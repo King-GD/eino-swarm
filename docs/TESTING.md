@@ -4864,7 +4864,11 @@ before the second RPC; `mobile/e2e/walkthrough.spec.ts` exercises the button
 through the phone screen against a scripted PC.
 The same walkthrough selects answer text and checks that Add to chat stays near
 the highlight: below the native menu's reserved space when there is room, or
-in its own row below a selection at the transcript bottom. On the old fixed-corner layout
+in its own row below a selection at the transcript bottom. The docked-row
+check measures the action against the transcript viewport's bottom, including
+its copy controls and durable completion timestamp, and still requires it to
+follow the selection without overlapping the transcript. A fixed text-to-button
+maximum would incorrectly count that metadata as blank space. On the old fixed-corner layout
 the gap was 300.5 CSS px on a 375px phone; the position regression failed
 before the fix. Android's isolated debug package was long-pressed in the real
 WebView: Copy/Share/Select all and Add to chat were visible without overlap
