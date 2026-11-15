@@ -1,3 +1,6 @@
+import { beforeEach } from "vitest"
+import { savePhoneMode } from "@/lib/phone-mode"
+beforeEach(() => savePhoneMode("local"))
 import { cleanup, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 

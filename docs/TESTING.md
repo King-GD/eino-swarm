@@ -8831,3 +8831,24 @@ path identities. The publisher uses `FileRenameInfoEx` with POSIX replacement;
 deletion sharing alone does not make legacy `MoveFileEx` accept an open target. `record_file_test.go` verifies exact bytes and handle release on every
 platform. Cross-compilation does not replace these Windows kernel checks or the
 packaged desktop window acceptance.
+
+### Phone Account admission and hidden Local controls
+
+`mobile/src/components/gateway-account-shell.test.tsx` covers default sign-in
+admission, logout, saved-PC account/device filtering, model/menu visibility,
+avatars and the timed three-click mode switch. `phone-mode.test.ts` covers
+persistence and unreadable/unknown storage. Legacy anonymous unit fixtures set
+Local explicitly. Playwright's default storage fixture likewise selects Local
+for existing pairing scenarios; `phone-account-mode.spec.ts` clears that fixture
+and checks the real default gate and signed-in mode switch on both phone layouts.
+Screenshots remain in each run's private `--output` directory. Browser checks do
+not establish installed iOS/Android acceptance.
+
+`mobile/e2e/ios-phone-account-mode.swift` supplies the packaged-app XCTest
+`BindFlowTests/testNativePhoneAccountGateAndPortraitModeSwitch`. Use
+`ios-layout-fixture.py` with `IOS_LAYOUT_PRESERVE_PUBLIC=1` and the candidate's
+built public directory in a fresh private simulator. It verifies the default
+login gate, the actual portrait three-tap gesture, restored Local menus and
+return to Account across relaunch, retaining screenshots and AX trees. This
+case uses the offline PC fixture and does not accept a production account,
+Android installation or TestFlight distribution.

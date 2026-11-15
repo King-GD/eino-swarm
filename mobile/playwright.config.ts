@@ -12,6 +12,9 @@ export default defineConfig({
     ...devices["Pixel 7"],
     baseURL: origin,
     locale: "zh-CN",
+    // Legacy pairing/model scenarios exercise Local mode explicitly. Account
+    // admission scenarios remove this preference before loading the product.
+    storageState: { cookies: [], origins: [{ origin, localStorage: [{ name: "zwai.phone.mode", value: "local" }] }] },
     permissions: ["camera"],
     launchOptions: {
       args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"],
@@ -21,7 +24,7 @@ export default defineConfig({
     { name: "phone" },
     {
       name: "iphone-layout",
-      testMatch: ["composer-prediction.spec.ts", "markdown-mermaid.spec.ts", "project-management.spec.ts", "iteration-limit.spec.ts", "file-preview-controls.spec.ts", "gateway-account.spec.ts", "cloud-web-tools.spec.ts", "file-download.spec.ts", "reasoning-fold.spec.ts", "quoted-goal.spec.ts", "conversation-open.spec.ts", "engine-startup.spec.ts", "generation-interruption.spec.ts", "pc-timeouts.spec.ts", "model-refresh.spec.ts", "composer-layout.spec.ts", "ask-answer.spec.ts", "ask-restart.spec.ts", "agent-roster.spec.ts", "api-error.spec.ts", "unread-completion.spec.ts", "active-unread.spec.ts", "worker-stop-replay.spec.ts", "markdown-highlight.spec.ts", "markdown-table.spec.ts", "goal-completion.spec.ts", "goal-pause.spec.ts"],
+      testMatch: ["phone-account-mode.spec.ts", "composer-prediction.spec.ts", "markdown-mermaid.spec.ts", "project-management.spec.ts", "iteration-limit.spec.ts", "file-preview-controls.spec.ts", "gateway-account.spec.ts", "cloud-web-tools.spec.ts", "file-download.spec.ts", "reasoning-fold.spec.ts", "quoted-goal.spec.ts", "conversation-open.spec.ts", "engine-startup.spec.ts", "generation-interruption.spec.ts", "pc-timeouts.spec.ts", "model-refresh.spec.ts", "composer-layout.spec.ts", "ask-answer.spec.ts", "ask-restart.spec.ts", "agent-roster.spec.ts", "api-error.spec.ts", "unread-completion.spec.ts", "active-unread.spec.ts", "worker-stop-replay.spec.ts", "markdown-highlight.spec.ts", "markdown-table.spec.ts", "goal-completion.spec.ts", "goal-pause.spec.ts"],
       use: { ...devices["iPhone 13"], browserName: "webkit", permissions: [] },
     },
   ],

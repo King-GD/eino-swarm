@@ -373,6 +373,8 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-220 Read and control PC conversations
 
+- 手机默认 Account 模式，未登录／失去授权仅显示用户中心；工具栏和用户中心显示安全头像或姓名首字。Account 隐藏模型管理、添加电脑、解除绑定和消息模型选择，仅使用当前账号／设备的 PC 与服务器模型。用户中心头像 1.2 秒间隔内三击切换并持久化手机 Account／Local；切换关闭旧页面连接，不改 PC 模式，不删除本地配置与记录。Local 保留原有入口。关联 `C-006`、`C-013`；证据：`mobile/src/components/gateway-account-shell.tsx`、`mobile/src/lib/phone-mode.ts`、`mobile/src/components/gateway-account-shell.test.tsx`、`mobile/e2e/phone-account-mode.spec.ts`。
+
 - 手机显示主管工具回合上限与延长轮数，提供「继续／停止」；继续延长原 turn，停止中断原 turn，不另发消息。重开／重连通过 `awaiting_continue` 恢复操作，即使最新历史页不含上限事件；请求失败显示原因并保留提示，重复点击在确认期间禁用。手机和 PC 都需更新。关联 `C-006`；证据：`internal/remote/iteration_continue_test.go`、`mobile/src/lib/iteration-limit.test.ts`、`mobile/src/components/iteration-limit-card.test.tsx`、`mobile/e2e/iteration-limit.spec.ts`。
 
 - 手机主管／子 Agent／直连聊天的纯思考组直接显示每条默认收起的「思考」控件，一次点击可查看原文，不再额外包装活动末行摘要；包含工具时保留过程聚合，展开后每条思考仍以独立的「思考」控件默认收起；用户再次展开才挂载完整原文，显式开合选择在同一条实时追加和完成后保持，关闭外层再打开则从收起开始。回答继续可见，工具保持既有独立折叠。子 Agent 详情与直连聊天复用同一日志，Clients 的 thinking 条目复用同一思考控件。关联 `F-222`、`F-223`、`F-230`／`C-006`；证据：`mobile/src/components/thought.tsx`、`mobile/src/components/thread-blocks-reasoning.test.tsx`、`mobile/src/components/client-groups.test.tsx`、`mobile/e2e/reasoning-fold.spec.ts`；来源：Issue #118、#129。

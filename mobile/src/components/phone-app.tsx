@@ -90,24 +90,25 @@ import { useModelCatalog } from "@/lib/use-model-catalog"
 
 export function PhoneApp() {
   const account = usePhoneAccount()
+  const savedHosts = () => loadSavedLinks().filter((row) => account.allowsLink?.(row) ?? true)
   const connectionError = (error: unknown) => linkError(error, Boolean(loadSavedLink()?.gatewayOwnerID))
   const [locale, setLocaleTick] = useState(getLocale())
-  const [hosts, setHosts] = useState(() => loadSavedLinks())
+  const [hosts, setHosts] = useState(() => savedHosts())
   const [personalProviders, setProviders] = useState(() => loadProviders())
   const providers = account.officialOnly ? account.providers : [...account.providers, ...personalProviders]
   const [surface, setSurface] = useState<"hosts" | "chat">(() =>
-    loadProviders().length > 0 && loadSavedLinks().length === 0 ? "chat" : "hosts",
+    loadProviders().length > 0 && savedHosts().length === 0 ? "chat" : "hosts",
   )
   const [modelsOpen, setModelsOpen] = useState(false)
   const [activeFp, setActiveFp] = useState(
-    () => loadActiveFingerprint() || loadSavedLinks()[0]?.fingerprint || "",
+    () => savedHosts().find((row) => row.fingerprint === loadActiveFingerprint())?.fingerprint || savedHosts()[0]?.fingerprint || "",
   )
   const [adding, setAdding] = useState(false)
   const [composing, setComposing] = useState(false)
   const [composeProject, setComposeProject] = useState("")
   const [addError, setAddError] = useState<string>()
   const [link, setLink] = useState<RemoteLink | null>(null)
-  const [busy, setBusy] = useState(() => loadSavedLinks().length > 0)
+  const [busy, setBusy] = useState(() => savedHosts().length > 0)
   const [bindBusy, setBindBusy] = useState(false)
   const [reconnecting, setReconnecting] = useState(false)
   const [error, setError] = useState<string>()
@@ -123,7 +124,7 @@ export function PhoneApp() {
   const [loadingMore, setLoadingMore] = useState(false)
   const { models, levels, catalogBusy, refreshModels, refreshBusy, refreshError, webExecutionStatus, predictionsEnabled } = useModelCatalog(link)
   const startup = useEngineStartup(link)
-  const hidePcModel = startup?.product_mode === "fofa"
+  const hidePcModel = account.mode === "account" || startup?.product_mode === "fofa"
   const restoring = startup?.startup === "restoring"
   const [composerPending, setComposerPending] = useState(false)
   const [view, setView] = useState<PhoneView>(emptyView())
@@ -184,7 +185,7 @@ export function PhoneApp() {
     const fp = loadActiveFingerprint()
     if (!fp) return
     saveHostLabel(fp, name)
-    setHosts(loadSavedLinks())
+    setHosts(savedHosts())
   }
 
   const resetRoster = () => {
@@ -289,7 +290,7 @@ export function PhoneApp() {
 
   const { boot, recover, close: closeLink } = usePhoneLinkLifecycle({
     link: linkRef, authority: authorityRef, generation: bindGen, unlinking: unlinkingRef, retryTimer, recoverRef,
-    install: setLink, attach: attachPush, firstList: consumeFirstList,
+    allowsLink: account.allowsLink, install: setLink, attach: attachPush, firstList: consumeFirstList,
     restore: async (next) => { const id = viewRef.current.threadId; if (id) await openThreadOn(next, id); else await consumeFirstList(next) },
     busy: setBusy, reconnecting: setReconnecting, error: setError, message: connectionError,
   })
@@ -351,7 +352,7 @@ export function PhoneApp() {
       loadGen.current += 1
       resetRoster()
       commitView(emptyView())
-      setHosts(loadSavedLinks())
+      setHosts(savedHosts())
       setActiveFp(bound.saved.fingerprint)
       setAdding(false)
       setAddError(undefined)
@@ -623,7 +624,7 @@ export function PhoneApp() {
     const fp = loadSavedLink()?.fingerprint
     if (fp) removeLink(fp)
     else clearLink()
-    const rest = loadSavedLinks()
+    const rest = savedHosts()
     setHosts(rest)
     resumedRef.current = false
     loadGen.current += 1
@@ -652,7 +653,8 @@ export function PhoneApp() {
 
   const selectHost = (fp: string, preserveView = false) => {
     if (!preserveView) setSurface("hosts")
-    const saved = loadSavedLinks().find((row) => row.fingerprint === fp)
+    const saved = savedHosts().find((row) => row.fingerprint === fp)
+    if (!saved) return
     const paused = saved && gatewayUpgradePending(saved)
     if (!paused && fp === activeFpRef.current && sameLinkAuthority(saved, authorityRef.current) && (!linkRef.current || linkRef.current.alive())) return
     bindGen.current += 1
@@ -673,9 +675,9 @@ export function PhoneApp() {
   }
 
   useEffect(() => {
-    const select = (event: Event) => { setHosts(loadSavedLinks()); selectHost((event as CustomEvent<string>).detail) }
+    const select = (event: Event) => { setHosts(savedHosts()); selectHost((event as CustomEvent<string>).detail) }
     const sync = () => {
-      const next = loadSavedLinks()
+      const next = savedHosts()
       setHosts(next)
       if (!next.some((h) => h.fingerprint === activeFpRef.current)) {
         window.clearTimeout(retryTimer.current); bindGen.current += 1
@@ -722,7 +724,7 @@ export function PhoneApp() {
     if (account.providers.length > 0 && hosts.length === 0) setSurface("chat")
   }, [account.providers.length, hosts.length])
 
-  const modelSheet = modelsOpen ? (
+  const modelSheet = modelsOpen && account.mode !== "account" ? (
     <ProviderSheet
       providers={providers}
       hasProfile={account.hasProfile}

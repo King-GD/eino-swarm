@@ -77,7 +77,8 @@ describe("opening the computer right after sign-in", () => {
 })
 
 describe("the signed-in start page", () => {
-  it("keeps pairing by QR and a model service of one's own under Other ways", async () => {
+  it("keeps pairing by QR and a model service of one's own under Other ways in Local mode", async () => {
+    localStorage.setItem("zwai.phone.mode", "local")
     signedIn({ bootstrap: noModels, hosts: [] })
     render(<App />)
     expect(screen.getByRole("heading", { name: t("account.pcs") })).toBeVisible()

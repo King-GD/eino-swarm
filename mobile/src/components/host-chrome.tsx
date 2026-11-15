@@ -1,3 +1,4 @@
+import { AccountButton } from "@/components/account-button"
 import { usePhoneAccount } from "@/components/gateway-account-shell"
 import { Capacitor } from "@capacitor/core"
 import { Menu, MessageSquare, Monitor, SquarePen } from "lucide-react"
@@ -94,17 +95,17 @@ export function HostChrome({
             className="absolute left-2 top-12 z-30 w-56 rounded-xl border border-border bg-card p-1 shadow-lg"
           >
             {openAccount ? <MenuRow onClick={() => { setMenu(false); openAccount() }}>{t("account.title")}</MenuRow> : null}
-            <MenuRow
+            {account.mode !== "account" ? <MenuRow
               onClick={() => {
                 setMenu(false)
                 onAdd()
               }}
             >
               {t("home.addHost")}
-            </MenuRow>
+            </MenuRow> : null}
             {pcLink && activeHost && !chatSelected ? <MenuRow onClick={() => { setMenu(false); setTimeoutsOpen(true) }}>{t("pcTimeouts.title")}</MenuRow> : null}
             {onProjects && !chatSelected ? <MenuRow onClick={() => { setMenu(false); onProjects() }}>{t("projects.manage")}</MenuRow> : null}
-            {onModels ? (
+            {onModels && account.mode !== "account" ? (
               <MenuRow
                 onClick={() => {
                   setMenu(false)
@@ -114,14 +115,14 @@ export function HostChrome({
                 {t("chat.models")}
               </MenuRow>
             ) : null}
-            <MenuRow
+            {account.mode !== "account" ? <MenuRow
               onClick={() => {
                 setMenu(false)
                 onUnlink()
               }}
             >
               {t("home.unlink")}
-            </MenuRow>
+            </MenuRow> : null}
             {canCheckUpdates ? (
               <MenuRow
                 onClick={() => {
@@ -225,6 +226,7 @@ export function HostChrome({
           )
         })}
       </div>
+      {openAccount ? <AccountButton onClick={openAccount} /> : null}
       {/* Add a PC is on the menu at the other end of this row; the corner
           belongs to the thing you reach for every time you pick up the phone. */}
       <Button

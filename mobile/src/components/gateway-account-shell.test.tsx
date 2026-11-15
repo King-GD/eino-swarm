@@ -3,11 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { App } from "@/app"
 import type { useGatewayAccount } from "@/lib/use-gateway-account"
 import { saveThreads, newThread } from "@/lib/direct-threads"
+import { openSaved } from "@/lib/client"
+import { saveLink } from "@/lib/store"
 import { saveProviders } from "@/lib/direct-provider"
-import { GatewayError } from "@/lib/gateway-account"
+import { GatewayError, saveGatewaySession } from "@/lib/gateway-account"
 import { setLocale, t } from "@/lib/i18n"
 
 const mocks = vi.hoisted(() => ({ account: {} as ReturnType<typeof useGatewayAccount>, discover: vi.fn() }))
+vi.mock("@/lib/client", async (original) => ({ ...await original<typeof import("@/lib/client")>(), openSaved: vi.fn() }))
 vi.mock("@/lib/use-gateway-account", () => ({ useGatewayAccount: () => mocks.account }))
 vi.mock("@/lib/openai-client", async (original) => ({ ...await original<typeof import("@/lib/openai-client")>(), discoverModels: mocks.discover }))
 
@@ -15,12 +18,108 @@ const session = { origin: "https://gateway.invalid", token: "agm_" + "a".repeat(
 const bootstrap = { user: session.user, device: session.device, models: { source_id: "gateway:owner", source_kind: "gateway" as const, label: "Team", execution: "phone" as const, api_base_url: "https://gateway.invalid/v1", catalog_url: "https://gateway.invalid/v1/models", api_access_enabled: true }, pairlink: { enabled: true, hub_url: session.origin, redeem_url: session.origin + "/pairlink/v1/pairings/redeem", websocket_url: "wss://gateway.invalid/pairlink/v1/ws", info_url: session.origin + "/pairlink/v1/info" }, heartbeat_interval: 30, presence_ttl: 90 }
 
 beforeEach(() => {
+  vi.mocked(openSaved).mockReset()
   setLocale("en")
   mocks.account = { status: "signed_out", session: null, bootstrap: undefined, hosts: [], origin: session.origin, error: undefined, busy: false, freshLogin: false, consumeFreshLogin: vi.fn(), setOrigin: vi.fn(), login: vi.fn(), refresh: vi.fn(async () => undefined), logout: vi.fn(async () => undefined), connectHost: vi.fn() }
   mocks.discover.mockReset().mockResolvedValue(["shared-model"])
 })
 
 describe("gateway account shell", () => {
+
+  it.each([{}, { gatewayOrigin: session.origin, gatewayOwnerID: "other", gatewayMobileID: session.device.id }, { gatewayOrigin: session.origin, gatewayOwnerID: session.user.id, gatewayMobileID: "other" }])("never reconnects a saved PC outside the current account/device (%j)", async (metadata) => {
+    saveLink({ hubURL: "https://relay.invalid", ticket: "ticket", hostPub: "pub", sessionID: "session", fingerprint: "local-pc", ...metadata })
+    mocks.account = { ...mocks.account, status: "authorized", session, bootstrap }
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true"))
+    expect(openSaved).not.toHaveBeenCalled()
+    expect(screen.queryByRole("tab", { name: "local-pc" })).not.toBeInTheDocument()
+    expect(localStorage.getItem("zwai.remote.links")).toContain("ticket")
+  })
+
+  it("still dials a saved PC owned by the authorized account and this phone", async () => {
+    const saved = { hubURL: session.origin, ticket: "ticket", hostPub: "pub", sessionID: "session", fingerprint: "account-pc", gatewayOrigin: session.origin, gatewayOwnerID: session.user.id, gatewayMobileID: session.device.id, gatewayHostID: "host" }
+    saveLink(saved)
+    saveGatewaySession(session)
+    vi.mocked(openSaved).mockRejectedValue(new Error("fixture stops after observing dial"))
+    mocks.account = { ...mocks.account, status: "authorized", session, bootstrap }
+    render(<App />)
+    await waitFor(() => expect(openSaved).toHaveBeenCalledOnce())
+    expect(openSaved).toHaveBeenCalledWith(saved)
+  })
+
+  it("revokes the main UI immediately on logout and retains the default gate after remount", async () => {
+    mocks.account = { ...mocks.account, status: "authorized", session, bootstrap }
+    const view = render(<App />)
+    await screen.findByRole("tab", { name: "Chat" })
+    mocks.account = { ...mocks.account, status: "signed_out", session: null, bootstrap: undefined }
+    view.rerender(<App />)
+    expect(screen.queryByRole("tab", { name: "Chat" })).not.toBeInTheDocument()
+    expect(screen.getByTestId("gateway-account")).toBeVisible()
+    view.unmount()
+    render(<App />)
+    expect(screen.queryByLabelText("Message")).not.toBeInTheDocument()
+  })
+
+  it("counts touch releases once when the browser also synthesizes clicks", () => {
+    render(<App />)
+    const portrait = screen.getByTestId("account-portrait")
+    const tap = () => {
+      const event = new Event("pointerup", { bubbles: true })
+      Object.defineProperties(event, { pointerType: { value: "touch" }, isPrimary: { value: true } })
+      fireEvent(portrait, event)
+      fireEvent.click(portrait, { detail: 1 })
+    }
+    tap(); tap()
+    expect(localStorage.getItem("zwai.phone.mode")).toBeNull()
+    tap()
+    expect(localStorage.getItem("zwai.phone.mode")).toBe("local")
+  })
+
+  it("expires an incomplete avatar gesture and permits an explicit Local choice from the login screen", () => {
+    vi.useFakeTimers()
+    try {
+      render(<App />)
+      const portrait = screen.getByTestId("account-portrait")
+      fireEvent.click(portrait); fireEvent.click(portrait)
+      act(() => { vi.advanceTimersByTime(1201) })
+      fireEvent.click(portrait)
+      expect(localStorage.getItem("zwai.phone.mode")).toBeNull()
+      fireEvent.click(portrait); fireEvent.click(portrait)
+      expect(localStorage.getItem("zwai.phone.mode")).toBe("local")
+      expect(screen.queryByTestId("gateway-account")).not.toBeInTheDocument()
+    } finally { vi.useRealTimers() }
+  })
+  it.each(["signed_out", "expired", "error", "access_denied"] as const)("%s blocks saved personal models by default", (status) => {
+    saveProviders([{ id: "personal", label: "Personal", baseURL: "https://private.invalid/v1", apiKey: "secret", api: "chat", model: "private", catalog: [], timeoutSeconds: 300 }])
+    mocks.account = { ...mocks.account, status }
+    render(<App />)
+    expect(screen.getByTestId("gateway-account")).toBeVisible()
+    expect(screen.queryByLabelText("Message")).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Menu" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument()
+  })
+
+  it("hides local menus and switches mode after three portrait clicks", async () => {
+    mocks.account = { ...mocks.account, status: "authorized", session, bootstrap }
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true"))
+    expect(screen.queryByRole("button", { name: "Model" })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }))
+    for (const name of ["Models", "Add a PC", "Unlink"]) expect(screen.queryByRole("menuitem", { name })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole("menuitem", { name: "User center" }))
+    const portrait = screen.getByTestId("account-portrait")
+    fireEvent.click(portrait); fireEvent.click(portrait)
+    expect(localStorage.getItem("zwai.phone.mode")).toBeNull()
+    fireEvent.click(portrait)
+    expect(localStorage.getItem("zwai.phone.mode")).toBe("local")
+    fireEvent.click(screen.getByRole("button", { name: "Close" }))
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }))
+    expect(screen.getByRole("menuitem", { name: "Models" })).toBeVisible()
+    fireEvent.click(screen.getByRole("menuitem", { name: "User center" }))
+    fireEvent.click(screen.getByTestId("account-portrait")); fireEvent.click(screen.getByTestId("account-portrait")); fireEvent.click(screen.getByTestId("account-portrait"))
+    expect(localStorage.getItem("zwai.phone.mode")).toBe("account")
+  })
+
   it.each([
     ["en", "browser_unavailable", "Could not open the sign-in browser. Try again."],
     ["en", "gateway_timeout", "The account operation timed out. Try again."],
@@ -151,6 +250,10 @@ describe("gateway account shell", () => {
     expect(screen.queryByRole("button", { name: "Scan QR" })).not.toBeInTheDocument()
     expect(mocks.discover).toHaveBeenCalledWith(expect.objectContaining({ id: "gateway:owner", apiKey: session.token, baseURL: "https://gateway.invalid/v1" }))
     expect(localStorage.getItem("zwai.phone.providers")).toBeNull()
+    expect(screen.queryByRole("button", { name: "Model" })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "User center" }))
+    fireEvent.click(screen.getByTestId("account-portrait")); fireEvent.click(screen.getByTestId("account-portrait")); fireEvent.click(screen.getByTestId("account-portrait"))
+    fireEvent.click(screen.getByRole("button", { name: "Close" }))
     fireEvent.click(await screen.findByRole("button", { name: "Model" }))
     expect(screen.getByRole("heading", { name: "Server · Team" })).toBeVisible()
     expect(screen.getByRole("radio", { name: "shared-model" })).toBeVisible()
@@ -158,6 +261,7 @@ describe("gateway account shell", () => {
   })
 
   it("shows the official name and does not ask for model ids", async () => {
+    localStorage.setItem("zwai.phone.mode", "local")
     const marker = "profile guidance marker 1842"
     // The stored profile drops instruction. The fixture still sends it so the
     // screen can prove that guidance never becomes a model id prompt.
@@ -182,6 +286,7 @@ describe("gateway account shell", () => {
   })
 
   it("opens default-server sign-in without asking for server configuration and Android Back closes its overlay", async () => {
+    localStorage.setItem("zwai.phone.mode", "local")
     render(<App />)
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }))
     expect(screen.getByTestId("gateway-account")).toBeVisible()

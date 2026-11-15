@@ -805,6 +805,20 @@ bar, or other local overlay, and never stops a turn.
 
 ## Account and a paired phone
 
+The phone defaults to **Account** mode. It opens User center and requires an
+approved sign-in before showing conversations or connecting to a PC. Signing
+out or losing authorization returns to that gate. The toolbar and User center
+show the user's public avatar, with an initial when the image is unavailable.
+Account mode hides Models, Add a PC, Unlink and composer model selection; it
+uses server models and computers belonging to the current account/device.
+Saved personal providers, anonymous bindings and their history remain stored.
+
+Click the User center portrait three times, with no gap longer than 1.2 seconds,
+to switch between **Account** and **Local**. The choice persists on this phone
+and does not change the PC's mode. Local exposes the existing personal-model
+and anonymous pairing controls. A generic portrait on the login screen also
+supports this explicit switch. Switching closes the old phone page/connection.
+
 The circular **Account** button at the bottom of the left rail opens the
 account menu, even when the conversation list is hidden. **Sign in with
 Gateway** opens its own account dialog and the system browser. Opening the

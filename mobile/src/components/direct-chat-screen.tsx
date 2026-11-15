@@ -1,3 +1,4 @@
+import { usePhoneAccount } from "@/components/gateway-account-shell"
 import { useEffect, useRef, useState } from "react"
 import { ChevronLeft } from "lucide-react"
 
@@ -68,7 +69,8 @@ export function DirectChatScreen({
   complete?: typeof streamCompletion
 }) {
   const sourceID = gatewaySourceID ?? providers.find((row) => row.sourceKind === "gateway")?.id ?? ""
-  const visible = (row: DirectThread) => !row.providerId.startsWith("gateway:") || row.providerId === sourceID
+  const account = usePhoneAccount()
+  const visible = (row: DirectThread) => (account.mode !== "account" && !row.providerId.startsWith("gateway:")) || row.providerId === sourceID
   const [threads, setThreads] = useState(loadThreads)
   const [openID, setOpenID] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -324,6 +326,7 @@ export function DirectChatScreen({
         stopLabel={t("thread.stop")}
         onStop={pending ? stop : undefined}
         hint={notice || (selectedUnavailable ? t("account.sourceUnavailable") : undefined)}
+        hideModel={account.mode === "account"}
         models={models}
         reasoningLevels={models.length ? thinking : []}
         providerId={open?.providerId || pick.providerId}

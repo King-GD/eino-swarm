@@ -28,6 +28,13 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
 
 ## [Unreleased]
 
+### Changed
+
+- Phone defaults to Account mode with required sign-in and avatar entry. Hide
+  Local model/pairing/unlink menus and model selection in Account mode; three
+  clicks on the User center portrait toggle a phone-only persisted Local mode.
+
+
 ### Fixed
 
 - Native offline smoke explicitly selects LOCAL in its private configuration

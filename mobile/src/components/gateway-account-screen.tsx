@@ -1,28 +1,18 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { X } from "lucide-react"
 import { AccountPcList } from "@/components/account-pc-list"
 import type { GatewayAccountController } from "@/components/gateway-account-shell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import type { DirectProvider } from "@/lib/direct-provider"
-import { acceptAvatarURL } from "@/lib/avatar-url"
+import { AccountPortrait } from "@/components/account-portrait"
 import { t } from "@/lib/i18n"
 import { gatewayUserDisplayName } from "@/lib/gateway-names"
 import { WebExecutionSettings } from "@/components/web-execution-settings"
 import type { PcWebSnapshot } from "@/components/pc-web-execution-status"
 
-function AccountPortrait({ name, url }: { name: string; url?: string }) {
-  const picture = acceptAvatarURL(url)
-  const [failed, setFailed] = useState(false)
-  useEffect(() => { setFailed(false) }, [picture])
-  return (
-    <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-sm font-medium">
-      {picture && !failed ? <img src={picture} alt="" referrerPolicy="no-referrer" className="size-full object-cover" onError={() => setFailed(true)} /> : Array.from(name)[0]}
-    </span>
-  )
-}
-
-export function GatewayAccountScreen({ account, providers, modelBusy, modelError, pcWeb, onClose, onConnect, onRefresh, onOpenChat, onOtherWays }: {
+export function GatewayAccountScreen({ account, providers, modelBusy, modelError, pcWeb, onClose, onConnect, onRefresh, onOpenChat, onOtherWays, onToggleMode }: {
+  onToggleMode?: () => void
   account: GatewayAccountController
   providers: DirectProvider[]
   modelBusy: boolean
@@ -36,6 +26,19 @@ export function GatewayAccountScreen({ account, providers, modelBusy, modelError
   onConnect: (id: string) => Promise<void>
   onRefresh: () => Promise<void>
 }) {
+  const lastTouch = useRef(Number.NEGATIVE_INFINITY)
+  const clicks = useRef(0)
+  const clickTimer = useRef<number | undefined>(undefined)
+  useEffect(() => () => window.clearTimeout(clickTimer.current), [])
+  const portraitClick = () => {
+    clicks.current++
+    window.clearTimeout(clickTimer.current)
+    clickTimer.current = window.setTimeout(() => { clicks.current = 0 }, 1200)
+    if (clicks.current < 3) return
+    clicks.current = 0
+    window.clearTimeout(clickTimer.current)
+    onToggleMode?.()
+  }
   const [formError, setFormError] = useState("")
   const [otherWays, setOtherWays] = useState(false)
   const [advanced, setAdvanced] = useState(false)
@@ -56,10 +59,18 @@ export function GatewayAccountScreen({ account, providers, modelBusy, modelError
         {onClose ? <Button variant="ghost" className="size-10 px-0" aria-label={t("home.close")} onClick={onClose}><X className="size-5" aria-hidden /></Button> : null}
       </header>
       <div className="flex flex-col gap-4 p-5">
-        {account.session ? <div className="flex items-center gap-3">
-          <AccountPortrait name={accountName} url={account.session.user.avatar_url} />
+        <div className="flex items-center gap-3">
+          <button type="button" data-testid="account-portrait" aria-label={accountName || t("account.title")} className="touch-manipulation rounded-full"
+            onPointerUp={(event) => {
+              if (event.pointerType !== "touch" || !event.isPrimary) return
+              lastTouch.current = performance.now()
+              portraitClick()
+            }}
+            onClick={(event) => { if (event.detail === 0 || performance.now() - lastTouch.current > 500) portraitClick() }}>
+            <AccountPortrait name={accountName} url={account.session?.user.avatar_url} />
+          </button>
           <p className="break-all text-sm font-medium">{accountName}</p>
-        </div> : null}
+        </div>
         {statusText ? <p role="status" className="text-sm text-muted-foreground">{statusText}</p> : null}
         {account.error ? <p role="alert" className="text-sm text-destructive">{t(account.error === "browser_unavailable" ? "account.browserFailed" : account.error === "gateway_timeout" ? "account.timeout" : account.error === "pc_upgrade_failed" ? "account.upgradeFailed" : "chat.failed")}</p> : null}
         {!authorized && (!waiting || account.status === "access_denied") ? <>

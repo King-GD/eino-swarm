@@ -63,7 +63,7 @@ test("user center shows a public avatar without a referrer", async ({ page }) =>
   await page.route(origin + "/client/api/v1/auth/me", (route) => route.fulfill({
     contentType: "application/json", body: JSON.stringify({ data: { user: pictured, device } }),
   }))
-  await page.goto("/?mock=1&tick=0")
+  await page.goto("/")
   const screen = page.getByTestId("gateway-account")
   const image = screen.locator("img")
   await expect(image).toHaveAttribute("src", picture)
@@ -82,7 +82,7 @@ test("user center keeps the name initial when a public avatar cannot load", asyn
   await page.route(origin + "/client/api/v1/auth/me", (route) => route.fulfill({
     contentType: "application/json", body: JSON.stringify({ data: { user: pictured, device } }),
   }))
-  await page.goto("/?mock=1&tick=0")
+  await page.goto("/")
   const screen = page.getByTestId("gateway-account")
   await expect(screen.getByText("林", { exact: true })).toBeVisible()
   await expect(screen.getByText("林小明", { exact: true })).toBeVisible()

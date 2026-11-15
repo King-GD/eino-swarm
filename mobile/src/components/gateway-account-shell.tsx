@@ -1,20 +1,25 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 import { GatewayAccountScreen } from "@/components/gateway-account-screen"
 import type { PcWebSnapshot } from "@/components/pc-web-execution-status"
+import { loadPhoneMode, savePhoneMode, type PhoneMode } from "@/lib/phone-mode"
 import { installAndroidBack } from "@/lib/android-back"
 import { loadAccountPresentation, saveAccountPresentation, type AccountPresentation } from "@/lib/account-presentation"
 import { OFFICIAL_MODEL_ALIAS } from "@/lib/gateway-account"
 import type { DirectProvider } from "@/lib/direct-provider"
+import { gatewayUserDisplayName } from "@/lib/gateway-names"
 import { t } from "@/lib/i18n"
 import type { GatewayHost } from "@/lib/gateway-account"
 import { autoConnectTarget } from "@/lib/gateway-auto-connect"
 import { gatewayProvider } from "@/lib/gateway-models"
-import { loadActiveFingerprint, loadSavedLinks } from "@/lib/store"
+import { loadActiveFingerprint, loadSavedLinks, type SavedLink } from "@/lib/store"
 import { discoverModels } from "@/lib/openai-client"
 import { useGatewayAccount } from "@/lib/use-gateway-account"
 
 type Account = ReturnType<typeof useGatewayAccount>
 type PhoneAccount = {
+  allowsLink?: (link: SavedLink) => boolean
+  mode?: PhoneMode
+  user?: { name: string; avatar?: string }
   providers: DirectProvider[]
   openAccount?: (pcWeb?: PcWebSnapshot) => void
   gatewaySourceID?: string
@@ -31,6 +36,12 @@ export const usePhoneAccount = () => useContext(PhoneAccountContext)
 
 export function GatewayAccountShell({ children }: { children: ReactNode }) {
   const account = useGatewayAccount()
+  const [mode, setMode] = useState(loadPhoneMode)
+  const toggleMode = () => {
+    const next = mode === "account" ? "local" : "account"
+    savePhoneMode(next)
+    setMode(next)
+  }
   const [dialog, setDialog] = useState<{ pcWeb?: PcWebSnapshot }>()
   const open = Boolean(dialog)
   const [catalog, setCatalog] = useState<{ authority: string; names: string[] }>({ authority: "", names: [] })
@@ -44,7 +55,7 @@ export function GatewayAccountShell({ children }: { children: ReactNode }) {
     saveAccountPresentation(value)
     setPresentationState(value)
   }
-  const officialOnly = Boolean(profile && presentation !== "full")
+  const officialOnly = mode === "account" || Boolean(profile && presentation !== "full")
   const authority = source ? source.id + "\x00" + source.apiKey : ""
   useEffect(() => {
     let active = true
@@ -77,7 +88,7 @@ export function GatewayAccountShell({ children }: { children: ReactNode }) {
       ? [{ ...source, catalog: catalog.names, model: catalog.names[0] }]
       : []
   }, [authority, catalog, officialOnly, profile, source])
-  const restricted = ["checking", "authorization_pending", "account_pending", "account_rejected"].includes(account.status) || Boolean(account.session && account.status === "access_denied")
+  const restricted = (mode === "account" && account.status !== "authorized") || ["checking", "authorization_pending", "account_pending", "account_rejected"].includes(account.status) || Boolean(account.session && account.status === "access_denied")
   useEffect(() => {
     if (!open || restricted) return
     return installAndroidBack(() => { setDialog(undefined); return true })
@@ -103,11 +114,25 @@ export function GatewayAccountShell({ children }: { children: ReactNode }) {
     const target = autoConnectTarget(hosts, loadSavedLinks(), loadActiveFingerprint())
     if (target) void connect(target.id).catch(() => undefined)
   }, [freshLogin, status, bootstrap])
-  const screen = <GatewayAccountScreen account={account} providers={providers} modelBusy={modelBusy}
+  const screen = <GatewayAccountScreen account={account} onToggleMode={toggleMode} providers={providers} modelBusy={modelBusy}
     modelError={modelError} pcWeb={dialog?.pcWeb} onClose={restricted ? undefined : () => setDialog(undefined)} onConnect={connect} onRefresh={refresh} onOpenChat={openChat} />
   return (
-    <PhoneAccountContext.Provider value={{ providers, hasProfile: Boolean(profile), officialOnly, presentation, setPresentation, gatewaySourceID: account.status === "authorized" ? account.bootstrap?.models.source_id ?? "" : "", openAccount: (pcWeb) => setDialog({ pcWeb }), empty: account.status === "authorized" ? <GatewayAccountScreen account={account} providers={providers} modelBusy={modelBusy} modelError={modelError} onConnect={connect} onRefresh={refresh} onOpenChat={openChat} onOtherWays={otherWays} /> : undefined, pcs: account.status === "authorized" ? { hosts: account.hosts, connect } : undefined }}>
-      {restricted ? screen : <div className="h-full min-h-0" inert={open || undefined} aria-hidden={open || undefined}>{children}</div>}
+    <PhoneAccountContext.Provider value={{
+      allowsLink: (link) => mode === "local" || Boolean(account.session
+        && link.gatewayOrigin === account.session.origin
+        && link.gatewayOwnerID === account.session.user.id
+        && link.gatewayMobileID === account.session.device.id),
+      mode,
+      user: account.session ? { name: gatewayUserDisplayName(account.session.user), avatar: account.session.user.avatar_url } : undefined,
+      providers, hasProfile: Boolean(profile), officialOnly, presentation, setPresentation,
+      gatewaySourceID: account.status === "authorized" ? account.bootstrap?.models.source_id ?? "" : "",
+      openAccount: (pcWeb) => setDialog({ pcWeb }),
+      empty: account.status === "authorized" ? <GatewayAccountScreen account={account} onToggleMode={toggleMode}
+        providers={providers} modelBusy={modelBusy} modelError={modelError} onConnect={connect}
+        onRefresh={refresh} onOpenChat={openChat} onOtherWays={mode === "local" ? otherWays : undefined} /> : undefined,
+      pcs: account.status === "authorized" ? { hosts: account.hosts, connect } : undefined,
+    }}>
+      {restricted ? screen : <div key={`${mode}:${account.session?.origin ?? ""}:${account.session?.user.id ?? ""}:${account.session?.device.id ?? ""}`} className="h-full min-h-0" inert={open || undefined} aria-hidden={open || undefined}>{children}</div>}
       {open && !restricted ? <div role="dialog" aria-modal="true" aria-label={t("account.title")} className="fixed inset-0 z-50 bg-background pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)]">{screen}</div> : null}
     </PhoneAccountContext.Provider>
   )

@@ -466,6 +466,8 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 
 ## C-013 Phone model picker
 
+- 手机产品模式默认 Account，未获授权时不挂载主界面；Account 不暴露模型选择／本地模型管理／匿名添加电脑／解除绑定入口，不回退个人模型或其他账号设备的连接。用户中心头像三击（相邻点击不超过 1.2 秒）显式切换手机持久模式，Local 恢复原有入口；与 PC 产品模式及官方／全部模型展示偏好独立。切换销毁旧页面和自有连接，保留本地数据。验证：`mobile/src/components/gateway-account-shell.test.tsx`、`mobile/src/lib/phone-mode.test.ts`、`mobile/e2e/phone-account-mode.spec.ts`。关联 `F-220`；变更类型：Changed。
+
 - 服务器模型、手机自配服务和 PC 目录不按模型名称合并：手机直连以 provider/source ID 持久选择，Gateway source ID 由服务端按 origin／账号确定；PC 会话在 PC 执行，只读取该 PC 的目录。切换、断开或重新连接 PC 不改手机直连来源。模型选择器按 provider ID 分组，同标签也不合并来源。账号模型凭据只作临时 provider 投影，不得写入自配服务或编辑界面（PC 侧同一规则见 `C-040`）；来源消失时取消其在途调用，保留已收到内容与原选择，禁止自动转到同名私有服务。已保存的自配接口可在确认后从本机移除：第一次点按只进入确认，取消或返回不删除；账号投影没有移除入口，移除不写入、不清除账号模型，也不删除已有直连历史。新对话在当前接口被移除且仍有其他接口时改用剩余接口；已打开并绑定被移除接口的对话保留原选择。服务器历史只对当前经验证 bootstrap source ID 可见；退出或其他账号登录时隐藏，原存储不删，同账号恢复后可读，API grant=false 的已批准账号也可读本人历史但不能调用。手机自配历史独立保留。证据：`mobile/src/lib/gateway-models.ts`、`mobile/src/lib/direct-provider.ts`、`mobile/src/lib/direct-provider-account.test.ts`、`mobile/src/components/direct-account-source.test.tsx`、`mobile/src/components/provider-sheet.tsx`、`mobile/src/components/provider-sheet.test.tsx`、`mobile/src/components/model-picker.tsx`；关联 `F-211`、`F-230`。
 
 - 状态：active；类型：compatibility / lifecycle；作用范围：phone composer；关联功能：`F-230`。

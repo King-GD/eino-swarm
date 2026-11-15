@@ -5,6 +5,7 @@ import { sameLinkAuthority } from "./link-authority"
 import { loadSavedLink, type SavedLink } from "./store"
 
 type Options = {
+  allowsLink?: (link: SavedLink) => boolean
   link: RefObject<RemoteLink | null>; authority: RefObject<SavedLink | null>
   generation: RefObject<number>; unlinking: RefObject<boolean>; retryTimer: RefObject<number>
   recoverRef: RefObject<(force?: boolean) => Promise<void>>
@@ -35,11 +36,11 @@ export function usePhoneLinkLifecycle(options: Options) {
     const o = latest.current
     if (o.unlinking.current || opening.current?.generation === o.generation.current) return
     const saved = loadSavedLink()
-    if (!saved || gatewayUpgradePending(saved)) { o.busy(false); return }
+    if (!saved || o.allowsLink?.(saved) === false || gatewayUpgradePending(saved)) { o.busy(false); return }
     if (!boot && !force && o.link.current?.alive() && sameLinkAuthority(saved, o.authority.current)) return
     const operation = { generation: o.generation.current }
     opening.current = operation
-    const valid = () => operation.generation === o.generation.current && sameLinkAuthority(saved, loadSavedLink())
+    const valid = () => latest.current.allowsLink?.(saved) !== false && operation.generation === o.generation.current && sameLinkAuthority(saved, loadSavedLink())
     if (boot) o.busy(true)
     else o.reconnecting(true)
     // Retire before dialing: a credential change must never leave two sockets.
