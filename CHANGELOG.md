@@ -34,6 +34,10 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
   before launching. It no longer waits for a composer behind the default FOFA
   sign-in welcome page; FOFA login still needs separate acceptance.
 
+- Phone conversations explicitly label the active Goal mode and retain the
+  objective strip while browsing Agents, worker logs and Outputs. Completed
+  goals still leave the strip hidden. (`F-150`, `C-009`)
+
 - A default FOFA install that is not signed in covers the conversation and
   composer with the sign-in prompt. The account button stays available.
   An explicit `product.mode: local` install still opens the main surface

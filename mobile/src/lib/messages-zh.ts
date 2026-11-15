@@ -282,6 +282,7 @@ export const zh: Record<MessageKey, string> = {
 
   "notice.goalCompleted": "目标已完成。",
 
+  "goal.mode": "目标模式",
   "goal.pursuing": "进行中",
   "goal.paused": "已暂停",
   "goal.blocked": "已卡住",

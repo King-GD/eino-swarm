@@ -956,6 +956,11 @@ request, objective, title or conversation ID is a positive prompt expectation.
 send/resume_goal for capped, blocked and idle. Desktop Playwright keeps the
 paused banner and Start after sending/reloading, then observes pursuit after
 Start. Phone tests retain the same projection through send until resume_goal.
+`mobile/src/components/goal-mode.test.tsx` checks the explicit localized Goal mode
+label and visibility across worker navigation, including completion/clear.
+`mobile/e2e/goal-mode.spec.ts` checks the strip in chat, Agents, worker logs and
+Outputs in Chinese/English on Chromium and iPhone WebKit, with viewport assertions
+and screenshots.
 `ordinary_worker_completion_test.go` uses the actual worker/manager boundary:
 the same-turn correction is consumed and collection completes, then the real
 next StartTurn excludes it and older GoalContinueText. `runtime_cues_test.go`

@@ -267,7 +267,8 @@ export function ThreadScreen({
   }
 
   if (agentPage === "files" && fileLink) {
-    return <FileBrowser link={fileLink} threadId={detail.id} onClose={() => changePage("chat")} />
+    return <FileBrowser link={fileLink} threadId={detail.id} onClose={() => changePage("chat")}
+      status={<GoalBanner detail={detail} running={running} />} />
   }
 
   return (
@@ -321,13 +322,13 @@ export function ThreadScreen({
         ) : null}
         {agentPage === "chat" && onOpenAccount ? <AccountButton onClick={onOpenAccount} /> : null}
       </header>
-      {agentPage === "chat" ? <GoalBanner
+      <GoalBanner
         detail={detail}
         running={running}
-        waiting={waiting}
+        waiting={agentPage === "chat" && waiting}
         disabled={restoring}
-        onResume={onResumeGoal}
-      /> : null}
+        onResume={agentPage === "chat" ? onResumeGoal : undefined}
+      />
       {agentPage === "chat" ? <ScheduleBanner
         detail={detail}
         running={running}
