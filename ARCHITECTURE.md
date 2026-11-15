@@ -178,6 +178,13 @@ the installation result; while it is pending, the frontend polls the read-only
 An unavailable progress read leaves the installation running. A failed install
 retains its confirmed version for a direct retry.
 
+A headless `web` shell (`--no-open` or browser opening disabled in config)
+holds a counted `web` presence through the same acknowledged HTTP handshake and
+bounded reconnection code as the desktop shell. Readiness follows that hold;
+recovery exhaustion fails the waiter, and signal shutdown joins its presence
+owner without stopping another client or turn. A browser-opening web shell
+continues to rely on its tab's presence.
+
 Both graphical shells load the **same** `http://127.0.0.1` origin, so there
 is exactly one implementation of uploads, downloads and the live event stream.
 Traffic lights follow the window (`?shell=desktop` or the native bridge), not

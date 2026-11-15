@@ -24,6 +24,7 @@ type desktopPresence struct {
 }
 
 type desktopPresenceStream struct {
+	surface string
 	id      string
 	body    io.ReadCloser
 	close   func()
@@ -31,8 +32,12 @@ type desktopPresenceStream struct {
 }
 
 func holdDesktopPresence(base string) (*desktopPresence, error) {
-	ctx, cancel := context.WithCancel(context.Background())
-	stream, err := openDesktopPresence(ctx, base, engineBootWait)
+	return holdShellPresence(context.Background(), base, "desktop")
+}
+
+func holdShellPresence(parent context.Context, base, surface string) (*desktopPresence, error) {
+	ctx, cancel := context.WithCancel(parent)
+	stream, err := openShellPresence(ctx, base, engineBootWait, surface)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -62,7 +67,7 @@ func maintainDesktopPresence(ctx context.Context, base string, stream *desktopPr
 		}
 		for {
 			if remaining == 0 {
-				fatal <- fmt.Errorf("desktop: native presence recovery exhausted: %w", last)
+				fatal <- fmt.Errorf("%s: presence recovery exhausted: %w", stream.surface, last)
 				return
 			}
 			remaining--
@@ -75,7 +80,7 @@ func maintainDesktopPresence(ctx context.Context, base string, stream *desktopPr
 			}
 			// Three attempts, including their complete POST/GET handshakes,
 			// fit inside the engine's idle grace. Never ensure another engine.
-			next, err := openDesktopPresence(ctx, base, min(engineBootWait, lease.IdleGrace/6))
+			next, err := openShellPresence(ctx, base, min(engineBootWait, lease.IdleGrace/6), stream.surface)
 			if ctx.Err() != nil {
 				if next != nil {
 					next.close()
@@ -93,7 +98,7 @@ func maintainDesktopPresence(ctx context.Context, base string, stream *desktopPr
 
 // The timer bounds the complete handshake, then is stopped after acknowledgement.
 // A context deadline on the successful GET would also kill its healthy lifetime.
-func openDesktopPresence(parent context.Context, base string, wait time.Duration) (stream *desktopPresenceStream, err error) {
+func openShellPresence(parent context.Context, base string, wait time.Duration, surface string) (stream *desktopPresenceStream, err error) {
 	ctx, cancel := context.WithCancelCause(parent)
 	timer := time.AfterFunc(wait, func() { cancel(context.DeadlineExceeded) })
 	var resp *http.Response
@@ -111,7 +116,7 @@ func openDesktopPresence(parent context.Context, base string, wait time.Duration
 			client.CloseIdleConnections()
 		}
 	}()
-	id, err := reserveDesktopPresence(ctx, base)
+	id, err := reserveShellPresence(ctx, base, surface)
 	if err != nil {
 		return nil, err
 	}
@@ -132,16 +137,19 @@ func openDesktopPresence(parent context.Context, base string, wait time.Duration
 	if cause := context.Cause(ctx); cause != nil {
 		return nil, cause
 	}
-	return &desktopPresenceStream{id: id, body: resp.Body, started: time.Now(), close: func() {
+	return &desktopPresenceStream{surface: surface, id: id, body: resp.Body, started: time.Now(), close: func() {
 		cancel(context.Canceled)
 		resp.Body.Close()
 		client.CloseIdleConnections()
 	}}, nil
 }
 
-func reserveDesktopPresence(ctx context.Context, base string) (string, error) {
-	body := fmt.Sprintf(`{"surface":"desktop","pid":%d}`, os.Getpid())
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/presence", strings.NewReader(body))
+func reserveShellPresence(ctx context.Context, base, surface string) (string, error) {
+	body, _ := json.Marshal(struct {
+		Surface string `json:"surface"`
+		PID     int    `json:"pid"`
+	}{surface, os.Getpid()})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/presence", strings.NewReader(string(body)))
 	if err != nil {
 		return "", err
 	}

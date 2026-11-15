@@ -256,7 +256,15 @@ Serves the same app over HTTP and opens your browser.
 | flag | default | meaning |
 |---|---|---|
 | `--addr HOST:PORT` | the configured `server.addr` (`127.0.0.1:8787`) | listen address. `:0` or `127.0.0.1:0` picks a free port and prints it. |
-| `--no-open` | off | do not open a browser. Also honoured: `server.open_browser: false`. |
+| `--no-open` | off | do not open a browser; hold the engine while this process runs. Also honoured: `server.open_browser: false`. |
+
+With `--no-open` or `server.open_browser: false`, this process holds a confirmed
+`web` presence before printing readiness, so a browser tab is optional. A lost
+connection is recovered on the same engine with a bounded budget; exhaustion
+returns an error for a supervisor to detect. `SIGTERM`/`Ctrl-C` release that
+presence. An otherwise idle engine then exits after its existing idle grace;
+active turns and other clients continue. The engine child has its own session:
+this wrapper does not forward a stop signal or cancel work.
 
 The URL is printed on startup. `Ctrl-C` stops this waiter. It does not stop
 the engine while another shell, the phone, or a turn is still using it.

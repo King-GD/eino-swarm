@@ -28,6 +28,11 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
 
 ## [Unreleased]
 
+### Fixed
+
+- Headless Web keeps the engine alive without a browser, reports exhausted
+  presence recovery to supervisors, and releases its hold on signal. (#170, `C-001`)
+
 ### Changed
 
 - Phone defaults to Account mode with required sign-in and avatar entry. Hide

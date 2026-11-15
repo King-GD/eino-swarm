@@ -1,5 +1,33 @@
 # Testing
 
+## Headless Web presence (`C-001`)
+
+`cmd/zwai/web_presence_test.go` drives `serveWeb` through real loopback HTTP
+handshakes: a web PID owns the hold, readiness waits for acknowledgement,
+startup refusal never becomes ready, signal cancellation releases and joins
+the stream, and four short streams exhaust the initial hold plus three
+recovery attempts. A real engine watcher advances past its idle grace while
+the waiter holds it, then exits after that hold is released. The CLI regression
+keeps an active turn unaffected by stopping only the waiter.
+`frontend/e2e/presence.spec.ts` distinguishes the headless launcher from its
+browser tab and checks that closing the tab leaves the launcher alive.
+
+`EngineLifecycle.tla` maps a ready headless waiter to the existing reserved /
+attached / opened shell states and signal release to `WindowCloses`. Idle exit
+is the unchanged `IdleCommit` / `IdleExit` pair. `headless-web-unheld` restores
+the reported missing hold and must violate `WindowHasEngine`; the current
+model checks that invariant together with the other lifecycle safety properties.
+The existing reachability cases cover attachment and idle exit after closing.
+This bounded model (two engines, one conversation, up to two turns) assumes
+atomic protocol transitions; it does not prove Go atomicity, network uptime or
+unbounded reconnect liveness. HTTP and process regressions cover those actual
+boundaries separately.
+
+```bash
+go test -race -count=1 ./cmd/zwai -run 'Presence|Web|Hold|Handshake'
+make model-check
+```
+
 PC chat omits whitespace-only assistant answers before creating layout rows.
 Recorded events remain available for replay and diagnostics. The work-fold
 unit test covers both display modes and streaming into visible content.

@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"os"
@@ -603,102 +602,6 @@ func httpGet(t *testing.T, url string) string {
 		t.Fatalf("GET %s: %d %s", url, resp.StatusCode, body)
 	}
 	return string(body)
-}
-
-// Ctrl-C in `zwai web` stops the waiter, not the engine. A turn left running
-// is not a user Stop, so it must not be marked cancelled.
-func TestWebWaiterStopLeavesTheEngineUp(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("OPENAI_BASE_URL", "")
-	t.Setenv("OPENAI_API_KEY", "")
-	t.Setenv("OPENAI_MODEL", "")
-	t.Cleanup(stopTestEngine)
-
-	stop := make(chan os.Signal, 1)
-	urls := make(chan string, 1)
-	errs := make(chan error, 1)
-	go func() {
-		errs <- serveWeb(
-			[]string{"--mock", "--no-open", "--addr", "127.0.0.1:0", "--data-dir", dir},
-			stop,
-			func(url string) { urls <- url },
-		)
-	}()
-
-	var url string
-	select {
-	case url = <-urls:
-	case err := <-errs:
-		t.Fatalf("the server stopped before it was listening: %v", err)
-	case <-time.After(30 * time.Second):
-		t.Fatal("the server never came up")
-	}
-
-	body := httpGet(t, url+"/api/meta")
-	if !strings.Contains(body, `"mode":"engine"`) {
-		t.Fatalf("meta: %s", body)
-	}
-	resp, err := http.Post(url+"/api/threads", "application/json", strings.NewReader("{}"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var created struct {
-		Thread store.Thread `json:"thread"`
-	}
-	_ = json.NewDecoder(resp.Body).Decode(&created)
-	resp.Body.Close()
-	resp, err = http.Post(url+"/api/threads/"+created.Thread.ID+"/turns",
-		"application/json", strings.NewReader(`{"text":"something long"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-
-	stop <- os.Interrupt
-	select {
-	case err := <-errs:
-		if err != nil {
-			t.Fatalf("web returned %v", err)
-		}
-	case <-time.After(20 * time.Second):
-		t.Fatal("the waiter did not return on a signal")
-	}
-	if got := httpGet(t, url+"/api/meta"); !strings.Contains(got, `"mode":"engine"`) {
-		t.Fatalf("the waiter stopped the engine: %s", got)
-	}
-	stopTestEngine()
-	deadline := time.Now().Add(10 * time.Second)
-	var down bool
-	for time.Now().Before(deadline) {
-		resp, err := http.Get(url + "/api/meta")
-		if err != nil {
-			down = true
-			break
-		}
-		resp.Body.Close()
-		time.Sleep(20 * time.Millisecond)
-	}
-	if !down {
-		t.Fatal("the engine did not exit after it was stopped")
-	}
-
-	st, err := store.Open(filepath.Join(dir, "zwai.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-	turns, err := st.ListTurns(created.Thread.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(turns) == 0 {
-		t.Fatal("the turn was not recorded")
-	}
-	for _, turn := range turns {
-		if turn.Status == store.TurnCancelled {
-			t.Fatalf("quit recorded a user stop: %+v", turn)
-		}
-	}
 }
 
 func TestWebRejectsAnUnusableAddress(t *testing.T) {

@@ -143,7 +143,7 @@ MODELS = {
         ),
         Model(
             "lifecycle", ROOT / "models" / "lifecycle" / "EngineLifecycle.tla",
-            ("DeadlineKillsChild", "RestoreBeforeListen", "StopRacesRestore", "PresenceAfterWindow",
+            ("DeadlineKillsChild", "RestoreBeforeListen", "StopRacesRestore", "PresenceAfterWindow", "HeadlessWaiterUnheld",
              "IdleCommitNonAtomic", "FinishUngated", "ParkedNotCheckpointed", "IdleCountsOnlyManagers",
              "ParkedAdmissionNonAtomic", "ParkedOwnerCheckedLate", "RestoreOwnerCheckedLate"),
             ("TypeOK", "WorkHasLiveOwner", "CheckpointHasOwner", "StopIsFinal", "WindowHasEngine",
@@ -460,6 +460,8 @@ CASES: tuple[Case, ...] = (
     _case("nuwa-reach-restore", "witness", witness="NeverRestored", model="nuwa"),
     _case("nuwa-reach-result", "witness", witness="NeverSharedResult", model="nuwa"),
     _case("nuwa-reach-delegation", "witness", witness="NeverDelegated", model="nuwa"),
+    _case("headless-web-unheld", "pre-170: serveWeb reports ready but never holds presence",
+          ("HeadlessWaiterUnheld",), "WindowHasEngine"),
     _case("current", "current design: every switch off"),
     _case("restore-owner-checked-late", "tagged project checked only after runtime occupation",
           ("RestoreOwnerCheckedLate",), "RestoreOwnsProject"),

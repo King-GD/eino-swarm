@@ -191,6 +191,8 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 
 ## C-001 One engine per data directory
 
+- Headless Web (`--no-open` or `server.open_browser: false`) acknowledges and holds a `web` presence before readiness. The waiter pins an idle engine, releases and joins that hold on signal, and fails on bounded same-address recovery exhaustion. Browser-opening Web continues to rely on tab presence. Evidence: `cmd/zwai/web_presence_test.go`, `cmd/zwai/cli_test.go`; protocol: `models/lifecycle/EngineLifecycle.tla` (`headless-web-unheld` re-finds #170; `WindowHasEngine` covers ready waiters as well as windows).
+
 - 状态：active；类型：lifecycle；作用范围：desktop、web、tui、engine；关联功能：`F-110`, `F-120`, `F-320`。
 - 恢复期间的 UI 操作：PC 目标编辑、清除和开始按钮显式禁用，已聚焦编辑框的 Enter／失焦不能绕过门禁；Stop 仍可用。目标编辑或清除只有实际成功 ACK 才收起编辑框；拒绝、丢失 ACK 或异常保留当前目标所属会话的编辑文字，`ready` 不自动重试，旧会话的迟到 ACK 不得关闭另一个会话的编辑。此处只保留当前页面编辑，不承诺目标草稿持久化。证据：`frontend/src/components/app/goal-banner.tsx`、`frontend/src/components/app/composer-goal-restoring.test.tsx`、`frontend/src/components/app/goal-banner-restoring.test.tsx`、`frontend/e2e/goal-restoring.spec.ts`。
 - 契约内容：同一数据目录只由一个 engine 进程持有；客户端连接同一 loopback 服务；不同版本或开发二进制身份替换引擎时先进行有界持久化交接并自动恢复。持锁但尚未发布地址的引擎必须在地址出现后经过同一身份和活动 turn 检查；子进程启动输给竞争者时也不得直接接受竞争者的 URL。身份/状态检查或检查点保存失败时不得假称已安全交接；明确报告错误并保留可重试的恢复现场。
