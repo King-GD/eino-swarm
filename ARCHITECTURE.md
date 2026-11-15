@@ -567,8 +567,8 @@ overwriting or re-signing an executable already used by an engine/window.
 
 Voice is an independent request service (`internal/speech`), not a chat turn or
 tool. The PC alone persists `speech.input`, `speech.output` and bounded resource
-limits. Its Settings → Speech page publishes the safe readiness snapshot through
-HTTP metadata and Pairlink `speech_config`/catalog. Both directions default off.
+limits. The voice sections in Settings → Models publish the safe readiness
+snapshot through HTTP metadata and Pairlink `speech_config`/catalog. Both directions default off.
 The pool resolves Gateway `transcription`/`speech` roles separately from the
 conversation profile alias; local voice selects its own provider/custom model.
 PC renderers use same-origin `/api/audio/*`, keeping credentials in Go.

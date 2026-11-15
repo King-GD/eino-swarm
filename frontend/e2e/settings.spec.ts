@@ -361,13 +361,14 @@ test("discovers models into the default dropdown", async ({ page, request }) => 
     await expect(
       dialog.getByRole("button", { name: `${heading} details` }),
     ).toBeVisible()
-    await expect(dialog.getByRole("textbox", { name: "Base URL" })).toHaveCount(0)
+    await expect(dialog.getByRole("textbox", { name: "Base URL", exact: true })).toHaveCount(0)
     await dialog.getByRole("button", { name: `${heading} details` }).click()
     await expect(dialog.getByLabel("Provider")).toBeVisible()
-    await expect(dialog.getByLabel("Base URL")).toHaveValue(
+    await expect(dialog.getByLabel("Base URL", { exact: true })).toHaveValue(
       "http://endpoint.invalid/v1",
     )
-    await dialog.getByRole("button", { name: "Discover models" }).click()
+    const ownServices = dialog.locator("section").filter({ has: page.getByRole("heading", { name: "Your own model services", exact: true }) })
+    await ownServices.getByRole("button", { name: "Discover models" }).click()
     // Opening the Radix listbox inside a Dialog marks the dialog aria-hidden,
     // so Back to app would hang. The combobox showing the name is enough: that is
     // the control the composer also reads after the sheet writes.
@@ -402,7 +403,8 @@ test("a failed model listing toasts over the open provider", async ({
     await dialog.getByRole("tab", { name: "Models" }).click()
     const heading = (provider.label || provider.id).trim()
     await dialog.getByRole("button", { name: `${heading} details` }).click()
-    const discover = dialog.getByRole("button", { name: "Discover models" })
+    const ownServices = dialog.locator("section").filter({ has: page.getByRole("heading", { name: "Your own model services", exact: true }) })
+    const discover = ownServices.getByRole("button", { name: "Discover models" })
     await expect(discover).toBeEnabled()
     await page.route("**/api/models/discover", async (route) => {
       await route.fulfill({

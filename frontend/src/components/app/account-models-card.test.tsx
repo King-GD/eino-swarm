@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { AccountModels, Meta, ModelInfo, RemoteStatus, Settings } from "@/lib/types"
@@ -46,6 +46,7 @@ const settings = (patch: Partial<Settings["models"]> = {}): Settings => ({
   log: { level: "info" },
 } as Settings)
 const meta = (account: AccountModels): Meta => ({
+  product_mode: "local",
   version: "test", mode: "desktop", mock: false, configured: true, default_provider: "",
   reasoning_levels: [], data_dir: "", capabilities: {}, swarm: {} as Meta["swarm"], account_models: account,
 })
@@ -67,6 +68,54 @@ beforeEach(() => {
 })
 
 describe("server models on the Models page", () => {
+  it("keeps model editing unavailable until product mode is known", () => {
+    useApp.setState({ meta: undefined })
+    render(<ModelsTab settings={settings()} onChange={vi.fn()} />)
+    expect(screen.queryByRole("button", { name: "Add a provider" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Endpoint details" })).toBeNull()
+    expect(screen.queryByRole("heading", { name: "Auxiliary models" })).toBeNull()
+    expect(screen.getByRole("heading", { name: "Voice input" })).toBeVisible()
+    expect(screen.queryByLabelText("API base URL")).toBeNull()
+  })
+
+  it("keeps a full-profile FOFA account read-only while exposing gateway voice controls", () => {
+    fake.status = signedIn
+    useApp.setState({ meta: { ...meta({ state: "ready", models: 1, profile: { presentation: "full", instruction: true, restrict_tools: false, tools: [] } }), product_mode: "fofa" } })
+    render(<ModelsTab settings={settings()} onChange={vi.fn()} />)
+    expect(screen.getByTestId("account-models-card")).toBeVisible()
+    expect(screen.queryByRole("combobox", { name: "Model list" })).toBeNull()
+    expect(screen.queryByRole("combobox", { name: "New conversations start with" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Add a provider" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Endpoint details" })).toBeNull()
+    expect(screen.queryByRole("heading", { name: "Auxiliary models" })).toBeNull()
+    expect(screen.getByRole("heading", { name: "Voice input" })).toBeVisible()
+  })
+
+  it("closes an outstanding account-presentation edit when the install switches to FOFA", async () => {
+    const account = meta({ state: "ready", models: 1, profile: { presentation: "official", instruction: true, restrict_tools: false, tools: [] } })
+    useApp.setState({ meta: { ...account, product_mode: "local" } })
+    const onChange = vi.fn()
+    render(<ModelsTab settings={settings()} onChange={onChange} />)
+    fireEvent.click(screen.getByRole("combobox", { name: "Model list" }))
+    fireEvent.click(await screen.findByRole("option", { name: "All models" }))
+    expect(await screen.findByRole("dialog", { name: "Switch to all models?" })).toBeVisible()
+    act(() => useApp.setState({ meta: { ...account, product_mode: "fofa" } }))
+    expect(screen.queryByRole("dialog", { name: "Switch to all models?" })).toBeNull()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it("closes an outstanding provider removal when the install switches to FOFA", () => {
+    const account = meta({ state: "signed_out", models: 0 })
+    useApp.setState({ meta: { ...account, product_mode: "local" } })
+    const onChange = vi.fn()
+    render(<ModelsTab settings={settings({ providers: [own, { ...own, id: "second", label: "Second" }] })} onChange={onChange} />)
+    fireEvent.click(screen.getAllByRole("button", { name: /remove|delete/i })[0])
+    expect(screen.getByRole("dialog")).toBeVisible()
+    act(() => useApp.setState({ meta: { ...account, product_mode: "fofa" } }))
+    expect(screen.queryByRole("dialog")).toBeNull()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
   it("invites sign-in first and keeps the own-service list below it", () => {
     render(<ModelsTab settings={settings({ providers: [{ ...own, ready: false, model: "" }] })} onChange={vi.fn()} />)
     const card = screen.getByTestId("account-models-card")

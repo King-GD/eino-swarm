@@ -7,8 +7,8 @@ behavior boundaries in [FEATURES](FEATURES.md) and [CONTRACTS](CONTRACTS.md).
 
 ## Voice input and read aloud
 
-Configure **Settings → Speech** on the PC. Voice input and spoken answers have
-separate switches, both initially off. Gateway mode reuses your account's
+Configure the voice sections in **Settings → Models** on the PC. Voice input
+and spoken answers have separate switches, both initially off. Gateway mode reuses your account's
 enabled recognition/speech roles. In local mode choose a service and its voice
 model, or configure a separate OpenAI-compatible endpoint. Select the recognition
 language, recording limit and, for playback, voice, speed and MP3/WAV output.
@@ -93,14 +93,15 @@ stays the same.
 project's instruction is the business context; when the two conflict, the
 project wins.
 
-A new install does not list **Settings → Models** and the composer has no model
-menu. Work asks you to sign in first. Those model controls appear after
-`product.mode: local` is set in the config file, or after three clicks on the
-portrait in account details. Another three clicks hides them again. See
-[Configuration](CONFIG.md). The key is absent while the install is FOFA.
+A new install shows managed models and voice configuration in **Settings →
+Models**; the composer has no model menu. Work asks you to sign in first. Local
+provider controls appear after `product.mode: local` is set in the config file,
+or after three clicks on the portrait in account details. Another three clicks
+hides those local controls again. See [Configuration](CONFIG.md). The key is
+absent while the install is FOFA.
 
-**Settings → Models** is base URL, API key, discover, and the default. The
-switch on a provider row shows that endpoint in the composer; off hides it
+In local mode, **Settings → Models** also edits base URL, API key, discovery
+and the default. The switch on a provider row shows that endpoint in the composer; off hides it
 from the model list without dropping a conversation that already uses it.
 Hiding the default moves new conversations to an endpoint that is still
 listed. The last endpoint stays on. The composer picker groups models by
@@ -124,8 +125,8 @@ are available. An existing setup with a working provider keeps starting on it
 conversations start on it.
 
 When the signed-in server publishes an official profile, the composer shows
-that server's name and does not open the model menu. Settings → Models offers
-**Official model** or **All models** on the account card. Official model hides
+that server's name and does not open the model menu. In local mode, Settings →
+Models offers **Official model** or **All models** on the account card. Official model hides
 this machine's own providers, auxiliary models and embedding names. Choosing
 All models asks first. After the switch, those services return, and they do
 not have this account's online capabilities. A conversation that already uses one of them keeps that

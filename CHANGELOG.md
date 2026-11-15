@@ -61,6 +61,10 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
 
 ### Changed
 
+- Voice input, read aloud and audio resource settings now live in Settings →
+  Models. Models is available in Gateway mode with managed models and voice
+  controls; local model editing remains restricted to local mode. (`F-148`, `C-048`)
+
 - Phone defaults to Account mode with required sign-in and avatar entry. Hide
   Local model/pairing/unlink menus and model selection in Account mode; three
   clicks on the User center portrait toggle a phone-only persisted Local mode.
@@ -114,9 +118,9 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
   order with code blocks omitted. (`F-148`, `C-048`)
 
 - The install mode is `product.mode`. A missing key means FOFA: sign in before
-  work, no Settings → Models section, and no composer model menu. Custom
-  provider edits and discovery are refused. `local` is written only when set,
-  from the config file or by clicking the portrait in the desktop account
+  work, managed models and voice controls in Settings → Models, and no composer
+  model menu. Custom provider edits and discovery are refused. `local` is written
+  only when set, from the config file or by clicking the portrait in the desktop account
   details three times. Another three clicks writes `fofa` again and drops the
   key. There is no Settings control for the mode. (`F-173`, `C-047`)
 
@@ -145,9 +149,9 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
 
 - A signed-in server can publish an official model profile. The composer shows
   the server's name, requests use the alias `account`, and that source can
-  append guidance and narrow workspace tools. Settings → Models can switch
-  between Official model and All models. A direct phone chat uses the same
-  name and switch; a paired phone follows the PC's filtered catalog.
+  append guidance and narrow workspace tools. In local mode, Settings → Models
+  can switch between Official model and All models. A direct phone chat uses the
+  same name and switch; a paired phone follows the PC's filtered catalog.
   (`F-172`, `F-171`, `C-046`, `C-040`)
 
 - The composer has a Tools menu. Built-in tools are one group, and each

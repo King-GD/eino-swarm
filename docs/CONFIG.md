@@ -35,13 +35,17 @@ empty value from the archive.
 
 ## Voice settings
 
-The PC's **Settings → Speech** edits `speech.input`, `speech.output` and
-`speech.limits`. Both directions default off. In Gateway mode the account's
+The voice sections in the PC's **Settings → Models** edit `speech.input`,
+`speech.output` and `speech.limits`. Both directions default off. In Gateway mode the account's
 fixed recognition/speech roles are used; local mode can select an existing
 provider or a separate custom endpoint/model. Voice models are independent of
 the composer conversation model. Input includes language, recognition prompt,
 automatic/WAV recording, maximum duration and timeout; output includes voice,
 speed, MP3/WAV format, optional instructions and timeout.
+
+Models is available in both modes. Gateway models remain managed by the account;
+local provider, default-model and auxiliary-model editing is available only in
+local mode. Voice controls use the same autosave as the other model settings.
 
 Phones synchronize the selected PC's safe projection and have no independent
 voice configuration. They retain its non-secret Gateway settings for offline-PC

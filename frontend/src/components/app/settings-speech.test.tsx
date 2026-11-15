@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { useState } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { SpeechTab } from "./settings-speech"
+import { SpeechSettings } from "./settings-speech"
 import { defaultSpeechSettings } from "@/lib/speech-types"
 import type { Settings, Meta } from "@/lib/types"
 import { useApp } from "@/store/app"
@@ -14,7 +14,7 @@ function setup(mode: "local" | "fofa", onChange = vi.fn(), onFlush = vi.fn(async
   speech.input.has_api_key = true
   function Host() {
     const [settings, setSettings] = useState({ speech, models: { default: "", providers: [] } } as unknown as Settings)
-    return <SpeechTab settings={settings} onChange={(next) => { setSettings(next); onChange(next) }} onFlush={onFlush} />
+    return <SpeechSettings settings={settings} onChange={(next) => { setSettings(next); onChange(next) }} onFlush={onFlush} />
   }
   render(<Host />)
   return { onChange, onFlush }

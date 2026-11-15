@@ -9,7 +9,7 @@ reconnection. API access is independent: approved users with an enabled API
 grant and Key can use **Server** models in Chat without any PC. An approved
 account without API permission can still connect to its PCs.
 
-Voice input and read aloud are configured only on the PC in **Settings → Speech**.
+Voice input and read aloud are configured only on the PC in **Settings → Models**.
 This phone reuses the explicitly selected PC's safe settings in both PC
 conversations and direct Chat; **User center** shows read-only status and sync
 time. Both directions default off. Tap the microphone beside Send, finish or

@@ -698,7 +698,7 @@ export const zh: { [K in keyof typeof en]: string } = {
 
   "settings.models.title": "模型",
   "settings.models.desc":
-    "每个提供商是一个接口。发现它提供的模型，选一个默认，然后在输入框里按会话切换。",
+    "配置对话、语音输入和语音朗读模型。网关模式由账号提供模型，本地模式可配置自己的服务。",
   "settings.models.providers": "提供商",
   "settings.models.providersDesc":
     "每个接口一行。开关决定它出不出现在输入框的模型列表里。打开后可改 URL、密钥和默认模型。",

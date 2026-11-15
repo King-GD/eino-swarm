@@ -21,6 +21,14 @@ Gateway direct calls with the phone's own session and local PC chunk/cancel RPC.
 Run the corresponding browser E2E with isolated ports/data/output and do not
 rebuild a Vite dist while serving a case.
 
+Settings regressions keep voice input, read aloud and resource limits inside
+Models, with no separate Speech navigation item. Voice search terms select
+Models and its autosave flush persists pending credentials before discovery or
+leaving the page. Models remains reachable in local and Gateway modes, including
+signed-out Gateway installs; Gateway never exposes local provider, default,
+auxiliary or account-presentation editing. Browser speech cases enter through
+Models before exercising recording and playback.
+
 Headless and fixture checks do not accept physical microphone capture or native
 playback. Mac acceptance runs only in the identified `ci-macOS` guest through
 the existing case lifecycle. iOS/Android packaged tests must reach Voice status,

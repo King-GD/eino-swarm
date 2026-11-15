@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -30,12 +30,16 @@ export function AccountModelsCard({
   const [leaveOfficial, setLeaveOfficial] = useState(false)
   const account = useApp((s) => s.meta?.account_models)
   const fofa = useApp((s) => s.meta?.product_mode) === "fofa"
+  const local = useApp((s) => s.meta?.product_mode) === "local"
   const problem = accountModelsProblem(account)
   const ready = account?.state === "ready"
   const tally = accountKindTally(account?.kinds)
   const ownReady = settings.models.providers.some((p) => p.ready && p.enabled !== false)
   const source = settings.models.default_source ?? "account"
-  const officialOnly = officialModelLock(account)
+  const officialOnly = !local || officialModelLock(account)
+  useEffect(() => {
+    if (!local) setLeaveOfficial(false)
+  }, [local])
   const presentation = settings.models.account_presentation === "full" ? "full" : "official"
   const choosePresentation = (next: string) => {
     const value = next === "full" ? "full" : "official"
@@ -79,7 +83,7 @@ export function AccountModelsCard({
         </div>
         {ready ? null : <AccountSignIn />}
       </div>
-      {account?.profile ? (
+      {local && account?.profile ? (
         <SettingsChoice
           label={t("accountModels.presentationTitle")}
           value={presentation}
@@ -90,7 +94,7 @@ export function AccountModelsCard({
           <SelectItem value="full">{t("accountModels.presentationFull")}</SelectItem>
         </SettingsChoice>
       ) : null}
-      {leaveOfficial ? (
+      {local && leaveOfficial ? (
         <Dialog open onOpenChange={setLeaveOfficial}>
           <DialogContent className="max-w-md">
             <DialogHeader>

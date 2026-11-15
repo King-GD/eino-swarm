@@ -728,7 +728,7 @@ export const en = {
 
   "settings.models.title": "Models",
   "settings.models.desc":
-    "Each provider is one endpoint. Discover the models it serves, pick a default, and switch per conversation in the composer.",
+    "Configure conversation, voice input, and read-aloud models. Gateway models come from your account; local mode lets you configure your own services.",
   "settings.models.providers": "Providers",
   "settings.models.providersDesc":
     "Each endpoint is a row. The switch puts it in the composer. Open one to edit the URL, key, and default model.",

@@ -1,6 +1,6 @@
 export const speechEn = {
   "speech.title": "Speech",
-  "speech.settingsHint": "Configure speech on this PC. Your phone reuses these settings.",
+  "speech.settingsHint": "Configure Voice input and Read aloud on this PC in Settings → Models. Your phone reuses these settings.",
   "speech.noConfig": "Connect to a PC to sync its speech settings.",
   "speech.synced": "Last synced: {time}",
   "speech.gateway": "Phone calls the Gateway directly",
@@ -35,7 +35,7 @@ export const speechEn = {
 
 export const speechZh: Record<keyof typeof speechEn, string> = {
   "speech.title": "语音",
-  "speech.settingsHint": "请在此电脑上配置语音，手机同步使用这些设置。",
+  "speech.settingsHint": "请在此电脑的「设置 → 模型」中配置语音输入和语音朗读，手机同步使用这些设置。",
   "speech.noConfig": "连接一台电脑以同步语音配置。",
   "speech.synced": "上次同步：{time}",
   "speech.gateway": "手机直接调用网关",
