@@ -37,6 +37,12 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
 
 ### Fixed
 
+- Settings → Swarm → sub-agents at once is the number of sub-agents one task
+  may run at the same time. Lowering it stops the workers that took a slot
+  last and leaves the earlier ones running. A stopped worker needs a free
+  slot before it can resume. `models/swarm/ConcurrencyCap.tla` checks that
+  the running set stays within the cap. (`C-009`)
+
 - Native offline smoke explicitly selects LOCAL in its private configuration
   before launching. It no longer waits for a composer behind the default FOFA
   sign-in welcome page; FOFA login still needs separate acceptance.

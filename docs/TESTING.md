@@ -4999,6 +4999,23 @@ make model-check
 python3 tools/model_check.py --fetch installed-skills-current --out /tmp/installed-skills-model
 ```
 
+## Sub-agent concurrency cap (opt-in, `C-009`)
+
+`models/swarm/ConcurrencyCap.tla` checks one task. Holders are the sub-agents
+inside a model call, oldest first. A programmatic spawn waits until
+`Len(holders) < cap`. Lowering the cap keeps that oldest prefix and stops the
+rest. `ShrinkKeepsHolders` is the v0.1.77 gate, which left those holders
+running and must break `HoldersWithinCap`. `NeverPreempted` is a witness that
+a lower cap can stop a holder. The model does not prove Go locking, or that a
+tool which ignores cancel releases its slot before it returns.
+`TestLoweringMaxConcurrentStopsNewestHoldersAndKeepsTheEarliest` covers a
+model call that honors cancellation: the newest holder stops, the earliest
+keeps the slot, and a queued worker stays out until that slot is released.
+
+```bash
+python3 tools/model_check.py --fetch concurrency-cap-current concurrency-cap-shrink-keeps-holders concurrency-cap-reach-preempt
+```
+
 ## iOS startup prompt model (opt-in, `C-045`)
 
 `models/mobile/IOSStartupPrompt.tla` checks the shell's document-start decision,
@@ -6418,11 +6435,11 @@ sees in-flight sub-agents after the manager yields.
 `finished` after the manager `RunWith` returns, instead of freezing
 Agents on starting with an empty pane.
 `TestRaisingMaxConcurrentUnblocksQueuedWorkers` /
-`TestLoweringMaxConcurrentKeepsWaitersQueuedUntilASlotFrees` /
+`TestLoweringMaxConcurrentStopsNewestHoldersAndKeepsTheEarliest` /
 `TestApplyLiveSwarmLimitsResizesParkedAndRunningRegistries` are why
 Settings → Swarm → sub-agents at once takes effect on the live and
-parked registry: a higher cap starts waiters immediately, a lower cap
-does not kill in-flight workers.
+parked registry: a higher cap starts waiters immediately, and a lower cap
+stops the newest holders until the task is back within the number.
 `TestSpawnToolRefusesPastTheConcurrencyCap` /
 `TestParallelSpawnsAdmitOnlyTheCap` /
 `TestSameRoleSteerDoesNotNeedAFreeSlot` /

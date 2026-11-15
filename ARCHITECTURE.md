@@ -1608,8 +1608,9 @@ worker before closing SQLite.
    a resizable gate, not a channel minted once: `PUT /settings`
    calls `ApplyLiveSwarmLimits` so workers already queued by a programmatic
    `Spawn` on a live or parked
-   `/goal` registry see the new budget without a restart, and so the
-   schedule ticker's frozen caps (active waits, min interval, default
+   `/goal` registry see the new budget without a restart. Lowering the cap
+   stops the newest holders until the running set fits; the earlier holders
+   keep their slots. The schedule ticker's frozen caps (active waits, min interval, default
    provider) match inbox create/resume/patch instead of racing
    `config.Replace`. If the
    manager hits `swarm.manager_max_iterations`, the turn **pauses** (still

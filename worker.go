@@ -87,8 +87,12 @@ func (r *Registry) startWorker(ctx context.Context, h *Handle, task, message, in
 				}
 			}
 		}()
-		r.acquireSlot()
-		defer r.releaseSlot()
+		h.mu.Lock()
+		h.preemptedByCap = false
+		h.preemptedCap = 0
+		h.mu.Unlock()
+		r.acquireSlot(h)
+		defer r.releaseSlot(id)
 		defer cancel()
 		defer watchCancel()
 

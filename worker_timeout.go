@@ -60,7 +60,11 @@ func (h *Handle) completeWorker(result string, err error, timeout time.Duration,
 			h.timeoutFailures = 0
 		}
 		if err != nil && runErr != nil {
-			h.err = fmt.Errorf("swarm: agent %s cancelled: %w", h.ID, err)
+			cause := err
+			if h.preemptedByCap {
+				cause = fmt.Errorf("concurrency cap lowered to %d", h.preemptedCap)
+			}
+			h.err = fmt.Errorf("swarm: agent %s cancelled: %w", h.ID, cause)
 		}
 	}
 	h.finished = time.Now()
