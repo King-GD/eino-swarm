@@ -284,6 +284,7 @@ export const en = {
 
   "notice.goalCompleted": "Standing objective completed.",
 
+  "goal.mode": "Goal mode",
   "goal.pursuing": "Pursuing",
   "goal.paused": "Paused",
   "goal.blocked": "Blocked",

@@ -12,11 +12,13 @@ export type MockGoalFields = {
 
 /** The offline host keeps the same pause in its detail replies and events. */
 export function mockGoalFixture(history: string | null): { fields: MockGoalFields; events: Step[] } | undefined {
-  if (!["goal-complete", "goal-paused", "goal-blocked", "goal-idle"].includes(history ?? "")) return undefined
+  if (!["goal-active", "goal-complete", "goal-paused", "goal-blocked", "goal-idle"].includes(history ?? "")) return undefined
   const goal = history === "goal-complete" ? "Verify current work" : "Verify the required artifact."
   const fields: MockGoalFields = { goal }
   const events: Step[] = [{ kind: "goal", text: goal }]
-  if (history === "goal-paused") {
+  if (history === "goal-active") {
+    events.push({ kind: "spawned", agentID: "goal-worker", role: "reader" })
+  } else if (history === "goal-paused") {
     fields.goalCapped = true
     events.push({ kind: "goal_capped", text: '{"auto_turns":1,"cap":1}' })
   } else if (history === "goal-blocked") {

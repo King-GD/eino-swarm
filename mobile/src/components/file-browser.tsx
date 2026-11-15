@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { TextFilePreview } from "@/components/text-file-preview"
 import { ImageFilePreview } from "@/components/image-file-preview"
 import { PhoneRichPreview } from "@/components/document-preview"
@@ -31,10 +31,11 @@ function fileFailure(cause: unknown): string {
 
 // Files arrive over the sealed PC link. HTML is a sandboxed artifact.
 // EPUB stays script-free. Office packages are parsed, never executed.
-export function FileBrowser({ link, threadId, onClose }: {
+export function FileBrowser({ link, threadId, onClose, status }: {
   link: RemoteLink
   threadId: string
   onClose: () => void
+  status?: ReactNode
 }) {
   const [listings, setListings] = useState<Record<string, WorkspaceFile[]>>({})
   const [loading, setLoading] = useState(true)
@@ -211,6 +212,7 @@ export function FileBrowser({ link, threadId, onClose }: {
             aria-label={t("files.refresh")}><RefreshCw className="size-4" /></Button>
         )}
       </header>
+      {status}
       {selected ? (
         <section data-testid="phone-file-preview" className={`flex min-h-0 flex-1 flex-col overflow-hidden ${epub ? "" : "p-4"}`}>
           {epub ? (

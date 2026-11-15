@@ -233,6 +233,8 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-150 Goals and scheduled waits
 
+- 手机目标模式：未完成目标条明确标注“目标模式”，在主对话、子 Agent 列表、worker 日志与产出物页面保持可见；恢复目标按钮仍仅在主对话提供。完成或清除目标后收起。关联契约：`C-009`；证据：`mobile/src/components/status-banners.tsx`、`mobile/src/components/thread-screen.tsx`、`mobile/src/components/goal-mode.test.tsx`、`mobile/e2e/goal-mode.spec.ts`。
+
 - 暂停状态的含义：PC 与手机目标条明确显示“自动执行已暂停”和自动执行暂停原因；时间标为“目标设立至今”，从 `goal_started_at` 累计，包含暂停期间。后续普通手动答复不会解除既有目标暂停；显式恢复、目标完成、清除或重新设定目标按各自回执更新状态；实际可用的 Start 控件旁才显示恢复操作提示。无恢复入口时仍显示已记录的暂停原因。关联契约：`C-009`；实现／验证：`frontend/src/components/app/goal-banner.tsx`、`frontend/src/components/app/goal-banner.test.tsx`、`frontend/e2e/goal-pause.spec.ts`、`mobile/src/components/status-banners.tsx`、`mobile/src/components/goal-pause-meaning.test.tsx`、`mobile/src/lib/goal-pause.test.ts`、`mobile/e2e/goal-pause.spec.ts`；来源：Issue #131。
 
 - 最后一轮自动续跑且无活动同对话 wake 时，Goal 明确要求本轮收齐或显式放弃 pending worker，不能承诺下一自动轮接管；历史 finished 与 running 分组提示。运行代完成唤醒遵循 `C-019` 的每 turn 一次额度及重启身份边界。证据：`internal/engine/prompt_goal_worker.go`、`internal/engine/worker_completion_wake_test.go`。

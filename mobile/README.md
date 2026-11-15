@@ -261,7 +261,9 @@ wait is the banner (next check, **Run now**, **Cancel wait**).
 Each finished PC turn leaves a divider stamped with its host completion time,
 including scheduled checks whose automatic input is hidden on the phone.
 `schedule_report` stays on the `report_schedule` chip.
-An unfinished `/goal` shows Pursuing / Blocked / Paused; paused or blocked
+An unfinished `/goal` shows an explicit **Goal mode** strip with its objective
+and Pursuing / Auto-run paused status. The strip stays visible in the chat,
+Agents, worker log and Outputs pages. Resume controls stay in the main chat; paused or blocked
 objectives retain Start. Completion removes the goal strip immediately and
 keeps it hidden after reopening; the stored objective, completion state and
 conversation history remain on the PC. A localized completion notice stays in
