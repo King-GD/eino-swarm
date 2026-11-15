@@ -30,6 +30,8 @@ func handleCatalog(eng *engine.Engine, req Request, path, sessionID string) Resp
 	resp.WebExecutionSupported = true
 	webStatus := tools.DescribeWebExecution(eng.Config())
 	resp.WebExecutionStatus = &webStatus
+	resp.Speech = speechSnapshot(eng)
+	resp = boundSpeechResponse(resp, false)
 	raw, err := json.Marshal(resp)
 	if err != nil {
 		return fail(req.ID, path, sessionID, "", fmtErr(err))

@@ -1,0 +1,60 @@
+/** Persisted on the PC; credentials never enter the phone snapshot. */
+export interface SpeechConnectionSettings {
+  enabled: boolean
+  source: "account" | "provider" | "custom"
+  provider_id: string
+  base_url: string
+  model: string
+  api_key?: string
+  has_api_key?: boolean
+}
+
+export interface SpeechInputSettings extends SpeechConnectionSettings {
+  language: string
+  prompt: string
+  recording_format: "auto" | "wav"
+  max_duration_seconds: number
+  timeout_seconds: number
+}
+
+export interface SpeechOutputSettings extends SpeechConnectionSettings {
+  voice: string
+  speed: number
+  format: "mp3" | "wav"
+  instructions: string
+  timeout_seconds: number
+}
+
+export interface SpeechLimits {
+  input_bytes: number
+  output_bytes: number
+  chunk_chars: number
+  staging_ttl_seconds: number
+}
+
+export interface SpeechSettings {
+  input: SpeechInputSettings
+  output: SpeechOutputSettings
+  limits: SpeechLimits
+}
+
+export interface SpeechSnapshot {
+  execution: "gateway" | "pc_local"
+  gateway_origin?: string
+  input: Pick<SpeechInputSettings, "enabled" | "language" | "prompt" | "recording_format" | "max_duration_seconds" | "timeout_seconds"> & {
+    ready: boolean; reason?: string; model: string; label: string
+  }
+  output: Pick<SpeechOutputSettings, "enabled" | "voice" | "speed" | "format" | "instructions" | "timeout_seconds"> & {
+    ready: boolean; reason?: string; model: string; label: string
+  }
+  limits: SpeechLimits
+}
+
+export function defaultSpeechSettings(value?: Partial<SpeechSettings>): SpeechSettings {
+  const connection = { enabled: false, source: "account" as const, provider_id: "", base_url: "", model: "" }
+  return {
+    input: { ...connection, language: "", prompt: "", recording_format: "auto", max_duration_seconds: 120, timeout_seconds: 120, ...value?.input },
+    output: { ...connection, voice: "", speed: 1, format: "mp3", instructions: "", timeout_seconds: 120, ...value?.output },
+    limits: { input_bytes: 25 << 20, output_bytes: 32 << 20, chunk_chars: 1000, staging_ttl_seconds: 300, ...value?.limits },
+  }
+}

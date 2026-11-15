@@ -8,6 +8,7 @@ import (
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/engine"
 	"github.com/LubyRuffy/eino-swarm/internal/remote"
+	"github.com/LubyRuffy/eino-swarm/internal/speech"
 	"github.com/LubyRuffy/eino-swarm/internal/tools"
 	"github.com/gin-gonic/gin"
 )
@@ -40,6 +41,7 @@ type metaView struct {
 	UI              config.UIConfig           `json:"ui"`
 	Clients         []PresenceClient          `json:"clients"`
 	DataGeneration  int64                     `json:"data_generation"`
+	Speech          speech.SnapshotView       `json:"speech"`
 }
 
 func (s *Server) getMeta(c *gin.Context) {
@@ -83,6 +85,7 @@ func (s *Server) getMeta(c *gin.Context) {
 		UI:             cfg.UI,
 		Clients:        clients,
 		DataGeneration: generation,
+		Speech:         s.speechService().Snapshot(),
 	})
 }
 
@@ -107,6 +110,7 @@ type settingsView struct {
 	Remote      config.RemoteConfig      `json:"remote"`
 	Search      config.SearchConfig      `json:"search"`
 	Clients     config.ClientsConfig     `json:"clients"`
+	Speech      speechSettingsView       `json:"speech"`
 	Product     struct {
 		Mode string `json:"mode"`
 	} `json:"product"`
@@ -141,6 +145,7 @@ func toSettingsView(cfg *config.Config) settingsView {
 	v.Remote = cfg.Remote
 	v.Search = cfg.Search
 	v.Clients = cfg.Clients
+	v.Speech = toSpeechSettingsView(cfg.Speech)
 	v.Product.Mode = cfg.Product.Resolved()
 	v.Models.Default = cfg.Models.Default
 	v.Models.DefaultSource = cfg.Models.DefaultSource
@@ -250,6 +255,7 @@ type putSettingsRequest struct {
 	Search      *config.SearchConfig      `json:"search"`
 	Clients     *config.ClientsConfig     `json:"clients"`
 	Product     *config.ProductConfig     `json:"product"`
+	Speech      *putSpeechSettings        `json:"speech"`
 }
 
 // putMemorySettings preserves the verifier setting when older clients save
@@ -346,6 +352,9 @@ func (s *Server) putSettings(c *gin.Context) {
 		}
 		if req.Clients != nil {
 			next.Clients = *req.Clients
+		}
+		if req.Speech != nil {
+			next.Speech = mergeSpeechSettings(cfg.Speech, req.Speech)
 		}
 		if req.Product != nil {
 			next.Product.Mode = req.Product.Mode

@@ -27,6 +27,9 @@ if gateway:
         raise SystemExit("Account fixtures must preserve packaged public bytes")
     gateway = gateway.rstrip("/")
 scenario_source = scenario_file.read_text()
+phone_mode = os.environ.get("IOS_LAYOUT_PHONE_MODE", "")
+if phone_mode not in ("", "account", "local"):
+    raise SystemExit("IOS_LAYOUT_PHONE_MODE must be account or local")
 if "__ZWAI_GATEWAY_FIXTURE_ORIGIN__" in scenario_source:
     if not gateway:
         raise SystemExit("The account scenario needs a loopback origin")
@@ -47,6 +50,8 @@ if locale not in ("en", "zh"):
     raise SystemExit("IOS_LAYOUT_LOCALE must be en or zh")
 bootstrap = ('history.replaceState(null,"",' + json.dumps(query) + ');'
              'localStorage.setItem("zwai.phone.locale",' + json.dumps(locale) + ');')
+if phone_mode:
+    bootstrap += 'localStorage.setItem("zwai.phone.mode",' + json.dumps(phone_mode) + ');'
 if gateway:
     bootstrap += 'localStorage.setItem("zwai.phone.gateway.origin",' + json.dumps(gateway) + ');'
 if os.environ.get("IOS_LAYOUT_PRESERVE_PUBLIC") == "1":

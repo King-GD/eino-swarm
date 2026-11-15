@@ -1,3 +1,4 @@
+import { SpeechReadButton } from "./speech-read-button"
 import { IterationLimitCard } from "./iteration-limit-card"
 import { BackoffNotice } from "./backoff-notice"
 import { GenerationNotice } from "./generation-notice"
@@ -489,6 +490,7 @@ function Answer({ block, showClock }: { block: Block; showClock?: boolean }) {
       {showClock ? (
         <MessageMeta at={block.at} timeTestId="assistant-message-time">
           {copy}
+          {copy ? <SpeechReadButton id={block.id} text={block.text} /> : null}
         </MessageMeta>
       ) : null}
     </div>

@@ -15,7 +15,7 @@ export function persistPayload(
   const patch: SettingsPatch = {}
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
   for (const key of [
-    "server", "tools", "personality", "log", "remote", "search", "clients",
+    "server", "tools", "personality", "log", "remote", "search", "clients", "speech",
   ] as const) {
     if (!same(next[key], baseline[key])) Object.assign(patch, { [key]: next[key] })
   }

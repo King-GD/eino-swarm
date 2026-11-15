@@ -1,5 +1,34 @@
 # Testing
 
+## Voice input and spoken answers (F-148 / C-048)
+
+`internal/config/speech_test.go` and `internal/speech/service_test.go` cover
+independent switches, private settings, typed model discovery, Gateway role
+resolution, exact multipart/audio bytes, request limits and real HTTP
+cancellation. `internal/server/speech_http_test.go` crosses the actual same-origin
+HTTP/settings boundary. `internal/remote/speech_rpc_test.go` crosses LinkPump
+dispatch with real loopback upstreams: only local execution is admitted, Stop
+and ordinary RPC stay responsive, cancellation/Close join owned requests, sealed
+chunks preserve bytes, final chunks can be read again, oversized ASR fails
+without truncation and temporary buffers expire. Voice creates no conversation
+or ordinary attachment staging. `internal/backup/speech_secrets_test.go` uses
+actual archives/restoration to check voice-key redaction and endpoint identity.
+
+Frontend tests cover Markdown prose extraction, lossless draft insertion and
+recording/player ownership, including late permission/model responses. Phone
+cache/transport tests cover complete pairing authority, no stored credentials,
+Gateway direct calls with the phone's own session and local PC chunk/cancel RPC.
+Run the corresponding browser E2E with isolated ports/data/output and do not
+rebuild a Vite dist while serving a case.
+
+Headless and fixture checks do not accept physical microphone capture or native
+playback. Mac acceptance runs only in the identified `ci-macOS` guest through
+the existing case lifecycle. iOS/Android packaged tests must reach Voice status,
+recording controls, permission refusal/recovery and playback. Report physical
+device capture separately from simulator-generated media. Preserve first
+failures, audio MIME/byte evidence, target identity and cleanup receipts outside
+the checkout; never invoke a real model from an automated test.
+
 ## Headless Web presence (`C-001`)
 
 `cmd/zwai/web_presence_test.go` drives `serveWeb` through real loopback HTTP

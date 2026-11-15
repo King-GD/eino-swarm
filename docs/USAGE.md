@@ -5,6 +5,34 @@ worked example. Keys and defaults are in [CONFIG](CONFIG.md), commands in
 [CLI](CLI.md), the phone app in [mobile/README](../mobile/README.md), and
 behavior boundaries in [FEATURES](FEATURES.md) and [CONTRACTS](CONTRACTS.md).
 
+## Voice input and read aloud
+
+Configure **Settings → Speech** on the PC. Voice input and spoken answers have
+separate switches, both initially off. Gateway mode reuses your account's
+enabled recognition/speech roles. In local mode choose a service and its voice
+model, or configure a separate OpenAI-compatible endpoint. Select the recognition
+language, recording limit and, for playback, voice, speed and MP3/WAV output.
+Try recording or playback in Settings to check the selected service.
+
+The microphone appears beside Send only when recognition is enabled and ready.
+On PC, click to record, click again to finish, or press Escape to cancel.
+On the phone, tap to open the recording panel and choose Finish or Cancel.
+Recognition inserts editable text; it never sends the message. If you edited
+the draft meanwhile, the recognized text is appended without replacing your work.
+
+Read aloud sits beside Copy under a completed answer. It skips code blocks and
+diagram source, plays long prose in order, and stops on another click. Recording
+and playback release their resources when you cancel, leave the conversation,
+change source, or background the phone.
+
+Phones have no separate voice model settings. The currently selected PC supplies
+their configuration; User center shows its read-only state and last sync time.
+Gateway speech goes directly from the phone using its own login to the same
+Gateway. After synchronization it still works if the PC goes offline; later PC
+edits apply when synchronized again. Local speech requires that PC online and
+its local voice model enabled and configured. A missing configuration never
+switches automatically to a different computer or service.
+
 ## The window
 
 The left rail switches **Projects** (the default), **Conversations**,

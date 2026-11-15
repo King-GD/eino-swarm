@@ -55,6 +55,11 @@ type LinkPump struct {
 	catalogCancel context.CancelFunc
 	catalogClosed bool
 	catalogWG     sync.WaitGroup
+	audioMu       sync.Mutex
+	audioClosed   bool
+	audioWG       sync.WaitGroup
+	audioJob      *audioJob
+	audioSeen     map[string]time.Time
 }
 
 func newLinkPump(eng *engine.Engine, cfg config.RemoteConfig, l *client.Link) *LinkPump {
@@ -77,6 +82,7 @@ func newLinkPump(eng *engine.Engine, cfg config.RemoteConfig, l *client.Link) *L
 }
 
 func (p *LinkPump) Close() {
+	p.stopAudio()
 	p.stopCatalogRefresh()
 	p.stopWatch()
 }
@@ -117,6 +123,16 @@ func (p *LinkPump) Dispatch(msg []byte) {
 		p.reply(okBase(req.ID, p.path, p.sessionID))
 	case OpRefreshCatalog:
 		p.startCatalogRefresh(req)
+	case OpAudioTranscribe, OpAudioSpeech, OpAudioChunk, OpAudioCancel:
+		p.dispatchAudio(req)
+	case OpPut:
+		if req.Purpose == "audio" {
+			p.dispatchAudio(req)
+		} else if req.Purpose != "" {
+			p.reply(fail(req.ID, p.path, p.sessionID, "bad_request", "unknown upload purpose"))
+		} else {
+			p.reply(HandleWith(p.eng, p.cfg, p.stage, req, p.path, p.sessionID))
+		}
 	default:
 		p.reply(HandleWith(p.eng, p.cfg, p.stage, req, p.path, p.sessionID))
 	}

@@ -36,6 +36,7 @@ import type {
 } from "./types"
 import { defaultClientsSettings, defaultRemoteSettings, defaultSearchSettings } from "./types"
 import { normalizeUISettings } from "./appearance"
+import { defaultSpeechSettings } from "./speech-types"
 import type { ClientCatalog } from "./local-clients"
 import type { SendImage } from "./paste-image"
 import type { ThreadLog } from "./thread-log"
@@ -334,6 +335,7 @@ function withToolLists(s: Settings): Settings {
     remote: defaultRemoteSettings(s.remote),
     search: defaultSearchSettings(s.search),
     clients: defaultClientsSettings(s.clients),
+    speech: defaultSpeechSettings(s.speech),
   }
 }
 

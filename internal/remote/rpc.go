@@ -46,7 +46,12 @@ func dispatch(eng *engine.Engine, cfg config.RemoteConfig, stage *Staging, req R
 		resp.WebExecutionSupported = true
 		webStatus := tools.DescribeWebExecution(eng.Config())
 		resp.WebExecutionStatus = &webStatus
-		return resp
+		resp.Speech = speechSnapshot(eng)
+		return boundSpeechResponse(resp, false)
+	case OpSpeechConfig:
+		resp := okBase(req.ID, path, sessionID)
+		resp.Speech = speechSnapshot(eng)
+		return boundSpeechResponse(resp, true)
 	case OpList, OpMore:
 		return handleList(eng, cfg, req, path, sessionID)
 	case OpClients:
@@ -83,6 +88,9 @@ func dispatch(eng *engine.Engine, cfg config.RemoteConfig, stage *Staging, req R
 	case OpTune:
 		return handleTune(eng, req, path, sessionID)
 	case OpPut:
+		if req.Purpose != "" {
+			return fail(req.ID, path, sessionID, "bad_request", "audio uploads require a live link")
+		}
 		return acceptPut(stage, req, path, sessionID)
 	case OpFollowupDrop:
 		if err := eng.DeleteFollowup(req.ThreadID, req.FollowupID); err != nil {

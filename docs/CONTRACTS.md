@@ -2,6 +2,16 @@
 
 Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user entry points and [CHANGELOG.md](../CHANGELOG.md) for history. Contract IDs are stable.
 
+## C-048 Voice configuration belongs to the PC; execution follows its mode
+
+- Status: active. Scope: PC/Web voice settings, editable dictation, finished-answer playback, phone configuration synchronization and audio transport. Feature: `F-148`.
+- `speech.input` and `speech.output` are independent, off by default. In Gateway mode the PC resolves the fixed `transcription` and `speech` roles without the conversational profile alias. Local mode requires an explicitly configured provider/custom voice model. Every request checks current configuration and cancellation; a model or account change invalidates old work.
+- Phones reuse only the explicitly selected PC's safe configuration, bound to its pairing authority. They never receive PC API keys or Host tokens. Gateway audio uses the phone's own valid session on the same verified origin; no redirect, PC proxy or implicit fallback is allowed. The per-PC non-secret Gateway snapshot may be used offline until the next synchronization. Thus a setting changed on an unreachable PC takes effect on the phone at its next synchronization. Unlinking removes the cached source. Local execution requires that exact PC online and enabled; it never falls back to cached execution or another PC.
+- Dictation belongs to its original draft. An unchanged draft receives text at the captured caret; an edited draft receives an append without loss. There is no automatic send. Playback uses completed prose, skips fenced code/diagram source, and sequences bounded segments through one cancelable player. Navigation, authority changes, disabling a direction and backgrounding stop owned capture/requests/playback and discard late results.
+- Audio is ephemeral memory, not a workspace attachment or durable message/event. Local phone RPC has one upload/job/result per connection, bounded chunks, explicit cancellation, idle expiry, replay refusal and join-on-close. Receiving Stop and ordinary RPC must remain responsive during model calls. ASR responses too large for one sealed frame fail explicitly rather than truncate.
+- Defaults: recording/request 120 seconds; input 25 MiB, output 32 MiB per segment, 1000 Unicode characters per text segment, staged idle expiry 300 seconds. Configurable limits are validated. Settings/API JSON expose only credential presence. Credential-free backups omit voice keys and preserve destination custom keys only for the same endpoint.
+- 实现 `internal/speech`、`internal/remote/speech.go`、`internal/server/speech.go`。验证：`internal/config/speech_test.go`, `internal/speech/service_test.go`, `internal/remote/speech_rpc_test.go`, `internal/server/speech_http_test.go`, `internal/backup/speech_secrets_test.go`, `frontend/src/lib/speech-text.test.ts`, `mobile/src/lib/speech-cache.test.ts`, `mobile/src/lib/speech-transport.test.ts`.
+
 ## C-047 The default install is FOFA and does not record that fact
 
 - 状态：active；类型：configuration；作用范围：本机 `product.mode`、设置与 meta、开始一轮工作的 HTTP 和配对手机 RPC；关联功能：`F-173`、`F-170`、`F-171`、`F-220`。

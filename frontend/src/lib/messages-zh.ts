@@ -12,7 +12,10 @@ import { backupZh } from "./messages-backup-zh"
 import type { en } from "./messages-en"
 
 /** Chinese UI chrome. Every key in messages-en.ts must have a string here. */
+import { speechZh } from "./messages-speech"
+
 export const zh: { [K in keyof typeof en]: string } = {
+  ...speechZh,
   ...backupZh,
   ...mcpZH,
   ...backoffZh,

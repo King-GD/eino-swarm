@@ -17,6 +17,7 @@ describe("native phone apps", () => {
     expect(existsSync(plistPath), "ios project missing — cap add ios").toBe(true)
     const plist = read("ios/App/App/Info.plist")
     expect(plist).toMatch(/NSCameraUsageDescription/)
+    expect(plist).toMatch(/NSMicrophoneUsageDescription/)
     // The camera component links the photo library. App Store processing
     // rejects the binary when those purpose strings are absent, even though
     // this app only requests the camera.
@@ -41,6 +42,9 @@ describe("native phone apps", () => {
     expect(existsSync(manifestPath), "android project missing — cap add android").toBe(true)
     const manifest = read("android/app/src/main/AndroidManifest.xml")
     expect(manifest).toMatch(/android\.permission\.CAMERA/)
+    expect(manifest).toMatch(/android\.permission\.RECORD_AUDIO/)
+    expect(manifest).toMatch(/android\.permission\.MODIFY_AUDIO_SETTINGS/)
+    expect(manifest).toMatch(/android\.hardware\.microphone" android:required="false"/)
     expect(manifest).toMatch(/android\.permission\.REQUEST_INSTALL_PACKAGES/)
     expect(manifest).toMatch(/usesCleartextTraffic="true"/)
     expect(manifest).toMatch(/enableOnBackInvokedCallback="true"/)
