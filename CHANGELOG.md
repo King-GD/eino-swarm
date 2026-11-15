@@ -4,6 +4,17 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). GitHub Releases start
 at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
+## [0.1.79] - 2026-11-15
+
+### Fixed
+
+- Headless Gateway account sign-in exposes only its validated public verification
+  link and continues polling without a host browser. (#171, `F-210`, `C-006`)
+
+This unified source batch includes the current speech settings integration and
+the earlier desktop, Linux and phone fixes. Client installers share this source
+version; publication and native acceptance are recorded separately by platform.
+
 ## [0.1.78] - 2026-11-15
 
 ### Fixed
@@ -47,8 +58,6 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
 
 ### Fixed
 
-- Headless Gateway account sign-in exposes only its validated public verification
-  link and continues polling without a host browser. (#171, `F-210`, `C-006`)
 - Linux release builds and validates amd64 and arm64 archives, with per-architecture
   runtime receipts and immutable partial-publication retries. (#172, `C-010`)
 - Headless Web keeps the engine alive without a browser, reports exhausted
