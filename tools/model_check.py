@@ -17,6 +17,8 @@ models/scheduling/WakeConsentTimeline.tla checks multiple original human
 decisions, asynchronous classification and exact-ID cancellation deduplication.
 models/stream/ManagerCommentary.tla checks the order and privacy of admitted
 manager commentary before it enters the event stream.
+models/account/DeviceLogin.tla checks validated public-link publication, manual
+headless authorization, terminal link clearing and required human approval.
 models/release/LinuxRelease.tla checks both Linux architecture targets, name/machine
 agreement, exact runtime evidence for new uploads and immutable public bytes.
 models/account/AccountCatalog.tla checks that a published account catalog
@@ -148,6 +150,18 @@ MODELS = {
             ("UseMainSend", "RebindContext", "SkipReplyOwner", "EnableSideTools", "HoldMainDuringModel"),
             ("TypeOK", "SideLeavesMainUntouched", "ModelReadsBoundThread",
              "ReplyMatchesActiveOwner", "SideHasNoTools", "MainCanAdvanceWhileSideWaits"),
+            (),
+        ),
+        Model(
+            "peer-inventory", ROOT / "models" / "native" / "PeerInventory.tla",
+            ("NumericPIDOwnsChildren", "IgnoreClaims", "IgnoreSameUIDChildren", "IgnoreActiveController"),
+            ("TypeOK", "ClaimsRequired", "SameUIDChildrenRefuse", "ActiveControllerBusy", "ForeignReuseDoesNotBlock"),
+            (),
+        ),
+        Model(
+            "device-login", ROOT / "models" / "account" / "DeviceLogin.tla",
+            ("RequireBrowser", "PublishUnsafe", "RetainTerminalURL", "BypassApproval"),
+            ("TypeOK", "ManualLoginAvailable", "OnlyValidatedURL", "TerminalHidesURL", "ApprovalRequired"),
             (),
         ),
         Model(
@@ -421,6 +435,31 @@ CASES: tuple[Case, ...] = (
         ("installed-skills-reach-hidden-view", "NeverDetachedLookup"),
         ("installed-skills-reach-reinstall", "NeverReinstalledWithPendingCleanup"),
         ("installed-skills-reach-delete-with-stage", "NeverDeletedWithStagedUpload"),
+    )),
+    _case("peer-inventory-current", "UID separates reused PIDs; terminal claims still required", model="peer-inventory"),
+    _case("peer-inventory-numeric-pid", "old numeric PID attributes foreign children to dead queue",
+          ("NumericPIDOwnsChildren",), "ForeignReuseDoesNotBlock", model="peer-inventory"),
+    _case("peer-inventory-claims", "missing or live effect receipt is ignored",
+          ("IgnoreClaims",), "ClaimsRequired", model="peer-inventory"),
+    _case("peer-inventory-owned-children", "same-UID ambiguous children are ignored",
+          ("IgnoreSameUIDChildren",), "SameUIDChildrenRefuse", model="peer-inventory"),
+    _case("peer-inventory-active", "an active controller is mistaken for dead history",
+          ("IgnoreActiveController",), "ActiveControllerBusy", model="peer-inventory"),
+    _case("peer-inventory-reach-quiet", "witness", witness="NeverForeignQuiet", model="peer-inventory"),
+    _case("peer-inventory-reach-refusal", "witness", witness="NeverUnresolvedRefused", model="peer-inventory"),
+    _case("device-login-current", "validated manual login survives absent or failed browser", model="device-login"),
+    _case("device-login-browser-required", "old browser gate refuses a headless login",
+          ("RequireBrowser",), "ManualLoginAvailable", model="device-login"),
+    _case("device-login-unsafe-url", "unvalidated Gateway URL reaches local status",
+          ("PublishUnsafe",), "OnlyValidatedURL", model="device-login"),
+    _case("device-login-terminal-url", "terminal status retains a pending link",
+          ("RetainTerminalURL",), "TerminalHidesURL", model="device-login"),
+    _case("device-login-bypass", "credentials activate without human approval",
+          ("BypassApproval",), "ApprovalRequired", model="device-login"),
+    *(_case(name, "witness", witness=witness, model="device-login") for name, witness in (
+        ("device-login-reach-manual", "NeverManualAuthorized"),
+        ("device-login-reach-unsafe", "NeverUnsafeRejected"),
+        ("device-login-reach-cancel", "NeverCancelledPending"),
     )),
     _case("linux-release-current", "two validated architecture archives; exact runtime receipts and immutable public bytes", model="linux-release"),
     _case("linux-release-arm-only", "original release only supports arm64", ("ArmOnly",), "BothArchitecturesSupported", model="linux-release"),

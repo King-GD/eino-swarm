@@ -21,7 +21,7 @@ func (h *Host) StartLogin(open func(string) error, newDevice bool) error {
 }
 
 // StartAccountLogin atomically reserves account mutation ownership before an
-// explicit desktop entry enables configuration, reloads and starts its flow.
+// explicit account entry enables configuration, reloads and starts its flow.
 func (h *Host) StartAccountLogin(open func(string) error, newDevice bool) error {
 	return h.startAccountLogin(open, newDevice, true)
 }
@@ -31,9 +31,6 @@ func (h *Host) startAccountLogin(open func(string) error, newDevice, enable bool
 		return ErrAccountOperationInProgress
 	}
 	defer h.accountMu.Unlock()
-	if open == nil {
-		return errors.New("remote: system browser is unavailable")
-	}
 	current := h.cfg.Snapshot().Remote
 	if enable && (!current.Enabled || current.AuthMode != config.RemoteAuthAccount) {
 		if h.eng == nil {

@@ -15,7 +15,7 @@ import (
 )
 
 func TestAccountLoginStartRejectsUnsafeConfigurationAndPrivateFiles(t *testing.T) {
-	for _, scenario := range []string{"no-browser", "disabled", "independent", "unsafe-origin", "identity-directory", "unsafe-token", "corrupt-pending", "unsafe-directory"} {
+	for _, scenario := range []string{"disabled", "independent", "unsafe-origin", "identity-directory", "unsafe-token", "corrupt-pending", "unsafe-directory"} {
 		t.Run(scenario, func(t *testing.T) {
 			e := testEngine(t)
 			cfg := e.Config()
@@ -24,8 +24,6 @@ func TestAccountLoginStartRejectsUnsafeConfigurationAndPrivateFiles(t *testing.T
 			cfg.Remote.HubURL = "https://gateway.example.invalid"
 			open := func(string) error { return nil }
 			switch scenario {
-			case "no-browser":
-				open = nil
 			case "disabled":
 				cfg.Remote.Enabled = false
 			case "independent":
@@ -52,7 +50,7 @@ func TestAccountLoginStartRejectsUnsafeConfigurationAndPrivateFiles(t *testing.T
 }
 
 func TestAccountLoginLoginFailuresAndTerminalStatuses(t *testing.T) {
-	for _, scenario := range []string{"unsafe-verification", "browser-unavailable", "unknown-status", "malformed-authorization", "denied", "expired", "deadline", "credential-failure", "poll-expiry", "poll-client-error"} {
+	for _, scenario := range []string{"unsafe-verification", "unknown-status", "malformed-authorization", "denied", "expired", "deadline", "credential-failure", "poll-expiry", "poll-client-error"} {
 		t.Run(scenario, func(t *testing.T) {
 			var origin string
 			var polls atomic.Int32

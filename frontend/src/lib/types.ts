@@ -774,6 +774,7 @@ export interface RemoteLoginStatus {
   state: "signed_out" | "signing_out" | "starting" | "authorization_pending" | "account_pending"
     | "account_rejected" | "authorized" | "access_denied" | "expired" | "error" | "cancelled"
   user_code?: string
+  verification_uri?: string
   host_fp?: string
   host_id?: string
   user_id?: string

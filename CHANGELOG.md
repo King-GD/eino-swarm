@@ -47,6 +47,8 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
 
 ### Fixed
 
+- Headless Gateway account sign-in exposes only its validated public verification
+  link and continues polling without a host browser. (#171, `F-210`, `C-006`)
 - Linux release builds and validates amd64 and arm64 archives, with per-architecture
   runtime receipts and immutable partial-publication retries. (#172, `C-010`)
 - Headless Web keeps the engine alive without a browser, reports exhausted

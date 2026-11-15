@@ -26,7 +26,7 @@ func (s *Server) getRemoteStatus(c *gin.Context) {
 		return
 	}
 	status := s.remote.Status()
-	status.LoginAvailable = s.opts.OpenURL != nil
+	status.LoginAvailable = true
 	c.JSON(http.StatusOK, status)
 }
 
@@ -96,10 +96,6 @@ func (s *Server) revokeRemoteBinding(c *gin.Context) {
 }
 
 func (s *Server) postRemoteLogin(c *gin.Context) {
-	if s.opts.OpenURL == nil {
-		c.JSON(http.StatusNotImplemented, gin.H{"error": "system browser is unavailable", "code": "remote_login_unavailable"})
-		return
-	}
 	if s.remote == nil {
 		remoteOffline(c, "remote is not running")
 		return

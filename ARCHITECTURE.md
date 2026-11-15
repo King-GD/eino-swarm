@@ -741,10 +741,12 @@ that socket itself.
 Gateway is an explicit `remote.auth_mode` alongside compatible `legacy` hubs.
 `internal/remote/login.go` owns the desktop device-authorization lifecycle:
 Go stages a private candidate credential before starting a Gateway flow,
-opens the Gateway-returned same-origin verification URL in the system
-browser, and polls with its secret device code and S256 proof. The browser
-receives only the public user code; the renderer receives only safe status,
-code, fingerprint and account metadata. Pending/rejected accounts do not
+validates the Gateway-returned same-origin verification URL before publishing it
+and optionally opening the host browser, then polls with its secret device code
+and S256 proof. A missing or failed host browser does not stop polling. The
+renderer receives safe status, the validated public link, code, fingerprint and
+account metadata; terminal status clears the link. The user can authorize a
+headless host from their own browser. Pending/rejected accounts do not
 register a host. Only a complete authorized receipt atomically replaces the
 private credential with its origin/account/host binding, after which the usual
 pairlink registration and WebSocket lifecycle starts. Authorization is distinct

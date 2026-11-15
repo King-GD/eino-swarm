@@ -122,11 +122,11 @@ describe("first-run welcome", () => {
     expect(screen.getByRole("button", { name: "Use my own model service" })).toBeTruthy()
   })
 
-  it("tells a browser build that signing in needs the desktop app, without a dead button", () => {
+  it("explains unavailable server sign-in without blocking the own-service path", () => {
     fake.status = { ...signedOut, login_available: false }
     render(<WelcomeGate />)
     expect((screen.getByRole("button", { name: "Sign in to the official server" }) as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText(/requires the desktop app/)).toBeTruthy()
+    expect(screen.getByText(/Device sign-in is unavailable/)).toBeTruthy()
     expect((screen.getByRole("button", { name: "Use my own model service" }) as HTMLButtonElement).disabled).toBe(false)
   })
 

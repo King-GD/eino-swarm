@@ -8970,6 +8970,30 @@ return to Account across relaunch, retaining screenshots and AX trees. This
 case uses the offline PC fixture and does not accept a production account,
 Android installation or TestFlight distribution.
 
+### Headless Gateway device sign-in
+
+`internal/remote/login_manual_test.go` exercises actual HTTP start/poll with
+missing, failed and working host launchers, pending network/review states and
+credential activation only after approval. `internal/server/remote_manual_login_test.go`
+crosses the real local HTTP adapter: explicit enable, validated public URL,
+unsafe-response refusal, cancellation and manual-token refusal.
+`frontend/e2e/headless-login.spec.ts` runs an offline loopback Gateway and opens
+its confirmation page in the user's browser; no native host browser is available.
+It does not establish physical NAS support or live Gateway availability.
+
+`models/account/DeviceLogin.tla` maps Start to `startAccountLogin`/`startLogin`,
+Response to `verifyLoginResponse` then `publishLogin`, HumanApproves/Activate to
+the Gateway's authorized poll plus private receipt activation, and CancelOrExpire
+to replacement of local terminal status. One attempt ranges over safe/unsafe
+responses and missing/failed/working launchers. TLC checks manual admission,
+validated-only URL publication, terminal link clearing and approval before
+activation; the original browser gate and three seeded missing guards must fail.
+Manual authorization, unsafe refusal and cancellation witnesses establish
+reachability. No fairness or eventual remote approval is assumed. This bounded
+protocol does not prove URL parser correctness, Go/storage atomicity, cross-attempt
+ownership or unbounded network liveness; the HTTP/race regressions cover those
+implementation boundaries. Run the `device-login-*` cases through `tools/model_check.py`.
+
 ### Linux archive architecture and publication
 
 `tools/test_release_linux.py` checks both named ELF machines, class/endian,
@@ -8991,3 +9015,27 @@ invariants; both new architectures and public retry are reachable. No eventual
 network/upload success is assumed. This finite equality model does not prove
 ELF parsing, Go/Python filesystem atomicity, real execution or GitHub behavior;
 real package/runtime and publisher regression evidence remains required.
+
+### Native access inventory and test configuration ownership
+
+`test_native_macos_access_guest.py` crosses `current_peers` with a historical
+controller PID now owned by a different kernel UID and with that unrelated
+process's children. Completed matching claims can be quiet without rewriting
+any queue receipt. Missing receipts, live interrupted effects, active controllers
+and same-UID ambiguous children still refuse. The actual guest observation bound
+two October queue PIDs to November root login processes; numeric PID reuse alone
+must not assign those login shells to the old CI queue.
+
+`models/native/PeerInventory.tla` maps one finite inventory observation to
+`current_peers`/`dead_peer_is_quiet`. It checks foreign-UID separation, mandatory
+terminal claims and refusal of same-UID children and active controllers. The old
+numeric-PID guard and missing-claim/owned-child guard variants must fail; quiet
+and unresolved witnesses remain reachable. No fairness or later-process claim is
+made; OS snapshot completeness, UID authenticity and process lifetime atomicity
+remain outside this model and require fresh real guest observations.
+
+`TestZeroDirectLoadDoesNotConnectBeforeTheModel` changes its post-turn MCP
+configuration through `Config.Update`: a terminal turn does not join background
+review, which may still take a locked configuration snapshot. The original direct
+field write was observed racing that snapshot and is retained in private red-run
+evidence, not accepted by a later green retry.

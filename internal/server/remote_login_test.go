@@ -10,19 +10,21 @@ import (
 	"testing"
 )
 
-func TestAccountLoginLoginRoutesRequireLocalBrowserAndRefuseManualCredential(t *testing.T) {
+func TestAccountLoginHeadlessRoutesStillRefuseManualCredential(t *testing.T) {
 	h := newHarness(t)
 	h.app.Config.Remote.AuthMode = "account"
 	h.app.Config.Remote.Enabled = true
-	h.app.Config.Remote.HubURL = "https://gateway.example.invalid"
-	h.json(http.MethodPost, "/api/remote/login", map[string]any{}, http.StatusNotImplemented)
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "not approved", http.StatusConflict) }))
+	defer gateway.Close()
+	h.app.Config.Remote.HubURL = gateway.URL
+	h.json(http.MethodPost, "/api/remote/login", map[string]any{}, http.StatusAccepted)
 	h.json(http.MethodPut, "/api/remote/token", map[string]any{"token": "cannot-bypass-account-approval"}, http.StatusForbidden)
 	if h.app.Config.HasHostToken() {
 		t.Fatal("manual token bypassed account authorization")
 	}
 	h.json(http.MethodDelete, "/api/remote/login", nil, http.StatusOK)
 	status := h.json(http.MethodGet, "/api/remote/status", nil, http.StatusOK)
-	if status["auth_mode"] != "account" || status["login_available"] != false {
+	if status["auth_mode"] != "account" || status["login_available"] != true {
 		t.Fatalf("unsafe capabilities: %v", status)
 	}
 }
@@ -72,7 +74,7 @@ func TestAccountLoginLocalLoginUsesStrictIntentAndSafeStatus(t *testing.T) {
 	if response.StatusCode != http.StatusAccepted {
 		t.Fatalf("login was not accepted: %d %s", response.StatusCode, raw)
 	}
-	for _, private := range []string{"candidate_token", "device_code", "code_verifier", "verification_uri", "pending-host-token"} {
+	for _, private := range []string{"candidate_token", "device_code", "code_verifier", "pending-host-token"} {
 		if strings.Contains(string(raw), private) {
 			t.Fatal("private material appeared in local response")
 		}

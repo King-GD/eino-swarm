@@ -208,7 +208,14 @@ func TestZeroDirectLoadDoesNotConnectBeforeTheModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e.cfg.MCP.DirectLoadPercent = 5
+	// The turn can finish before its background review; publish this change
+	// through the same lock that protects the review's configuration snapshot.
+	if err := e.cfg.Update(func(next *config.Config) error {
+		next.MCP.DirectLoadPercent = 5
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	restored, err := e.applyMCPSurface(t.Context(), turn, set, true)
 	joined := strings.Join(restored.Names, " ")
 	if err != nil || !strings.Contains(joined, "_list_tools_") || hits.Load() != 0 {
