@@ -140,6 +140,18 @@ describe("Settings dialog", () => {
     expect(screen.getByRole("tab", { name: "General" })).toBeVisible()
   })
 
+  it("saves voice switches through the independent Speech page", async () => {
+    useApp.setState({ meta: { product_mode: "fofa" } as Meta })
+    renderDialog({ initialSection: "speech" })
+    await screen.findByRole("heading", { name: "Speech" })
+    fireEvent.click(screen.getAllByLabelText("Enabled")[0])
+    await waitFor(() => expect(api.saveSettings).toHaveBeenCalled())
+    const patch = vi.mocked(api.saveSettings).mock.lastCall![0]
+    expect(patch.speech?.input.enabled).toBe(true)
+    expect(patch.speech?.output.enabled).toBe(false)
+    expect(patch.models).toBeUndefined()
+  })
+
   it("drains an earlier save before account login and does not rewrite enabled account settings", async () => {
     const loaded = structuredClone(base)
     loaded.remote = defaultRemoteSettings({ enabled: false, auth_mode: "independent", hub_url: "https://gateway.example" })

@@ -132,6 +132,9 @@ func (c *Config) publish(n *Config) {
 	if c.Search != n.Search {
 		c.Search = n.Search
 	}
+	if c.Speech != n.Speech {
+		c.Speech = n.Speech
+	}
 	if c.Clients != n.Clients {
 		c.Clients = n.Clients
 	}

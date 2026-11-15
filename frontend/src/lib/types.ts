@@ -1,5 +1,6 @@
 /** The wire contract with the Go server. Kept in one file so a change in the
  *  backend shows up here as a type error rather than as a blank panel. */
+import type { SpeechSettings, SpeechSnapshot } from "./speech-types"
 
 export type EventKind =
   | "user_message"
@@ -477,6 +478,8 @@ export interface AccountModelKinds {
   embedding: number
   ocr: number
   decisions: number
+  transcription?: number
+  speech?: number
   other: number
   unclassified: number
   embedding_models?: string[]
@@ -521,6 +524,7 @@ export interface PresenceClient {
 }
 
 export interface Meta {
+  speech?: SpeechSnapshot
   startup?: "restoring" | "ready"
   restore?: { completed: number; total: number; failed?: number }
   version: string
@@ -614,6 +618,7 @@ export interface ProviderSettings {
 }
 
 export interface Settings {
+  speech?: SpeechSettings
   server: { addr: string; open_browser: boolean }
   models: {
     default: string

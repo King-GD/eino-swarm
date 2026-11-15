@@ -1,10 +1,12 @@
+import { ComposerContextMeter, ComposerSlashMenu, thinkingLabel } from "./composer-widgets"
+import { VoiceInputControl } from "./voice-input-control"
+import { useComposerSpeech } from "@/lib/use-composer-speech"
 import { ArrowUp, Brain, Paperclip, ShieldCheck, Square } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type SetStateAction } from "react"
 import { ComposerDraftStatus } from "@/components/app/composer-draft-status"
 import { useComposerDraft } from "@/lib/use-composer-draft"
 import { composerDraftSession } from "@/lib/composer-draft"
 
-import { ContextMeter } from "@/components/app/context-meter"
 import { ComposerAttachments } from "@/components/app/composer-attachments"
 import { ComposerDropOverlay } from "@/components/app/composer-drop-overlay"
 import { ComposerImages } from "@/components/app/composer-images"
@@ -15,7 +17,6 @@ import { GoalBanner } from "@/components/app/goal-banner"
 import { PlanBanner } from "@/components/app/plan-banner"
 import { ScheduleBanner } from "@/components/app/schedule-banner"
 import { QueueTray } from "@/components/app/queue-tray"
-import { SlashMenu } from "@/components/app/slash-menu"
 import { Badge } from "@/components/ui/badge"
 import { api } from "@/lib/api"
 import { toastError } from "@/store/toasts"
@@ -47,7 +48,6 @@ import { afterImeSettles, enterSendsMessage } from "@/lib/ime"
 import {
   clearSlashCommand,
   commandNeedsArgument,
-  compactHint,
   completeSlashCommand,
   filterSlashCommands,
   localizedSlashCommands,
@@ -56,7 +56,6 @@ import {
   slashDraft,
   stripSlashToken,
   normalizeSlashPrefix,
-  withSlashHints,
   type SlashCommand,
 } from "@/lib/slash"
 import {
@@ -74,7 +73,7 @@ import { lastFailedTurnError } from "@/lib/transcript"
 import { formatQuotedMessage, type Quote } from "@/lib/quote"
 import type { Attachment, Followup, ModelInfo, UsageSnapshot } from "@/lib/types"
 import { windowForSelection } from "@/lib/usage"
-import { useT, type Translate } from "@/lib/use-t"
+import { useT } from "@/lib/use-t"
 import { chromeTypeClass, contentTypeClass } from "@/lib/chrome-type"
 import { cn } from "@/lib/utils"
 import { activeWake } from "@/lib/schedule-view"
@@ -245,6 +244,7 @@ export function Composer({
   const [slashIndex, setSlashIndex] = useState(0)
   const [draftOverflows, setDraftOverflows] = useState(false)
   const areaRef = useRef<HTMLTextAreaElement>(null)
+  const speechInput = useComposerSpeech({ scope: draftKey, text, onText: setText, textarea: areaRef, disabled: Boolean(disabled) })
   const pinCaret = useRef<number | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const dockRef = useRef<HTMLDivElement>(null)
@@ -360,7 +360,7 @@ export function Composer({
     slashReady: sendReady,
     awaitingArgument,
   })
-  const sendDisabled = Boolean(disabled) || uploading || !submittable
+  const sendDisabled = Boolean(disabled) || speechInput.busy || uploading || !submittable
   const restoreStop = Boolean(restoring && canStopWhileRestoring)
   const corner = restoreStop ? { stop: true, send: true } : composerCornerActions({
     running,
@@ -399,7 +399,7 @@ export function Composer({
   }
 
   const submit = async (opts?: { steer?: boolean }) => {
-    if (submittingRef.current || disabled) return
+    if (submittingRef.current || disabled || speechInput.busy) return
     if (slash?.id === "side") {
       openSideQuestion(slash.arg)
       return
@@ -923,6 +923,7 @@ export function Composer({
                   <Square className="size-3.5 fill-current" />
                 </Button>
               ) : null}
+              <VoiceInputControl control={speechInput} />
               {corner.send ? (
                 <Button
                   size="icon"
@@ -943,71 +944,5 @@ export function Composer({
       </div>
     </div>
   )
-}
-
-/** Isolated so a live `usage` pulse (one per model call) cannot rewrite the
- *  controlled textarea while a CJK IME is composing. */
-function ComposerContextMeter({
-  usage,
-  window,
-  scale,
-}: {
-  usage?: UsageSnapshot | null
-  window: number
-  scale: number
-}) {
-  const live = useApp((s) => s.usage)
-  return <ContextMeter usage={usage ?? live} window={window} scale={scale} />
-}
-
-function ComposerSlashMenu({
-  commands,
-  activeIndex,
-  usage,
-  window,
-  contextChars,
-  contextBudget,
-  onHover,
-  onSelect,
-}: {
-  commands: SlashCommand[]
-  activeIndex: number
-  usage?: UsageSnapshot | null
-  window: number
-  contextChars: number
-  contextBudget: number
-  onHover: (index: number) => void
-  onSelect: (cmd: SlashCommand) => void
-}) {
-  const t = useT()
-  const live = useApp((s) => s.usage)
-  const snap = usage ?? live
-  const items = withSlashHints(
-    commands,
-    {
-      compact: compactHint(
-        snap?.context_tokens,
-        snap?.context_window || window,
-        contextChars,
-        contextBudget,
-        t.locale,
-      ),
-    },
-  )
-  return (
-    <SlashMenu
-      items={items}
-      activeIndex={Math.min(activeIndex, Math.max(0, items.length - 1))}
-      onHover={onHover}
-      onSelect={onSelect}
-    />
-  )
-}
-
-function thinkingLabel(level: string, t: Translate): string {
-  if (level === "low") return t("reason.low")
-  if (level === "medium") return t("reason.medium")
-  if (level === "high") return t("reason.high")
-  return t("composer.thinkingLevel", { level })
 }
 

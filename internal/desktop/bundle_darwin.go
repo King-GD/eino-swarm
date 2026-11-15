@@ -125,6 +125,8 @@ func macInfoPlist(version string) string {
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>zwai lists models and talks to endpoints on your local network.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>zwai records audio when you use voice input.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

@@ -83,10 +83,18 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
   includes them. The account details show each switch and name, and those
   controls cannot be edited. Conversation requests use `conversation`. Naming
   and compact follow `conversation` while their own roles are off. Embedding,
-  OCR and decisions run only while those roles are on. Speech recognition,
-  speech synthesis and image generation are shown read-only and are not called
-  by this client. An older server that returns the first six or eight roles
+  OCR and decisions run only while those roles are on. Voice settings use the
+  speech recognition and synthesis roles; image generation remains read-only.
+  An older server that returns the first six or eight roles
   still works. LOCAL keeps the ordinary catalog. (`F-173`)
+
+- PC-owned Voice settings with separate, initially disabled dictation and read
+  aloud controls on desktop, Web and phone. Gateway audio goes directly from
+  each client; phones reuse the selected PC's safe settings with their own
+  Mobile login and can keep using synchronized Gateway settings with the PC
+  offline. Only configured local speech uses encrypted PC audio RPC. Recordings
+  remain ephemeral, recognized text is editable, and long answers are spoken in
+  order with code blocks omitted. (`F-148`, `C-048`)
 
 - The install mode is `product.mode`. A missing key means FOFA: sign in before
   work, no Settings → Models section, and no composer model menu. Custom

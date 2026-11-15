@@ -17,6 +17,17 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("openai client", () => {
+  it("keeps voice models out of the conversation catalog", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ data: [
+      { id: "voice-role", model_type: "speech" },
+      { id: "recognition-role", model_type: "transcription" },
+      { id: "legacy-chat" },
+      { id: "chat-role", model_type: "chat" },
+      { id: "vector-role", model_type: "embedding" },
+    ] }))
+    await expect(discoverModels(provider(), fetchImpl)).resolves.toEqual(["legacy-chat", "chat-role"])
+  })
+
   it("lists model ids from the endpoint", async () => {
     const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
       jsonResponse({ data: [{ id: "a" }, { id: "b" }] }),

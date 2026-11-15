@@ -15,6 +15,7 @@ This is the current user-facing capability map. The code and tests named below a
     - `F-145` Durable composer drafts
     - `F-146` Next-step composer suggestions
     - `F-147` Temporary task side chat
+    - `F-148` Voice input and spoken answers
     - `F-150` Goals and scheduled waits
     - `F-160` Trace and diagnostics
     - `F-170` Settings and providers
@@ -46,6 +47,12 @@ This is the current user-facing capability map. The code and tests named below a
     - `F-421` External Agent Skills packages
     - `F-422` Local backup and restore
     - `F-430` Build and release paths
+
+### F-148 Voice input and spoken answers
+
+- 目的：在桌面、Web、iOS 和 Android 听写可编辑草稿并朗读完成回复。入口：PC Settings → Speech、Send 左侧麦克风及 Copy 旁 Read aloud；输入：录音或完成回复正文；输出：草稿文本或音频；前置条件：对应开关开启且配置就绪；失败表现：保留草稿、显示可重试错误。Input and output are independently off by default. Dictation never sends automatically or overwrites text edited while recognition was pending. Read aloud skips fenced code and diagrams and sequences long prose in order.
+- The PC is the only configuration authority. Phones synchronize the explicitly selected PC's non-secret settings. Gateway execution goes directly from the phone to the same Gateway using its own current Mobile login, including while reading a PC conversation. A synchronized Gateway configuration remains usable with that PC offline; it refreshes when reconnected. Only local mode with that PC's enabled, ready local voice service uses encrypted PC audio RPC. No configuration, login, local connection or microphone capability means the affected control stays unavailable; failures never select another PC or service.
+- 关联契约：`C-048`。实现证据：`internal/speech`, `internal/server/speech.go`, `internal/remote/speech.go`, `frontend/src/components/app/settings-speech.tsx`, `mobile/src/lib/phone-speech.ts`。验证证据：`internal/speech/service_test.go`, `internal/server/speech_http_test.go`, `internal/remote/speech_rpc_test.go`, `frontend/src/lib/speech-media.test.ts`, `mobile/src/lib/speech-cache.test.ts`, `mobile/src/lib/speech-transport.test.ts`. Native recording and playback acceptance is distinct from these headless checks.
 
 ### F-110 Desktop, browser, and terminal shells
 
@@ -312,7 +319,7 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-173 FOFA install and local model controls
 
-- 目的：新安装默认是 FOFA。使用者必须登录后才能开始工作，不能改本机自配模型；切到 LOCAL 后，模型设置和输入框里的模型切换才出现。服务器如果返回固定模型角色，FOFA 只读展示最多 9 个开关和名称，对话请求使用 `conversation`，命名和压缩在各自角色关闭时跟随 `conversation`，嵌入、OCR 和决策只在打开时调用，语音识别、语音合成和图片生成只展示、不由客户端发起；旧服务器只返回前 6 个或 8 个角色时仍然可用。LOCAL 忽略这些角色。使用者：PC 用户，以及已配对、在这台 PC 上执行的手机；入口：账号详情里的头像、`config.yaml` 的 `product.mode`、`PUT /api/settings` 的 `product`；输入：空、`fofa` 或 `local`；输出：`GET /api/meta` 的 `product_mode` 恒为 `fofa` 或 `local`；前置条件：没有该键就是 FOFA；失败表现：FOFA 下改模型或发现模型返回 `403` `custom_models_disabled`，未登录就开始工作返回 `403` `login_required`，其它取值在读取或保存时拒绝。关联契约：`C-047`、`C-040`；关联功能：`F-170`、`F-171`、`F-220`。
+- 目的：新安装默认是 FOFA。使用者必须登录后才能开始工作，不能改本机自配模型；切到 LOCAL 后，模型设置和输入框里的模型切换才出现。服务器如果返回固定模型角色，FOFA 只读展示最多 9 个开关和名称，对话请求使用 `conversation`，命名和压缩在各自角色关闭时跟随 `conversation`，嵌入、OCR 和决策只在打开时调用；语音识别和语音合成还需在 Settings → Speech 分别启用，按 `F-148` / `C-048` 调用，图片生成仍只展示。旧服务器只返回前 6 个或 8 个角色时仍然可用。LOCAL 忽略这些角色。使用者：PC 用户，以及已配对、在这台 PC 上执行的手机；入口：账号详情里的头像、`config.yaml` 的 `product.mode`、`PUT /api/settings` 的 `product`；输入：空、`fofa` 或 `local`；输出：`GET /api/meta` 的 `product_mode` 恒为 `fofa` 或 `local`；前置条件：没有该键就是 FOFA；失败表现：FOFA 下改模型或发现模型返回 `403` `custom_models_disabled`，未登录就开始工作返回 `403` `login_required`，其它取值在读取或保存时拒绝。关联契约：`C-047`、`C-040`；关联功能：`F-170`、`F-171`、`F-220`。
 - 配置文件默认不写 `product`。`fofa` 与空值在保存时同样省略。只有 `local` 会写入。设置里没有这一项。桌面账号详情对话框里有头像（图片、名字首字或默认人像）。连续三次点击在 `local` 与 `fofa` 之间切换并刷新 meta。写回 `fofa` 后键再次省略。手改配置文件在下次加载时生效。
 - FOFA 隐藏 Settings 的 Models 和 PC 输入框的模型菜单。已配对手机上属于这台 PC 的新对话和会话也隐藏模型按钮。手机直连自己的模型不走这个开关。未登录时登录层盖住对话和输入，主列不能操作；欢迎不再提供「使用自己的模型服务」或「稍后再说」，登录层不挡住账号按钮。`--mock` 不要求登录，但仍拒绝改模型。Stop 和回答问题保持可用。已保存的自配 provider 留在文件里，切到 LOCAL 后还在。
 - 实现证据：`internal/config/product.go`、`internal/server/product_mode.go`、`internal/server/settings.go`、`internal/remote/host.go`、`internal/remote/account_models.go`、`internal/engine/model_roles.go`、`frontend/src/components/app/desktop-account-menu.tsx`、`frontend/src/components/app/welcome-gate.tsx`、`frontend/src/components/app/composer.tsx`、`mobile/src/components/composer.tsx`。验证：`internal/config/product_test.go`、`internal/server/product_mode_http_test.go`、`internal/remote/product_gate_test.go`、`internal/remote/account_models_test.go`、`frontend/src/components/app/desktop-account-menu.test.tsx`、`frontend/src/components/app/welcome-gate.test.tsx`、`frontend/src/components/app/composer.test.tsx`、`frontend/e2e/product-mode.spec.ts`。

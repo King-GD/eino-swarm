@@ -10,6 +10,7 @@ import { t } from "@/lib/i18n"
 import { gatewayUserDisplayName } from "@/lib/gateway-names"
 import { WebExecutionSettings } from "@/components/web-execution-settings"
 import type { PcWebSnapshot } from "@/components/pc-web-execution-status"
+import { SpeechStatus } from "@/components/speech-status"
 
 export function GatewayAccountScreen({ account, providers, modelBusy, modelError, pcWeb, onClose, onConnect, onRefresh, onOpenChat, onOtherWays, onToggleMode }: {
   onToggleMode?: () => void
@@ -79,6 +80,7 @@ export function GatewayAccountScreen({ account, providers, modelBusy, modelError
           {onClose ? <Button variant="ghost" onClick={onClose}>{t("account.anonymous")}</Button> : null}
         </> : null}
         {!waiting ? <WebExecutionSettings pcWeb={pcWeb} /> : null}
+        {!waiting ? <SpeechStatus /> : null}
         {authorized ? <>
           <section className="flex flex-col gap-2">
             <h2 className="text-sm font-semibold">{t("account.models")}</h2>

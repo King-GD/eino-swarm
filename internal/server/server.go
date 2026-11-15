@@ -60,16 +60,17 @@ type Options struct {
 
 // Server owns the router.
 type Server struct {
-	opts      Options
-	engine    *engine.Engine
-	log       *slog.Logger
-	router    *gin.Engine
-	terminals *terminal.Hub
-	remote    *remote.Host
-	search    *search.Service
-	presence  *presence
-	updater   update.Checker
-	sideChats chan struct{}
+	opts       Options
+	engine     *engine.Engine
+	log        *slog.Logger
+	router     *gin.Engine
+	terminals  *terminal.Hub
+	remote     *remote.Host
+	search     *search.Service
+	presence   *presence
+	updater    update.Checker
+	sideChats  chan struct{}
+	audioCalls chan struct{}
 }
 
 // New builds the server and its routes.
@@ -87,10 +88,11 @@ func New(opts Options) (*Server, error) {
 
 	s := &Server{
 		opts: opts, engine: opts.Engine, log: opts.Logger,
-		terminals: terminal.NewHub(terminal.MaxSessions),
-		presence:  newPresence(),
-		updater:   opts.Updater,
-		sideChats: make(chan struct{}, sideChatConcurrency),
+		terminals:  terminal.NewHub(terminal.MaxSessions),
+		presence:   newPresence(),
+		updater:    opts.Updater,
+		sideChats:  make(chan struct{}, sideChatConcurrency),
+		audioCalls: make(chan struct{}, speechHTTPConcurrency),
 	}
 	r := gin.New()
 	r.Use(gin.Recovery(), s.accessLog())
@@ -118,6 +120,9 @@ func New(opts Options) (*Server, error) {
 		api.POST("/open", s.openURL)
 		api.GET("/settings", s.getSettings)
 		api.PUT("/settings", s.putSettings)
+		api.POST("/audio/transcriptions", s.transcribeAudio)
+		api.POST("/audio/speech", s.synthesizeAudio)
+		api.POST("/audio/models", s.discoverAudioModels)
 		api.POST("/backup", s.postBackup)
 		api.GET("/backup/progress", s.getBackupProgress)
 		api.POST("/backup/preview", s.postBackupPreview)
@@ -359,6 +364,8 @@ func (s *Server) fail(c *gin.Context, err error) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "bad_request"})
 	case errors.Is(err, errCustomModelsDisabled):
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error(), "code": "custom_models_disabled"})
+	case errors.Is(err, config.ErrInvalidSpeech):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "invalid_speech"})
 	case errors.Is(err, config.ErrInvalidProductMode):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "invalid_product_mode"})
 	default:

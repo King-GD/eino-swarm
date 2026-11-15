@@ -1,0 +1,76 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { useState } from "react"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { SpeechTab } from "./settings-speech"
+import { defaultSpeechSettings } from "@/lib/speech-types"
+import type { Settings, Meta } from "@/lib/types"
+import { useApp } from "@/store/app"
+
+afterEach(() => vi.unstubAllGlobals())
+
+function setup(mode: "local" | "fofa", onChange = vi.fn(), onFlush = vi.fn(async () => {})) {
+  useApp.setState({ meta: { product_mode: mode } as Meta })
+  const speech = defaultSpeechSettings()
+  speech.input.has_api_key = true
+  function Host() {
+    const [settings, setSettings] = useState({ speech, models: { default: "", providers: [] } } as unknown as Settings)
+    return <SpeechTab settings={settings} onChange={(next) => { setSettings(next); onChange(next) }} onFlush={onFlush} />
+  }
+  render(<Host />)
+  return { onChange, onFlush }
+}
+
+describe("Speech settings", () => {
+  it("configures local speech independently and preserves a saved secret until explicitly cleared", () => {
+    const { onChange } = setup("local")
+    fireEvent.change(screen.getAllByLabelText("API base URL")[0], { target: { value: "http://speech.invalid/v1" } })
+    fireEvent.change(screen.getAllByLabelText("Model")[0], { target: { value: "recognizer" } })
+    fireEvent.click(screen.getAllByLabelText("Enabled")[0])
+    const current = onChange.mock.lastCall![0] as Settings
+    expect(current.speech?.input).toMatchObject({ enabled: true, source: "custom", base_url: "http://speech.invalid/v1", model: "recognizer" })
+    expect(current.speech?.input.api_key).toBeUndefined()
+    expect(current.speech?.output.enabled).toBe(false)
+    fireEvent.click(screen.getByRole("button", { name: "Clear saved key" }))
+    expect(onChange.mock.lastCall![0].speech.input.api_key).toBe("")
+  })
+
+  it("uses gateway-managed roles without exposing endpoint or credential configuration", () => {
+    const { onChange } = setup("fofa")
+    expect(screen.queryByLabelText("API base URL")).toBeNull()
+    expect(screen.queryByLabelText("API key")).toBeNull()
+    expect(screen.getAllByText("Managed by the gateway")).toHaveLength(2)
+    fireEvent.click(screen.getAllByLabelText("Enabled")[1])
+    expect(onChange.mock.lastCall![0].speech.output).toMatchObject({ enabled: true, source: "account" })
+    expect(onChange.mock.lastCall![0].speech.input.enabled).toBe(false)
+  })
+
+  it("discovers models only after pending configuration writes finish", async () => {
+    const order: string[] = []
+    const onFlush = vi.fn(async () => { order.push("saved") })
+    const fetcher = vi.fn(async (_path: RequestInfo | URL, _init?: RequestInit) => { order.push("discovered"); return new Response(JSON.stringify({ models: ["recognizer", 42] }), { status: 200 }) })
+    vi.stubGlobal("fetch", fetcher)
+    setup("local", vi.fn(), onFlush)
+    fireEvent.click(screen.getAllByRole("button", { name: "Discover models" })[0])
+    await waitFor(() => expect(fetcher).toHaveBeenCalledOnce())
+    expect(order).toEqual(["saved", "discovered"])
+    expect(fetcher.mock.calls[0]?.[0]).toBe("/api/audio/models")
+    expect(document.querySelectorAll("datalist option")).toHaveLength(1)
+  })
+
+  it("cancels discovery when its endpoint changes and ignores the old list", async () => {
+    let resolve!: (response: Response) => void
+    let signal!: AbortSignal
+    vi.stubGlobal("fetch", vi.fn((_path: RequestInfo | URL, init?: RequestInit) => {
+      signal = init!.signal as AbortSignal
+      return new Promise<Response>((done) => { resolve = done })
+    }))
+    setup("local")
+    fireEvent.click(screen.getAllByRole("button", { name: "Discover models" })[0])
+    await waitFor(() => expect(signal).toBeDefined())
+    fireEvent.change(screen.getAllByLabelText("API base URL")[0], { target: { value: "http://replacement.invalid/v1" } })
+    expect(signal.aborted).toBe(true)
+    resolve(new Response(JSON.stringify({ models: ["old model"] }), { status: 200 }))
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Discover models" })[0]).toBeEnabled())
+    expect(document.querySelectorAll("datalist option")).toHaveLength(0)
+  })
+})

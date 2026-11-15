@@ -36,6 +36,7 @@ type Config struct {
 	UI          UIConfig          `yaml:"ui" json:"ui"`
 	Remote      RemoteConfig      `yaml:"remote" json:"remote"`
 	Search      SearchConfig      `yaml:"search" json:"search"`
+	Speech      SpeechConfig      `yaml:"speech" json:"speech"`
 	Clients     ClientsConfig     `yaml:"clients" json:"clients"`
 	// Product is omitted while the install stays on the default FOFA behavior.
 	Product ProductConfig `yaml:"product,omitempty" json:"product,omitempty"`
@@ -566,6 +567,7 @@ func Default() *Config {
 			KeepAwake:    DefaultRemoteKeepAwake,
 		},
 		Clients: DefaultClients(),
+		Speech:  DefaultSpeech(),
 	}
 }
 
@@ -638,6 +640,9 @@ func Load(dataDir string) (*Config, error) {
 		return nil, err
 	}
 	if err := cfg.validateProduct(); err != nil {
+		return nil, err
+	}
+	if err := cfg.validateSpeech(); err != nil {
 		return nil, err
 	}
 	cfg.normalize()
@@ -869,6 +874,7 @@ func (c *Config) normalize() {
 	c.normalizeRemote()
 	c.normalizeSearch()
 	c.normalizeClients()
+	c.normalizeSpeech()
 }
 
 func (c *Config) providerIndex(id string) int {
@@ -936,6 +942,9 @@ func (c *Config) save() error {
 		return err
 	}
 	if err := c.validateProduct(); err != nil {
+		return err
+	}
+	if err := c.validateSpeech(); err != nil {
 		return err
 	}
 	if strings.TrimSpace(c.dataDir) == "" {

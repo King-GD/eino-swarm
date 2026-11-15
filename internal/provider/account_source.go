@@ -60,13 +60,17 @@ type accountProfile struct {
 // ModelKinds counts the server's classification. Empty type is unclassified.
 // EmbeddingModels keeps those names in catalog order for the embedding picker.
 type ModelKinds struct {
-	Chat            int      `json:"chat"`
-	Embedding       int      `json:"embedding"`
-	OCR             int      `json:"ocr"`
-	Decisions       int      `json:"decisions"`
-	Other           int      `json:"other"`
-	Unclassified    int      `json:"unclassified"`
-	EmbeddingModels []string `json:"embedding_models,omitempty"`
+	Chat                int      `json:"chat"`
+	Embedding           int      `json:"embedding"`
+	OCR                 int      `json:"ocr"`
+	Decisions           int      `json:"decisions"`
+	Transcription       int      `json:"transcription"`
+	Speech              int      `json:"speech"`
+	Other               int      `json:"other"`
+	Unclassified        int      `json:"unclassified"`
+	EmbeddingModels     []string `json:"embedding_models,omitempty"`
+	TranscriptionModels []string `json:"transcription_models,omitempty"`
+	SpeechModels        []string `json:"speech_models,omitempty"`
 }
 
 // NewAccountSource builds the projection of one account catalog. The id must
@@ -190,6 +194,12 @@ func (s *AccountSource) Kinds() ModelKinds {
 			kinds.OCR++
 		case "decisions":
 			kinds.Decisions++
+		case "transcription":
+			kinds.Transcription++
+			kinds.TranscriptionModels = append(kinds.TranscriptionModels, name)
+		case "speech":
+			kinds.Speech++
+			kinds.SpeechModels = append(kinds.SpeechModels, name)
 		default:
 			kinds.Other++
 		}

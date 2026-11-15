@@ -4,6 +4,7 @@ import {
   Cpu,
   Library,
   Loader2,
+  Mic,
   Palette,
   Search,
   Smartphone,
@@ -15,6 +16,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 
 import { MemorySettings } from "@/components/app/memory-settings"
 import { ModelsTab } from "@/components/app/model-settings"
+import { SpeechTab } from "@/components/app/settings-speech"
 import { GeneralTab } from "@/components/app/settings-general"
 import { PersonalityTab } from "@/components/app/settings-personality"
 import { BackupTab } from "@/components/app/settings-backup"
@@ -72,6 +74,12 @@ function sections(t: Translate) {
       label: t("settings.nav.models"),
       icon: Cpu,
       keys: "provider endpoint api key base url responses cloud builtin tools discover auxiliary title compact context window timeout first byte model embedding semantic search 模型 提供商 云端 内置 工具 嵌入 语义 搜索 首字节 等待 超时",
+    },
+    {
+      id: "speech",
+      label: t("settings.nav.speech"),
+      icon: Mic,
+      keys: "speech voice microphone audio asr tts transcription read aloud 语音 麦克风 录音 识别 朗读 音色",
     },
     {
       id: "swarm",
@@ -557,6 +565,7 @@ export function SettingsDialog({
                       focusKey={focusKey}
                     />
                   ) : null}
+                  {page === "speech" ? <SpeechTab settings={settings} onChange={apply} query={query} onFlush={() => persistRef.current!.flush()} /> : null}
                   {page === "swarm" ? (
                     <SwarmTab
                       settings={settings}

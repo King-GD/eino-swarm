@@ -21,6 +21,50 @@ the URL in `engine.json` (a random loopback port unless `--addr` was set).
 | `429` | too many terminals are already open |
 | `501` | the shell cannot do this (`reveal` / `open` when this process is not a loopback engine or the desktop app) |
 
+## Voice
+
+`F-148` / `C-048`. Voice is independent of chat turns and writes no audio files
+or transcript events. Existing same-origin protection and startup admission
+apply. All responses are `no-store`.
+
+| endpoint | behavior |
+|---|---|
+| `POST /api/audio/transcriptions` | multipart `file`; returns `{ "text": "…" }` for insertion into an editable draft |
+| `POST /api/audio/speech` | JSON `{ "text": "…" }`, one bounded prose segment; returns audio bytes with their MIME |
+| `POST /api/audio/models` | JSON `{ "kind": "input" }` or `output`; discovers the configured voice service's models by capability |
+
+`GET /api/settings` and `PUT /api/settings` include `speech.input`,
+`speech.output` and `speech.limits`. Each direction has `enabled`, `source`
+(`account`, `provider`, `custom`), `provider_id`, `base_url`, `model` and
+direction-specific parameters. `api_key` is write-only: omitted keeps the saved
+key, an explicit empty string clears it; reads report `has_api_key`.
+Gateway mode resolves fixed voice roles with the PC's private account source.
+Local mode requires a provider/custom selection. The request cannot supply a
+replacement upstream URL, key or model.
+
+PC metadata and phone `speech_config`/catalog replies publish only a safe voice
+snapshot: `execution` (`gateway`/`pc_local`), verified `gateway_origin` when
+applicable, input/output `enabled`, `ready`, reason, model/label, parameters and
+limits. No local endpoint, API key or Host token is included.
+If a valid parameter set expands beyond the sealed-frame budget, `speech_config`
+returns `audio_config_limit`; ordinary metadata/catalog remain available with
+`speech_error` and no voice snapshot. A live refusal or invalid new snapshot
+revokes the previous executable phone cache rather than reusing stale settings.
+
+For local execution only, the sealed phone link supports `put` with
+`purpose:"audio"`, `audio_transcribe {audio_id,put_id}`,
+`audio_speech {audio_id,text}`, `audio_chunk {audio_id,offset}` and
+`audio_cancel {audio_id}`. Upload and operation IDs match. Model operations
+reply asynchronously in `audio`; chunks carry `audio_id,mime,size,offset,next,
+data,more`, with base64 data and decoded-byte offsets. Zero offsets and the final
+`more:false` remain explicit. Each raw chunk is at most 36 KiB. Cancel also
+releases downloaded output and is idempotent. Gateway-mode PC relay requests
+are refused: the phone uses its own Mobile token on `/v1/audio/*` directly.
+
+Voice errors expose safe category codes, never upstream bodies or credentials.
+Oversize input/output, an unavailable direction, upstream failure and cancellation
+do not change the main chat's state or retry automatically.
+
 ## Composer drafts
 
 `F-145` / `C-033`. Drafts belong to `thread:<thread_id>`,
@@ -276,7 +320,7 @@ endpoint:
 |---|---|
 | `signed_out` | no device login on this machine |
 | `pending` | signed in; the model catalog has not been read yet |
-| `ready` | the catalog was read (`models` is the total count). `kinds` counts `chat`, `unclassified`, `embedding`, `ocr`, `decisions` and `other`, and `embedding_models` lists the embedding names. `source_id` is the runtime `gateway:<32 hex>` id. Conversation rows in `GET /api/models` are the `chat` and unclassified names. When the server publishes fixed roles, `roles` is the read-only list `{id,enabled,label}` and a FOFA install uses those names instead of the catalog. The list may include `transcription`, `speech` and `image`; this client shows them and does not call them. An old server omits `roles` or returns only the first six or eight roles. LOCAL ignores the field |
+| `ready` | the catalog was read (`models` is the total count). `kinds` counts `chat`, `unclassified`, `embedding`, `ocr`, `decisions`, `transcription`, `speech` and `other`; `embedding_models`, `transcription_models` and `speech_models` list their respective model names. `source_id` is the runtime `gateway:<32 hex>` id. Conversation rows in `GET /api/models` are the `chat` and unclassified names. When the server publishes fixed roles, `roles` is the read-only list `{id,enabled,label}` and a FOFA install uses those names instead of the catalog. The list may include `transcription`, `speech` and `image`. Voice uses `transcription` and `speech` when separately enabled in Settings → Voice; see `F-148` / `C-048`. Image generation remains display-only. An old server omits `roles` or returns only the first six or eight roles. LOCAL ignores the field |
 | `no_access` | signed in but the account may not use the model API |
 | `unavailable` | signed in but the catalog could not be used; `reason` is one of `rejected`, `unsupported`, `network`, `gateway`, `unsafe_response`, `no_models` |
 

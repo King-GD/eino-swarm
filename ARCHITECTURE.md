@@ -563,6 +563,39 @@ Checkout re-exec bundles live under
 temporary construction and atomic publication prevent another `go run` from
 overwriting or re-signing an executable already used by an engine/window.
 
+## Voice input and spoken answers
+
+Voice is an independent request service (`internal/speech`), not a chat turn or
+tool. The PC alone persists `speech.input`, `speech.output` and bounded resource
+limits. Its Settings → Speech page publishes the safe readiness snapshot through
+HTTP metadata and Pairlink `speech_config`/catalog. Both directions default off.
+The pool resolves Gateway `transcription`/`speech` roles separately from the
+conversation profile alias; local voice selects its own provider/custom model.
+PC renderers use same-origin `/api/audio/*`, keeping credentials in Go.
+
+The phone reuses the explicitly selected PC's safe snapshot in PC conversations
+and direct Chat. Gateway execution uses the phone's own current Mobile session
+against the matching Gateway's ordinary `/v1/audio/*`; audio never goes through
+the PC in this mode. Its per-PC cache contains no key, token or local endpoint,
+is bound to the pairing authority, and remains usable with the PC offline.
+Changes made on an unreachable PC apply after the next synchronization. Unlink
+removes that cache; another PC/account is never an implicit fallback.
+
+Only `pc_local` execution uses the current live LinkPump's private audio staging,
+asynchronous model request and bounded audio download chunks. It has one current
+upload/job/result, explicit cancellation, replay receipts and idle expiry. Close
+seals admission, cancels and joins owned work, then releases memory. Ordinary
+RPC and Stop keep receiving during voice calls. No audio enters workspace file
+handling, the store or the event bus. These requests do not alter turn/worker,
+presence, handoff or event-sequence ordering.
+
+The shared browser recorder owns acquired microphone tracks through cancellation,
+including late permission grants. PC dictation updates the existing durable draft;
+phone dictation edits its existing composer. Playback extracts Markdown prose,
+skips fenced code, and sequences bounded speech segments through one cancelable
+player. Native microphone declarations and packaged-app behavior remain separate
+acceptance gates. See `F-148` / `C-048` and [Testing](docs/TESTING.md).
+
 ## Official server account models
 
 The official server is the primary model source and the user's own providers are

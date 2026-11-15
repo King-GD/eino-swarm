@@ -6,49 +6,55 @@ import (
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/engine"
+	"github.com/LubyRuffy/eino-swarm/internal/speech"
 	"github.com/LubyRuffy/eino-swarm/internal/tools"
 )
 
 const (
 	ProtocolV = 1
 
-	OpMeta           = "meta"
-	OpList           = "list"
-	OpMore           = "more"
-	OpOpen           = "open"
-	OpRead           = "read"
-	OpStart          = "start"
-	OpSend           = "send"
-	OpSteer          = "steer"
-	OpStop           = "stop"
-	OpContinue       = "continue"
-	OpAnswer         = "answer"
-	OpWatch          = "watch"
-	OpUnwatch        = "unwatch"
-	OpLog            = "log"
-	OpEvent          = "event"
-	OpReady          = "ready"
-	OpLagged         = "lagged"
-	OpRunNow         = "run_now"
-	OpCancelWait     = "cancel_wait"
-	OpResumeGoal     = "resume_goal"
-	OpHello          = "hello"
-	OpProjectGet     = "project_get"
-	OpProjectCreate  = "project_create"
-	OpProjectUpdate  = "project_update"
-	OpCatalog        = "catalog"
-	OpRefreshCatalog = "refresh_catalog"
-	OpGetTimeouts    = "get_timeouts"
-	OpSetTimeouts    = "set_timeouts"
-	OpTune           = "tune"
-	OpPut            = "put"
-	OpFollowupDrop   = "followup_drop"
-	OpFollowupSteer  = "followup_steer"
-	OpPreempt        = "preempt"
-	OpClients        = "clients"
-	OpClientRead     = "client_read"
-	OpFiles          = "files"
-	OpFileChunk      = "file_chunk"
+	OpMeta            = "meta"
+	OpList            = "list"
+	OpMore            = "more"
+	OpOpen            = "open"
+	OpRead            = "read"
+	OpStart           = "start"
+	OpSend            = "send"
+	OpSteer           = "steer"
+	OpStop            = "stop"
+	OpContinue        = "continue"
+	OpAnswer          = "answer"
+	OpWatch           = "watch"
+	OpUnwatch         = "unwatch"
+	OpLog             = "log"
+	OpEvent           = "event"
+	OpReady           = "ready"
+	OpLagged          = "lagged"
+	OpRunNow          = "run_now"
+	OpCancelWait      = "cancel_wait"
+	OpResumeGoal      = "resume_goal"
+	OpHello           = "hello"
+	OpProjectGet      = "project_get"
+	OpProjectCreate   = "project_create"
+	OpProjectUpdate   = "project_update"
+	OpCatalog         = "catalog"
+	OpRefreshCatalog  = "refresh_catalog"
+	OpGetTimeouts     = "get_timeouts"
+	OpSetTimeouts     = "set_timeouts"
+	OpTune            = "tune"
+	OpPut             = "put"
+	OpFollowupDrop    = "followup_drop"
+	OpFollowupSteer   = "followup_steer"
+	OpPreempt         = "preempt"
+	OpClients         = "clients"
+	OpClientRead      = "client_read"
+	OpFiles           = "files"
+	OpFileChunk       = "file_chunk"
+	OpSpeechConfig    = "speech_config"
+	OpAudioTranscribe = "audio_transcribe"
+	OpAudioSpeech     = "audio_speech"
+	OpAudioChunk      = "audio_chunk"
+	OpAudioCancel     = "audio_cancel"
 )
 
 // GroupRecent is the inbox section for conversations with no project.
@@ -102,12 +108,15 @@ type Request struct {
 	Puts []string `json:"puts,omitempty"`
 	// Put fields stream one file or image across frames. Pairlink's plaintext
 	// cap is 64KiB, so a photo cannot ride in a single request.
-	PutID string `json:"put_id,omitempty"`
-	Name  string `json:"name,omitempty"`
-	MIME  string `json:"mime,omitempty"`
-	Part  int    `json:"part,omitempty"`
-	Parts int    `json:"parts,omitempty"`
-	Data  string `json:"data,omitempty"`
+	PutID   string `json:"put_id,omitempty"`
+	Purpose string `json:"purpose,omitempty"`
+	AudioID string `json:"audio_id,omitempty"`
+	Offset  int64  `json:"offset,omitempty"`
+	Name    string `json:"name,omitempty"`
+	MIME    string `json:"mime,omitempty"`
+	Part    int    `json:"part,omitempty"`
+	Parts   int    `json:"parts,omitempty"`
+	Data    string `json:"data,omitempty"`
 	// Group pages one inbox section. "recent" is conversations with no
 	// project. A project id pages that folder. Empty is the global idle page.
 	Group string `json:"group,omitempty"`
@@ -130,6 +139,9 @@ type Request struct {
 // Response is what the PC replies. Path and SessionID are pairlink
 // metadata so zwai trace can join the remote hop.
 type Response struct {
+	Speech                *speech.SnapshotView    `json:"speech,omitempty"`
+	SpeechError           string                  `json:"speech_error,omitempty"`
+	Audio                 *AudioView              `json:"audio,omitempty"`
 	Startup               string                  `json:"startup,omitempty"`
 	Restore               *engine.RestoreProgress `json:"restore,omitempty"`
 	DataGeneration        *int64                  `json:"data_generation,omitempty"`

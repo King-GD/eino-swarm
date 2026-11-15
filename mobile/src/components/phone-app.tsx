@@ -87,6 +87,7 @@ import { answerPhoneQuestion, continuePhoneTurn, interruptPhoneFollowup, sendPho
 import { sendComposed } from "@/lib/turn-send"
 import { phonePrediction } from "@/lib/composer-prediction"
 import { useModelCatalog } from "@/lib/use-model-catalog"
+import { usePhoneSpeechSync } from "@/lib/phone-speech"
 
 export function PhoneApp() {
   const account = usePhoneAccount()
@@ -124,6 +125,7 @@ export function PhoneApp() {
   const [loadingMore, setLoadingMore] = useState(false)
   const { models, levels, catalogBusy, refreshModels, refreshBusy, refreshError, webExecutionStatus, predictionsEnabled } = useModelCatalog(link)
   const startup = useEngineStartup(link)
+  usePhoneSpeechSync(link, hosts.find((host) => host.fingerprint === activeFp), hosts)
   const hidePcModel = account.mode === "account" || startup?.product_mode === "fofa"
   const restoring = startup?.startup === "restoring"
   const [composerPending, setComposerPending] = useState(false)

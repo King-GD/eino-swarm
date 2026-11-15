@@ -11,7 +11,10 @@ import { backupEn } from "./messages-backup"
 
 /** English UI chrome. Keys are stable; Chinese lives in messages-zh.ts.
  *  Agent replies and protocol markers (quoted-send wrappers) stay English. */
+import { speechEn } from "./messages-speech"
+
 export const en = {
+  ...speechEn,
   ...backupEn,
   ...mcpEN,
   ...backoffEn,

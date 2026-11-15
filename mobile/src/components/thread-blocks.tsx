@@ -25,6 +25,7 @@ import {
   type RosterCounts,
 } from "@/lib/tool-preview"
 import { cn } from "@/lib/cn"
+import { SpeechActions } from "./speech-actions"
 
 export function renderBlock(b: CompactBlock) {
   if (b.kind === "turn_end") {
@@ -67,6 +68,7 @@ export function renderBlock(b: CompactBlock) {
     return (
       <div data-quote-text="" className={cn("mr-4 min-w-0 wrap-break-word text-sm leading-snug", b.streaming && "opacity-90")}>
         <PhoneMarkdown text={text} />
+        {!b.streaming ? <SpeechActions id={b.id} text={text} /> : null}
       </div>
     )
   }

@@ -40,7 +40,7 @@ export function accountModelRows(models: ModelInfo[]): ModelInfo[] {
   return models.filter((m) => m.source === "account" && m.ready && m.model)
 }
 
-const kindOrder = ["chat", "unclassified", "embedding", "ocr", "decisions", "other"] as const
+const kindOrder = ["chat", "unclassified", "embedding", "ocr", "decisions", "transcription", "speech", "other"] as const
 export type AccountKindKey = (typeof kindOrder)[number]
 
 /** Non-zero classification counts, in a stable order. Missing kinds means the

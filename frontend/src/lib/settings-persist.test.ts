@@ -6,6 +6,7 @@ import {
   persistPayload,
 } from "./settings-persist"
 import type { Settings } from "./types"
+import { defaultSpeechSettings } from "./speech-types"
 
 const base: Settings = {
   server: { addr: "127.0.0.1:1", open_browser: false },
@@ -52,6 +53,15 @@ const base: Settings = {
 }
 
 describe("persistPayload", () => {
+  it("saves speech independently without overwriting unrelated model settings", () => {
+    const speech = defaultSpeechSettings()
+    speech.input.enabled = true
+    speech.input.language = "zh"
+    const patch = persistPayload({ ...base, speech }, undefined, base)
+    expect(patch.speech).toEqual(speech)
+    expect(patch.models).toBeUndefined()
+    expect(patch.remote).toBeUndefined()
+  })
   it("keeps the locale with the rest of the document", () => {
     const patch = persistPayload(base, "zh")
     expect(patch.memory).toEqual(base.memory)

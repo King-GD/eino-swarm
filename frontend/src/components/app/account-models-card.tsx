@@ -55,6 +55,8 @@ export function AccountModelsCard({
     embedding: "accountModels.kind.embedding",
     ocr: "accountModels.kind.ocr",
     decisions: "accountModels.kind.decisions",
+    transcription: "accountModels.kind.transcription",
+    speech: "accountModels.kind.speech",
     other: "accountModels.kind.other",
   }
   const counted = tally.map((part) => t(kindText[part.key], { count: part.count })).join(" · ")

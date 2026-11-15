@@ -26,9 +26,11 @@ var maxStagedBytes = engine.MaxUploadBytes
 // Staging holds chunked uploads for one phone link. They are not a thread's
 // files until start/send/steer consumes them: a new conversation has no id yet.
 type Staging struct {
-	mu    sync.Mutex
-	puts  map[string]*partial
-	bytes int
+	mu        sync.Mutex
+	puts      map[string]*partial
+	bytes     int
+	byteLimit int
+	putLimit  int
 }
 
 type partial struct {
@@ -87,7 +89,11 @@ func (s *Staging) Accept(req Request) (PutView, error) {
 	}
 	p := s.puts[id]
 	if p == nil {
-		if len(s.puts) >= maxStagedPuts {
+		limit := s.putLimit
+		if limit <= 0 {
+			limit = maxStagedPuts
+		}
+		if len(s.puts) >= limit {
 			return PutView{}, fmt.Errorf("remote: too many uploads are waiting on this link")
 		}
 		p = &partial{name: name, mime: mime, parts: req.Parts, got: map[int][]byte{}}
@@ -101,11 +107,15 @@ func (s *Staging) Accept(req Request) (PutView, error) {
 		}
 		return p.view(id), nil
 	}
-	if s.bytes+len(raw) > maxStagedBytes {
+	byteLimit := s.byteLimit
+	if byteLimit <= 0 {
+		byteLimit = maxStagedBytes
+	}
+	if s.bytes+len(raw) > byteLimit {
 		if len(p.got) == 0 {
 			delete(s.puts, id)
 		}
-		return PutView{}, fmt.Errorf("remote: staged uploads are over the %d MiB limit", maxStagedBytes>>20)
+		return PutView{}, fmt.Errorf("remote: staged uploads are over the %d MiB limit", byteLimit>>20)
 	}
 	p.got[req.Part] = raw
 	p.size += len(raw)

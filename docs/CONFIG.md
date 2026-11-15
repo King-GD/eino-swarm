@@ -33,6 +33,23 @@ saved here. A machine that has never saved a config has nothing to copy back.
 An empty key that was only filled from the environment is not saved over by an
 empty value from the archive.
 
+## Voice settings
+
+The PC's **Settings → Speech** edits `speech.input`, `speech.output` and
+`speech.limits`. Both directions default off. In Gateway mode the account's
+fixed recognition/speech roles are used; local mode can select an existing
+provider or a separate custom endpoint/model. Voice models are independent of
+the composer conversation model. Input includes language, recognition prompt,
+automatic/WAV recording, maximum duration and timeout; output includes voice,
+speed, MP3/WAV format, optional instructions and timeout.
+
+Phones synchronize the selected PC's safe projection and have no independent
+voice configuration. They retain its non-secret Gateway settings for offline-PC
+use and refresh on reconnect. Local voice execution requires that PC online.
+API reads omit voice credentials; `config show` redacts them. A backup made
+without credentials also removes both voice keys; restore preserves a saved
+custom key only if it belongs to the same endpoint.
+
 ## A complete file
 
 ```yaml
