@@ -44,8 +44,9 @@ go run ./cmd/zwai web
 # Windows amd64 and arm64 zips, cross-compiled. See docs/CLI.md.
 make windows-release VERSION=x.y.z
 
-# Linux arm64 Web/CLI (no native window; run ./zwai web --no-open)
+# Linux amd64 + arm64 Web/CLI archives (no native window)
 make linux-release VERSION=x.y.z
+# Optional single architecture: LINUX_ARCHES=amd64
 ```
 
 First launch writes `~/.zwai-swarm/config.yaml`. Until a model can answer, the
@@ -64,6 +65,16 @@ go run ./cmd/zwai desktop
 
 `OPENAI_*` only fills blank fields on first run. Settings, themes, search and
 the rest of the keys are in [docs/CONFIG.md](docs/CONFIG.md).
+
+### Linux installation without a build toolchain
+
+Download the `zwai-<version>-linux-amd64.tar.gz` (x86_64) or
+`zwai-<version>-linux-arm64.tar.gz` archive from [GitHub Releases](https://github.com/LubyRuffy/eino-swarm/releases).
+Choose a release containing the matching asset; older releases may contain only
+one platform. Extract it and run `./zwai web --no-open`. The archive includes the
+Web UI and needs neither Go nor Node on the target. The printed URL is local;
+remote access still requires the existing authenticated server configuration.
+See [Linux packaging and acceptance](docs/RELEASE.md#linux-amd64arm64-webcli-packages).
 
 ### Try it without a model
 

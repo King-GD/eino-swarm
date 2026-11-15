@@ -291,13 +291,43 @@ def validate_windows_zip(path):
         raise ValueError(f'Windows installer is not a {match.group(1)} executable')
 
 
+def prepare_linux_publication(root, version, source_sha, files, remote_assets):
+    """Reuse public bytes, and require per-architecture runtime evidence for new ones."""
+    from release_linux import validate_archive
+    delivery = read_json(Path(os.environ.get('DELIVERY_STATE', home() / 'issue-automation/delivery-state.json')), {})
+    batch, _ = delivery_batch(delivery, version, source_sha)
+    accepted = (batch or {}).get('release_linux_validation')
+    for asset in files:
+        remote = remote_assets.get(asset.name)
+        if remote is not None:
+            digest = remote.get('digest')
+            if not isinstance(digest, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', digest):
+                raise ValueError('Published Linux archive has no verified remote digest')
+            if not asset.exists():
+                run(['gh', 'release', 'download', 'v' + version, '--pattern', asset.name,
+                     '--dir', str(asset.parent)], cwd=root)
+            if not asset.is_file() or digest != 'sha256:' + sha256(asset):
+                raise ValueError('Retained Linux archive differs from published bytes; refusing rebuild/overwrite')
+        else:
+            arch = asset.name.removesuffix('.tar.gz').rsplit('-', 1)[1]
+            entries = accepted.get('assets') if isinstance(accepted, dict) else None
+            receipt = entries.get(arch) if isinstance(entries, dict) else None
+            if (not isinstance(accepted, dict) or accepted.get('status') != 'passed'
+                    or accepted.get('version') != version or accepted.get('source_sha') != source_sha
+                    or not isinstance(receipt, dict) or receipt.get('status') != 'passed'
+                    or receipt.get('arch') != arch or receipt.get('asset_name') != asset.name
+                    or not asset.is_file() or sha256(asset) != receipt.get('asset_sha256')):
+                raise ValueError('The accepted Linux archive is missing or differs from architecture/runtime evidence')
+        validate_archive(asset)
+
+
 def github_platform(root, version, source_sha, platform, state, *, urgent_reason=None):
     if platform == 'android':
         files = [root / 'bin' / f'zwai-{version}-android.apk']
     elif platform == 'windows':
         files = windows_release_files(root, version)
     elif platform == 'linux':
-        files = [root / 'bin' / f'zwai-{version}-linux-arm64.tar.gz']
+        files = [root / 'bin' / f'zwai-{version}-linux-{arch}.tar.gz' for arch in ('amd64', 'arm64')]
     else:
         machine = run(['uname', '-m'])
         arch = {'arm64': 'arm64', 'x86_64': 'amd64'}.get(machine)
@@ -307,7 +337,9 @@ def github_platform(root, version, source_sha, platform, state, *, urgent_reason
     remote = run(['gh', 'api', '--paginate', '--slurp', 'repos/{owner}/{repo}/releases'], cwd=root)
     matches = [r for page in json.loads(remote) for r in page if r['tag_name'] == 'v' + version]
     remote_assets = {a['name']: a for a in matches[0]['assets']} if matches else {}
-    if all(p.name in remote_assets for p in files):
+    if platform == 'linux':
+        prepare_linux_publication(root, version, source_sha, files, remote_assets)
+    elif all(p.name in remote_assets for p in files):
         for p in files:
             digest = remote_assets[p.name].get('digest')
             if not digest or not digest.startswith('sha256:'):
@@ -330,15 +362,6 @@ def github_platform(root, version, source_sha, platform, state, *, urgent_reason
                     or accepted.get('asset_name') != asset.name or not asset.is_file()
                     or sha256(asset) != accepted.get('asset_sha256')):
                 raise ValueError('The accepted Android package is missing or differs from native-device evidence')
-        elif platform == 'linux' and ('release_linux_validation' in (batch or {})
-                or (batch or {}).get('linux') == 'ready_for_publication'):
-            asset = files[0]
-            accepted = (batch or {}).get('release_linux_validation')
-            if (not isinstance(accepted, dict) or batch.get('source_sha') != source_sha
-                    or accepted.get('status') != 'passed' or accepted.get('version') != version
-                    or accepted.get('source_sha') != source_sha or accepted.get('asset_name') != asset.name
-                    or not asset.is_file() or sha256(asset) != accepted.get('asset_sha256')):
-                raise ValueError('The accepted Linux archive is missing or differs from runtime evidence')
         elif platform == 'macos' and (native or (batch or {}).get('macos') == 'ready_for_publication'):
             asset = files[0]
             if (native.get('status') != 'passed' or native.get('version') != version
@@ -350,8 +373,6 @@ def github_platform(root, version, source_sha, platform, state, *, urgent_reason
                 target = 'desktop-release'
             elif platform == 'windows':
                 target = 'windows-release'
-            elif platform == 'linux':
-                target = 'linux-release'
             else:
                 target = 'mobile-android-release'
             env = dict(os.environ, ANDROID_ARTIFACT='apk')
@@ -363,9 +384,6 @@ def github_platform(root, version, source_sha, platform, state, *, urgent_reason
         elif platform == 'windows':
             for path in files:
                 validate_windows_zip(path)
-    if platform == 'linux':
-        from release_linux import validate_archive
-        validate_archive(files[0])
     if source_preflight(root, version, (platform,), urgent_reason=urgent_reason) != source_sha:
         raise ValueError('Source changed during platform build')
     run(['go', 'run', './internal/release/cmd', '-version', version, '-dir', str(root / 'bin'),

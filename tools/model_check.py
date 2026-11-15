@@ -17,6 +17,8 @@ models/scheduling/WakeConsentTimeline.tla checks multiple original human
 decisions, asynchronous classification and exact-ID cancellation deduplication.
 models/stream/ManagerCommentary.tla checks the order and privacy of admitted
 manager commentary before it enters the event stream.
+models/release/LinuxRelease.tla checks both Linux architecture targets, name/machine
+agreement, exact runtime evidence for new uploads and immutable public bytes.
 models/account/AccountCatalog.tla checks that a published account catalog
 belongs to the current credential (C-040).
 models/account/DefaultSourceChoice.tla checks that the Settings default badge
@@ -146,6 +148,12 @@ MODELS = {
             ("UseMainSend", "RebindContext", "SkipReplyOwner", "EnableSideTools", "HoldMainDuringModel"),
             ("TypeOK", "SideLeavesMainUntouched", "ModelReadsBoundThread",
              "ReplyMatchesActiveOwner", "SideHasNoTools", "MainCanAdvanceWhileSideWaits"),
+            (),
+        ),
+        Model(
+            "linux-release", ROOT / "models" / "release" / "LinuxRelease.tla",
+            ("ArmOnly", "IgnoreMachine", "IgnoreReceipt", "RebuildPublic"),
+            ("TypeOK", "BothArchitecturesSupported", "MachineMatchesName", "ReceiptMatchesNewUpload", "PublicBytesPreserved"),
             (),
         ),
         Model(
@@ -413,6 +421,16 @@ CASES: tuple[Case, ...] = (
         ("installed-skills-reach-hidden-view", "NeverDetachedLookup"),
         ("installed-skills-reach-reinstall", "NeverReinstalledWithPendingCleanup"),
         ("installed-skills-reach-delete-with-stage", "NeverDeletedWithStagedUpload"),
+    )),
+    _case("linux-release-current", "two validated architecture archives; exact runtime receipts and immutable public bytes", model="linux-release"),
+    _case("linux-release-arm-only", "original release only supports arm64", ("ArmOnly",), "BothArchitecturesSupported", model="linux-release"),
+    _case("linux-release-machine", "archive name disagrees with ELF machine", ("IgnoreMachine",), "MachineMatchesName", model="linux-release"),
+    _case("linux-release-receipt", "new upload lacks matching architecture/source/bytes evidence", ("IgnoreReceipt",), "ReceiptMatchesNewUpload", model="linux-release"),
+    _case("linux-release-rebuild", "partial publication rebuilds existing public bytes", ("RebuildPublic",), "PublicBytesPreserved", model="linux-release"),
+    *(_case(name, "witness", witness=witness, model="linux-release") for name, witness in (
+        ("linux-release-reach-amd64", "NeverAMD64Uploaded"),
+        ("linux-release-reach-arm64", "NeverARM64Uploaded"),
+        ("linux-release-reach-retry", "NeverPublicRetry"),
     )),
     _case("account-current", "publish rechecks the credential and login or logout seals the catalog",
           model="account"),

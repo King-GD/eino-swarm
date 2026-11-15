@@ -8932,3 +8932,25 @@ login gate, the actual portrait three-tap gesture, restored Local menus and
 return to Account across relaunch, retaining screenshots and AX trees. This
 case uses the offline PC fixture and does not accept a production account,
 Android installation or TestFlight distribution.
+
+### Linux archive architecture and publication
+
+`tools/test_release_linux.py` checks both named ELF machines, class/endian,
+archive entry/mode/link boundaries, requested GOARCH and failed-build preservation.
+`tools/test_release_linux_publication.py` exercises `github_platform` itself with
+both accepted archives, partial/full public retries, downloads and missing/wrong
+architecture, source, version, hash, file and receipt. It asserts no rebuild or
+upload on refusal. `internal/release/linux_test.go` requires both archives at the
+actual Go publisher boundary; `internal/update/linux_asset_test.go` checks names.
+
+`models/release/LinuxRelease.tla` maps Prepare to artifact selection/public-byte
+reuse, Validate to ELF name/machine validation plus per-arch runtime receipts,
+and Upload to the subsequent source preflight and Go publisher. One selected
+artifact ranges over two architectures, matching/missing/wrong arch/source/hash
+receipts and public/new state. TLC checks support for both, name/machine agreement,
+receipt equality for new uploads and immutable public bytes. The original
+arm64-only behavior and three seeded missing guards fail the corresponding
+invariants; both new architectures and public retry are reachable. No eventual
+network/upload success is assumed. This finite equality model does not prove
+ELF parsing, Go/Python filesystem atomicity, real execution or GitHub behavior;
+real package/runtime and publisher regression evidence remains required.

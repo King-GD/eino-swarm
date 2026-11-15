@@ -30,6 +30,8 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
 
 ### Fixed
 
+- Linux release builds and validates amd64 and arm64 archives, with per-architecture
+  runtime receipts and immutable partial-publication retries. (#172, `C-010`)
 - Headless Web keeps the engine alive without a browser, reports exhausted
   presence recovery to supervisors, and releases its hold on signal. (#170, `C-001`)
 

@@ -27,7 +27,7 @@ help:
 	@echo "make mobile-android  open the Android app in Android Studio"
 	@echo "make mobile-android-release  Android APK/AAB into bin/"
 	@echo "make desktop-release  macOS zwai.app zip into bin/ (darwin host)"
-	@echo "make linux-release  Linux arm64 Web/CLI tar.gz into bin/"
+	@echo "make linux-release  Linux amd64/arm64 Web/CLI tar.gz into bin/"
 	@echo "make windows-release  Windows amd64 and arm64 zwai.exe zips into bin/"
 	@echo "make release      publish only affected, pending Mac/Windows/Linux/Android/iOS platforms"
 	@echo "make check      formatting, vet, test, e2e"
@@ -106,9 +106,11 @@ desktop-release: frontend
 windows-release: frontend
 	go run ./internal/desktop/winpack -version "$(VERSION)" -o bin
 
+LINUX_ARCHES ?= amd64 arm64
+
 .PHONY: linux-release
 linux-release: frontend
-	python3 tools/release_linux.py --version "$(VERSION)" --output bin
+	python3 tools/release_linux.py --version "$(VERSION)" --output bin --arch $(LINUX_ARCHES)
 
 # One allocated batch/version; only required platforms run, with independent gates.
 .PHONY: release release-check mobile-ios-release
