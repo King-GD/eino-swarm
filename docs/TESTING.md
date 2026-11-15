@@ -2658,6 +2658,11 @@ Incident evidence and the upstream-cause uncertainty are recorded in
 `internal/desktop/recovery*_test.go` exercises the actual controller with injected
 clock/probe/snapshot effects, including stale challenges, blank pixels, source
 origin, inactivity, sleep-sized tick gaps, retry exhaustion and cancellation.
+A flat presented frame is `presentation_blank` and still takes the one existing
+reload; a missing capture is not blank. The decision is the sampled image, not
+a downscaled average. `models/desktop/RendererRecovery.tla` checks that
+acknowledgement and its foreground budget; see "Renderer recovery decision"
+below.
 The retry regressions check that a timed-out successor leaves the second
 attempt available until a new foreground probe fails. Exercise both focus
 changes and ticks queued during the blocked launch, and require the next
@@ -5047,6 +5052,31 @@ keeps the slot, and a queued worker stays out until that slot is released.
 
 ```bash
 python3 tools/model_check.py --fetch concurrency-cap-current concurrency-cap-shrink-keeps-holders concurrency-cap-reach-preempt
+```
+
+## Renderer recovery decision (C-034)
+
+`models/desktop/RendererRecovery.tla` checks the paint acknowledgement, not
+pixel thresholds, ScreenCaptureKit or the wall-clock grace. A WebKit match is
+healthy only when the visible body is not flat. A missed, hidden or refused
+capture stays with the WebKit result. The first foreground failure reloads
+once; a later failure opens a successor on the same engine, and the second
+successor exhausts the budget. Leaving the foreground starts a new grace and
+does not spend it. The five-minute stable reset is outside this model.
+
+`renderer-recovery-ignore-presented` restores the decision shipped through
+v0.1.77 and must break `VisibleFlatIsNotHealthy`.
+`renderer-recovery-unknown-as-flat` counts an unknown capture as a blank body
+and must break `UnknownMatchStaysHealthy`. `renderer-recovery-skip-reload`
+opens a successor without the one reload and must break
+`ReplacementFollowsReload`. `renderer-recovery-background-spends` spends the
+budget while the window is away and must break `RecoveryStaysInForeground`.
+The reach witnesses keep a readable body, a flat body, the reload, the
+successor and a healthy unknown capture reachable. `make model-check` includes
+these cases. The Go tests still own the sampled image and the real controller.
+
+```bash
+python3 tools/model_check.py --fetch renderer-recovery-current renderer-recovery-ignore-presented renderer-recovery-unknown-as-flat renderer-recovery-skip-reload renderer-recovery-background-spends
 ```
 
 ## iOS startup prompt model (opt-in, `C-045`)

@@ -111,7 +111,10 @@ This endpoint reports interface recovery; it never restarts or completes work.
 
 Before reload or replacement, `probe_failed` reports the last observed boundary:
 `callback_missing`, `location_pending`, `snapshot_pending`, `snapshot_error`,
-`snapshot_mismatch`, or no pending probe. These are observations, not proof of a
+`snapshot_mismatch`, `presentation_blank`, or no pending probe. `presentation_blank`
+means the visible window's own image is one flat colour below its top control
+band. A missed, hidden, or refused capture stays on the WebKit result and is
+not this reason. These are observations, not proof of a
 JavaScript/GPU cause. `duration_ms` is the age of the latest dispatched probe
 when known, not a completed recovery duration. Native error text is excluded.
 A successor waiting for its first paint sends bounded `probe_failed` records

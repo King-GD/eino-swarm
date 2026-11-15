@@ -36,8 +36,9 @@ and projects sort by last update; drag a row to pin a custom order. On the
 desktop window, drag the title bar to move it; double-click to zoom or
 restore, like Finder.
 
-On the Mac, an independent native controller checks actual painted pixels,
-tries one reload, then replaces the window on the same engine if needed.
+On the Mac, an independent native controller checks actual painted pixels.
+A window that stays one flat colour counts as not painted. It tries one
+reload, then replaces the window on the same engine if needed.
 Background work continues, and the restored window returns to its conversation
 and saved draft. Repeated failures stop with a native error. A system WebKit
 fault can still occur after a successful recovery. Diagnostics are in

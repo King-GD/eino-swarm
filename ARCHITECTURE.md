@@ -193,7 +193,14 @@ the server mode string, because that mode is `engine` for every client.
 The renderer health nonce remains painted inside the macOS WebView. A small
 opaque native sibling covers that corner on screen and stays outside
 `WKWebView.takeSnapshot`; only those underlying pixels can acknowledge a paint
-challenge. Background sampling precedes the first probe and follows theme and
+challenge. When that window is visible, the same check also samples the
+process's own presented frame. A flat body below the top control band fails
+the probe even though the covered nonce matched; a missed, hidden, or refused
+sample does not. Recovery then uses the existing one reload and successor
+window. That decision is `models/desktop/RendererRecovery.tla`: a flat body
+is not healthy paint, an unknown capture is not blank, and the one reload
+precedes a bounded successor only while the window is in front. Background
+sampling precedes the first probe and follows theme and
 dialog changes through a bounded same-origin message, independently of health
 and recovery budgets. A later decoration failure preserves the existing cover
 and continues real pixel checks.

@@ -3,6 +3,7 @@ package desktop
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image/color"
 
@@ -13,6 +14,22 @@ const recoveryMessageLimit = 2048
 const recoverySnapshotSide = 64
 const recoveryProbeGridSide = 8
 const recoveryProbeCellSide = 2
+
+// recoveryPresentationBlank is the native snapshot status for a flat window.
+// The same number is what presentedFrameStatus returns to ScreenCaptureKit.
+const recoveryPresentationBlank = 6
+
+// errPresentedFrameBlank is the on-screen frame, not a failed capture.
+// A missing, hidden, or refused sample must not use this error.
+var errPresentedFrameBlank = errors.New("presented frame is blank")
+
+const (
+	presentationGridX      = 8
+	presentationGridY      = 6
+	presentationContrast   = 48
+	presentationMinOpaque  = 64
+	presentationCellOpaque = 4
+)
 
 func validRecoveryMessage(expected, session string, generation int, challenge, message string, origin *application.OriginInfo) bool {
 	if origin == nil || !origin.IsMainFrame || !sameDirectoryOrigin(expected, origin.Origin) ||
@@ -82,6 +99,116 @@ func absChannel(a, b byte) int {
 		return int(a - b)
 	}
 	return int(b - a)
+}
+
+func presentationCellBounds(width, height, cx, cy int) (x0, y0, x1, y1 int) {
+	x0 = cx * width / presentationGridX
+	x1 = (cx + 1) * width / presentationGridX
+	y0 = cy * height / presentationGridY
+	y1 = (cy + 1) * height / presentationGridY
+	return
+}
+
+func presentationLuma(red, green, blue byte) int {
+	return (54*int(red) + 183*int(green) + 19*int(blue)) >> 8
+}
+
+func histogramMedian(hist *[256]int, count int) int {
+	target := count / 2
+	seen := 0
+	median := 0
+	for luma, n := range hist {
+		seen += n
+		if seen > target {
+			median = luma
+			break
+		}
+	}
+	return median
+}
+
+func histogramOutliers(hist *[256]int, median int) int {
+	outliers := 0
+	for luma, n := range hist {
+		delta := luma - median
+		if delta < 0 {
+			delta = -delta
+		}
+		if delta >= presentationContrast {
+			outliers += n
+		}
+	}
+	return outliers
+}
+
+// presentedFrameBlank reports a window whose body is one flat colour.
+// The top band is the probe cover and window controls, so it cannot prove
+// that the rest of the window has anything to read. A cell counts when its
+// own pixels contain real contrast, or when its colour differs from another
+// body cell. Faint rules and a few specks stay under that floor. Too little
+// opaque sample is unknown, not a blank frame.
+func presentedFrameBlank(pixels []byte, width, height int) bool {
+	if width < presentationGridX*4 || height < presentationGridY*4 || len(pixels) != width*height*4 {
+		return false
+	}
+	hist := make([][256]int, presentationGridY*presentationGridX)
+	counts := make([]int, presentationGridY*presentationGridX)
+	opaque := 0
+	for y := 0; y < height; y++ {
+		cy := y * presentationGridY / height
+		if cy == 0 {
+			continue
+		}
+		for x := 0; x < width; x++ {
+			i := (y*width + x) * 4
+			if pixels[i+3] < 240 {
+				continue
+			}
+			cx := x * presentationGridX / width
+			slot := cy*presentationGridX + cx
+			hist[slot][presentationLuma(pixels[i], pixels[i+1], pixels[i+2])]++
+			counts[slot]++
+			opaque++
+		}
+	}
+	if opaque < presentationMinOpaque {
+		return false
+	}
+	minMedian, maxMedian, usable := 255, 0, 0
+	for cy := 1; cy < presentationGridY; cy++ {
+		for cx := 0; cx < presentationGridX; cx++ {
+			slot := cy*presentationGridX + cx
+			if counts[slot] < presentationCellOpaque {
+				continue
+			}
+			median := histogramMedian(&hist[slot], counts[slot])
+			if histogramOutliers(&hist[slot], median) >= presentationCellOpaque {
+				return false
+			}
+			if usable == 0 || median < minMedian {
+				minMedian = median
+			}
+			if usable == 0 || median > maxMedian {
+				maxMedian = median
+			}
+			usable++
+		}
+	}
+	return usable > 0 && maxMedian-minMedian < presentationContrast
+}
+
+func presentedSampleStatus(pixels []byte, width, height int) int {
+	if width < 1 || height < 1 || width > 4096 || height > 4096 {
+		return 0
+	}
+	need := int64(width) * int64(height) * 4
+	if need != int64(len(pixels)) {
+		return 0
+	}
+	if presentedFrameBlank(pixels, width, height) {
+		return recoveryPresentationBlank
+	}
+	return 0
 }
 
 func recoveryProbeScript(expected, session string, generation int, challenge string, first, second color.NRGBA, document int) string {

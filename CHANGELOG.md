@@ -33,6 +33,13 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
 - Headless Web keeps the engine alive without a browser, reports exhausted
   presence recovery to supervisors, and releases its hold on signal. (#170, `C-001`)
 
+- A Mac window that stays one flat colour fails the renderer probe
+  (`presentation_blank`) and uses the existing single reload, then a
+  successor window on the same engine. A missed, hidden, or refused capture
+  is not treated as a blank frame. `models/desktop/RendererRecovery.tla`
+  checks that decision, including the v0.1.77 fault that accepted a flat
+  body after a matching WebKit snapshot. (`F-115`, `C-034`)
+
 ### Changed
 
 - Phone defaults to Account mode with required sign-in and avatar entry. Hide
