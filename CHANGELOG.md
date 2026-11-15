@@ -4,6 +4,23 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). GitHub Releases start
 at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
+## [0.1.78] - 2026-11-15
+
+### Fixed
+
+- Headless Web owns an acknowledged presence hold, stays alive without browser
+  tabs, and releases the hold on shutdown. (#170, `C-001`)
+
+### Added
+
+- Linux amd64 and arm64 Web/CLI archives with matching ELF architecture and
+  per-archive runtime acceptance before upload. (#172, `F-430`, `C-010`)
+
+This source batch also contains the integrated phone account/goal presentation,
+sub-agent concurrency cap and Mac flat-window recovery changes. Platform
+publication and native acceptance remain independent; a Linux archive does not
+accept or publish the desktop or phone installers.
+
 ## [0.1.77] - 2026-11-14
 
 ### Fixed
