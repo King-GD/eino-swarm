@@ -294,8 +294,10 @@ Generic deadline or cancellation errors do not suggest a timeout setting.
 The response area shows a spinning "working…" as soon as the turn starts.
 Server progress then updates it with a ticking elapsed time and how many
 sub-agents are running. **Sub-agents at once** in Settings → Swarm takes
-effect immediately. Queued workers start under the new cap. Lowering it does
-not kill anyone already running.
+effect immediately. One task runs at most that many sub-agents at once.
+Lowering it stops the workers that took a slot last and leaves the earlier
+ones running. A stopped worker needs a free slot before it can resume.
+Workers already queued start when a slot opens.
 
 While the model is reasoning, developer view caps the block at ten lines and
 follows new tokens. Click the row to hide it while it is still running. After

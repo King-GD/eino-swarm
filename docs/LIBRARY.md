@@ -420,9 +420,14 @@ still must call the actual wait/close tools to collect or discard those results.
 Set exported limit fields before starting workers. For a live registry use
 `SetAgentTimeout`, `SetMaxTurns` and `SetMaxConcurrent`. Timeout is captured
 when the lifetime context is created; the turn cap is read when the worker's
-model agent is created. Setters do not restart workers or clear their watchdog
-failure budget. `timeout_settings_test.go` exercises actual lifetime deadlines
-and live limit changes.
+model agent is created. The timeout and turn setters do not restart workers or
+clear their watchdog failure budget. `SetMaxConcurrent` does: when the new cap
+is below the number of workers already inside a model call, it stops the
+newest of those holders. Their result is
+`swarm: agent <id> cancelled: concurrency cap lowered to N`. The earlier
+holders keep running, and a programmatic waiter stays queued until one of
+them releases a slot. `timeout_settings_test.go` exercises actual lifetime
+deadlines and live limit changes.
 
 Each of those has a test: `TestCallerContextCancelDoesNotReleaseAgents`,
 `TestWorkerSurvivesParentContextCancel`,
@@ -439,7 +444,7 @@ Each of those has a test: `TestCallerContextCancelDoesNotReleaseAgents`,
 `TestUndeliveredSteerSurfacesWhenTheAgentFinishes`,
 `TestHostNotifyKeepsWorkerEventsAfterRunReturns`,
 `TestRaisingMaxConcurrentUnblocksQueuedWorkers`,
-`TestLoweringMaxConcurrentKeepsWaitersQueuedUntilASlotFrees`,
+`TestLoweringMaxConcurrentStopsNewestHoldersAndKeepsTheEarliest`,
 `TestPreemptAbortsInFlightToolAndDeliversSteer`,
 `TestPreemptAbortsAToolThatIgnoresCancellation`,
 `TestCancelReturnsWhileAToolIgnoresCancellation`,

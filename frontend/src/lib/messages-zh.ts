@@ -784,7 +784,7 @@ export const zh: { [K in keyof typeof en]: string } = {
   "settings.swarm.subagents": "子代理",
   "settings.swarm.maxConcurrent": "同时运行的子代理",
   "settings.swarm.maxConcurrentHint":
-    "立刻生效。超过这个数时，新的启动和续跑会被拒绝。已经排队的会在有空位时放行。更多意味着扇出更快，也更费 token。",
+    "立刻生效。一个任务里同时在跑的子代理不会超过这个数。调低时，后占到名额的会停掉，先占到的继续；停掉的要等有空位才能再续跑。已经排队的会在有空位时放行。超过这个数时，新的启动和续跑会被拒绝。更多意味着扇出更快，也更费 token。",
   "settings.swarm.agentTimeout": "子代理超时（秒）",
   "settings.swarm.agentTimeoutHint": "一个子代理最多能工作多久，超时即停。",
   "settings.swarm.maxTurns": "子代理工具回合",

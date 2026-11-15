@@ -36,6 +36,8 @@ another project's identity (C-044).
 models/mobile/IOSStartupPrompt.tla checks that iOS binds static cookie and HTTP
 flags before the page starts, and that the old synchronous startup prompt can
 stay unanswered (C-045).
+models/swarm/ConcurrencyCap.tla checks that one task's running sub-agents stay
+within the live cap, including after the cap is lowered (C-009).
 Every case sets its model's switch constants and states
 the expected outcome: the current design must pass every safety invariant;
 each historical or seeded behaviour must break the named invariant (checked
@@ -86,6 +88,12 @@ class Model:
 MODELS = {
     m.name: m
     for m in (
+        Model(
+            "concurrency-cap", ROOT / "models" / "swarm" / "ConcurrencyCap.tla",
+            ("ShrinkKeepsHolders",),
+            ("TypeOK", "HoldersWithinCap"),
+            (("MaxWorkers", 3),),
+        ),
         Model(
             "generation-recovery", ROOT / "models" / "generation" / "ModelGenerationRecovery.tla",
             ("NoJoin",),
@@ -287,6 +295,12 @@ def _askpub(name: str, source: str, switches: tuple[str, ...] = (), violates: st
 
 
 CASES: tuple[Case, ...] = (
+    _case("concurrency-cap-current", "one task's running sub-agents stay within the live cap",
+          model="concurrency-cap"),
+    _case("concurrency-cap-shrink-keeps-holders",
+          "historical, shipped through v0.1.77: lowering the cap left workers that already held a slot running",
+          ("ShrinkKeepsHolders",), "HoldersWithinCap", model="concurrency-cap"),
+    _case("concurrency-cap-reach-preempt", "witness", witness="NeverPreempted", model="concurrency-cap"),
     _case("ios-startup-current", "iOS binds static cookie and HTTP flags before the page starts",
           model="ios-startup"),
     _case("ios-startup-sync-prompt",

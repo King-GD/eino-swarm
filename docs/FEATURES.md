@@ -467,6 +467,7 @@ This is the current user-facing capability map. The code and tests named below a
 - 逐次生成生命周期通知沿用 `F-130`／`C-035`；公开通知与输出身份见 `docs/LIBRARY.md`，验证：`generation_test.go`。
 
 - worker lifetime 默认一小时，已有显式正值优先；live registry 用同步 `SetAgentTimeout`、`SetMaxTurns`、`SetMaxConcurrent` 更新后续执行，运行中 deadline 与三次 watchdog 恢复预算不变。关联契约：`C-009`、`C-019`；实现／验证：`swarm.go`、`worker.go`、`timeout_settings_test.go`、`worker_timeout_test.go`、`docs/LIBRARY.md`。
+- 同时运行的子代理是一个任务的实时上限。保存后立刻作用到正在跑和已暂停的 swarm。调低时，后占到名额的子代理停掉，先占到的继续；停掉的要等有空位才能再续跑。已经排队的在有空位时放行。新的启动和续跑在满员时被拒绝。关联契约：`C-009`；实现／验证：`gate.go`、`swarm.go`、`gate_test.go`、`models/swarm/ConcurrencyCap.tla`。
 - 模型输出通知提供可选 `MessageID`，同一流的思考、正文与 checkpoint 保留身份，新模型轮次使用不同身份；无身份的旧通知保持兼容。关联契约：`C-003`；证据：`signal.go`、`signal_identity_test.go`、`docs/LIBRARY.md`。
 - 进程交接 API 与恢复边界见 `F-110`、`C-027`；库使用说明：`docs/LIBRARY.md`；证据：`handoff.go`、`handoff_test.go`。
 

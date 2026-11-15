@@ -2,6 +2,7 @@ package swarm
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -62,7 +63,7 @@ func TestSlotGateRepairsNonPositiveCap(t *testing.T) {
 	if g.cap != defaultMaxConcurrent {
 		t.Fatalf("resize: cap=%d", g.cap)
 	}
-	g.release() // held is already 0; must not go negative
+	g.release("absent") // held is already 0; must not go negative
 }
 
 func TestRaisingMaxConcurrentUnblocksQueuedWorkers(t *testing.T) {
@@ -117,10 +118,12 @@ func TestRaisingMaxConcurrentUnblocksQueuedWorkers(t *testing.T) {
 	}
 }
 
-func TestLoweringMaxConcurrentKeepsWaitersQueuedUntilASlotFrees(t *testing.T) {
-	// ModelBuilder runs after acquire, so two live workers race on call
-	// order. Key the fixtures by role or close(blocks[0]) unblocks the
-	// wrong handle and h1.Done hangs.
+func TestLoweringMaxConcurrentStopsNewestHoldersAndKeepsTheEarliest(t *testing.T) {
+	// The configured number is how many sub-agents of this task may run at
+	// once. Lowering it has to stop the newest holders immediately; leaving
+	// them in the model makes the task look busier than the setting. The
+	// earliest holder keeps its slot, and a worker still queued on the gate
+	// cannot take that slot until the earliest one finishes.
 	starteds := map[string]chan struct{}{
 		"one": make(chan struct{}), "two": make(chan struct{}), "three": make(chan struct{}),
 	}
@@ -148,14 +151,16 @@ func TestLoweringMaxConcurrentKeepsWaitersQueuedUntilASlotFrees(t *testing.T) {
 	if err != nil {
 		t.Fatalf("spawn one: %v", err)
 	}
-	h2, err := reg.Spawn(context.Background(), "two", "do the assigned work", reg.ModelBuilder)
-	if err != nil {
-		t.Fatalf("spawn two: %v", err)
-	}
+	// Generate runs only after the slot is held, so this wait fixes the
+	// acquisition order before the next worker exists.
 	select {
 	case <-starteds["one"]:
 	case <-time.After(2 * time.Second):
 		t.Fatal("first worker never started")
+	}
+	h2, err := reg.Spawn(context.Background(), "two", "do the assigned work", reg.ModelBuilder)
+	if err != nil {
+		t.Fatalf("spawn two: %v", err)
 	}
 	select {
 	case <-starteds["two"]:
@@ -172,24 +177,40 @@ func TestLoweringMaxConcurrentKeepsWaitersQueuedUntilASlotFrees(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 
+	reg.SetMaxConcurrent(2)
+	select {
+	case <-h1.Done():
+		t.Fatal("repeating the current cap stopped the earliest holder")
+	case <-h2.Done():
+		t.Fatal("repeating the current cap stopped the newest holder")
+	case <-starteds["three"]:
+		t.Fatal("repeating the current cap let the waiter in")
+	case <-time.After(200 * time.Millisecond):
+	}
+
 	reg.SetMaxConcurrent(1)
+	select {
+	case <-h2.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("lowering the cap left the newest holder running")
+	}
+	_, stopErr, finished := h2.Result()
+	if !finished || stopErr == nil || !strings.Contains(stopErr.Error(), "swarm: agent "+h2.ID+" cancelled: concurrency cap lowered to 1") {
+		t.Fatalf("newest holder stop: finished=%v err=%v", finished, stopErr)
+	}
+	select {
+	case <-h1.Done():
+		t.Fatal("lowering the cap stopped the earliest holder")
+	case <-starteds["three"]:
+		t.Fatal("lowering the cap let a waiter in while the earliest holder still had the slot")
+	case <-time.After(200 * time.Millisecond):
+	}
+
 	close(blocks["one"])
 	select {
 	case <-h1.Done():
 	case <-time.After(2 * time.Second):
-		t.Fatal("first worker did not finish after release")
-	}
-	select {
-	case <-starteds["three"]:
-		t.Fatal("lowering the cap let a waiter in while another worker still held the last slot")
-	case <-time.After(200 * time.Millisecond):
-	}
-
-	close(blocks["two"])
-	select {
-	case <-h2.Done():
-	case <-time.After(2 * time.Second):
-		t.Fatal("second worker did not finish after release")
+		t.Fatal("earliest holder did not finish after release")
 	}
 	select {
 	case <-starteds["three"]:
