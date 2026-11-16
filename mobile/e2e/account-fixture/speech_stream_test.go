@@ -24,7 +24,7 @@ import (
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 )
 
-const speechInput = `{"model":"speech","input":"Read the completed response.","voice":"native-fixture-voice","response_format":"pcm","stream_format":"audio"}`
+const speechInput = `{"model":"speech","input":"Read the completed response.","voice":"native-fixture-voice","response_format":"pcm","stream_format":"sse"}`
 
 func realSpeechFixture(t *testing.T) *fixture {
 	t.Helper()
@@ -81,6 +81,8 @@ func TestNativeSpeechFixtureRefusesWrongAuthorityAndMalformedAudioRequests(t *te
 		{"json", "/v1/audio/speech", "mobile", "{", "", 400},
 		{"wrong-model", "/v1/audio/speech", "mobile", strings.Replace(speechInput, `"model":"speech"`, `"model":"conversation"`, 1), "", 400},
 		{"not-pcm", "/v1/audio/speech", "mobile", strings.Replace(speechInput, `"pcm"`, `"mp3"`, 1), "", 400},
+		{"buffered-wire", "/v1/audio/speech", "mobile", strings.Replace(speechInput, `"sse"`, `"audio"`, 1), "", 400},
+		{"missing-wire", "/v1/audio/speech", "mobile", strings.Replace(speechInput, `,"stream_format":"sse"`, ``, 1), "", 400},
 		{"disabled", "/v1/audio/speech", "mobile", speechInput, "disabled", 503},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -178,6 +180,14 @@ func TestNativeSpeechFixtureFiniteRawAndSSERetainExactPCMAndCompletion(t *testin
 			}
 		} else if strings.Count(raw, base64.StdEncoding.EncodeToString(speechPCM())) != 4 || !strings.HasSuffix(raw, "event: speech.audio.done\ndata: {\"type\":\"speech.audio.done\"}\n\n") {
 			t.Fatal("finite SSE lost audio or terminal frame")
+		}
+		var state struct {
+			Data struct {
+				Requests []map[string]any `json:"requests"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal([]byte(webRequest(t, server, "/fixture/speech/state", "", "", 200)), &state); err != nil || len(state.Data.Requests) != 1 || state.Data.Requests[0]["stream_format"] != "sse" {
+			t.Fatalf("native evidence must retain the actual requested stream protocol: %+v error=%v", state.Data.Requests, err)
 		}
 		f.speech.mu.Lock()
 		if !f.speech.requests[0].EOF || f.speech.requests[0].Cancelled || f.speech.requests[0].Flushes != 4 {

@@ -47,6 +47,10 @@ Select **PCM (streaming playback)** to play a response while it is generated.
 The service must return mono 24 kHz signed 16-bit little-endian PCM, either as
 audio chunks or OpenAI speech SSE events. MP3/WAV remain complete-segment
 playback. Phone PC-local RPC remains buffered.
+Gateway account PCM streaming requests use SSE; personal services retain the
+audio streaming request. The resolved spoken-output source controls this choice,
+including editable gateway model bindings. Paired phones route that output independently
+of recognition, with their own same-origin gateway login.
 
 Paired phones use the selected PC's safe projection only while that PC is online
 and its engine is ready. Gateway audio uses the phone's own same-origin account
@@ -901,6 +905,18 @@ The Host Token and the long-term X25519 key live as files, not in this YAML:
 $ZWAI_HOME/remote/host_token   0600
 $ZWAI_HOME/remote/identity     0600
 ```
+
+On Unix, remote credential directories/files reject group/other permission bits;
+new directories/files use `0700`/`0600`. On Windows, where Go reports `0777`/`0666`
+even for private ACLs, the client instead checks the actual owner and DACL. Only the current
+user, SYSTEM and built-in Administrators may own the object or receive a
+nonzero allow grant. Missing/NULL DACLs, unknown owners or ACE formats, and
+grants to other principals (including inherited grants) are refused. An empty
+DACL grants nothing; actual file access may still fail. Newly created credential
+files are checked before secret bytes are written. The client does not change
+existing ACLs automatically. Regular-file, symlink and size checks still apply.
+Credential updates flush their record and parent directory; Windows uses a
+writable directory handle with `FlushFileBuffers` and reports failures.
 
 `GET /api/settings` never echoes the token. In `independent` mode, enabling pairing
 with a hub URL mints `host_token` if missing; `PUT /api/remote/token` can replace

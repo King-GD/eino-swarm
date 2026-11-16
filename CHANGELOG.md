@@ -12,7 +12,14 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
   playback starts as audio arrives, with raw PCM and OpenAI speech SSE support.
   Select PCM as the audio format in speech settings; MP3/WAV and PC-local phone
   RPC retain complete-segment playback. Stop cancels the stream and queued audio.
+  Gateway PCM requests select SSE, including editable account model bindings;
+  phones route spoken output independently of recognition using their own login.
   (`F-148`, `C-048`)
+
+### Fixed
+
+- Validate private Windows gateway credentials by owner and DACL, preserving
+  account model access without weakening rejection of broadly accessible files.
 
 ## [0.1.80] - 2026-11-16
 

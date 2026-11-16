@@ -33,6 +33,13 @@ No PC key/token reaches the phone and no failure silently changes source.
 Choose **PCM (streaming playback)** as the audio format to start direct Gateway
 or personal-service playback as audio arrives. MP3/WAV retain complete-segment
 playback. The encrypted PC-local route also waits for a completed segment.
+The PC snapshot declares read-aloud execution separately from dictation: an
+ordinary configurable Gateway output uses the phone's matching Mobile login
+directly, while personal PC outputs use encrypted PC RPC. Older PC snapshots
+without the output route retain their global execution setting. Gateway PCM
+requests select SSE; standalone personal services retain their own audio protocol.
+User center shows the execution source beside each direction so mixed PC/Gateway
+settings remain visible.
 
 After connecting to a PC, open **Menu → Manage projects**, or **Manage projects**
 from New conversation. Create or edit the PC's project name, shared instruction,

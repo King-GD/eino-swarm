@@ -30,12 +30,14 @@ apply. All responses are `no-store`.
 | endpoint | behavior |
 |---|---|
 | `POST /api/audio/transcriptions` | multipart `file`; returns `{ "text": "…" }` for insertion into an editable draft |
-| `POST /api/audio/speech` | JSON `{ "text": "…" }`, one bounded prose segment; returns audio bytes with their MIME. Finished answers and the PC selection menu both use this endpoint |
+| `POST /api/audio/speech` | JSON `{ "text": "…" }`, one bounded prose segment; returns audio bytes or PCM speech SSE with their MIME. Finished answers and the PC selection menu both use this endpoint |
 | `POST /api/audio/models` | JSON `{ "kind": "input" }` or `output`; discovers the configured voice service's models by capability |
 
 With `speech.output.format: pcm`, `/api/audio/speech` flushes audio as it arrives
 instead of buffering the segment. The upstream request uses
-`response_format: "pcm"` and `stream_format: "audio"`. Responses are `audio/pcm`
+`response_format: "pcm"` and `stream_format: "sse"` for a resolved gateway
+account source; personal provider/custom services use `stream_format: "audio"`.
+Responses are `audio/pcm`
 (mono 24 kHz, signed 16-bit little-endian) or an upstream `text/event-stream`
 containing OpenAI `speech.audio.delta` base64 audio and `speech.audio.done`.
 A failure after headers terminates the HTTP stream; it is not a successful
@@ -48,14 +50,20 @@ complete-segment semantics.
 (`account`, `provider`, `custom`), `provider_id`, `base_url`, `model` and
 direction-specific parameters. `api_key` is write-only: omitted keeps the saved
 key, an explicit empty string clears it; reads report `has_api_key`.
-Gateway mode resolves fixed voice roles with the PC's private account source.
-Local mode requires a provider/custom selection. The request cannot supply a
-replacement upstream URL, key or model.
+Functional bindings resolve each direction's model. Managed gateways supply
+their enabled roles; editable accounts and LOCAL can select personal providers.
+The request cannot supply a replacement upstream URL, key or model.
 
 PC metadata and phone `speech_config`/catalog replies publish only a safe voice
 snapshot: `execution` (`gateway`/`pc_local`), verified `gateway_origin` when
 applicable, input/output `enabled`, `ready`, reason, model/label, parameters and
-limits. No local endpoint, API key or Host token is included.
+limits. Output additionally publishes its own `execution` and, only for an
+account source, `gateway_origin`. New phones prefer these output fields for
+spoken audio, so an editable gateway's selected speech model goes directly to
+that gateway even when recognition uses the PC. Older snapshots without output
+routing fall back to the global fields; global routing and recognition routing are
+unchanged. A personal output explicitly publishes `execution:"pc_local"` without
+an origin. No endpoint path, API key or Host token is included.
 If a valid parameter set expands beyond the sealed-frame budget, `speech_config`
 returns `audio_config_limit`; ordinary metadata/catalog remain available with
 `speech_error` and no voice snapshot. A live refusal or invalid new snapshot

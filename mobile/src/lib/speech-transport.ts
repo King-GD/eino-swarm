@@ -1,4 +1,4 @@
-import type { SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
+import { speechRoute, type SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
 import { speechAudioResponse, type SpeechAudio, type SpeechAudioStream } from "../../../frontend/src/lib/speech-stream"
 import { gatewayAuthorityCurrent, notifyGatewayRefusal, watchGatewayAuthority } from "./gateway-authority"
 import type { GatewaySession } from "./gateway-account"
@@ -84,7 +84,8 @@ async function boundedBody(response: Response, maximum: number, signal: AbortSig
 /** The PC supplies parameters, never a request URL or a credential. Construct
  * the ordinary Mobile data-plane endpoint from the phone's own live session. */
 export async function gatewaySpeechCall(snapshot: SpeechSnapshot, session: GatewaySession, operation: "transcribe" | "speak", input: Blob | string, signal: AbortSignal, fetcher: typeof fetch = gatewayFetch): Promise<string | SpeechAudio> {
-  if (snapshot.execution !== "gateway" || snapshot.gateway_origin !== session.origin || !gatewayAuthorityCurrent(session)) throw new SpeechCallError("unavailable")
+  const route = speechRoute(snapshot, operation === "transcribe" ? "input" : "output")
+  if (route?.execution !== "gateway" || route.gateway_origin !== session.origin || !gatewayAuthorityCurrent(session)) throw new SpeechCallError("unavailable")
   return endpointSpeechCall(snapshot, session.origin + "/v1", session.token, operation, input, signal, fetcher, session)
 }
 
@@ -126,7 +127,7 @@ export async function endpointSpeechCall(snapshot: SpeechSnapshot, baseURL: stri
       if (typeof input !== "string" || !input.trim() || Array.from(input).length > snapshot.limits.chunk_chars) throw new SpeechCallError("too_large")
       headers["Content-Type"] = "application/json"
       body = JSON.stringify({ model: snapshot.output.model, input, response_format: snapshot.output.format, speed: snapshot.output.speed,
-        ...(snapshot.output.format === "pcm" ? { stream_format: "audio" } : {}),
+        ...(snapshot.output.format === "pcm" ? { stream_format: authority ? "sse" : "audio" } : {}),
         ...(snapshot.output.voice ? { voice: snapshot.output.voice } : {}), ...(snapshot.output.instructions ? { instructions: snapshot.output.instructions } : {}) })
     }
     const response = await fetcher(baseURL.replace(/\/$/, "") + "/audio/" + (operation === "transcribe" ? "transcriptions" : "speech"), {
@@ -173,7 +174,7 @@ function audioResponse(response: RemoteResponse, id: string) {
 /** Model calls are async RPCs. Cancelling the local waiter alone does not
  * cancel the PC's model request, so every exit explicitly releases its ID. */
 export async function localSpeechCall(snapshot: SpeechSnapshot, link: RemoteLink, operation: "transcribe" | "speak", input: Blob | string, signal: AbortSignal): Promise<string | Blob> {
-  if (snapshot.execution !== "pc_local" || !link.alive()) throw new SpeechCallError("unavailable")
+  if (speechRoute(snapshot, operation === "transcribe" ? "input" : "output")?.execution !== "pc_local" || !link.alive()) throw new SpeechCallError("unavailable")
   const option = operation === "transcribe" ? snapshot.input : snapshot.output
   if (!option.enabled || !option.ready) throw new SpeechCallError("unavailable")
   const id = crypto.randomUUID()

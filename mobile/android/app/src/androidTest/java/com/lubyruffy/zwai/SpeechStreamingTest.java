@@ -14,6 +14,7 @@ import android.system.OsConstants;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.view.WindowInsets;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.WebView;
@@ -63,8 +64,9 @@ public class SpeechStreamingTest {
             assertNotNull(launch); launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
             android.app.Activity reached = instrumentation.startActivitySync(launch);
             assertTrue(reached instanceof BridgeActivity); activity = (BridgeActivity) reached;
-            click("Sign in"); waitVisible("User center");
-            click("Other server"); fill("Server address", origin); click("Use this server"); click("Sign in");
+            waitVisible("User center");
+            installServerEventTrace();
+            click("Other server"); fill("Server address", origin); click("Use this server"); waitGatewayOrigin(); click("Sign in");
             browser("Sign in to test gateway"); click("Sign in to test gateway");
             browser("Authorize test device"); click("Authorize test device");
             waitVisible("Device authorized. Return to zwai.");
@@ -108,8 +110,35 @@ public class SpeechStreamingTest {
             for (int i=0; i<calls.length(); i++) assertEquals("/v1/audio/speech", calls.getJSONObject(i).getString("route"));
             write("final-fixture-state.json", state().toString(2));
         } catch (Exception | AssertionError failure) {
-            try { save("failure"); write("failure-fixture-state.json", state().toString(2)); }
-            catch (Exception | AssertionError observation) { failure.addSuppressed(observation); }
+            try { write("failure-fixture-state.json", state().toString(2)); }
+            catch (Exception | AssertionError observation) { reportFailureObservation(failure, "fixture_state", observation); }
+            // Failure pixels must precede Activity.finish and must not wait for
+            // a WebView paint callback that may itself be the failing boundary.
+            try {
+                Bitmap pixels = ui.takeScreenshot(); assertNotNull("Retain the reached native failure screen", pixels);
+                try {
+                    try (FileOutputStream stream = output("failure.png")) { assertTrue(pixels.compress(Bitmap.CompressFormat.PNG, 100, stream)); }
+                } finally { pixels.recycle(); }
+            } catch (Exception | AssertionError observation) { reportFailureObservation(failure, "raw_screenshot", observation); }
+            try { write("failure-native-hierarchy.json", nativeHierarchy(ui.getRootInActiveWindow()).toString(2)); }
+            catch (Exception | AssertionError observation) { reportFailureObservation(failure, "native_hierarchy", observation); }
+            try { write("failure-accessibility.txt", visibleText()); }
+            catch (Exception | AssertionError observation) { reportFailureObservation(failure, "visible_text", observation); }
+            try { actions.put(new JSONObject().put("action", "native_server_event_trace_at_failure").put("events", serverEventTrace())); }
+            catch (Exception | AssertionError observation) { reportFailureObservation(failure, "native_server_event_trace", observation); }
+            try { write("failure-native-actions.json", actions.toString(2)); }
+            catch (Exception | AssertionError observation) { reportFailureObservation(failure, "native_actions", observation); }
+            try {
+                String text = visibleText();
+                JSONObject labels = new JSONObject().put("user_center", text.contains("User center"))
+                    .put("checking_account", text.contains("Checking account…"))
+                    .put("endpoint_rejected", text.contains("The endpoint rejected the request."))
+                    .put("browser_failed", text.contains("Could not open the sign-in browser. Try again."))
+                    .put("gateway_sign_in", text.contains("Sign in to test gateway"))
+                    .put("device_authorize", text.contains("Authorize test device"));
+                Bundle status = new Bundle(); status.putString("failure_visible_labels", labels.toString()); instrumentation.sendStatus(2, status);
+            } catch (Exception | AssertionError observation) { reportFailureObservation(failure, "visible_label_classification", observation); }
+            reportFailureObservation(failure, "evidence_directory", null);
             throw failure;
         } finally { if (activity != null) instrumentation.runOnMainSync(() -> activity.finish()); }
     }
@@ -231,8 +260,51 @@ public class SpeechStreamingTest {
         instrumentation.sendKeySync(new KeyEvent(0,0,KeyEvent.ACTION_UP,KeyEvent.KEYCODE_A,0,KeyEvent.META_CTRL_ON));instrumentation.sendStringSync(value);
         instrumentation.runOnMainSync(() -> ((InputMethodManager)activity.getSystemService(android.app.Activity.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(activity.getBridge().getWebView().getWindowToken(),0));
         long until=SystemClock.uptimeMillis()+4000;
-        do{JSONArray current=dom().getJSONArray("entries");for(int i=0;i<current.length();i++)if(name.equals(current.getJSONObject(i).optString("label"))&&value.equals(current.getJSONObject(i).optString("value")))return;SystemClock.sleep(100);}while(SystemClock.uptimeMillis()<until);
+        do{JSONArray current=dom().getJSONArray("entries");for(int i=0;i<current.length();i++)if(name.equals(current.getJSONObject(i).optString("label"))&&value.equals(current.getJSONObject(i).optString("value"))){
+            boolean[] keyboard = {true};
+            do {
+                instrumentation.runOnMainSync(() -> {
+                    WindowInsets insets = activity.getBridge().getWebView().getRootWindowInsets();
+                    keyboard[0] = insets == null || insets.isVisible(WindowInsets.Type.ime());
+                });
+                if (!keyboard[0]) break;
+                SystemClock.sleep(25);
+            } while (SystemClock.uptimeMillis() < until);
+            assertFalse("Native keyboard must be dismissed before the next physical touch", keyboard[0]);
+            long remaining = until - SystemClock.uptimeMillis();
+            assertTrue("The field deadline must retain the existing native idle guard", remaining >= 300);
+            ui.waitForIdle(300, Math.min(2500, remaining));
+            actions.put(new JSONObject().put("action", "native_keyboard_roundtrip").put("field", name).put("matched", true).put("ime_visible", false));
+            actions.put(new JSONObject().put("action", "native_ui_idle_after_input").put("idle_ms", 300).put("events", serverEventTrace()));
+            return;
+        }SystemClock.sleep(100);}while(SystemClock.uptimeMillis()<until);
         throw new AssertionError("Native keyboard did not update "+name);
+    }
+    private void waitGatewayOrigin() throws Exception {
+        long until = SystemClock.uptimeMillis() + 4000;
+        do {
+            if ("true".equals(evaluate("localStorage.getItem('zwai.phone.gateway.origin') === " + JSONObject.quote(origin)))) {
+                actions.put(new JSONObject().put("action", "native_server_form_origin_readback").put("matches_fixture", true).put("events", serverEventTrace()));
+                return;
+            }
+            SystemClock.sleep(50);
+        } while (SystemClock.uptimeMillis() < until);
+        throw new AssertionError("The native server form must submit its selected fixture origin");
+    }
+    private void installServerEventTrace() throws Exception {
+        // Passive native-event observations never click, submit, change form
+        // values or write storage; they distinguish a sent touch from a submit.
+        String script = "(()=>{const wanted=" + JSONObject.quote(origin) + ";const rows=[];window.__zwaiNativeServerTrace=rows;"
+            + "const flags=()=>({input_matches_fixture:document.getElementById('account-server')?.value===wanted,origin_matches_fixture:localStorage.getItem('zwai.phone.gateway.origin')===wanted});"
+            + "for(const type of ['pointerdown','pointerup','click','submit','input','focusout'])document.addEventListener(type,e=>{if(rows.length>=200)return;"
+            + "const target=e.target,control=target?.closest?.('button,input');const text=control?.innerText||'';const label=control?.id==='account-server'?'Server address':['Use this server','Other server','Sign in'].includes(text)?text:'other';"
+            + "rows.push({type,tag:target?.tagName||'',label,isTrusted:e.isTrusted,defaultPrevented:e.defaultPrevented,...flags()});"
+            + "if(type==='submit')queueMicrotask(()=>{if(rows.length<200)rows.push({type:'submit_observer_microtask',isTrusted:e.isTrusted,defaultPrevented:e.defaultPrevented,...flags()})});"
+            + "},{capture:true,passive:true});return true})()";
+        assertEquals("The pass-through native event observer must install", "true", evaluate(script));
+    }
+    private JSONArray serverEventTrace() throws Exception {
+        return new JSONArray(new JSONArray("[" + evaluate("JSON.stringify(window.__zwaiNativeServerTrace||[])") + "]").getString(0));
     }
     private void touch(JSONObject viewport,JSONObject entry) throws Exception {
         int[] geometry=new int[4];instrumentation.runOnMainSync(()->{WebView web=activity.getBridge().getWebView();web.getLocationOnScreen(geometry);geometry[2]=web.getWidth();geometry[3]=web.getHeight();});
@@ -246,6 +318,42 @@ public class SpeechStreamingTest {
         try{assertTrue(ui.injectInputEvent(down,true));assertTrue(ui.injectInputEvent(up,true));}finally{down.recycle();up.recycle();}
     }
     private String visibleText() { StringBuilder text=new StringBuilder();for(AccessibilityNodeInfo node:nodes())if(node.isVisibleToUser())text.append(label(node)).append('\n');return text.toString(); }
+    private void reportFailureObservation(Throwable failure, String step, Throwable observation) {
+        if (observation != null) failure.addSuppressed(observation);
+        try {
+            JSONObject metadata = new JSONObject().put("step", step)
+                .put("error_class", observation == null ? JSONObject.NULL : observation.getClass().getName());
+            JSONArray causes = new JSONArray(); Set<Throwable> seen = new HashSet<>();
+            for (Throwable cause = observation; cause != null && seen.add(cause); cause = cause.getCause()) {
+                JSONObject entry = new JSONObject().put("class", cause.getClass().getName());
+                if (cause instanceof android.system.ErrnoException) entry.put("errno", ((android.system.ErrnoException) cause).errno);
+                causes.put(entry);
+            }
+            metadata.put("cause_chain", causes);
+            JSONObject directory = new JSONObject().put("basename", evidence.getName());
+            try {
+                File[] files = evidence.listFiles();
+                if (files == null) directory.put("list_error", "unavailable");
+                else {
+                    JSONArray entries = new JSONArray();
+                    for (File file : files) entries.put(new JSONObject().put("basename", file.getName()).put("bytes", file.length()));
+                    directory.put("count", files.length).put("entries", entries);
+                }
+            } catch (SecurityException error) { directory.put("list_error", error.getClass().getName()); }
+            metadata.put("directory", directory);
+            Bundle status = new Bundle(); status.putString("failure_observation", metadata.toString()); instrumentation.sendStatus(2, status);
+        } catch (Exception | AssertionError reporting) { failure.addSuppressed(reporting); }
+    }
+    private JSONObject nativeHierarchy(AccessibilityNodeInfo node) throws Exception {
+        if (node == null) return new JSONObject().put("root_missing", true);
+        Rect bounds = new Rect(); node.getBoundsInScreen(bounds);
+        JSONArray children = new JSONArray();
+        for (int i = 0; i < node.getChildCount(); i++) children.put(nativeHierarchy(node.getChild(i)));
+        return new JSONObject().put("package", String.valueOf(node.getPackageName())).put("class", String.valueOf(node.getClassName()))
+            .put("text", String.valueOf(node.getText())).put("description", String.valueOf(node.getContentDescription()))
+            .put("resource_id", String.valueOf(node.getViewIdResourceName())).put("visible", node.isVisibleToUser())
+            .put("enabled", node.isEnabled()).put("bounds", bounds.flattenToString()).put("children", children);
+    }
     private FileOutputStream output(String name) throws Exception { return new FileOutputStream(Os.open(new File(evidence,name).getPath(),OsConstants.O_WRONLY|OsConstants.O_CREAT|OsConstants.O_EXCL,0600)); }
     private void write(String name,String value) throws Exception { try(FileOutputStream stream=output(name)){stream.write(value.getBytes(StandardCharsets.UTF_8));} }
     private void save(String phase) throws Exception {

@@ -26,14 +26,15 @@ var speechObserver string
 const desktopSpeechToken = "native-desktop-speech-only"
 
 type speechRequest struct {
-	ID        int    `json:"id"`
-	Route     string `json:"route"`
-	Mode      string `json:"mode"`
-	Flushes   int    `json:"flushes"`
-	Bytes     int    `json:"bytes"`
-	EOF       bool   `json:"eof"`
-	Cancelled bool   `json:"cancelled"`
-	Failed    bool   `json:"failed"`
+	ID           int    `json:"id"`
+	Route        string `json:"route"`
+	Mode         string `json:"mode"`
+	StreamFormat string `json:"stream_format"`
+	Flushes      int    `json:"flushes"`
+	Bytes        int    `json:"bytes"`
+	EOF          bool   `json:"eof"`
+	Cancelled    bool   `json:"cancelled"`
+	Failed       bool   `json:"failed"`
 }
 
 type speechObservation struct {
@@ -242,7 +243,7 @@ func (f *fixture) streamSpeech(w http.ResponseWriter, r *http.Request) {
 		StreamFormat        string `json:"stream_format"`
 	}
 	if r.Method != http.MethodPost || json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&input) != nil ||
-		input.Model != "speech" || input.Input == "" || input.Voice != "native-fixture-voice" || input.ResponseFormat != "pcm" || input.StreamFormat != "audio" {
+		input.Model != "speech" || input.Input == "" || input.Voice != "native-fixture-voice" || input.ResponseFormat != "pcm" || input.StreamFormat != "sse" {
 		http.Error(w, "invalid native PCM request", 400)
 		return
 	}
@@ -252,7 +253,7 @@ func (f *fixture) streamSpeech(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "speech fixture is disabled", 503)
 		return
 	}
-	request := &speechRequest{ID: len(f.speech.requests) + 1, Route: r.URL.Path, Mode: f.speech.mode}
+	request := &speechRequest{ID: len(f.speech.requests) + 1, Route: r.URL.Path, Mode: f.speech.mode, StreamFormat: input.StreamFormat}
 	f.speech.requests = append(f.speech.requests, request)
 	f.speech.mu.Unlock()
 	sse := strings.HasPrefix(request.Mode, "sse")

@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/LubyRuffy/eino-swarm/internal/config"
 )
 
 // AudioStream owns its request, configuration watch and model admission hold.
@@ -45,6 +47,9 @@ func (s *Service) SynthesizeStream(ctx context.Context, text string) (*AudioStre
 	body := map[string]any{"model": selected.target.Model, "input": text, "response_format": output.Format, "speed": output.Speed}
 	if output.Format == "pcm" {
 		body["stream_format"] = "audio"
+		if strings.HasPrefix(selected.target.ID, config.AccountSourcePrefix) {
+			body["stream_format"] = "sse"
+		}
 	}
 	if output.Voice != "" {
 		body["voice"] = output.Voice
