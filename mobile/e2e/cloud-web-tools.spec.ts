@@ -71,12 +71,12 @@ async function fixture(page: Page, api: "chat" | "responses", denied = false, fe
   return { calls, models: () => models }
 }
 
-async function chooseModel(page: Page, source: "personal" | "gateway" = "personal") {
+async function chooseModel(page: Page) {
   await page.goto("/")
   await expect(page.getByRole("tab", { name: "对话" })).toHaveAttribute("aria-selected", "true")
   await page.getByRole("button", { name: "模型", exact: true }).click()
-  const group = page.getByRole("heading", { name: source === "personal" ? "手机自配工具模型" : /测试服务器/ }).locator("..")
-  await group.getByRole("radio", { name: source === "personal" ? "tool-model" : "server-model", exact: true }).click()
+  const group = page.getByRole("heading", { name: "手机自配工具模型" }).locator("..")
+  await group.getByRole("radio", { name: "tool-model", exact: true }).click()
 }
 
 async function expectNoWebSettingsBanner(page: Page) {
@@ -92,9 +92,9 @@ async function openUserCenterFromMenu(page: Page) {
 }
 
 for (const api of ["chat", "responses"] as const) {
-  for (const source of (api === "chat" ? ["personal", "gateway"] : ["personal"]) as ("personal" | "gateway")[]) test(`${api}: signed-in phone executes cloud tools with the ${source} model`, async ({ page }, testInfo) => {
+  test(`${api}: signed-in LOCAL phone executes cloud tools with its personal model`, async ({ page }, testInfo) => {
     const seen = await fixture(page, api)
-    await chooseModel(page, source)
+    await chooseModel(page)
     await expectNoWebSettingsBanner(page)
     await page.getByLabel("消息").fill("Use web evidence")
     await page.getByRole("button", { name: "发送", exact: true }).click()
@@ -117,7 +117,7 @@ test("a page timeout preserves streamed text and the model continues after one r
   let completeFetch!: () => void
   const fetchTimeout = new Promise<void>((resolve) => { completeFetch = resolve })
   const seen = await fixture(page, "chat", false, fetchTimeout)
-  await chooseModel(page, "gateway")
+  await chooseModel(page)
   await page.getByLabel("消息").fill("Use web evidence")
   await page.getByRole("button", { name: "发送", exact: true }).click()
   try {

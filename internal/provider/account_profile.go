@@ -43,6 +43,7 @@ func NewAccountProfile(id, baseURL, token string, profile AccountProfile) (*Acco
 		return nil, err
 	}
 	src.profiled = true
+	src.managed = true
 	src.profile = accountProfile{
 		label:       strings.TrimSpace(profile.Label),
 		instruction: strings.TrimSpace(profile.Instruction),
@@ -134,7 +135,7 @@ func (p *Pool) profileSource(providerID string) *AccountSource {
 	if p == nil {
 		return nil
 	}
-	src := p.account.Load()
+	src := p.activeAccount()
 	if src == nil || !src.profiled {
 		return nil
 	}

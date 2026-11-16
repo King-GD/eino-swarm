@@ -1,6 +1,10 @@
 import { accountEn } from "./messages-account"
+import { pcWaitEn } from "./messages-pc-wait"
 import { generationEn } from "./messages-generation"
+import { speechEn } from "./messages-speech"
 export const en = {
+  ...pcWaitEn,
+  ...speechEn,
   ...accountEn,
   "startup.failed": "{failed} conversations could not be restored. Check Trace or logs.",
   "startup.restoring": "Restoring unfinished tasks {completed}/{total}",
@@ -284,6 +288,7 @@ export const en = {
 
   "notice.goalCompleted": "Standing objective completed.",
 
+  "goal.mode": "Goal mode",
   "goal.pursuing": "Pursuing",
   "goal.paused": "Paused",
   "goal.blocked": "Blocked",

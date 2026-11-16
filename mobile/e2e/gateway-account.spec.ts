@@ -126,12 +126,13 @@ test("account overlays keep the title and close control inside the safe area", a
   await expect(page.getByRole("button", { name: "其他方式", exact: true })).toBeVisible()
 
   await approved(page)
-  await page.goto("/")
-  await expect(page.getByRole("tab", { name: "对话" })).toHaveAttribute("aria-selected", "true")
+  await page.goto("/?mock=1&tick=0")
+  await page.getByRole("button", { name: "返回", exact: true }).click()
+  await expect(page.getByRole("tab", { name: "Walkthrough PC", exact: true })).toHaveAttribute("aria-selected", "true")
   await page.getByRole("button", { name: "菜单" }).click()
   await page.getByRole("menuitem", { name: "用户中心" }).click()
   await checkOverlay("approved-safe-area")
-  await expect(page.getByRole("tab", { name: "对话" })).toBeVisible()
+  await expect(page.getByRole("tab", { name: "Walkthrough PC", exact: true })).toHaveAttribute("aria-selected", "true")
 })
 
 test("default account sign-in requires no server configuration and review hides all other resources", async ({ page }, testInfo) => {
@@ -151,7 +152,7 @@ test("default account sign-in requires no server configuration and review hides 
   await page.screenshot({ path: testInfo.outputPath("account-review.png") })
 })
 
-test("server and phone same-named models route by selected source and logout preserves private settings", async ({ page }, testInfo) => {
+test("LOCAL groups the signed-in gateway catalog and logout preserves private settings", async ({ page }, testInfo) => {
   await approved(page, true)
   const calls = await fixture(page)
   let privateCalls = 0
@@ -163,17 +164,16 @@ test("server and phone same-named models route by selected source and logout pre
   await page.goto("/")
   await expect(page.getByRole("tab", { name: "对话" })).toHaveAttribute("aria-selected", "true")
   await page.getByRole("button", { name: "模型", exact: true }).click()
-  await expect(page.getByRole("heading", { name: "服务器 · 测试网关" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "网关 · 测试网关" })).toBeVisible()
   await expect(page.getByRole("heading", { name: "手机自配" })).toBeVisible()
   await expect(page.getByRole("radio", { name: "shared-model" })).toHaveCount(2)
   await page.screenshot({ path: testInfo.outputPath("model-sources.png") })
-  const serverGroup = page.getByRole("heading", { name: "服务器 · 测试网关" }).locator("..")
-  await serverGroup.getByRole("radio", { name: "shared-model" }).click()
-  await page.getByLabel("消息").fill("route through server")
+  await page.getByRole("group", { name: "手机自配", exact: true }).getByRole("radio", { name: "shared-model" }).click()
+  await page.getByLabel("消息").fill("route through personal source")
   await page.getByRole("button", { name: "发送", exact: true }).click()
-  await expect(page.getByText("SERVER ANSWER", { exact: true })).toBeVisible()
-  await page.screenshot({ path: testInfo.outputPath("server-chat.png") })
-  expect(privateCalls).toBe(0)
+  await expect(page.getByText("PRIVATE ANSWER", { exact: true })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath("local-chat.png") })
+  expect(privateCalls).toBe(1)
   await page.getByRole("button", { name: "返回", exact: true }).click()
   await page.getByRole("button", { name: "菜单" }).click()
   await page.getByRole("menuitem", { name: "用户中心" }).click()
@@ -185,12 +185,13 @@ test("server and phone same-named models route by selected source and logout pre
   expect(await page.evaluate(() => localStorage.getItem("zwai.phone.providers"))).not.toContain(token)
   await page.getByRole("button", { name: "模型", exact: true }).click()
   await expect(page.getByRole("radio", { name: "shared-model" })).toHaveCount(1)
-  await page.getByRole("radio", { name: "shared-model" }).click()
+  await page.getByRole("group", { name: "手机自配", exact: true }).getByRole("radio", { name: "shared-model" }).click()
   await page.getByLabel("消息").fill("route through personal source")
   await page.getByRole("button", { name: "发送", exact: true }).click()
   await expect(page.getByText("PRIVATE ANSWER", { exact: true })).toBeVisible()
-  expect(privateCalls).toBe(1)
-  expect(calls.filter((c) => c.path === "/v1/chat/completions")).toHaveLength(1)
+  expect(privateCalls).toBe(2)
+  expect(calls.filter((c) => c.path === "/v1/chat/completions")).toHaveLength(0)
+  expect(calls.filter((c) => c.path === "/v1/models").length).toBeGreaterThan(0)
 })
 
 test("device-only account can select an online PC without QR or API permission", async ({ page }, testInfo) => {
@@ -205,7 +206,7 @@ test("device-only account can select an online PC without QR or API permission",
   await page.getByRole("button", { name: "菜单" }).click()
   await page.getByRole("menuitem", { name: "用户中心" }).click()
   await expect(page.getByRole("heading", { name: "我的电脑" })).toBeVisible()
-  await expect(page.getByText("API 权限当前不可用，请联系管理员。")).toBeVisible()
+  await expect(page.getByText("API 权限当前不可用，请联系管理员。")).toHaveCount(0)
   await expect(page.getByRole("button", { name: "连接 家里电脑" })).toBeDisabled()
   await expect(page.getByText("open-abcdef0123456789")).toHaveCount(0)
   await expect(page.getByText(legacyFingerprint)).toHaveCount(0)
@@ -332,7 +333,7 @@ test("real anonymous QR becomes one account connection and the replacement ticke
     await browser.getByRole("button", { name: "Authorize test device", exact: true }).click()
     await expect(browser.getByRole("heading", { name: "Device authorized. Return to zwai.", exact: true })).toBeVisible()
     await browser.close()
-    await expect(page.getByText("API 权限当前不可用，请联系管理员。", { exact: true })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole("heading", { name: "我的电脑", exact: true })).toBeVisible({ timeout: 15_000 })
     expect((await state()).counts.connect || 0).toBe(0)
     await expect.poll(() => sockets.filter((socket) => !socket.closed).length).toBe(1)
 
@@ -385,6 +386,7 @@ test("real anonymous QR becomes one account connection and the replacement ticke
 
 
 test("a bootstrap denial remains restricted while account review status is unconfirmed", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("zwai.phone.mode", "account"))
   await approved(page, true)
   const calls = await fixture(page, { denyBootstrap: true })
   await page.goto("/")
@@ -398,14 +400,12 @@ test("a bootstrap denial remains restricted while account review status is uncon
 
 
 test("a refused PC connection rechecks review and hides private models and device controls", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("zwai.phone.mode", "account"))
   await approved(page, true)
   const calls = await fixture(page, { apiEnabled: false, denyConnect: true, hosts: [
     { id: "pc-online", name: "办公电脑", hostname: "work", version: "1", online: true, enabled: true },
   ] })
   await page.goto("/")
-  await expect(page.getByRole("tab", { name: "对话" })).toHaveAttribute("aria-selected", "true")
-  await page.getByRole("button", { name: "菜单" }).click()
-  await page.getByRole("menuitem", { name: "用户中心" }).click()
   await page.getByRole("button", { name: "连接 办公电脑" }).click()
   await expect(page.getByText("账号审核未通过，请联系管理员。")).toBeVisible()
   await expect(page.getByRole("heading", { name: "用户中心" })).toBeVisible()

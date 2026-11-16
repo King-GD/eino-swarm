@@ -250,6 +250,11 @@ func (e *Engine) Providers() *provider.Pool { return e.pool }
 // CreateThread opens a new conversation. A conversation in a project works in
 // the project's directory; one in no project gets a workspace of its own.
 func (e *Engine) CreateThread(title, providerID, projectID string) (*store.Thread, error) {
+	if providerID != "" && e.pool.OfficialOnly() {
+		if err := e.pool.ValidateConversationSelection(providerID, ""); err != nil {
+			return nil, err
+		}
+	}
 	if strings.TrimSpace(providerID) == "" {
 		providerID = e.newConversationProvider()
 	}
@@ -386,11 +391,11 @@ func (e *Engine) rememberShownModel(th *store.Thread, composerModel string) erro
 // turn on. An empty model follows that provider's user-configured default; a
 // set model is the name the composer picked.
 func (e *Engine) SetThreadProvider(id, providerID, model string) error {
-	// Official presentation sends the alias without rewriting the conversation's
-	// stored provider, so switching back to the full list restores it.
+	// Managed execution retains the historical binding for a later LOCAL session.
 	if e.pool.OfficialOnly() {
-		return nil
+		return e.pool.ValidateConversationSelection(providerID, model)
 	}
+
 	prov, err := e.pool.ResolveModel(providerID, model)
 	if err != nil {
 		return err

@@ -3,6 +3,7 @@ package provider
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
@@ -29,6 +30,7 @@ type AccountSource struct {
 	label   string
 	baseURL string
 	token   string
+	owner   string
 	names   []string
 	windows map[string]int
 	types   map[string]string
@@ -37,6 +39,8 @@ type AccountSource struct {
 	profiled bool
 	profile  accountProfile
 	roles    []AccountRole
+	managed  bool
+	defaults map[string]string
 }
 
 // AccountRole is a read-only server switch. ID is the model name a FOFA
@@ -60,13 +64,17 @@ type accountProfile struct {
 // ModelKinds counts the server's classification. Empty type is unclassified.
 // EmbeddingModels keeps those names in catalog order for the embedding picker.
 type ModelKinds struct {
-	Chat            int      `json:"chat"`
-	Embedding       int      `json:"embedding"`
-	OCR             int      `json:"ocr"`
-	Decisions       int      `json:"decisions"`
-	Other           int      `json:"other"`
-	Unclassified    int      `json:"unclassified"`
-	EmbeddingModels []string `json:"embedding_models,omitempty"`
+	Chat                int      `json:"chat"`
+	Embedding           int      `json:"embedding"`
+	OCR                 int      `json:"ocr"`
+	Decisions           int      `json:"decisions"`
+	Transcription       int      `json:"transcription"`
+	Speech              int      `json:"speech"`
+	Other               int      `json:"other"`
+	Unclassified        int      `json:"unclassified"`
+	EmbeddingModels     []string `json:"embedding_models,omitempty"`
+	TranscriptionModels []string `json:"transcription_models,omitempty"`
+	SpeechModels        []string `json:"speech_models,omitempty"`
 }
 
 // NewAccountSource builds the projection of one account catalog. The id must
@@ -122,6 +130,7 @@ func (s *AccountSource) SetRoles(roles []AccountRole) {
 		return
 	}
 	s.roles = append([]AccountRole(nil), roles...)
+	s.managed = len(roles) > 0
 }
 
 // Roles is a copy of the server role list. Nil means this server has no roles.
@@ -146,9 +155,18 @@ func (s *AccountSource) Role(id string) (enabled, configured bool) {
 }
 
 func (s *AccountSource) conversationalNames() []string {
+	if name := s.defaults["conversation"]; s.managed && name != "" {
+		return []string{name}
+	}
 	if len(s.roles) > 0 {
 		if enabled, _ := s.Role("conversation"); enabled {
 			return []string{"conversation"}
+		}
+		return nil
+	}
+	if s.managed {
+		if name := s.defaults["conversation"]; name != "" {
+			return []string{name}
 		}
 		return nil
 	}
@@ -190,6 +208,12 @@ func (s *AccountSource) Kinds() ModelKinds {
 			kinds.OCR++
 		case "decisions":
 			kinds.Decisions++
+		case "transcription":
+			kinds.Transcription++
+			kinds.TranscriptionModels = append(kinds.TranscriptionModels, name)
+		case "speech":
+			kinds.Speech++
+			kinds.SpeechModels = append(kinds.SpeechModels, name)
 		default:
 			kinds.Other++
 		}
@@ -218,7 +242,7 @@ func (s *AccountSource) provider(preferred string) config.Provider {
 	}
 	model := strings.TrimSpace(preferred)
 	if model == "" {
-		model = chooseName(names, "")
+		model = chooseName(names, s.defaults["conversation"])
 	}
 	return config.Provider{
 		ID: s.id, Label: s.label, BaseURL: s.baseURL, APIKey: s.token,
@@ -235,9 +259,15 @@ func (p *Pool) ConversationDefault(id string) (name string, followsSetting bool,
 	if id == "" {
 		id = p.DefaultProviderID()
 	}
-	if src := p.account.Load(); src != nil && id == src.ID() {
+	if ref, exists := p.cfg.ModelsSnapshot().Bindings[p.ModelPolicy().Scope]["conversation"]; exists && !p.OfficialOnly() && ref.ProviderID == id {
+		return ref.Model, true, true
+	}
+	if src := p.activeAccount(); src != nil && id == src.ID() {
 		if src.profiled {
 			return config.OfficialModelAlias, true, true
+		}
+		if name := src.defaults["conversation"]; name != "" && p.accountModel() == "" {
+			return name, true, true
 		}
 		if preferred := p.accountModel(); preferred != "" {
 			return preferred, true, true
@@ -315,7 +345,7 @@ func (p *Pool) SetAccountSource(src *AccountSource) {
 // AccountSourceID is the id of the published account source, empty when
 // signed out.
 func (p *Pool) AccountSourceID() string {
-	if src := p.account.Load(); src != nil {
+	if src := p.activeAccount(); src != nil {
 		return src.ID()
 	}
 	return ""
@@ -323,7 +353,7 @@ func (p *Pool) AccountSourceID() string {
 
 // AccountRole reports the signed-in source's role when providerID is that source.
 func (p *Pool) AccountRole(providerID, role string) (enabled, configured bool) {
-	src := p.account.Load()
+	src := p.activeAccount()
 	if src == nil || src.ID() != strings.TrimSpace(providerID) {
 		return false, false
 	}
@@ -333,18 +363,8 @@ func (p *Pool) AccountRole(providerID, role string) (enabled, configured bool) {
 // AccountEmbedding is the semantic-search target while the server published roles.
 // configured is false for an ordinary catalog, including a signed-out pool.
 func (p *Pool) AccountEmbedding() (providerID, model string, enabled, configured bool) {
-	src := p.account.Load()
-	if src == nil {
-		return "", "", false, false
-	}
-	on, configured := src.Role("embedding")
-	if !configured {
-		return "", "", false, false
-	}
-	if !on {
-		return "", "", false, true
-	}
-	return src.ID(), "embedding", true, true
+	ref, configured := p.RoleSelection("embedding", "", "")
+	return ref.ProviderID, ref.Model, ref.Model != "", configured
 }
 
 // DefaultProviderID is the provider a new conversation starts on: the
@@ -352,11 +372,14 @@ func (p *Pool) AccountEmbedding() (providerID, model string, enabled, configured
 // one can start a chat, otherwise the configured default provider.
 func (p *Pool) DefaultProviderID() string {
 	m := p.cfg.ModelsSnapshot()
-	if src := p.account.Load(); src != nil && src.profiled && m.Presentation() != config.AccountPresentationFull {
+	if ref, ok := m.Bindings[p.ModelPolicy().Scope]["conversation"]; ok && !p.OfficialOnly() {
+		return ref.ProviderID
+	}
+	if src := p.activeAccount(); src != nil && src.managed {
 		return src.ID()
 	}
 	if m.DefaultSource != config.DefaultSourceProvider {
-		if src := p.account.Load(); src != nil && len(src.conversationalNames()) > 0 {
+		if src := p.activeAccount(); src != nil && len(src.conversationalNames()) > 0 {
 			return src.ID()
 		}
 	}
@@ -369,8 +392,8 @@ func (p *Pool) OfficialOnly() bool {
 	if p == nil || p.cfg == nil {
 		return false
 	}
-	src := p.account.Load()
-	return src != nil && src.profiled && p.cfg.ModelsSnapshot().Presentation() != config.AccountPresentationFull
+	src := p.activeAccount()
+	return src != nil && src.managed
 }
 
 // equal reports whether two projections would behave identically. A periodic
@@ -379,7 +402,7 @@ func (s *AccountSource) equal(o *AccountSource) bool {
 	if s == nil || o == nil {
 		return s == o
 	}
-	if s.id != o.id || s.label != o.label || s.baseURL != o.baseURL || s.token != o.token || len(s.names) != len(o.names) || len(s.windows) != len(o.windows) || len(s.types) != len(o.types) || !s.sameProfile(o) {
+	if s.managed != o.managed || !maps.Equal(s.defaults, o.defaults) || s.owner != o.owner || s.id != o.id || s.label != o.label || s.baseURL != o.baseURL || s.token != o.token || len(s.names) != len(o.names) || len(s.windows) != len(o.windows) || len(s.types) != len(o.types) || !s.sameProfile(o) {
 		return false
 	}
 	for i, name := range s.names {

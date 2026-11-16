@@ -40,10 +40,17 @@ type projectPatch struct {
 }
 
 func projectSettings(e *engine.Engine, p *store.Project) *ProjectSettings {
-	return &ProjectSettings{ID: p.ID, Name: p.Name, SystemPrompt: p.SystemPrompt, Workdir: p.Workdir,
+	v := &ProjectSettings{ID: p.ID, Name: p.Name, SystemPrompt: p.SystemPrompt, Workdir: p.Workdir,
 		ResolvedWorkdir: e.ProjectWorkdir(p), MemoryEnabled: p.MemoryEnabled, NuwaEnabled: p.NuwaEnabled,
 		PlannerProviderID: p.NuwaPlannerProviderID, PlannerModel: p.NuwaPlannerModel,
 		ExecutorProviderID: p.NuwaExecutorProviderID, ExecutorModel: p.NuwaExecutorModel}
+	if !e.Providers().ModelPolicy().Configurable {
+		v.PlannerProviderID = ""
+		v.PlannerModel = ""
+		v.ExecutorProviderID = ""
+		v.ExecutorModel = ""
+	}
+	return v
 }
 
 func handleProjectSettings(e *engine.Engine, req Request, path, sessionID string) Response {

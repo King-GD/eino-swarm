@@ -5,6 +5,7 @@ import { DestRail } from "./dest-rail"
 import type { Meta, RemoteStatus } from "@/lib/types"
 import { useApp } from "@/store/app"
 import { useSettingsSheet } from "@/store/settings-sheet"
+import { resetToasts, useToasts } from "@/store/toasts"
 
 const fake = vi.hoisted(() => ({
   status: undefined as RemoteStatus | undefined,
@@ -89,6 +90,7 @@ beforeEach(() => {
   fake.saveSettings.mockResolvedValue({})
   useApp.setState({ meta: undefined })
   useSettingsSheet.setState({ open: false, section: "general" })
+  resetToasts()
 })
 
 describe("desktop account entry", () => {
@@ -377,6 +379,69 @@ describe("desktop account entry", () => {
     fireEvent.click(portrait)
     await waitFor(() => expect(fake.saveSettings).toHaveBeenCalledWith({ product: { mode: "local" } }))
     expect(fake.saveSettings).toHaveBeenCalledTimes(1)
+  })
+
+  it("names the running conversation when three clicks are refused", async () => {
+    const engine = "engine: a backup or restore is already running, or a task is still active"
+    fake.saveSettings.mockRejectedValueOnce(Object.assign(new Error(engine), {
+      code: "backup_busy",
+      details: { active: [{ id: "th_running", title: "Open work" }, null, { id: "", title: "  " }] },
+    }))
+    render(<DestRail {...props} />)
+    const portrait = within(openAccount()).getByTestId("account-portrait")
+    fireEvent.click(portrait)
+    fireEvent.click(portrait)
+    fireEvent.click(portrait)
+    await waitFor(() => expect(useToasts.getState().toasts.map((toast) => toast.message)).toEqual([
+      "Open work is still running. Switching mode waits until it finishes.",
+    ]))
+    expect(fake.meta).not.toHaveBeenCalled()
+  })
+
+  it("counts several running conversations when three clicks are refused", async () => {
+    fake.saveSettings.mockRejectedValueOnce(Object.assign(new Error("busy"), {
+      code: "backup_busy",
+      details: {
+        active: [
+          { id: "th_a", title: "First" },
+          { id: "th_b", title: "Second" },
+        ],
+      },
+    }))
+    render(<DestRail {...props} />)
+    const portrait = within(openAccount()).getByTestId("account-portrait")
+    fireEvent.click(portrait)
+    fireEvent.click(portrait)
+    fireEvent.click(portrait)
+    await waitFor(() => expect(useToasts.getState().toasts.map((toast) => toast.message)).toEqual([
+      "2 conversations are still running. Switching mode waits until they finish.",
+    ]))
+  })
+
+  it("explains a mode switch that is blocked without naming a conversation", async () => {
+    fake.saveSettings.mockRejectedValueOnce(Object.assign(new Error("engine: a backup or restore is already running, or a task is still active"), {
+      code: "backup_busy",
+    }))
+    render(<DestRail {...props} />)
+    const portrait = within(openAccount()).getByTestId("account-portrait")
+    fireEvent.click(portrait)
+    fireEvent.click(portrait)
+    fireEvent.click(portrait)
+    await waitFor(() => expect(useToasts.getState().toasts.map((toast) => toast.message)).toEqual([
+      "A task, recovery, or model request is still active. Switching mode waits until it finishes.",
+    ]))
+  })
+
+  it("keeps an unexpected settings failure in the toast", async () => {
+    fake.saveSettings.mockRejectedValueOnce(new Error("settings file could not be written"))
+    render(<DestRail {...props} />)
+    const portrait = within(openAccount()).getByTestId("account-portrait")
+    fireEvent.click(portrait)
+    fireEvent.click(portrait)
+    fireEvent.click(portrait)
+    await waitFor(() => expect(useToasts.getState().toasts.map((toast) => toast.message)).toEqual([
+      "settings file could not be written",
+    ]))
   })
 
   it("writes fofa after three more clicks when the install is local", async () => {

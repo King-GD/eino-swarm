@@ -1,5 +1,6 @@
 import { usePhoneAccount } from "@/components/gateway-account-shell"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
+import { PcReadyGate } from "@/components/pc-ready-gate"
 import { EngineStartupBanner } from "@/components/engine-startup"
 import { useEngineStartup } from "@/lib/use-engine-startup"
 import { rosterGenerationReset } from "@/lib/roster-generation"
@@ -87,6 +88,7 @@ import { answerPhoneQuestion, continuePhoneTurn, interruptPhoneFollowup, sendPho
 import { sendComposed } from "@/lib/turn-send"
 import { phonePrediction } from "@/lib/composer-prediction"
 import { useModelCatalog } from "@/lib/use-model-catalog"
+import { usePhoneSpeechSync } from "@/lib/phone-speech"
 
 export function PhoneApp() {
   const account = usePhoneAccount()
@@ -124,7 +126,8 @@ export function PhoneApp() {
   const [loadingMore, setLoadingMore] = useState(false)
   const { models, levels, catalogBusy, refreshModels, refreshBusy, refreshError, webExecutionStatus, predictionsEnabled } = useModelCatalog(link)
   const startup = useEngineStartup(link)
-  const hidePcModel = account.mode === "account" || startup?.product_mode === "fofa"
+  usePhoneSpeechSync(startup?.startup === "ready" ? link : null, hosts.find((host) => host.fingerprint === activeFp), hosts, surface === "chat" && account.mode !== "account", providers)
+  const hidePcModel = startup?.model_policy ? !startup.model_policy.configurable : startup?.product_mode === "fofa"
   const restoring = startup?.startup === "restoring"
   const [composerPending, setComposerPending] = useState(false)
   const [view, setView] = useState<PhoneView>(emptyView())
@@ -165,7 +168,8 @@ export function PhoneApp() {
 
   const completionRead = useCompletionRead({
     link: linkRef, view: viewRef, contentVisible: managerVisible,
-    visible: Boolean(view.detail) && !adding && !composing && !modelsOpen && surface !== "chat",
+    visible: Boolean(view.detail) && !adding && !composing && !modelsOpen && surface !== "chat"
+      && (account.mode !== "account" || Boolean(link?.alive() && startup?.startup === "ready")),
     onError: setError,
     onRead: (detail, baseline) => {
       setError(undefined)
@@ -688,9 +692,9 @@ export function PhoneApp() {
         if (saved && (gatewayUpgradePending(saved) || !sameLinkAuthority(saved, authorityRef.current))) selectHost(saved.fingerprint, true)
       }
     }
-    const chat = () => setSurface("chat")
-    const scan = () => setAdding(true)
-    const models = () => setModelsOpen(true)
+    const chat = () => { if (account.mode !== "account") setSurface("chat") }
+    const scan = () => { if (account.mode !== "account") setAdding(true) }
+    const models = () => { if (account.mode !== "account") setModelsOpen(true) }
     window.addEventListener("zwai.gateway.chat", chat)
     window.addEventListener("zwai.gateway.scan", scan)
     window.addEventListener("zwai.gateway.models", models)
@@ -716,6 +720,7 @@ export function PhoneApp() {
   }
 
   const openChat = () => {
+    if (account.mode === "account") return
     setSurface("chat")
     setComposing(false)
   }
@@ -747,7 +752,10 @@ export function PhoneApp() {
     />
   ) : null
 
-  if (phoneShell(hosts.length, providers.length) === "scan" && !(surface === "chat" && account.gatewaySourceID)) {
+  const gate = (children: ReactNode) => account.mode !== "account" ? children : <PcReadyGate waiting={!link?.alive() || startup?.startup !== "ready"}
+    notice={<div className="flex h-full min-h-0 flex-col">{link?.alive() ? <p role="status" className="p-4 text-sm">{t("pcWait.restoring")}</p> : null}{error ? <p role="alert" className="px-4 text-sm text-destructive">{error}</p> : null}{account.empty}</div>}>{children}</PcReadyGate>
+
+  if (account.mode !== "account" && phoneShell(hosts.length, providers.length) === "scan" && !(surface === "chat" && account.gatewaySourceID)) {
     if (account.empty) return <>{account.empty}{sheet}{modelSheet}</>
     return (
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -780,7 +788,7 @@ export function PhoneApp() {
     : undefined
 
   if (composing && surface !== "chat") {
-    return (
+    return gate(
       <div className="flex h-full min-w-0 flex-col overflow-hidden">
         <UpdateNotice />
         {link ? banner : null}
@@ -821,9 +829,9 @@ export function PhoneApp() {
     )
   }
 
-  if (view.detail && link && surface !== "chat") {
+  if (view.detail && surface !== "chat") {
     const detail = view.detail
-    return (
+    return gate(
       <div className="flex h-full min-w-0 flex-col overflow-hidden">
         <UpdateNotice />
         {banner}
@@ -833,7 +841,7 @@ export function PhoneApp() {
             detail={detail}
             prediction={phonePrediction(view.events, detail, predictionsEnabled && !catalogBusy)}
             onReadVisibility={(visible) => { managerVisible.current = visible }}
-            fileLink={link}
+            fileLink={link ?? undefined}
             blocks={view.blocks}
             followups={view.followups}
             onSteerFollowup={(id) => void queueFollowup(OpFollowupSteer, detail.id, id)}
@@ -858,6 +866,7 @@ export function PhoneApp() {
             onSend={(text, extra) => postTurn(OpSend, detail.id, text, extra)}
             onSteer={(text, extra) => postTurn(OpSteer, detail.id, text, extra)}
             onStop={async () => {
+              if (!link?.alive()) return
               try {
                 await link.rpc({ op: OpStop, thread_id: detail.id })
                 const r = await link.rpc({ op: OpOpen, thread_id: detail.id })
@@ -881,7 +890,7 @@ export function PhoneApp() {
     )
   }
 
-  if (surface === "chat") {
+  if (surface === "chat" && account.mode !== "account") {
     return (
       <ChatSurface
         locale={locale}
@@ -912,7 +921,7 @@ export function PhoneApp() {
     )
   }
 
-  return (
+  return gate(
     <div className="flex h-full min-w-0 flex-col overflow-hidden">
       <UpdateNotice />
       {link ? banner : null}

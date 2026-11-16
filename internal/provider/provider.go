@@ -88,6 +88,7 @@ type builder func(ctx context.Context, p config.Provider) (model.BaseChatModel, 
 // same endpoint at once, and one shared client means one shared connection
 // pool instead of a dozen.
 type Pool struct {
+	policyUse sync.RWMutex
 	cfg       *config.Config
 	build     builder
 	mock      bool
@@ -156,7 +157,7 @@ func (p *Pool) Resolve(id string) (config.Provider, error) {
 	if strings.TrimSpace(id) == "" {
 		id = p.DefaultProviderID()
 	}
-	if src := p.account.Load(); src != nil && id == src.ID() {
+	if src := p.activeAccount(); src != nil && id == src.ID() {
 		return src.provider(p.accountModel()), nil
 	}
 	if strings.HasPrefix(id, config.AccountSourcePrefix) {
@@ -185,7 +186,19 @@ func (p *Pool) Resolve(id string) (config.Provider, error) {
 // means the provider's configured default (and, offline, MockModelName).
 func (p *Pool) ResolveModel(id, model string) (config.Provider, error) {
 	if p.OfficialOnly() {
-		return p.account.Load().provider(""), nil
+		src := p.activeAccount()
+		if id == src.id && model != "" {
+			if !src.permits(model) {
+				return config.Provider{}, ErrModelPolicy
+			}
+			prov := src.provider("")
+			prov.Model = model
+			return prov, nil
+		}
+		return src.provider(""), nil
+	}
+	if ref, ok := p.cfg.ModelsSnapshot().Bindings[p.ModelPolicy().Scope]["conversation"]; ok && strings.TrimSpace(id) == "" && model == "" {
+		id, model = ref.ProviderID, ref.Model
 	}
 	prov, err := p.Resolve(id)
 	if err != nil {
@@ -239,7 +252,7 @@ func (p *Pool) List() []Info {
 	if !p.OfficialOnly() {
 		rows = listModels(p.cfg.Snapshot(), p.mock)
 	}
-	src := p.account.Load()
+	src := p.activeAccount()
 	if src == nil {
 		return rows
 	}
@@ -257,7 +270,22 @@ func (p *Pool) accountModel() string {
 	if p == nil || p.cfg == nil {
 		return ""
 	}
-	return strings.TrimSpace(p.cfg.ModelsSnapshot().AccountModel)
+	if src := p.activeAccount(); src != nil && src.managed {
+		return src.defaults["conversation"]
+	}
+	m := p.cfg.ModelsSnapshot()
+	if ref, ok := m.Bindings[p.ModelPolicy().Scope]["conversation"]; ok {
+		if src := p.activeAccount(); src != nil && ref.ProviderID == src.id {
+			return ref.Model
+		}
+	}
+	if name := strings.TrimSpace(m.AccountModel); name != "" {
+		return name
+	}
+	if src := p.activeAccount(); src != nil {
+		return src.defaults["conversation"]
+	}
+	return ""
 }
 
 func listModels(cfg *config.Config, mock bool) []Info {
@@ -315,9 +343,7 @@ func (p *Pool) Get(ctx context.Context, id, model string) (model.BaseChatModel, 
 	if err != nil {
 		return nil, err
 	}
-	if !p.mock {
-		m = &recordingModel{inner: m, gate: p.backoffFor(prov.BaseURL)}
-	}
+	m = p.trackedModel(m, prov)
 	p.cache[key] = m
 	return m, nil
 }
@@ -362,7 +388,7 @@ func (p *Pool) modelBuilder(ctx context.Context, id, modelName, effort string, r
 	limit := p.cfg.SwarmSnapshot().CompletionTokenLimit()
 	if p.mock {
 		return func(role, agentID string) model.BaseChatModel {
-			return wrap(newMockModelWithStreamDelay(role, p.mockDelay), agentID, prov, effort, limit, rec)
+			return wrap(p.trackedModel(newMockModelWithStreamDelay(role, p.mockDelay), prov), agentID, prov, effort, limit, rec)
 		}, nil
 	}
 	if !prov.Ready() {
@@ -419,10 +445,10 @@ func wrap(m model.BaseChatModel, agentID string, p config.Provider, effort strin
 		return m
 	}
 	r := &recordingModel{inner: m, agentID: agentID, providerID: p.ID, model: p.Model, reasoning: effort, maxTokens: maxTokens, rec: rec}
-	if shared, ok := m.(*recordingModel); ok && shared.gate != nil && shared.rec == nil {
+	if shared, ok := m.(*recordingModel); ok && (shared.gate != nil || shared.policyUse != nil) && shared.rec == nil {
 		// Admission and telemetry must surround the same request. Wrapping the
 		// gate again would count a cancelled wait as a completed model call.
-		r.inner, r.gate = shared.inner, shared.gate
+		r.inner, r.gate, r.policyUse = shared.inner, shared.gate, shared.policyUse
 	}
 	return r
 }
@@ -433,6 +459,7 @@ func wrap(m model.BaseChatModel, agentID string, p config.Provider, effort strin
 // conversation's reasoning effort as a per-call option, which keeps the shared
 // client cached instead of one instance per thinking level.
 type recordingModel struct {
+	policyUse  func() (func(), error)
 	inner      model.BaseChatModel
 	gate       *backoffGate
 	agentID    string
@@ -526,7 +553,7 @@ func (r *recordingModel) streamOnce(ctx context.Context, in []*schema.Message, o
 	if err != nil {
 		finish(err)
 	}
-	if recorder == nil && (r.gate == nil || err != nil) {
+	if recorder == nil && ((r.gate == nil && r.policyUse == nil) || err != nil) {
 		return stream, modelCallError(err)
 	}
 	if err != nil {

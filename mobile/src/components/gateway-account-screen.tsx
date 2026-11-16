@@ -10,8 +10,10 @@ import { t } from "@/lib/i18n"
 import { gatewayUserDisplayName } from "@/lib/gateway-names"
 import { WebExecutionSettings } from "@/components/web-execution-settings"
 import type { PcWebSnapshot } from "@/components/pc-web-execution-status"
+import { SpeechStatus } from "@/components/speech-status"
 
-export function GatewayAccountScreen({ account, providers, modelBusy, modelError, pcWeb, onClose, onConnect, onRefresh, onOpenChat, onOtherWays, onToggleMode }: {
+export function GatewayAccountScreen({ account, providers, modelBusy, modelError, pcWeb, onClose, onConnect, onRefresh, onOtherWays, onToggleMode, pcRequired=false }: {
+  pcRequired?: boolean
   onToggleMode?: () => void
   account: GatewayAccountController
   providers: DirectProvider[]
@@ -66,7 +68,7 @@ export function GatewayAccountScreen({ account, providers, modelBusy, modelError
               lastTouch.current = performance.now()
               portraitClick()
             }}
-            onClick={(event) => { if (event.detail === 0 || performance.now() - lastTouch.current > 500) portraitClick() }}>
+            onClick={() => { if (performance.now() - lastTouch.current > 500) portraitClick() }}>
             <AccountPortrait name={accountName} url={account.session?.user.avatar_url} />
           </button>
           <p className="break-all text-sm font-medium">{accountName}</p>
@@ -76,19 +78,25 @@ export function GatewayAccountScreen({ account, providers, modelBusy, modelError
         {!authorized && (!waiting || account.status === "access_denied") ? <>
           <p className="text-sm leading-relaxed text-muted-foreground">{t("account.hint")}</p>
           <Button disabled={account.busy} onClick={() => void account.login()}>{t("account.login")}</Button>
-          {onClose ? <Button variant="ghost" onClick={onClose}>{t("account.anonymous")}</Button> : null}
         </> : null}
-        {!waiting ? <WebExecutionSettings pcWeb={pcWeb} /> : null}
+        {!waiting && !pcRequired ? <WebExecutionSettings pcWeb={pcWeb} /> : null}
+        {!waiting && !pcRequired ? <SpeechStatus /> : null}
         {authorized ? <>
-          <section className="flex flex-col gap-2">
+          {!pcRequired && (providers.length > 0 || modelBusy || modelError) ? <section className="flex flex-col gap-2">
             <h2 className="text-sm font-semibold">{t("account.models")}</h2>
-            <p className="text-xs text-muted-foreground">{t("account.modelsHint")}</p>
-            {onOpenChat ? <Button variant="outline" onClick={onOpenChat}>{t("account.history")}</Button> : null}
-            {!account.bootstrap?.models.api_access_enabled ? <p className="text-sm text-muted-foreground">{t("account.modelsDenied")}</p> : null}
             {modelBusy ? <p role="status" className="text-sm text-muted-foreground">{t("account.modelsLoading")}</p> : null}
             {modelError ? <p role="alert" className="text-sm text-destructive">{t("account.modelsFailed")}</p> : null}
-            {providers.flatMap((p) => p.catalog).length ? <p className="wrap-break-word text-sm">{providers.flatMap((p) => p.catalog).join(" · ")}</p> : null}
-          </section>
+            {providers.map(provider => <div key={provider.id}>
+              <h3 className="text-sm font-medium">{provider.label}</h3>
+              <p className="break-all text-xs text-muted-foreground">{provider.catalog.map(name => provider.modelLabels?.[name] ?? name).join(" · ")}</p>
+            </div>)}
+          </section> : null}
+
+          {pcRequired && !onClose ? <section aria-labelledby="pc-wait-title" data-testid="pc-wait">
+            <h2 id="pc-wait-title" className="text-base font-semibold">{t("pcWait.title")}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{t("pcWait.hint")}</p>
+            {account.hosts.length > 0 ? <p role="status" className="mt-2 text-sm text-muted-foreground">{t(account.hosts.some(host => host.online && host.enabled) ? "pcWait.connect" : "pcWait.offline")}</p> : null}
+          </section> : null}
           <section className="flex flex-col gap-2">
             <h2 className="text-sm font-semibold">{t("account.pcs")}</h2>
             {!account.hosts.length ? <p className="text-sm text-muted-foreground">{t("account.empty")}</p> : <AccountPcList hosts={account.hosts} onConnect={onConnect} />}

@@ -65,6 +65,9 @@ func ParseDefaultSource(raw string) (string, error) {
 const maxAccountModelLen = 256
 
 func (c *Config) validateDefaultSource() error {
+	if err := c.validateModelBindings(); err != nil {
+		return err
+	}
 	source, err := ParseDefaultSource(c.Models.DefaultSource)
 	if err != nil {
 		return err

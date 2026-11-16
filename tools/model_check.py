@@ -25,6 +25,9 @@ is a selectable row, and that official presentation starts on the server
 without listing own providers (C-040, C-046).
 models/provider/RouteRecovery.tla checks that confirmed route refusals stop
 after a consecutive cap instead of waiting forever or buying model retries (C-029).
+models/desktop/RendererRecovery.tla checks that a flat visible body is not
+healthy paint, an unknown capture does not become a blank frame, and the one
+reload precedes a bounded successor only in the foreground (C-034).
 models/skills/InstalledSkills.tla checks project-scoped skill publication,
 lookup, removal and separation from learned memory.
 models/sidechat/SideChat.tla checks that temporary replies stay within their
@@ -86,6 +89,8 @@ class Model:
 MODELS = {
     m.name: m
     for m in (
+        Model("model-mode", ROOT / "models" / "lifecycle" / "ModelModeAdmission.tla",
+              ("SampleThenCommit",), ("TypeOK", "SwitchIsIdle"), ()),
         Model(
             "generation-recovery", ROOT / "models" / "generation" / "ModelGenerationRecovery.tla",
             ("NoJoin",),
@@ -99,6 +104,14 @@ MODELS = {
             ("UnboundedRouteRecovery", "ExhaustionStartsModelRetry"),
             ("TypeOK", "RouteRefusalStops", "NoRetryAfterExhaustion"),
             (("Cap", 3), ("MaxProbes", 9)),
+        ),
+        Model(
+            "renderer-recovery", ROOT / "models" / "desktop" / "RendererRecovery.tla",
+            ("IgnorePresentedFrame", "UnknownCountsAsFlat", "BlankSkipsReload",
+             "BackgroundSpendsRecovery"),
+            ("TypeOK", "VisibleFlatIsNotHealthy", "UnknownMatchStaysHealthy",
+             "ReplacementFollowsReload", "RecoveryStaysInForeground"),
+            (("MaxProbes", 3), ("MaxReplacements", 2)),
         ),
         Model(
             "installed-skills", ROOT / "models" / "skills" / "InstalledSkills.tla",
@@ -287,6 +300,10 @@ def _askpub(name: str, source: str, switches: tuple[str, ...] = (), violates: st
 
 
 CASES: tuple[Case, ...] = (
+    _case("model-mode-current", "mode changes hold exclusive idle admission", model="model-mode"),
+    _case("model-mode-sampled", "seeded idle sample races a new task",
+          ("SampleThenCommit",), "SwitchIsIdle", model="model-mode"),
+    _case("model-mode-reach", "witness", witness="NeverSwitch", model="model-mode"),
     _case("ios-startup-current", "iOS binds static cookie and HTTP flags before the page starts",
           model="ios-startup"),
     _case("ios-startup-sync-prompt",
@@ -333,6 +350,28 @@ CASES: tuple[Case, ...] = (
         ("route-reach-recovered", "NeverRecovered"),
         ("route-reach-cancelled", "NeverCancelled"),
         ("route-reach-other", "NeverOtherError"),
+    )),
+    _case("renderer-recovery-current",
+          "a flat visible body fails paint; an unknown capture does not; one foreground reload precedes a successor",
+          model="renderer-recovery"),
+    _case("renderer-recovery-ignore-presented",
+          "historical, shipped through v0.1.77: a matching WebKit snapshot counted as healthy paint while the visible body stayed flat",
+          ("IgnorePresentedFrame",), "VisibleFlatIsNotHealthy", model="renderer-recovery"),
+    _case("renderer-recovery-unknown-as-flat",
+          "seeded: a missed, hidden or refused capture counts as a blank body",
+          ("UnknownCountsAsFlat",), "UnknownMatchStaysHealthy", model="renderer-recovery"),
+    _case("renderer-recovery-skip-reload",
+          "seeded: a flat body opens a successor without the one reload",
+          ("BlankSkipsReload",), "ReplacementFollowsReload", model="renderer-recovery"),
+    _case("renderer-recovery-background-spends",
+          "seeded: a failure spends the recovery budget while the window is away",
+          ("BackgroundSpendsRecovery",), "RecoveryStaysInForeground", model="renderer-recovery"),
+    *(_case(name, "witness", witness=witness, model="renderer-recovery") for name, witness in (
+        ("renderer-recovery-reach-content", "NeverHealthyContent"),
+        ("renderer-recovery-reach-blank", "NeverBlank"),
+        ("renderer-recovery-reach-reload", "NeverReloaded"),
+        ("renderer-recovery-reach-replace", "NeverReplaced"),
+        ("renderer-recovery-reach-unknown", "NeverUnknownHealthy"),
     )),
     _case("installed-skills-current", "validate, publish and detach whole project skill bundles",
           model="installed-skills"),

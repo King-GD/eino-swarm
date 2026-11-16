@@ -43,7 +43,7 @@ func TestMockPoolKeepsItsOwnPacingForEveryAgent(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := cached.(*mockModel).chunkDelay; got != delay {
+		if got := cached.(*recordingModel).inner.(*mockModel).chunkDelay; got != delay {
 			t.Fatalf("cached model pacing=%s, want %s", got, delay)
 		}
 		build, err := p.ModelBuilder(context.Background(), "", "", "", nil)
@@ -60,7 +60,7 @@ func TestMockPoolKeepsItsOwnPacingForEveryAgent(t *testing.T) {
 			t.Fatal("explicit chat pacing slowed synchronous review")
 		}
 		defaultModel, err := NewMock(cfg).Get(context.Background(), "", "")
-		if err != nil || defaultModel.(*mockModel).chunkDelay != time.Millisecond {
+		if err != nil || defaultModel.(*recordingModel).inner.(*mockModel).chunkDelay != time.Millisecond {
 			t.Fatalf("an explicit pool changed the next default pool: %+v %v", defaultModel, err)
 		}
 	}

@@ -5,6 +5,31 @@ worked example. Keys and defaults are in [CONFIG](CONFIG.md), commands in
 [CLI](CLI.md), the phone app in [mobile/README](../mobile/README.md), and
 behavior boundaries in [FEATURES](FEATURES.md) and [CONTRACTS](CONTRACTS.md).
 
+## Voice input and read aloud
+
+Configure **Settings → Voice** on the PC. Voice input and spoken answers have
+separate switches, both initially off. Managed gateway mode reuses the account's
+enabled recognition/speech roles; editable gateways allow functional overrides. In local mode choose a service and its voice
+model, or configure a separate OpenAI-compatible endpoint. Select the recognition
+language, recording limit and, for playback, voice, speed and MP3/WAV output.
+Try recording or playback in Settings to check the selected service.
+
+The microphone appears beside Send only when recognition is enabled and ready.
+On PC, click to record, click again to finish, or press Escape to cancel.
+On the phone, tap to open the recording panel and choose Finish or Cancel.
+Recognition inserts editable text; it never sends the message. If you edited
+the draft meanwhile, the recognized text is appended without replacing your work.
+
+Read aloud sits beside Copy under a completed answer. It skips code blocks and
+diagram source, plays long prose in order, and stops on another click. Recording
+and playback release their resources when you cancel, leave the conversation,
+change source, or background the phone.
+
+A paired phone uses the selected PC's voice configuration while that PC is online
+and ready. Gateway audio uses the phone's own login on the same Gateway. Losing
+the PC stops capture/playback and returns Account mode to the waiting screen.
+LOCAL direct Chat has independent voice settings in its personal model services.
+
 ## The window
 
 The left rail switches **Projects** (the default), **Conversations**,
@@ -36,8 +61,9 @@ and projects sort by last update; drag a row to pin a custom order. On the
 desktop window, drag the title bar to move it; double-click to zoom or
 restore, like Finder.
 
-On the Mac, an independent native controller checks actual painted pixels,
-tries one reload, then replaces the window on the same engine if needed.
+On the Mac, an independent native controller checks actual painted pixels.
+A window that stays one flat colour counts as not painted. It tries one
+reload, then replaces the window on the same engine if needed.
 Background work continues, and the restored window returns to its conversation
 and saved draft. Repeated failures stop with a native error. A system WebKit
 fault can still occur after a successful recovery. Diagnostics are in
@@ -64,11 +90,20 @@ stays the same.
 project's instruction is the business context; when the two conflict, the
 project wins.
 
-A new install does not list **Settings → Models** and the composer has no model
-menu. Work asks you to sign in first. Those model controls appear after
-`product.mode: local` is set in the config file, or after three clicks on the
-portrait in account details. Another three clicks hides them again. See
-[Configuration](CONFIG.md). The key is absent while the install is FOFA.
+A new install requires gateway sign-in. An ordinary gateway account shows model
+settings and permits personal providers; a managed third-party account hides all
+model selection and uses its gateway preset. There is no normal mode switch.
+The existing triple-click on the account portrait is a debug entry to LOCAL and
+back. Switching waits until turns, workers, recovery and model requests are idle,
+and preserves login and personal settings. A refusal names the conversation that
+is still running.
+See [Configuration](CONFIG.md).
+
+**Settings → Models → Functional models** selects conversation, title, compression,
+embedding, recognition, spoken-answer and OCR models. The decisions role is a
+background call and is not listed. Unchanged gateway
+roles follow updated server defaults. An explicit choice stays until **Use default**
+removes it. LOCAL works without login and uses only your own configured models.
 
 **Settings → Models** is base URL, API key, discover, and the default. The
 switch on a provider row shows that endpoint in the composer; off hides it
@@ -94,15 +129,10 @@ are available. An existing setup with a working provider keeps starting on it
 (`models.default_source`). An own provider is marked default only when new
 conversations start on it.
 
-When the signed-in server publishes an official profile, the composer shows
-that server's name and does not open the model menu. Settings → Models offers
-**Official model** or **All models** on the account card. Official model hides
-this machine's own providers, auxiliary models and embedding names. Choosing
-All models asks first. After the switch, those services return, and they do
-not have this account's online capabilities. A conversation that already uses one of them keeps that
-choice and uses it again after the switch. The official name and the request
-alias stay on the server; this setting does not reveal or select the real
-model id. Signing out clears the profile.
+A managed third-party gateway supplies its own models and capabilities. Model
+settings and the composer model menu stay hidden, including for a saved legacy
+“All models” preference. Existing personal selections remain saved for LOCAL;
+while managed, conversations and auxiliary requests use the gateway preset.
 
 ## Composer
 
@@ -174,6 +204,16 @@ shell, and they go into the current composer even when the terminal belongs
 to another conversation. Only selected text is included. The initial directory
 is where the shell started, not a claim about its directory after `cd` or
 `ssh`. Quotes are saved with the draft.
+
+When spoken output is enabled and ready, the same menu offers **Read aloud**.
+It reads the selection and leaves the quote actions in place. Closing the
+menu, changing the selection, leaving the conversation, or hiding the page
+stops that reading.
+
+On a Chinese interface, an English selection also offers **翻译**. The result
+stays in the menu. It is not added to the conversation and does not start a
+turn. A selection that contains Chinese or another non-Latin script does not
+offer it. The offline app repeats the selected text instead of translating it.
 
 ## One turn
 
@@ -270,8 +310,11 @@ engine withholds that answer and lets it correct once in the same turn. A
 repeated early ending retains the original workers and shows why collection
 is waiting. Once per turn, if every pending worker was still running, their
 completion can automatically resume collection. The manager must still receive
-the actual results. Other collection pauses require **Continue** or **Stop**.
-Continue grants one further attempt. Stop cancels them. Restart preserves the
+the actual results. Other collection pauses require **Continue** or **Stop**
+while the turn is still running, including when the folded transcript does not
+itself say the turn is running. Continue grants one further attempt. Stop
+cancels them. Until that turn becomes idle, the card says the turn is still
+closing; the stopped sentence appears once it is idle. Restart preserves the
 wait identities and the consumed allowance. The turn's Trace records
 `workers_uncollected`.
 
@@ -809,15 +852,22 @@ The phone defaults to **Account** mode. It opens User center and requires an
 approved sign-in before showing conversations or connecting to a PC. Signing
 out or losing authorization returns to that gate. The toolbar and User center
 show the user's public avatar, with an initial when the image is unavailable.
-Account mode hides Models, Add a PC, Unlink and composer model selection; it
-uses server models and computers belonging to the current account/device.
+Account mode hides personal Models, Add a PC and Unlink; it connects only to
+computers belonging to the current account/device. Without a ready PC engine,
+it shows connection guidance and retains the open conversation and draft for
+reconnection. The PC's model policy controls composer selection: ordinary
+gateway accounts may choose models; managed third-party accounts use the preset
+and show no model controls.
 Saved personal providers, anonymous bindings and their history remain stored.
 
 Click the User center portrait three times, with no gap longer than 1.2 seconds,
 to switch between **Account** and **Local**. The choice persists on this phone
 and does not change the PC's mode. Local exposes the existing personal-model
-and anonymous pairing controls. A generic portrait on the login screen also
+and anonymous pairing controls. While signed in, it also displays the separately
+authorized third-party preset and Gateway model catalogs in their own groups.
+Denied or empty sources are hidden; matching model names keep separate routes. A generic portrait on the login screen also
 supports this explicit switch. Switching closes the old phone page/connection.
+
 
 The circular **Account** button at the bottom of the left rail opens the
 account menu, even when the conversation list is hidden. **Sign in with

@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	// ProductModeFOFA is the install that signs in for models and does not
-	// edit this machine's own providers. It is the default and is not written
-	// into the file.
+	// ProductModeFOFA is the legacy persisted name of gateway mode. The gateway
+	// determines whether model settings are editable. It is the default and is
+	// not written into the file.
 	ProductModeFOFA = "fofa"
 	// ProductModeLocal shows model settings and the composer model menu.
 	ProductModeLocal = "local"
@@ -22,6 +22,15 @@ var ErrInvalidProductMode = errors.New("config: product.mode must be fofa or loc
 // from the file so a default install does not advertise the switch.
 type ProductConfig struct {
 	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+}
+
+// ProductSnapshot reads only execution mode; model admission need not inspect
+// unrelated settings while background work is finishing.
+func (c *Config) ProductSnapshot() ProductConfig {
+	mu := c.mutex()
+	mu.RLock()
+	defer mu.RUnlock()
+	return c.Product
 }
 
 // Resolved is fofa or local. Anything that is not local, including empty, is fofa.
@@ -56,6 +65,9 @@ func (c *Config) normalizeProduct() {
 // install runs. Nil and empty lists are the same, and a missing enabled flag
 // is the same as listed. Provider order is part of the setting.
 func SameModelSettings(a, b ModelsConfig) bool {
+	if !reflect.DeepEqual(a.Bindings, b.Bindings) {
+		return false
+	}
 	if a.Default != b.Default || a.DefaultSource != b.DefaultSource || a.AccountModel != b.AccountModel {
 		return false
 	}

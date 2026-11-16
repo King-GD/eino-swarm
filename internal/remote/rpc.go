@@ -8,6 +8,7 @@ import (
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/engine"
+	"github.com/LubyRuffy/eino-swarm/internal/provider"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 	"github.com/LubyRuffy/eino-swarm/internal/tools"
 )
@@ -43,10 +44,17 @@ func dispatch(eng *engine.Engine, cfg config.RemoteConfig, stage *Staging, req R
 		}
 		resp.DataGeneration = &generation
 		resp.ProductMode = eng.Config().Snapshot().Product.Resolved()
+		policy := eng.Providers().ModelPolicy()
+		resp.ModelPolicy = &policy
 		resp.WebExecutionSupported = true
 		webStatus := tools.DescribeWebExecution(eng.Config())
 		resp.WebExecutionStatus = &webStatus
-		return resp
+		resp.Speech = speechSnapshot(eng)
+		return boundSpeechResponse(resp, false)
+	case OpSpeechConfig:
+		resp := okBase(req.ID, path, sessionID)
+		resp.Speech = speechSnapshot(eng)
+		return boundSpeechResponse(resp, true)
 	case OpList, OpMore:
 		return handleList(eng, cfg, req, path, sessionID)
 	case OpClients:
@@ -83,6 +91,9 @@ func dispatch(eng *engine.Engine, cfg config.RemoteConfig, stage *Staging, req R
 	case OpTune:
 		return handleTune(eng, req, path, sessionID)
 	case OpPut:
+		if req.Purpose != "" {
+			return fail(req.ID, path, sessionID, "bad_request", "audio uploads require a live link")
+		}
 		return acceptPut(stage, req, path, sessionID)
 	case OpFollowupDrop:
 		if err := eng.DeleteFollowup(req.ThreadID, req.FollowupID); err != nil {
@@ -229,6 +240,10 @@ func opErr(id, path, sessionID string, err error) Response {
 
 func mapErr(id, path, sessionID string, err error) Response {
 	switch {
+	case errors.Is(err, provider.ErrModelPolicy):
+		return fail(id, path, sessionID, "custom_models_disabled", err.Error())
+	case errors.Is(err, provider.ErrAccountLoginRequired):
+		return fail(id, path, sessionID, "login_required", err.Error())
 	case errors.Is(err, engine.ErrRestoring):
 		return fail(id, path, sessionID, "restoring", err.Error())
 	case errors.Is(err, engine.ErrBackupBusy):

@@ -10,6 +10,8 @@ import (
 )
 
 func redactSecrets(cfg *config.Config) {
+	cfg.Speech.Input.APIKey = ""
+	cfg.Speech.Output.APIKey = ""
 	for i := range cfg.Models.Providers {
 		cfg.Models.Providers[i].APIKey = ""
 	}
@@ -55,6 +57,8 @@ func marshalConfig(cfg *config.Config, omit bool) ([]byte, error) {
 // the destination already had. Empty snapshot values stay empty so an
 // environment seed applied by Load is not wiped and then saved.
 func overlayKeptSecrets(dst, src *config.Config) {
+	keepSpeechKey(&dst.Speech.Input.SpeechEndpoint, src.Speech.Input.SpeechEndpoint)
+	keepSpeechKey(&dst.Speech.Output.SpeechEndpoint, src.Speech.Output.SpeechEndpoint)
 	keys := make(map[string]string, len(src.Models.Providers))
 	for _, p := range src.Models.Providers {
 		keys[p.ID] = p.APIKey
@@ -84,6 +88,15 @@ func overlayKeptSecrets(dst, src *config.Config) {
 	}
 	if strings.TrimSpace(src.Tools.Proxy.HTTPS) != "" {
 		dst.Tools.Proxy.HTTPS = src.Tools.Proxy.HTTPS
+	}
+}
+
+// An imported endpoint must not receive a credential saved for another server.
+func keepSpeechKey(dst *config.SpeechEndpoint, src config.SpeechEndpoint) {
+	if dst.Source == config.SpeechSourceCustom && src.Source == dst.Source &&
+		strings.TrimRight(dst.BaseURL, "/") == strings.TrimRight(src.BaseURL, "/") &&
+		strings.TrimSpace(src.APIKey) != "" {
+		dst.APIKey = src.APIKey
 	}
 }
 

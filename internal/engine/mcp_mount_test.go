@@ -208,7 +208,10 @@ func TestZeroDirectLoadDoesNotConnectBeforeTheModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e.cfg.MCP.DirectLoadPercent = 5
+	// A terminal turn may still have a memory review reading the config.
+	if err := e.UpdateConfig(func(c *config.Config) error { c.MCP.DirectLoadPercent = 5; return nil }); err != nil {
+		t.Fatal(err)
+	}
 	restored, err := e.applyMCPSurface(t.Context(), turn, set, true)
 	joined := strings.Join(restored.Names, " ")
 	if err != nil || !strings.Contains(joined, "_list_tools_") || hits.Load() != 0 {

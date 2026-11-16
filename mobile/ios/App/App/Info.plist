@@ -68,6 +68,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>The camera reads the pairing QR shown on the computer.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>The microphone records speech that you choose to transcribe into your message draft.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>The camera component references the photo library. This app reads the pairing code with the camera and does not open photos.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

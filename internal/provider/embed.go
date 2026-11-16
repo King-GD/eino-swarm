@@ -25,11 +25,19 @@ const (
 // pool never leaves the process: it hashes character n-grams so --mock and
 // the tests still exercise semantic ranking.
 func (p *Pool) Embed(ctx context.Context, providerID, model string, texts []string) ([][]float32, error) {
+	release, err := p.BeginModelUse()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	if len(texts) == 0 {
 		return nil, nil
 	}
 	if p.mock {
 		return NgramEmbed(texts), nil
+	}
+	if err := p.validateModelSelection(providerID, model); err != nil {
+		return nil, err
 	}
 	prov, err := p.Resolve(providerID)
 	if err != nil {

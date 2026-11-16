@@ -163,7 +163,7 @@ func (s *Service) embeddingChoice() (providerID, model string, on bool) {
 	if s == nil || s.cfg == nil || s.embed == nil {
 		return "", "", false
 	}
-	if s.cfg.Product.FOFA() {
+	{
 		if chooser, ok := s.embed.(interface {
 			AccountEmbedding() (string, string, bool, bool)
 		}); ok {

@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/LubyRuffy/eino-swarm/internal/app"
 	"github.com/LubyRuffy/eino-swarm/internal/server"
@@ -52,6 +53,10 @@ func TestFOFAInstallOmitsTheModeAndRejectsCustomModelsUntilLocal(t *testing.T) {
 	refused := h.json(http.MethodPost, "/api/threads/"+id+"/turns", map[string]any{"text": "start"}, http.StatusForbidden)
 	if refused["code"] != "login_required" {
 		t.Fatalf("turn refusal = %v", refused)
+	}
+	translated := h.json(http.MethodPost, "/api/threads/"+id+"/translation", map[string]any{"text": "Hello"}, http.StatusForbidden)
+	if translated["code"] != "login_required" {
+		t.Fatalf("translation refusal = %v", translated)
 	}
 
 	changed := h.json(http.MethodPut, "/api/settings", map[string]any{
@@ -105,6 +110,14 @@ func TestFOFAInstallOmitsTheModeAndRejectsCustomModelsUntilLocal(t *testing.T) {
 	again := h.json(http.MethodPost, "/api/threads/"+id+"/turns", map[string]any{"text": "start"}, http.StatusAccepted)
 	if again["code"] == "login_required" {
 		t.Fatalf("local still required a sign-in: %v", again)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for a.Engine.Status(id).Running && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if a.Engine.Status(id).Running {
+		t.Fatal("local turn did not settle")
 	}
 
 	restored := h.json(http.MethodPut, "/api/settings", map[string]any{

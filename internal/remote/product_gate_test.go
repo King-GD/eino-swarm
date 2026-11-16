@@ -10,7 +10,7 @@ func TestInstallAllowsKeepsFOFASignedOutAndLocalOpen(t *testing.T) {
 	if work || models {
 		t.Fatalf("signed-out fofa work=%v models=%v", work, models)
 	}
-	work, models = installAllows(false, true, AccountPending)
+	work, models = installAllows(false, true, AccountReady)
 	if !work || models {
 		t.Fatalf("signed-in fofa work=%v models=%v", work, models)
 	}

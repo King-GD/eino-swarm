@@ -1,4 +1,5 @@
 import { backoffZh } from "./messages-backoff"
+import { modelPolicyZh } from "./messages-model-policy"
 import { remoteLoginZh } from "./messages-remote-login"
 import { desktopAccountZh } from "./messages-desktop-account"
 import { memoryZh } from "./messages-memory-zh"
@@ -12,7 +13,11 @@ import { backupZh } from "./messages-backup-zh"
 import type { en } from "./messages-en"
 
 /** Chinese UI chrome. Every key in messages-en.ts must have a string here. */
+import { speechZh } from "./messages-speech"
+
 export const zh: { [K in keyof typeof en]: string } = {
+  ...modelPolicyZh,
+  ...speechZh,
   ...backupZh,
   ...mcpZH,
   ...backoffZh,
@@ -166,8 +171,6 @@ export const zh: { [K in keyof typeof en]: string } = {
   "composer.placeholderPlan": "要规划什么？",
   "composer.placeholderAsk": "输入回答，或点上面的选项",
   "composer.attach": "附加文件",
-  "composer.decision": "决策",
-  "composer.decisionFailed": "这次决策没有完成。",
   "composer.attachHint": "把文件放到工作区",
   "composer.thinking": "思考强度",
   "composer.thinkingDefault": "默认思考",
@@ -264,6 +267,11 @@ export const zh: { [K in keyof typeof en]: string } = {
   "selection.menu": "选区",
   "selection.add": "加入对话",
   "selection.sideChat": "在侧聊中提问",
+  "selection.translate": "翻译",
+  "selection.translating": "正在翻译…",
+  "selection.translation": "译文",
+  "selection.translateFailed": "翻译失败，请重试。",
+  "selection.translateTooLong": "选区过长，请缩短后再翻译。",
   "sideChat.title": "侧聊",
   "sideChat.open": "打开侧聊",
   "sideChat.close": "关闭侧聊",

@@ -1,7 +1,8 @@
-import { MessageSquare, MessageSquarePlus } from "lucide-react"
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { Languages, Loader2, MessageSquare, MessageSquarePlus, Square, Volume2 } from "lucide-react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 
 import { Button } from "@/components/ui/button"
+import { ApiError, api } from "@/lib/api"
 import {
   QUOTE_SELECTION_EVENT,
   menuPosition,
@@ -9,22 +10,45 @@ import {
   readTextSelection,
   type PageSelection,
 } from "@/lib/selection"
+import { englishSelection } from "@/lib/selection-language"
+import { speechPlayback } from "@/lib/speech-media"
+import { synthesizeSpeech } from "@/lib/speech-api"
+import { speechText } from "@/lib/speech-text"
 import { useT } from "@/lib/use-t"
 import { TERMINAL_SELECTION_EVENT, type TerminalSelection } from "@/lib/terminal"
+import { useApp } from "@/store/app"
+import { toastError } from "@/store/toasts"
 
-/** Offers quote actions after a selection inside a quote source settles. */
+/** One playback owner for the selection menu. Leaving the menu stops it. */
+export const selectionSpeechKey = "selection"
+
+type SelectionTranslation = { status: "loading" | "done" | "error"; text: string; error?: string }
+
+/** Offers quote actions after a selection inside a quote source settles.
+ *  Reading and translation stay beside that selection; they are not quotes. */
 export function SelectionMenu({
+  threadId,
   onAdd,
   onAsk,
 }: {
+  threadId?: string
   onAdd: (text: string) => void
   onAsk?: (text: string) => void
 }) {
   const t = useT()
+  const speech = useApp((store) => store.meta?.speech)
+  const playback = useSyncExternalStore(speechPlayback.subscribe, speechPlayback.getSnapshot)
   const [active, setActive] = useState<PageSelection | null>(null)
   const [clearSelection, setClearSelection] = useState<(() => void) | null>(null)
+  const [translation, setTranslation] = useState<SelectionTranslation | null>(null)
+  const translateAbort = useRef<AbortController | null>(null)
   const menu = useRef<HTMLDivElement>(null)
   const canAsk = Boolean(onAsk && !clearSelection)
+  const selectionText = active?.text ?? ""
+  const prose = useMemo(() => speechText(selectionText), [selectionText])
+  const canRead = Boolean(speech?.output.enabled && speech.output.ready && prose)
+  const showTranslate = t.locale === "zh" && Boolean(threadId) && englishSelection(selectionText)
+  const reading = playback.key === selectionSpeechKey && playback.state !== "idle"
 
   useEffect(() => {
     let pressed = false
@@ -87,6 +111,8 @@ export function SelectionMenu({
       if (!fromEventTarget(event.target)) apply(true, true)
     }
     const hide = () => {
+      if (speechPlayback.getSnapshot().key === selectionSpeechKey) speechPlayback.stop()
+      translateAbort.current?.abort()
       terminal = null
       dismissedClick = false
       setClearSelection(null)
@@ -136,21 +162,86 @@ export function SelectionMenu({
     }
   }, [])
 
+  useEffect(() => {
+    setTranslation(null)
+  }, [selectionText])
+
+  useEffect(() => () => {
+    translateAbort.current?.abort()
+    if (speechPlayback.getSnapshot().key === selectionSpeechKey) speechPlayback.stop()
+  }, [selectionText])
+
+  useEffect(() => {
+    const hidden = () => {
+      if (document.hidden && speechPlayback.getSnapshot().key === selectionSpeechKey) speechPlayback.stop()
+    }
+    document.addEventListener("visibilitychange", hidden)
+    return () => document.removeEventListener("visibilitychange", hidden)
+  }, [])
+
+  useEffect(() => {
+    if (!canRead && speechPlayback.getSnapshot().key === selectionSpeechKey) speechPlayback.stop()
+  }, [canRead])
+
   useLayoutEffect(() => {
     const el = menu.current
     if (!active || !el) return
     const { left } = menuPosition(active.rect, windowViewport(), el.offsetWidth)
     el.style.left = `${left}px`
-  }, [active, canAsk, t.locale])
+  }, [active, canAsk, canRead, showTranslate, t.locale, translation?.status])
 
   if (!active) return null
   const pos = menuPosition(active.rect, windowViewport())
   const choose = (action: (text: string) => void) => {
+    if (speechPlayback.getSnapshot().key === selectionSpeechKey) speechPlayback.stop()
+    translateAbort.current?.abort()
     clearSelection?.()
     window.getSelection()?.removeAllRanges()
     setActive(null)
     action(active.text)
   }
+  const read = () => {
+    if (!speech || !canRead) return
+    if (reading) {
+      speechPlayback.stop()
+      return
+    }
+    void speechPlayback.play(selectionSpeechKey, active.text, {
+      chunkChars: speech.limits.chunk_chars,
+      synthesize: (part, signal) => synthesizeSpeech(part, signal, speech.limits.output_bytes),
+    }).catch((error: unknown) => {
+      if (error instanceof DOMException && error.name === "AbortError") return
+      toastError(error instanceof Error ? error.message : t("speech.failed"), { title: t("speech.output") })
+    })
+  }
+  const translate = () => {
+    if (!threadId) return
+    translateAbort.current?.abort()
+    const controller = new AbortController()
+    translateAbort.current = controller
+    const source = active.text
+    setTranslation({ status: "loading", text: "" })
+    void api.translateSelection(threadId, source, controller.signal).then(
+      (result) => {
+        if (controller.signal.aborted) return
+        if (!result.text.trim()) {
+          setTranslation({ status: "error", text: "", error: t("selection.translateFailed") })
+          return
+        }
+        setTranslation({ status: "done", text: result.text })
+      },
+      (error: unknown) => {
+        if (controller.signal.aborted) return
+        const tooLong = error instanceof ApiError && error.code === "selection_translation_too_long"
+        setTranslation({
+          status: "error",
+          text: "",
+          error: t(tooLong ? "selection.translateTooLong" : "selection.translateFailed"),
+        })
+      },
+    )
+  }
+  const readLabel = reading ? t("speech.stopReading") : t("speech.read")
 
   return (
     <div
@@ -158,34 +249,74 @@ export function SelectionMenu({
       data-testid="selection-menu"
       role="menu"
       aria-label={t("selection.menu")}
-      className="fixed z-50 flex rounded-md border border-border bg-popover p-0.5 text-popover-foreground shadow-md"
+      className="fixed z-50 flex flex-col rounded-md border border-border bg-popover p-0.5 text-popover-foreground shadow-md"
       style={{
         top: pos.top,
         left: pos.left,
         transform: pos.place === "above" ? "translate(-50%, -100%)" : "translate(-50%, 0)",
       }}
     >
-      <Button
-        role="menuitem"
-        variant="ghost"
-        size="sm"
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => choose(onAdd)}
-      >
-        <MessageSquarePlus />
-        {t("selection.add")}
-      </Button>
-      {onAsk && canAsk ? (
+      <div className="flex">
         <Button
           role="menuitem"
           variant="ghost"
           size="sm"
           onMouseDown={(event) => event.preventDefault()}
-          onClick={() => choose(onAsk)}
+          onClick={() => choose(onAdd)}
         >
-          <MessageSquare />
-          {t("selection.sideChat")}
+          <MessageSquarePlus />
+          {t("selection.add")}
         </Button>
+        {onAsk && canAsk ? (
+          <Button
+            role="menuitem"
+            variant="ghost"
+            size="sm"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => choose(onAsk)}
+          >
+            <MessageSquare />
+            {t("selection.sideChat")}
+          </Button>
+        ) : null}
+        {canRead ? (
+          <Button
+            role="menuitem"
+            variant="ghost"
+            size="sm"
+            aria-label={readLabel}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={read}
+          >
+            {reading && playback.state === "loading" ? <Loader2 className="animate-spin" /> : reading ? <Square className="fill-current" /> : <Volume2 />}
+            {readLabel}
+          </Button>
+        ) : null}
+        {showTranslate ? (
+          <Button
+            role="menuitem"
+            variant="ghost"
+            size="sm"
+            aria-busy={translation?.status === "loading"}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={translate}
+          >
+            {translation?.status === "loading" ? <Loader2 className="animate-spin" /> : <Languages />}
+            {t("selection.translate")}
+          </Button>
+        ) : null}
+      </div>
+      {translation ? (
+        <div
+          role="status"
+          aria-live="polite"
+          aria-label={t("selection.translation")}
+          className="max-h-48 max-w-sm overflow-auto border-t border-border px-2.5 py-2 text-(length:--chrome-font-size) whitespace-pre-wrap wrap-anywhere"
+        >
+          {translation.status === "loading" ? t("selection.translating")
+            : translation.status === "error" ? <span className="text-destructive">{translation.error}</span>
+            : translation.text}
+        </div>
       ) : null}
     </div>
   )

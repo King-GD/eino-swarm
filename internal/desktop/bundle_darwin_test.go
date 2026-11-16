@@ -47,6 +47,7 @@ func TestWriteAppBundleInstallsPlistAndExecutable(t *testing.T) {
 		"<key>CFBundleIconFile</key>",
 		"<string>AppIcon.icns</string>",
 		"NSLocalNetworkUsageDescription",
+		"NSMicrophoneUsageDescription",
 		"NSAllowsLocalNetworking",
 		"zwai lists models and talks to endpoints on your local network.",
 	} {

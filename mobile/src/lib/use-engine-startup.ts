@@ -19,6 +19,7 @@ export function useEngineStartup(link: RemoteLink | null): EngineStartup | undef
         if (r.ok && (r.startup === "restoring" || r.startup === "ready")) {
           const value: EngineStartup = {
             startup: r.startup,
+            model_policy: r.model_policy,
             restore: r.restore,
             data_generation: typeof r.data_generation === "number" ? r.data_generation : undefined,
           }

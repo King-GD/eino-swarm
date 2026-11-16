@@ -1,3 +1,4 @@
+import type { ModelPolicy } from "../../../frontend/src/lib/model-policy"
 export const PROTOCOL_V = 1
 
 export const OpList = "list"
@@ -38,6 +39,11 @@ export const OpClients = "clients"
 export const OpClientRead = "client_read"
 export const OpFiles = "files"
 export const OpFileChunk = "file_chunk"
+export const OpSpeechConfig = "speech_config"
+export const OpAudioTranscribe = "audio_transcribe"
+export const OpAudioSpeech = "audio_speech"
+export const OpAudioChunk = "audio_chunk"
+export const OpAudioCancel = "audio_cancel"
 export const GROUP_RECENT = "recent"
 
 export type RemoteRequest = {
@@ -61,6 +67,9 @@ export type RemoteRequest = {
   web_execution?: "" | "auto" | "local" | "cloud"
   puts?: string[]
   put_id?: string
+  purpose?: "audio"
+  audio_id?: string
+  offset?: number
   name?: string
   mime?: string
   part?: number
@@ -231,6 +240,7 @@ export type EngineStartup = {
   startup?: "restoring" | "ready"
   restore?: { completed: number; total: number; failed?: number }
   data_generation?: number
+  model_policy?: ModelPolicy
   product_mode?: "fofa" | "local"
 }
 
@@ -280,6 +290,8 @@ export type RemoteResponse = EngineStartup & {
   timeout_settings?: TimeoutSettings
   files?: WorkspaceFile[]
   file_chunk?: FileChunk
+  speech?: import("../../../frontend/src/lib/speech-types").SpeechSnapshot
+  audio?: { audio_id: string; text?: string; mime?: string; size?: number; offset?: number; next?: number; data?: string; more?: boolean }
 }
 
 export type WorkspaceFile = {

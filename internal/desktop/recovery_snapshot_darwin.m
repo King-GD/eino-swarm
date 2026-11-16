@@ -2,9 +2,13 @@
 #import <WebKit/WebKit.h>
 #import <objc/runtime.h>
 #include <math.h>
+#include <stdlib.h>
+#include <string.h>
 #include "recovery_snapshot_darwin.h"
 
 extern void desktopSnapshotResult(uint64_t request, int status, unsigned char *pixels, int length);
+
+void (*zwaiAfterProbeSnapshot)(void *window, uint64_t request, unsigned char *pixels, int length);
 
 // This sibling is omitted from WKWebView's own snapshot. The real nonce still
 // paints in that view, while the native window presents only the page background.
@@ -115,6 +119,18 @@ void zwaiRecoverySnapshot(void *native, uint64_t request) {
         if (context == NULL) { desktopSnapshotResult(request, 5, NULL, 0); return; }
         CGContextDrawImage(context, CGRectMake(0, 0, 64, 64), source);
         CGContextRelease(context);
+        // The hook reads the window the user sees. It owns this copy and must
+        // deliver exactly one snapshot result. No hook means the WebKit image stands.
+        if (zwaiAfterProbeSnapshot != NULL) {
+            unsigned char *probe = malloc(sizeof(pixels));
+            if (probe == NULL) {
+                desktopSnapshotResult(request, 0, pixels, sizeof(pixels));
+                return;
+            }
+            memcpy(probe, pixels, sizeof(pixels));
+            zwaiAfterProbeSnapshot(native, request, probe, (int)sizeof(pixels));
+            return;
+        }
         desktopSnapshotResult(request, 0, pixels, sizeof(pixels));
     }];
     [configuration release];

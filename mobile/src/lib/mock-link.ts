@@ -1,4 +1,5 @@
 import { MockProjects } from "./mock-projects"
+import { MockSpeech } from "./mock-speech"
 import { mockFileChunk, mockListedFiles, mockOutputFiles } from "./mock-files"
 import { iterationLimitHistory, iterationSnapshotOnly, mockAwaitingContinue, mockContinueIteration } from "./mock-iteration-limit"
 import { restartAskHistory } from "./mock-ask-restart"
@@ -742,6 +743,7 @@ export function resetMockHost() {
 
 /** One socket onto the walkthrough host. */
 export class MockLink {
+  private speech = new MockSpeech()
   path = "direct"
   onPush?: (resp: RemoteResponse) => void
   onDisconnect?: (err: Error) => void
@@ -758,6 +760,7 @@ export class MockLink {
   }
 
   close() {
+    this.speech.close()
     this.closed = true
     if (this.watcher) this.host.unwatch(this.watcher)
     this.watcher = null
@@ -773,6 +776,7 @@ export class MockLink {
   ): Promise<RemoteResponse> {
     if (this.closed) throw new Error("offline")
     const id = req.id ?? ""
+    if (this.speech.accepts(req)) return this.ok({ id, ...await this.speech.handle(req) })
     const thread = () => this.host.find(req.thread_id ?? "")
     if (req.op.startsWith("project_")) return this.host.projects.handle(req)
     switch (req.op) {

@@ -36,6 +36,7 @@ import type {
 } from "./types"
 import { defaultClientsSettings, defaultRemoteSettings, defaultSearchSettings } from "./types"
 import { normalizeUISettings } from "./appearance"
+import { defaultSpeechSettings } from "./speech-types"
 import type { ClientCatalog } from "./local-clients"
 import type { SendImage } from "./paste-image"
 import type { ThreadLog } from "./thread-log"
@@ -266,6 +267,14 @@ async function requestResponse(path: string, init?: RequestInit): Promise<Respon
   return res
 }
 
+function translateSelection(id: string, text: string, signal: AbortSignal): Promise<{ text: string }> {
+  return request<{ text: string }>(`/api/threads/${id}/translation`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+    signal,
+  })
+}
+
 async function askSideChat(
   id: string,
   body: { question: string; quote?: string; history?: SideChatExchange[]; provider_id?: string; model?: string },
@@ -334,6 +343,7 @@ function withToolLists(s: Settings): Settings {
     remote: defaultRemoteSettings(s.remote),
     search: defaultSearchSettings(s.search),
     clients: defaultClientsSettings(s.clients),
+    speech: defaultSpeechSettings(s.speech),
   }
 }
 
@@ -700,8 +710,7 @@ export const api = {
   },
 
   askSideChat,
-  decideThread: (id: string) =>
-    request<{ text: string }>(`/api/threads/${id}/decision`, { method: "POST" }).then((r) => r.text),
+  translateSelection,
   startTurn: (
     id: string,
     text: string,

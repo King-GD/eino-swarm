@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// errCustomModelsDisabled is a model-settings write while the install is FOFA.
+// errCustomModelsDisabled refuses edits to a gateway-managed model preset.
 var errCustomModelsDisabled = errors.New("model settings cannot be changed in this mode")
 
 // rejectSignedOut blocks work that starts a model turn while a FOFA install
@@ -27,7 +27,7 @@ func (s *Server) rejectSignedOut(c *gin.Context) bool {
 		return false
 	}
 	state := s.remote.AccountModels().State
-	if state != "" && state != remote.AccountSignedOut {
+	if state == remote.AccountReady {
 		return false
 	}
 	c.JSON(http.StatusForbidden, gin.H{
@@ -37,13 +37,13 @@ func (s *Server) rejectSignedOut(c *gin.Context) bool {
 	return true
 }
 
-// rejectCustomModels blocks provider edits and discovery in FOFA, including
-// the scripted provider. LOCAL is the install that can change them.
+// rejectCustomModels blocks provider edits and discovery unless the current
+// execution source permits them. LOCAL and editable gateway accounts do.
 func (s *Server) rejectCustomModels(c *gin.Context) bool {
 	if s == nil || s.engine == nil || s.engine.Config() == nil {
 		return false
 	}
-	if !s.engine.Config().Snapshot().Product.FOFA() {
+	if s.engine.Providers().ModelPolicy().Configurable {
 		return false
 	}
 	c.JSON(http.StatusForbidden, gin.H{

@@ -105,7 +105,7 @@ export function ModelPicker({
         {models.length === 0 ? <p className="px-3 py-3 text-sm text-muted-foreground">{t("composer.noModels")}</p> : null}
         <div role="radiogroup" aria-label={t("composer.model")} className="min-h-0 overflow-y-auto overscroll-contain px-2 py-2">
           {groups.map((group) => (
-            <div key={group.id}>
+            <div key={group.id} role="group" aria-label={group.label}>
               <h3 className="px-3 py-2 text-xs font-semibold text-muted-foreground">{group.label}</h3>
               {group.rows.map((row) => {
                 const selected = row.provider_id === providerId && row.model === model

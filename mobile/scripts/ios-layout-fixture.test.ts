@@ -123,3 +123,24 @@ it("refuses a scenario path outside the reviewed mobile e2e directory", () => {
   expect(run.status).not.toBe(0)
   expect(run.stderr).toContain("reviewed e2e Swift file")
 })
+
+it("selects an explicit phone mode only in the private native wrapper", () => {
+  const f = fixture()
+  const run = spawnSync("python3", [f.script], { encoding: "utf8", env: {
+    ...process.env, TMPDIR: f.root, IOS_LAYOUT_PUBLIC: f.ipa, IOS_LAYOUT_PRESERVE_PUBLIC: "1", IOS_LAYOUT_PHONE_MODE: "local",
+  } })
+  expect(run.status, run.stderr).toBe(0)
+  const app = path.join(run.stdout.trim(), "mobile/ios/App/App")
+  for (const [name, bytes] of Object.entries(f.files)) expect(readFileSync(path.join(app, "public", name))).toEqual(bytes)
+  expect(readFileSync(path.join(app, "BridgeViewController.swift"), "utf8")).toContain("zwai.phone.mode")
+  expect(readFileSync(path.join(f.app, "BridgeViewController.swift"), "utf8")).not.toContain("zwai.phone.mode")
+})
+
+it("rejects an unknown phone mode rather than silently selecting another product path", () => {
+  const f = fixture()
+  const run = spawnSync("python3", [f.script], { encoding: "utf8", env: {
+    ...process.env, TMPDIR: f.root, IOS_LAYOUT_PUBLIC: f.ipa, IOS_LAYOUT_PRESERVE_PUBLIC: "1", IOS_LAYOUT_PHONE_MODE: "invalid",
+  } })
+  expect(run.status).not.toBe(0)
+  expect(run.stderr).toContain("IOS_LAYOUT_PHONE_MODE")
+})

@@ -523,7 +523,7 @@ function AppShell() {
         ) : null}
       </ShellColumns>
 
-      <SelectionMenu key={`${activeId ?? ""}:${side.owner ?? ""}`} onAdd={addQuote} onAsk={side.fromQuote} />
+      <SelectionMenu key={`${activeId ?? ""}:${side.owner ?? ""}`} threadId={activeId ?? undefined} onAdd={addQuote} onAsk={side.fromQuote} />
 
       <AppPalette
         open={paletteOpen}

@@ -1,6 +1,7 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { App } from "@/app"
+import { GatewayAccountShell, usePhoneAccount } from "./gateway-account-shell"
 import type { useGatewayAccount } from "@/lib/use-gateway-account"
 import { saveThreads, newThread } from "@/lib/direct-threads"
 import { openSaved } from "@/lib/client"
@@ -8,6 +9,7 @@ import { saveLink } from "@/lib/store"
 import { saveProviders } from "@/lib/direct-provider"
 import { GatewayError, saveGatewaySession } from "@/lib/gateway-account"
 import { setLocale, t } from "@/lib/i18n"
+import { MockHost, MockLink } from "@/lib/mock-link"
 
 const mocks = vi.hoisted(() => ({ account: {} as ReturnType<typeof useGatewayAccount>, discover: vi.fn() }))
 vi.mock("@/lib/client", async (original) => ({ ...await original<typeof import("@/lib/client")>(), openSaved: vi.fn() }))
@@ -30,7 +32,7 @@ describe("gateway account shell", () => {
     saveLink({ hubURL: "https://relay.invalid", ticket: "ticket", hostPub: "pub", sessionID: "session", fingerprint: "local-pc", ...metadata })
     mocks.account = { ...mocks.account, status: "authorized", session, bootstrap }
     render(<App />)
-    await waitFor(() => expect(screen.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true"))
+    await screen.findByTestId("pc-wait")
     expect(openSaved).not.toHaveBeenCalled()
     expect(screen.queryByRole("tab", { name: "local-pc" })).not.toBeInTheDocument()
     expect(localStorage.getItem("zwai.remote.links")).toContain("ticket")
@@ -47,10 +49,35 @@ describe("gateway account shell", () => {
     expect(openSaved).toHaveBeenCalledWith(saved)
   })
 
+  it("preserves the account conversation draft across a disconnected transport and its replacement", async () => {
+    const host = new MockHost(0), first = new MockLink(host)
+    let reconnect!: () => void
+    saveLink({ hubURL: session.origin, ticket: "ticket", hostPub: "pub", sessionID: "session", fingerprint: "account-pc", gatewayOrigin: session.origin, gatewayOwnerID: session.user.id, gatewayMobileID: session.device.id, gatewayHostID: "host" })
+    saveGatewaySession(session)
+    mocks.account = { ...mocks.account, status: "authorized", session, bootstrap }
+    vi.mocked(openSaved).mockResolvedValueOnce(first as never).mockImplementationOnce(() => new Promise(resolve => { reconnect = () => resolve(new MockLink(host) as never) }))
+    const page = render(<App />)
+    try {
+      const input = await screen.findByRole("textbox", { name: /^Message$/ })
+      fireEvent.change(input, { target: { value: "Continue after the computer reconnects" } })
+      const history = screen.getByTestId("transcript").textContent
+      act(() => { first.close(); first.onDisconnect?.(new Error("offline")) })
+      expect(await screen.findByTestId("pc-wait")).toBeVisible()
+      expect(screen.queryByRole("textbox", { name: /^Message$/ })).not.toBeInTheDocument()
+      expect(input).not.toBeVisible()
+      await act(async () => reconnect())
+      await waitFor(() => expect(input).toBeVisible())
+      expect(screen.getByRole("textbox", { name: /^Message$/ })).toBe(input)
+      expect(input).toHaveValue("Continue after the computer reconnects")
+      expect(screen.getByTestId("transcript").textContent).toBe(history)
+      expect(mocks.discover).not.toHaveBeenCalled()
+    } finally { page.unmount(); host.stop() }
+  })
+
   it("revokes the main UI immediately on logout and retains the default gate after remount", async () => {
     mocks.account = { ...mocks.account, status: "authorized", session, bootstrap }
     const view = render(<App />)
-    await screen.findByRole("tab", { name: "Chat" })
+    await screen.findByTestId("pc-wait")
     mocks.account = { ...mocks.account, status: "signed_out", session: null, bootstrap: undefined }
     view.rerender(<App />)
     expect(screen.queryByRole("tab", { name: "Chat" })).not.toBeInTheDocument()
@@ -60,19 +87,38 @@ describe("gateway account shell", () => {
     expect(screen.queryByLabelText("Message")).not.toBeInTheDocument()
   })
 
-  it("counts touch releases once when the browser also synthesizes clicks", () => {
+  it.each([0, 1])("counts touch releases once when the browser synthesizes clicks with detail=%i", (detail) => {
     render(<App />)
     const portrait = screen.getByTestId("account-portrait")
     const tap = () => {
       const event = new Event("pointerup", { bubbles: true })
       Object.defineProperties(event, { pointerType: { value: "touch" }, isPrimary: { value: true } })
       fireEvent(portrait, event)
-      fireEvent.click(portrait, { detail: 1 })
+      fireEvent.click(portrait, { detail })
     }
     tap(); tap()
     expect(localStorage.getItem("zwai.phone.mode")).toBeNull()
     tap()
     expect(localStorage.getItem("zwai.phone.mode")).toBe("local")
+  })
+
+  it("closes User center after the debug mode changes and keeps the account signed in", async () => {
+    localStorage.setItem("zwai.phone.mode", "local")
+    mocks.account = { ...mocks.account, status: "authorized", session, bootstrap }
+    function Menu() {
+      const { openAccount, mode } = usePhoneAccount()
+      return <button data-mode={mode} onClick={() => openAccount?.()}>Open user center</button>
+    }
+    render(<GatewayAccountShell><Menu /></GatewayAccountShell>)
+    fireEvent.click(screen.getByRole("button", { name: "Open user center" }))
+    const dialog = screen.getByRole("dialog", { name: "User center" })
+    const portrait = within(dialog).getByTestId("account-portrait")
+    fireEvent.click(portrait); fireEvent.click(portrait); fireEvent.click(portrait)
+    expect(localStorage.getItem("zwai.phone.mode")).toBe("account")
+    expect(screen.queryByRole("dialog", { name: "User center" })).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Open user center" })).toHaveAttribute("data-mode", "account")
+    expect(mocks.account.logout).not.toHaveBeenCalled()
+    expect(mocks.discover).toHaveBeenCalledOnce()
   })
 
   it("expires an incomplete avatar gesture and permits an explicit Local choice from the login screen", () => {
@@ -102,21 +148,16 @@ describe("gateway account shell", () => {
   it("hides local menus and switches mode after three portrait clicks", async () => {
     mocks.account = { ...mocks.account, status: "authorized", session, bootstrap }
     render(<App />)
-    await waitFor(() => expect(screen.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true"))
+    await screen.findByTestId("pc-wait")
     expect(screen.queryByRole("button", { name: "Model" })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole("button", { name: "Menu" }))
     for (const name of ["Models", "Add a PC", "Unlink"]) expect(screen.queryByRole("menuitem", { name })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole("menuitem", { name: "User center" }))
     const portrait = screen.getByTestId("account-portrait")
     fireEvent.click(portrait); fireEvent.click(portrait)
     expect(localStorage.getItem("zwai.phone.mode")).toBeNull()
     fireEvent.click(portrait)
     expect(localStorage.getItem("zwai.phone.mode")).toBe("local")
-    fireEvent.click(screen.getByRole("button", { name: "Close" }))
-    fireEvent.click(screen.getByRole("button", { name: "Menu" }))
-    expect(screen.getByRole("menuitem", { name: "Models" })).toBeVisible()
-    fireEvent.click(screen.getByRole("menuitem", { name: "User center" }))
-    fireEvent.click(screen.getByTestId("account-portrait")); fireEvent.click(screen.getByTestId("account-portrait")); fireEvent.click(screen.getByTestId("account-portrait"))
+    expect(screen.getByRole("button",{name:"Other ways"})).toBeVisible()
+    fireEvent.click(screen.getByTestId("account-portrait"));fireEvent.click(screen.getByTestId("account-portrait"));fireEvent.click(screen.getByTestId("account-portrait"))
     expect(localStorage.getItem("zwai.phone.mode")).toBe("account")
   })
 
@@ -157,7 +198,7 @@ describe("gateway account shell", () => {
     render(<App />)
     expect(screen.getByRole("heading", { name: "User center" })).toBeVisible()
     expect(screen.getByRole("heading", { name: "Your computers" })).toBeVisible()
-    expect(screen.getByText("API access is unavailable. Contact an administrator.")).toBeVisible()
+    expect(screen.getByTestId("pc-wait")).toBeVisible()
     expect(screen.queryByRole("button", { name: "Scan QR" })).not.toBeInTheDocument()
     expect(mocks.discover).not.toHaveBeenCalled()
   })
@@ -229,60 +270,54 @@ describe("gateway account shell", () => {
     if (username !== expected) expect(screen.queryByText(username, { exact: true })).not.toBeInTheDocument()
   })
 
-  it("retains own server history for an API-disabled approved account and hides another account's history", async () => {
-    const own = newThread({ providerId: "gateway:owner", model: "shared-model", reasoning: "" }); own.title = "Own history"
-    const other = newThread({ providerId: "gateway:other", model: "shared-model", reasoning: "" }); other.title = "Other account history"
-    saveThreads([own, other])
-    mocks.account = { ...mocks.account, status: "authorized", session, bootstrap: { ...bootstrap, models: { ...bootstrap.models, api_access_enabled: false } } }
+  it("retains direct history without exposing or executing it in gateway mode", async () => {
+    const own = newThread({providerId:"gateway:owner",model:"shared-model",reasoning:""}); own.title="Own history"
+    saveThreads([own])
+    mocks.account={...mocks.account,status:"authorized",session,bootstrap}
     render(<App />)
-    fireEvent.click(screen.getByRole("button", { name: "Chat history" }))
-    expect(await screen.findByText("Own history")).toBeVisible()
-    expect(screen.queryByText("Other account history")).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole("button", { name: "Open Own history" }))
-    expect(screen.getByLabelText("Message")).toBeDisabled()
+    expect(await screen.findByTestId("pc-wait")).toBeVisible()
+    expect(screen.queryByRole("button",{name:"Chat history"})).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Message")).not.toBeInTheDocument()
+    expect(localStorage.getItem("zwai.phone.directThreads")).toContain("Own history")
     expect(mocks.discover).not.toHaveBeenCalled()
   })
 
-  it("automatically makes server models usable without a PC and keeps credential out of personal settings", async () => {
-    mocks.account = { ...mocks.account, status: "authorized", session, bootstrap }
+  it("requires a PC despite a usable gateway catalog and ignores direct execution events", async () => {
+    mocks.account={...mocks.account,status:"authorized",session,bootstrap}
     render(<App />)
-    await screen.findByRole("tab", { name: "Chat" })
-    expect(screen.queryByRole("button", { name: "Scan QR" })).not.toBeInTheDocument()
-    expect(mocks.discover).toHaveBeenCalledWith(expect.objectContaining({ id: "gateway:owner", apiKey: session.token, baseURL: "https://gateway.invalid/v1" }))
+    expect(await screen.findByTestId("pc-wait")).toBeVisible()
+    for(const name of ["chat","models","scan"]) await act(async()=>{window.dispatchEvent(new Event("zwai.gateway."+name))})
+    expect(screen.queryByLabelText("Message")).not.toBeInTheDocument()
+    expect(screen.queryByRole("dialog",{name:"Models"})).not.toBeInTheDocument()
+    expect(mocks.discover).not.toHaveBeenCalled()
     expect(localStorage.getItem("zwai.phone.providers")).toBeNull()
-    expect(screen.queryByRole("button", { name: "Model" })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole("button", { name: "User center" }))
-    fireEvent.click(screen.getByTestId("account-portrait")); fireEvent.click(screen.getByTestId("account-portrait")); fireEvent.click(screen.getByTestId("account-portrait"))
-    fireEvent.click(screen.getByRole("button", { name: "Close" }))
-    fireEvent.click(await screen.findByRole("button", { name: "Model" }))
-    expect(screen.getByRole("heading", { name: "Server · Team" })).toBeVisible()
-    expect(screen.getByRole("radio", { name: "shared-model" })).toBeVisible()
     expect(document.body.textContent).not.toContain(session.token)
   })
 
-  it("shows the official name and does not ask for model ids", async () => {
+  it("shows the signed-in Gateway models beside personal models in LOCAL", async () => {
     localStorage.setItem("zwai.phone.mode", "local")
-    const marker = "profile guidance marker 1842"
-    // The stored profile drops instruction. The fixture still sends it so the
-    // screen can prove that guidance never becomes a model id prompt.
-    const profile = { label: "Partner model", instruction: marker, tools: ["read"] }
-    mocks.account = {
-      ...mocks.account, status: "authorized", session,
-      bootstrap: { ...bootstrap, models: { ...bootstrap.models, profile } },
-    }
+    saveGatewaySession(session)
+    saveProviders([{ id: "private", label: "Personal", baseURL: "https://private.invalid/v1", apiKey: "private-secret", api: "chat", model: "shared-model", catalog: ["shared-model"], timeoutSeconds: 300 }])
+    mocks.account = { ...mocks.account, status: "authorized", session, bootstrap }
     render(<App />)
-    await screen.findByRole("tab", { name: "Chat" })
+    fireEvent.click(await screen.findByRole("button", { name: /^Model$/ }))
+    expect(await screen.findByRole("heading", { name: "Gateway · Team" })).toBeVisible()
+    expect(screen.getByRole("heading", { name: "Personal" })).toBeVisible()
+    expect(screen.getAllByRole("radio", { name: "shared-model" })).toHaveLength(2)
+    expect(localStorage.getItem("zwai.phone.providers")).not.toContain(session.token)
+  })
+
+  it("groups a retained third-party profile in LOCAL without importing its credential", async () => {
+    localStorage.setItem("zwai.phone.mode","local")
+    saveGatewaySession(session)
+    mocks.account={...mocks.account,status:"authorized",session,bootstrap:{...bootstrap,models:{...bootstrap.models,profile:{label:"Partner model",tools:["read"]}}}}
+    render(<App />)
+    fireEvent.click(await screen.findByRole("button",{name:/^Model$/}))
+    expect(await screen.findByRole("heading",{name:"Third-party · Partner model"})).toBeVisible()
+    expect(screen.getByRole("radio",{name:"Partner model"})).toBeVisible()
     expect(mocks.discover).not.toHaveBeenCalled()
-    expect(screen.getByRole("button", { name: "Model" })).toHaveTextContent("Partner model")
-    fireEvent.click(screen.getByRole("button", { name: "Model" }))
-    expect(screen.queryByRole("dialog", { name: "Model" })).not.toBeInTheDocument()
-    expect(document.body.textContent).not.toContain("shared-model")
-    expect(document.body.textContent).not.toContain(marker)
-    fireEvent.click(screen.getByRole("button", { name: "Menu" }))
-    fireEvent.click(screen.getByRole("menuitem", { name: "Models" }))
-    expect(screen.getByRole("radio", { name: "Official model" })).toBeChecked()
-    expect(screen.queryByRole("button", { name: "Add a model" })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole("radio", { name: "All models" }))
+    expect(localStorage.getItem("zwai.phone.providers")).toBeNull()
+    expect(screen.queryByRole("radio",{name:"All models"})).not.toBeInTheDocument()
   })
 
   it("opens default-server sign-in without asking for server configuration and Android Back closes its overlay", async () => {
@@ -318,10 +353,8 @@ describe("gateway account shell", () => {
       { id: "pc-offline", name: "Home PC", hostname: "home", version: "1", online: false, enabled: true },
     ], connectHost: vi.fn(async () => { throw new Error("fixture keeps the account page visible") }) }
     render(<App />)
-    await screen.findByRole("tab", { name: "Chat" })
-    await waitFor(() => expect(screen.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true"))
-    fireEvent.click(screen.getByRole("button", { name: "Menu" }))
-    fireEvent.click(screen.getByRole("menuitem", { name: "User center" }))
+    await screen.findByTestId("pc-wait")
+    await screen.findByTestId("pc-wait")
     expect(screen.getByRole("button", { name: "Connect Home PC" })).toBeDisabled()
     fireEvent.click(screen.getByRole("button", { name: "Connect Work PC" }))
     await waitFor(() => expect(mocks.account.connectHost).toHaveBeenCalledWith("pc-online"))

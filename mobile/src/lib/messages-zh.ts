@@ -1,8 +1,12 @@
 import { accountZh } from "./messages-account"
+import { pcWaitZh } from "./messages-pc-wait"
 import { generationZh } from "./messages-generation"
+import { speechZh } from "./messages-speech"
 import type { MessageKey } from "./messages-en"
 
 export const zh: Record<MessageKey, string> = {
+  ...pcWaitZh,
+  ...speechZh,
   ...accountZh,
   "startup.failed": "有 {failed} 个会话恢复失败，请查看 Trace 或日志。",
   "startup.restoring": "正在恢复未完成任务 {completed}/{total}",
@@ -282,6 +286,7 @@ export const zh: Record<MessageKey, string> = {
 
   "notice.goalCompleted": "目标已完成。",
 
+  "goal.mode": "目标模式",
   "goal.pursuing": "进行中",
   "goal.paused": "已暂停",
   "goal.blocked": "已卡住",

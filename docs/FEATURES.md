@@ -15,6 +15,7 @@ This is the current user-facing capability map. The code and tests named below a
     - `F-145` Durable composer drafts
     - `F-146` Next-step composer suggestions
     - `F-147` Temporary task side chat
+    - `F-148` Voice input and spoken answers
     - `F-150` Goals and scheduled waits
     - `F-160` Trace and diagnostics
     - `F-170` Settings and providers
@@ -24,6 +25,7 @@ This is the current user-facing capability map. The code and tests named below a
     - `F-175` Provider cloud built-in tools
     - `F-176` External MCP tools
     - `F-180` PC text quoting
+    - `F-181` Selection reading and translation
     - `F-190` Desktop updates
   - `F-200` Phone
     - `F-210` Pair a phone with a PC
@@ -46,6 +48,12 @@ This is the current user-facing capability map. The code and tests named below a
     - `F-421` External Agent Skills packages
     - `F-422` Local backup and restore
     - `F-430` Build and release paths
+
+### F-148 Voice input and spoken answers
+
+- 目的：在桌面、Web、iOS 和 Android 听写可编辑草稿并朗读完成回复。入口：PC Settings → Voice、Send 左侧麦克风及 Copy 旁 Read aloud；输入：录音或完成回复正文；输出：草稿文本或音频；前置条件：对应开关开启且配置就绪；失败表现：保留草稿、显示可重试错误。Input and output are independently off by default. Dictation never sends automatically or overwrites text edited while recognition was pending. Read aloud skips fenced code and diagrams and sequences long prose in order. The PC selection menu uses that same player for settled prose when spoken output is enabled and ready (`F-181`).
+- Paired phones synchronize the explicitly selected PC's non-secret voice settings and execute only while its exact link is live and engine ready. Gateway audio uses the phone's current same-origin Mobile login; PC-local audio uses encrypted RPC. Disconnect cancels owned audio requests and Account mode returns to PC guidance. LOCAL direct Chat has independent voice selections referencing personal providers. Missing configuration, authorization or microphone capability leaves the affected control unavailable; failures never select another PC or service.
+- 关联契约：`C-048`。实现证据：`internal/speech`, `internal/server/speech.go`, `internal/remote/speech.go`, `frontend/src/components/app/settings-speech.tsx`, `mobile/src/lib/phone-speech.ts`。验证证据：`internal/speech/service_test.go`, `internal/server/speech_http_test.go`, `internal/remote/speech_rpc_test.go`, `frontend/src/lib/speech-media.test.ts`, `mobile/src/lib/speech-cache.test.ts`, `mobile/src/lib/speech-transport.test.ts`. Native recording and playback acceptance is distinct from these headless checks.
 
 ### F-110 Desktop, browser, and terminal shells
 
@@ -70,9 +78,9 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-115 Bounded native renderer recovery
 
-- 故障诊断：重载／替换前向原异步诊断通道发出最后探针边界和已知年龄，区分回调缺失、位置待恢复、截图待回、截图错误及像素不匹配。继任等待首次绘制时向同一 journal 提前报告自己的探针边界，便于在父进程截止前定位停在哪一步。继任错误保留启动前／attach／ready 后提交前阶段和安全 lease HTTP 分类，不记录原生错误正文、URL 或响应内容。该分类不等于已定位 GPU／JS 根因。证据：`internal/desktop/recovery_diagnostic_runtime_test.go`、`internal/lease/discover_diagnostics_test.go`、`cmd/zwai/desktop_recovery_phase_diagnostics_test.go`；契约：`C-034`、`C-001`、`C-012`。
+- 故障诊断：重载／替换前向原异步诊断通道发出最后探针边界和已知年龄，区分回调缺失、位置待恢复、截图待回、截图错误、像素不匹配，以及窗口正文呈现为纯色。继任等待首次绘制时向同一 journal 提前报告自己的探针边界，便于在父进程截止前定位停在哪一步。继任错误保留启动前／attach／ready 后提交前阶段和安全 lease HTTP 分类，不记录原生错误正文、URL 或响应内容。该分类不等于已定位 GPU／JS 根因。证据：`internal/desktop/recovery_diagnostic_runtime_test.go`、`internal/lease/discover_diagnostics_test.go`、`cmd/zwai/desktop_recovery_phase_diagnostics_test.go`；契约：`C-034`、`C-001`、`C-012`。
 - 目的：在 macOS WebContent 活挂、绘图失效或白屏时恢复可用窗口；使用者：桌面用户；入口：`zwai desktop` 的原生恢复控制循环；输入：同源、主 frame、当前 challenge 响应与实际截图像素；输出：一次重载，必要时附着原引擎的继任窗口；前置条件：引擎租约可验证、恢复副本与诊断目录可写；失败表现：有界尝试耗尽后的原生错误提示及保留诊断；关联契约：`C-034`, `C-001`, `C-012`, `C-033`；实现证据：`internal/desktop/recovery.go`, `internal/desktop/recovery_state.go`, `internal/desktop/recovery_snapshot_darwin.m`, `cmd/zwai/desktop_recovery_darwin.go`, `internal/desktop/recovery_test.go`, `cmd/zwai/desktop_recovery_test.go`。
-- 健康条件包含本次随机探针的真实像素；HTTP、JS 响应或动画帧不单独算绘制成功。失焦、最小化、睡眠与唤醒有检测暂停／宽限。
+- 健康条件包含本次随机探针的真实像素；HTTP、JS 响应或动画帧不单独算绘制成功。窗口可见时，正文呈现为纯色也记为失败并沿用同一次重载与继任；截取失败、窗口不可见或系统拒绝时不把未知画面当成白屏。该判定和前台预算由 `models/desktop/RendererRecovery.tla` 检查。失焦、最小化、睡眠与唤醒有检测暂停／宽限。
 - 继任失败后若还有预算，原窗口在重试延迟后重新探测。只有新的前台绘制探针失败才允许再次替换；该探针的 20 秒健康期从实际派发计时，不被已排队 tick 提前耗尽。最后一次失败耗尽预算，只提示一次。回归见 `internal/desktop/recovery_test.go`、`internal/desktop/recovery_runtime_test.go`、`internal/desktop/recovery_dispatch_clock_test.go`。
 - 焦点诊断：父进程的协调入口保留有界 guard 原因、已采样父子身份／激活策略与请求结果，未读取谓词保持 unknown。日志不证明系统已激活窗口，不新增恢复 journal 阶段或延长截止；证据：`internal/desktop/recovery_focus.go`、`internal/desktop/recovery_focus_darwin.m`、`internal/desktop/recovery_focus_test.go`、`tools/test_native_macos_recovery_focus.py`；契约：`C-034`、`C-012`。
 - 探针不出现在用户画面：首次绘制前在 WebView 同级安装不接收输入、对辅助功能隐藏的原生不透明遮挡，跟随页面左上角背景；WebView 自身截图仍校验完整随机像素。主题、配色和弹窗变化同步底色；已有遮挡时短暂采色失败不停止健康检测。证据：`internal/desktop/recovery_cover.go`、`internal/desktop/recovery_cover_test.go`、`internal/desktop/recovery_snapshot_darwin.m`、`tools/test_native_macos_render_cover.py`、`frontend/e2e/render-probe-cover.spec.ts`；契约：`C-034`。
@@ -233,6 +241,8 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-150 Goals and scheduled waits
 
+- 手机目标模式：未完成目标条明确标注“目标模式”，在主对话、子 Agent 列表、worker 日志与产出物页面保持可见；恢复目标按钮仍仅在主对话提供。完成或清除目标后收起。关联契约：`C-009`；证据：`mobile/src/components/status-banners.tsx`、`mobile/src/components/thread-screen.tsx`、`mobile/src/components/goal-mode.test.tsx`、`mobile/e2e/goal-mode.spec.ts`。
+
 - 暂停状态的含义：PC 与手机目标条明确显示“自动执行已暂停”和自动执行暂停原因；时间标为“目标设立至今”，从 `goal_started_at` 累计，包含暂停期间。后续普通手动答复不会解除既有目标暂停；显式恢复、目标完成、清除或重新设定目标按各自回执更新状态；实际可用的 Start 控件旁才显示恢复操作提示。无恢复入口时仍显示已记录的暂停原因。关联契约：`C-009`；实现／验证：`frontend/src/components/app/goal-banner.tsx`、`frontend/src/components/app/goal-banner.test.tsx`、`frontend/e2e/goal-pause.spec.ts`、`mobile/src/components/status-banners.tsx`、`mobile/src/components/goal-pause-meaning.test.tsx`、`mobile/src/lib/goal-pause.test.ts`、`mobile/e2e/goal-pause.spec.ts`；来源：Issue #131。
 
 - 最后一轮自动续跑且无活动同对话 wake 时，Goal 明确要求本轮收齐或显式放弃 pending worker，不能承诺下一自动轮接管；历史 finished 与 running 分组提示。运行代完成唤醒遵循 `C-019` 的每 turn 一次额度及重启身份边界。证据：`internal/engine/prompt_goal_worker.go`、`internal/engine/worker_completion_wake_test.go`。
@@ -291,28 +301,26 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-171 Official server first: sign-in, welcome and account models
 
-- 目的：默认体验以官方服务器为主，登录后即可使用其模型、手机连接和云端联网工具，无需手填端点或密钥；自配的第三方模型服务在 `local` 安装里继续完整支持，是并列的次要路径。FOFA 安装见 `F-173`。使用者：PC 用户；入口：首次启动的欢迎对话框、Settings → Models 顶部的官方服务器卡片、未配置横幅、输入框模型选择器的账号分组、`F-210` 的 Account 菜单；输入：Gateway 浏览器登录（沿用 `F-210` 的设备登录）和用户对欢迎的选择；输出：Go 以私有设备凭据调用服务器的桌面模型接口读取目录，账号模型作为仅存内存的临时 provider（id `gateway:<hex>`，`source:account`）排在自配服务之前，`/api/meta.account_models` 向界面提供状态、总数、类型计数、嵌入模型名和原因，不含凭据或端点；前置条件：服务器地址来自 `remote.hub_url`（Go 默认值，Settings 可改），前端不硬编码；失败表现：`pending`／`no_access`／`unavailable`（含 `reason`）分别在卡片和欢迎里说明，不暴露凭据或端点，不影响自配服务。关联契约：`C-040`、`C-009`、`C-006`、`C-013`；实现证据：`internal/config/default_source.go`、`internal/provider/account_source.go`、`internal/remote/account_models.go`、`internal/server/settings.go`、`frontend/src/lib/account-models.ts`、`frontend/src/components/app/welcome-gate.tsx`、`frontend/src/components/app/account-models-card.tsx`、`frontend/src/components/app/account-sign-in.tsx`、`models/account/DefaultSourceChoice.tla`；验证：`internal/config/default_source_test.go`、`internal/provider/account_source_test.go`、`internal/remote/account_models_test.go`、`internal/remote/host_account_models_test.go`、`internal/server/account_models_http_test.go`、`frontend/src/components/app/welcome-gate.test.tsx`、`frontend/src/components/app/account-models-card.test.tsx`、`frontend/src/components/app/configured-banner.test.tsx`、`frontend/e2e/account-welcome.spec.ts`。
+- 目的：默认体验以官方服务器为主，登录后即可使用其模型、手机连接和云端联网工具，无需手填端点或密钥；LOCAL 与普通可编辑 gateway 均支持自配 provider；第三方托管 gateway 只使用预置。默认登录与调试入口见 `F-173`。使用者：PC 用户；入口：首次启动的欢迎对话框、Settings → Models 顶部的官方服务器卡片、未配置横幅、输入框模型选择器的账号分组、`F-210` 的 Account 菜单；输入：Gateway 浏览器登录（沿用 `F-210` 的设备登录）和用户对欢迎的选择；输出：Go 以私有设备凭据调用服务器的桌面模型接口读取目录，账号模型作为仅存内存的临时 provider（id `gateway:<hex>`，`source:account`）排在自配服务之前，`/api/meta.account_models` 向界面提供状态、总数、类型计数、嵌入模型名和原因，不含凭据或端点；前置条件：服务器地址来自 `remote.hub_url`（Go 默认值，Settings 可改），前端不硬编码；失败表现：`pending`／`no_access`／`unavailable`（含 `reason`）分别在卡片和欢迎里说明，不暴露凭据或端点，不影响自配服务。关联契约：`C-040`、`C-009`、`C-006`、`C-013`；实现证据：`internal/config/default_source.go`、`internal/provider/account_source.go`、`internal/remote/account_models.go`、`internal/server/settings.go`、`frontend/src/lib/account-models.ts`、`frontend/src/components/app/welcome-gate.tsx`、`frontend/src/components/app/account-models-card.tsx`、`frontend/src/components/app/account-sign-in.tsx`、`models/account/DefaultSourceChoice.tla`；验证：`internal/config/default_source_test.go`、`internal/provider/account_source_test.go`、`internal/remote/account_models_test.go`、`internal/remote/host_account_models_test.go`、`internal/server/account_models_http_test.go`、`frontend/src/components/app/welcome-gate.test.tsx`、`frontend/src/components/app/account-models-card.test.tsx`、`frontend/src/components/app/configured-banner.test.tsx`、`frontend/e2e/account-welcome.spec.ts`。
 - 首次启动欢迎：仅当没有可用模型（`configured=false`）、尚未回答过欢迎且不在 `restoring` 时出现。主操作是登录官方服务器，次要是「使用自己的模型服务」（保存回答后打开 Settings → Models）和「稍后再说」；两种回答都写入 `ui.welcome_dismissed`，刷新或重启不再弹出。登录成功或配置好任一模型服务会自动收起欢迎，无需回答。关掉对话框等同「稍后再说」，不会被困住。回答之后只要仍无可用模型，未配置横幅继续同时提供登录和设置自有模型两个入口。
-- 对话模型：服务器或自配目录带 `model_type` 时，输入框和手机选择器只列出 `chat` 与未分类的旧模型；`embedding`、`ocr`、`decisions` 不进入可选对话模型目录，也不会被自动选为新会话默认模型。目录没有该字段时保持原列表，不按名称推断。已经选中被隐藏模型的对话保留原名；显式保存为账号默认的名称被隐藏时，选择器将它标为不可用，请求仍沿用该名称。账号目录仍保留全部分类：官方卡片用类型计数代替模型名列表；嵌入模型选择器只列出 `embedding`；只有嵌入等非对话模型时账号仍为 `ready`，新会话回落到自配服务。
+- 对话模型：服务器或自配目录带 `model_type` 时，输入框和手机选择器只列出 `chat` 与未分类的旧模型；`embedding`、`ocr`、`decisions` 不进入可选对话模型目录，也不会被自动选为新会话默认模型。目录没有该字段时保持原列表，不按名称推断。已经选中被隐藏模型的对话保留原名；显式保存为账号默认的名称被隐藏时，选择器将它标为不可用，请求仍沿用该名称。账号目录仍保留全部分类：官方卡片用类型计数代替模型名列表，但不列出 `decisions`；嵌入模型选择器只列出 `embedding`；只有嵌入等非对话模型时账号仍为 `ready`，新会话回落到自配服务。
 - 模型来源：账号目录在登录／注销后及每 10 分钟刷新，只有账号变化才重新读取。`models.default_source`（`account`／`provider`）决定新会话先用谁：新配置默认 `account`，账号没有可对话模型时回落到 `models.default`；已有可用默认 provider 的旧配置或首启 `OPENAI_*` 迁移为 `provider`，升级不改变原用户的行为。`models.account_model` 记住服务器上的默认对话模型。非空时未指定模型的会话跟随它；名称离开目录后仍显示为不可用，请求继续使用该名称。空值时新建会话记下当时的第一个可对话名称，目录随后重排不再改变这次选择；已有的空模型会话在下次发送时记下输入框上的名称。省略保存时保留原值，过长拒绝。账号目录就绪后，「自己的模型服务」里的「服务器模型」展开后列出可对话模型；目录给出上下文长度时显示在模型名旁，只读。点选写入该字段，用「默认 / 设为默认」选择新对话来源；自配行的「默认」只在来源是 `provider` 且该行是 `models.default` 时出现。官方卡片上的「新对话默认使用」写同一个来源字段，简介按类型计数。账号模型没有编辑、密钥或端点输入；注销或失去权限后，已选账号模型的会话得到稳定的 `account_login_required`，不会改走同名自配服务。
-- 手机侧的登录优先首页、自动连接唯一在线电脑见 `F-211`；手机直连服务器模型见 `F-230`。
+- 手机 Account 登录后等待同账号 PC，ready 才工作；手机 LOCAL 的个人及授权账号来源直连见 `F-230`。
 - 同一条一 id 排障路径不变：账号模型的 turn 以 `gateway:` provider id 前缀标识来源，普通目录不新增事件类型，也不记录凭据。服务器下发官方档案时的名称、别名和工具名单见 `F-172`。
 
 ### F-172 Official model profile
 
-- 目的：服务器可以只给一个官方名称，由它按账号解析真实模型，并为本机回合附加指导、收窄工作区工具。使用者：已登录官方服务器的 PC 与手机用户；入口：Gateway bootstrap 的可选 `models.profile`，Settings → Models 的「模型列表」，手机直连的同一开关；输入：服务器给出的名称、可选指导、工作区工具允许名单和可选上下文长度，以及本机 `models.account_presentation`；输出：输入框只显示该名称，发往 Gateway 的模型字段为协议别名 `account`，官方来源的回合在固定主管规则之后、人格和项目指令之前追加指导，并按允许名单与本机开关的交集挂载工作区工具；前置条件：档案通过现有 bootstrap 校验；失败表现：空名称、名称超过 64 个字符、指导超过 8 KiB、未知或无法识别的重复工具名、非正数上下文长度使账号进入 `unavailable` / `unsafe_response`，不发布半份目录。关联契约：`C-046`、`C-040`；关联功能：`F-171`、`F-230`。
+- 目的：服务器可以只给一个官方名称，由它按账号解析真实模型，并为本机回合附加指导、收窄工作区工具。使用者：已登录官方服务器的 PC 与手机用户；入口：Gateway bootstrap 的可选 `models.profile` 与 model_policy；输入：服务器名称、可选指导、工作区工具允许名单、上下文长度和配置权限；输出：输入框只显示该名称，发往 Gateway 的模型字段为协议别名 `account`，官方来源的回合在固定主管规则之后、人格和项目指令之前追加指导，并按允许名单与本机开关的交集挂载工作区工具；前置条件：档案通过现有 bootstrap 校验；失败表现：空名称、名称超过 64 个字符、指导超过 8 KiB、未知或无法识别的重复工具名、非正数上下文长度使账号进入 `unavailable` / `unsafe_response`，不发布半份目录。关联契约：`C-046`、`C-040`；关联功能：`F-171`、`F-230`。
 - 没有 `profile` 的账号保持 `F-171` 的目录。档案只存在内存，不写入 `config.yaml`，不进入 `models.providers`。`label` 由服务器提供，客户端不写死品牌或模型名。客户端不请求、不保存、不转发对话模型 id。更换服务器上的真实模型不需要新的客户端，也不改已有会话。
-- `models.account_presentation` 缺省为 `official`，也可为 `full`。空值表示 `official`，在用户明确保存之前不写回旧配置。`official` 时输入框不打开模型菜单；设置不列出服务器模型徽章、自配服务、辅助模型和账号嵌入模型名。从 `official` 改到 `full` 前先确认，说明切换后本机自己的模型没有这个账号的线上能力；取消则保持 `official`，切回 `official` 不再询问。新会话和发送走官方别名。会话上原来保存的自配 provider 保留，切回 `full` 后继续使用。`full` 恢复自配服务、辅助模型和本机嵌入选择；官方来源仍是一行档案名称。只有选中官方来源的回合才追加指导并应用工具名单。
+- 托管账号不展示模型配置或选择，也没有 Official／All models 开关。旧 account_presentation 只保留兼容解析，不能解锁其他目录。普通 gateway 的功能默认与编辑权限由 model_policy 提供；桌面 LOCAL 忽略账号档案，手机 LOCAL 可显示服务端独立授权的账号模型来源。历史个人选择保留，托管期间执行预置，切回 LOCAL 后可恢复。
 - 工具名单是 `read`、`write`、`edit`、`exec`、`web_search`、`web_fetch`、`python_runner`、`screenshot` 的子集。它只作用于官方来源，并与本机已有开关取交集。`spawn_agent`、提问、日程、目标和记忆保持挂载。名单存在时该回合不挂 MCP。缺省该字段表示不额外限制；空数组表示不挂工作区工具。`context_window` 缺省时沿用未知窗口。
-- 已配对手机执行在 PC 上，目录由 PC 过滤，不再做第二套开关。手机直连使用同一份 bootstrap，并在本机保存同一个展示开关，默认 `official`。直连只显示名称并发送别名 `account`；指导正文不保存在手机上，工作区工具名单由 PC 引擎执行。退出登录或档案消失后，内存中的指导、工具名单和别名绑定一并清除。此前写在 `models.account_model` 里的具体名称保留，但档案生效期间不显示、不发送。
+- 配对手机在 PC 执行，遵循 PC 过滤后的目录和 model_policy，没有第二个展示开关或网关直连模型。退出清除内存档案；个人设置保留。
 - `GET /api/meta` 的 `account_models.profile` 只含 `presentation`、是否有指导、以及在名单存在时的工具名。指导正文不进入 meta、设置、普通历史或单独事件。Trace 的 `account_profile` 记录名称、别名、工具名单和指导长度。实现证据：`internal/remote/account_profile.go`、`internal/provider/account_profile.go`、`internal/engine/prompt.go`、`internal/engine/history_tool.go`、`frontend/src/components/app/account-models-card.tsx`、`frontend/src/components/app/model-picker.tsx`、`mobile/src/lib/gateway-account.ts`、`mobile/src/components/provider-sheet.tsx`、`models/account/DefaultSourceChoice.tla`。验证：`internal/remote/account_profile_test.go`、`internal/provider/account_profile_test.go`、`internal/engine/account_profile_test.go`、`internal/server/account_models_http_test.go`、`frontend/src/components/app/account-models-card.test.tsx`、`frontend/e2e/official-profile.spec.ts`、`mobile/src/lib/gateway-account.test.ts`、`mobile/src/components/gateway-account-shell.test.tsx`、`mobile/src/components/provider-sheet.test.tsx`。
 
 ### F-173 FOFA install and local model controls
 
-- 目的：新安装默认是 FOFA。使用者必须登录后才能开始工作，不能改本机自配模型；切到 LOCAL 后，模型设置和输入框里的模型切换才出现。服务器如果返回固定模型角色，FOFA 只读展示最多 9 个开关和名称，对话请求使用 `conversation`，命名和压缩在各自角色关闭时跟随 `conversation`，嵌入、OCR 和决策只在打开时调用，语音识别、语音合成和图片生成只展示、不由客户端发起；旧服务器只返回前 6 个或 8 个角色时仍然可用。LOCAL 忽略这些角色。使用者：PC 用户，以及已配对、在这台 PC 上执行的手机；入口：账号详情里的头像、`config.yaml` 的 `product.mode`、`PUT /api/settings` 的 `product`；输入：空、`fofa` 或 `local`；输出：`GET /api/meta` 的 `product_mode` 恒为 `fofa` 或 `local`；前置条件：没有该键就是 FOFA；失败表现：FOFA 下改模型或发现模型返回 `403` `custom_models_disabled`，未登录就开始工作返回 `403` `login_required`，其它取值在读取或保存时拒绝。关联契约：`C-047`、`C-040`；关联功能：`F-170`、`F-171`、`F-220`。
-- 配置文件默认不写 `product`。`fofa` 与空值在保存时同样省略。只有 `local` 会写入。设置里没有这一项。桌面账号详情对话框里有头像（图片、名字首字或默认人像）。连续三次点击在 `local` 与 `fofa` 之间切换并刷新 meta。写回 `fofa` 后键再次省略。手改配置文件在下次加载时生效。
-- FOFA 隐藏 Settings 的 Models 和 PC 输入框的模型菜单。已配对手机上属于这台 PC 的新对话和会话也隐藏模型按钮。手机直连自己的模型不走这个开关。未登录时登录层盖住对话和输入，主列不能操作；欢迎不再提供「使用自己的模型服务」或「稍后再说」，登录层不挡住账号按钮。`--mock` 不要求登录，但仍拒绝改模型。Stop 和回答问题保持可用。已保存的自配 provider 留在文件里，切到 LOCAL 后还在。
-- 实现证据：`internal/config/product.go`、`internal/server/product_mode.go`、`internal/server/settings.go`、`internal/remote/host.go`、`internal/remote/account_models.go`、`internal/engine/model_roles.go`、`frontend/src/components/app/desktop-account-menu.tsx`、`frontend/src/components/app/welcome-gate.tsx`、`frontend/src/components/app/composer.tsx`、`mobile/src/components/composer.tsx`。验证：`internal/config/product_test.go`、`internal/server/product_mode_http_test.go`、`internal/remote/product_gate_test.go`、`internal/remote/account_models_test.go`、`frontend/src/components/app/desktop-account-menu.test.tsx`、`frontend/src/components/app/welcome-gate.test.tsx`、`frontend/src/components/app/composer.test.tsx`、`frontend/e2e/product-mode.spec.ts`。
+- 客户端区分 LOCAL 与 gateway，持久默认值仍为 fofa。默认必须登录且账号 ready；仅用户中心头像三击保留 LOCAL 调试入口，没有普通模式配置。切换要求 turn／worker／恢复／辅助模型请求全部空闲。桌面 LOCAL 使用个人 provider；手机 LOCAL 还聚合服务端分别授权的第三方预置和网关模型分组。普通 gateway 可配置 provider 和功能模型，未覆盖项跟随服务端更新，显式覆盖保持，恢复默认删覆盖。`decisions` 只作后台调用，不出现在功能模型、输入框、账号类型计数或角色清单里，结果也不进入对话。托管第三方账号隐藏所有模型配置，只用预置。接口也拒绝越权，旧 full 偏好不能解锁。手机 gateway 必须有同账号在线 ready PC，无 PC 保持引导页。入口：用户中心头像三击、模型设置和网关 bootstrap；关联 `C-040`／`C-046`／`C-013`；实现证据：`internal/provider/model_policy_test.go`、`internal/engine/model_policy_test.go`、`internal/server/settings_model_policy_test.go`、`frontend/e2e/model-policy.spec.ts`、`frontend/e2e/product-mode.spec.ts`、`mobile/e2e/phone-account-mode.spec.ts`。
+- 既有服务端角色保持兼容：title／compact 关闭时使用 conversation；embedding／ocr／decisions／transcription／speech 按开关执行。translation、naming 的专用路由按 F-181／C-049 和现有命名实现生效；LOCAL 忽略服务端角色。托管配置不可由客户端替换。
 
 ### F-175 Provider cloud built-in tools
 
@@ -335,6 +343,10 @@ This is the current user-facing capability map. The code and tests named below a
 
 - 目的：把选中的对话、子代理日志或集成终端原文与提问分开提交；使用者：PC 用户；入口：选中来源文本 → Add to chat；输入：选区和可选请求；输出：可编辑引用与带标签的消息；前置条件：选区在可引用来源内；失败表现：无有效选区时不显示操作；关联契约：`C-011`；实现证据：`frontend/src/components/app/selection-menu.tsx`, `frontend/src/components/app/terminal-session.tsx`, `frontend/src/lib/terminal.ts`, `frontend/src/lib/quote.ts`；验证：`frontend/src/components/app/selection-menu.test.tsx`, `frontend/src/components/app/terminal-session.test.tsx`, `frontend/src/lib/terminal.test.ts`, `frontend/e2e/terminal-quotes.spec.ts`。
 - 终端引用在现有 `Quote.text` 中保留 `Source: integrated terminal`、客户端标签页 `Session`、源 `Conversation`／`Project`，以及 ready 帧已知的 `Initial directory`／`Shell`。加入当前输入框，保留原终端来源；正文仅包含用户实际选中的内容，命令须被选中才会带入，不推断执行命令、退出码或 `cd`／`ssh` 后的工作目录。引用沿用现有查看、编辑、删除、草稿保存与刷新恢复，发送仍使用 `<selected_text>`，用户请求单独使用 `<user_request>`。
+
+### F-181 Selection reading and translation
+
+- 目的：在 PC 选区菜单中朗读已选文字，并在中文界面把英文选区译成简体中文。使用者：桌面和 Web 用户。入口：选中可引用来源中的文字后出现的菜单；输入：已经稳定的选区；输出：朗读，或仍留在菜单里的译文；前置条件：朗读需要语音输出已启用且就绪，翻译需要界面语言为中文、当前打开了会话，且选区判定为英文。FOFA 的 `translation` 角色打开时，请求发到账号基址的 `/translations`；关闭或旧服务器没有该角色时使用当前对话模型。失败表现：朗读显示可重试错误，翻译在菜单内显示失败。两者都不加入引用，也不创建回合、事件或跟进。关联契约：`C-048`、`C-049`。实现证据：`frontend/src/components/app/selection-menu.tsx`、`frontend/src/lib/selection-language.ts`、`frontend/src/lib/speech-media.ts`、`internal/engine/selection_translation.go`、`internal/server/selection_translation.go`。验证：`frontend/src/components/app/selection-menu.test.tsx`、`frontend/src/lib/selection-language.test.ts`、`internal/engine/selection_translation_test.go`、`internal/server/selection_translation_http_test.go`、`internal/server/selection_translation_limit_test.go`。
 
 ### F-190 Desktop updates
 
@@ -369,11 +381,11 @@ This is the current user-facing capability map. The code and tests named below a
 
 - 目的：不手工配置服务器即可登录、发现并连接本人电脑；入口：手机「登录」及菜单「用户中心」；输入：浏览器登录和显式设备授权、用户选择的在线 PC；输出：审核状态、本人 PC 列表、自动获取的连接票据和心跳。待审／拒审只显示审核界面，普通 API 权限不决定设备连接权限。匿名扫码独立保留，账号模式选择 PC 无需扫码；保存并重连选中的 Host ID／公钥，不批量连接账号的所有 PC（唯一在线电脑的一次性自动连接见本节「登录优先」条目）。失败可刷新／重新登录，离线 PC 禁用连接，退出删除受管票据而保留匿名票据与自配模型。关联 `C-006`、`C-013`、`F-230`；实现证据：`mobile/src/lib/gateway-account.ts`、`mobile/src/lib/use-gateway-account.ts`、`mobile/src/components/gateway-account-shell.tsx`、`mobile/src/components/gateway-account-screen.tsx`、`mobile/e2e/gateway-account.spec.ts`。
 
-- 登录优先：手机尚无任何电脑时，首页以「登录」为主操作，扫码、粘贴配对链接和「自配模型」收进「其他方式」；已登录但未连接电脑时，首页直接列出本人电脑并保留同一「其他方式」，「添加电脑」面板也列出本人电脑。登录刚完成时，若手机没有任何已保存连接或活动指纹，且账号恰有一台在线且启用的电脑，自动连接这一台一次：该标记只在内存，在失败、退出、重新登录、换服务器后清除，每次登录最多一次，之后重启或刷新不会再自动选；有多台、没有在线电脑或手机已有连接时不猜测，由用户选择。离线电脑仍禁用，自动连接失败回到可选列表。这取代了此前「账号模式一律不自动连接」的说法；关联 `C-006`；证据：`mobile/src/lib/gateway-auto-connect.ts`、`mobile/src/lib/gateway-auto-connect.test.ts`、`mobile/src/lib/use-gateway-account-fresh-login.test.tsx`、`mobile/src/components/gateway-account-shell.tsx`、`mobile/src/components/account-pc-list.tsx`、`mobile/src/components/scan-screen.tsx`、`mobile/src/components/gateway-account-start.test.tsx`、`mobile/e2e/gateway-account.spec.ts`。
+- 登录优先：默认 Account 首页要求登录；登录后未连接 ready PC 时列出本人电脑并显示接入引导。扫码、粘贴配对链接和「自配模型」仅在头像三击切换的 LOCAL 调试模式下通过「其他方式」提供。登录刚完成时，若手机没有任何已保存连接或活动指纹，且账号恰有一台在线且启用的电脑，自动连接这一台一次：该标记只在内存，在失败、退出、重新登录、换服务器后清除，每次登录最多一次，之后重启或刷新不会再自动选；有多台、没有在线电脑或手机已有连接时不猜测，由用户选择。离线电脑仍禁用，自动连接失败回到可选列表。关联 `C-006`；证据：`mobile/src/lib/gateway-auto-connect.ts`、`mobile/src/lib/gateway-auto-connect.test.ts`、`mobile/src/lib/use-gateway-account-fresh-login.test.tsx`、`mobile/src/components/gateway-account-shell.tsx`、`mobile/src/components/account-pc-list.tsx`、`mobile/src/components/scan-screen.tsx`、`mobile/src/components/gateway-account-start.test.tsx`、`mobile/e2e/gateway-account.spec.ts`。
 
 ### F-220 Read and control PC conversations
 
-- 手机默认 Account 模式，未登录／失去授权仅显示用户中心；工具栏和用户中心显示安全头像或姓名首字。Account 隐藏模型管理、添加电脑、解除绑定和消息模型选择，仅使用当前账号／设备的 PC 与服务器模型。用户中心头像 1.2 秒间隔内三击切换并持久化手机 Account／Local；切换关闭旧页面连接，不改 PC 模式，不删除本地配置与记录。Local 保留原有入口。关联 `C-006`、`C-013`；证据：`mobile/src/components/gateway-account-shell.tsx`、`mobile/src/lib/phone-mode.ts`、`mobile/src/components/gateway-account-shell.test.tsx`、`mobile/e2e/phone-account-mode.spec.ts`。
+- 手机默认 Account，未登录显示用户中心，登录后没有同账号在线 ready PC 时显示等待与连接引导；不直接调用网关 Chat。PC 模型菜单由 PC model_policy 控制，托管隐藏，普通 gateway 可选择。头像三击切换手机 LOCAL 调试模式，保留登录及数据；LOCAL 恢复个人配置与匿名配对。关联 C-006／C-013；证据：`mobile/src/components/gateway-account-shell.tsx`、`mobile/src/components/phone-app.tsx`、`mobile/src/components/gateway-account-start.test.tsx`、`mobile/e2e/phone-account-mode.spec.ts`。
 
 - 手机显示主管工具回合上限与延长轮数，提供「继续／停止」；继续延长原 turn，停止中断原 turn，不另发消息。重开／重连通过 `awaiting_continue` 恢复操作，即使最新历史页不含上限事件；请求失败显示原因并保留提示，重复点击在确认期间禁用。手机和 PC 都需更新。关联 `C-006`；证据：`internal/remote/iteration_continue_test.go`、`mobile/src/lib/iteration-limit.test.ts`、`mobile/src/components/iteration-limit-card.test.tsx`、`mobile/e2e/iteration-limit.spec.ts`。
 
@@ -436,7 +448,7 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-230 Direct model chat
 
-- 手机 Gateway 审核通过并具备 API 权限后，自动发现服务器模型，无 PC 也可调用；服务器模型按 `gateway:<account-source>` 和自配服务的独立 provider ID 区分。同名模型不合并身份，已有对话来源不可自动回退；PC 会话只使用 PC 模型目录。服务器凭据不显示／持久化到自配服务表，退出或换账号移除该来源并取消其在途直连请求。证据：`mobile/src/lib/gateway-models.ts`、`mobile/src/lib/direct-provider-account.test.ts`、`mobile/src/components/direct-account-source.test.tsx`、`mobile/e2e/gateway-account.spec.ts`；关联 `F-211`、`C-013`。
+- 直连 Chat 在手机 LOCAL 调试模式使用个人模型，并分别获取登录账号已授权的第三方预置和额外网关目录，按来源分组。同名模型保留不同路由，无权限或空目录不显示该组；撤权不退出登录。Account 等待 PC；历史账号直连记录按同账号来源隔离。LOCAL 语音单独引用个人 provider，凭据不进语音偏好。证据：`mobile/src/components/gateway-account-shell.tsx`、`mobile/src/lib/local-speech.test.ts`、`mobile/e2e/gateway-account.spec.ts`；关联 C-013／C-048。
 
 - 新旧 Chat Completions 推理字段兼容沿用 `F-170`／`C-009`；通过直连的同一思考区块显示，字段名称不影响正文。证据：`mobile/src/lib/openai-wire.ts`、`mobile/e2e/direct-chat-reasoning.spec.ts`。
 - 用户与流式回答复用 `F-220` 的手机 Markdown 代码围栏渲染及原文复制，遵守 `C-032`；证据：`mobile/src/components/direct-chat-screen.tsx`, `mobile/e2e/markdown-highlight.spec.ts`。

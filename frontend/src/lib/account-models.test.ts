@@ -69,7 +69,7 @@ describe("account model rows", () => {
   it("counts only the types the server reported and keeps a saved conversation default", () => {
     expect(accountKindTally(undefined)).toEqual([])
     expect(accountKindTally({
-      chat: 1, unclassified: 2, embedding: 1, ocr: 0, decisions: 0, other: 0,
+      chat: 1, unclassified: 2, embedding: 1, ocr: 0, decisions: 4, other: 0,
     }).map((part) => part.key)).toEqual(["chat", "unclassified", "embedding"])
     const row = (model: string, selected = false): ModelInfo =>
       ({ id: model, provider_id: "gateway:a", provider_label: "Server", label: model, model, ready: true, source: "account", default: selected })
@@ -82,7 +82,7 @@ describe("account model rows", () => {
     expect(accountChoiceLabel(branded, "")).toBe("Partner model")
     expect(accountChoiceLabel(models, "missing")).toBe("missing")
     expect(officialModelLock({ state: "ready", models: 1, profile: { presentation: "official", instruction: false } })).toBe(true)
-    expect(officialModelLock({ state: "ready", models: 1, profile: { presentation: "full", instruction: false } })).toBe(false)
+    expect(officialModelLock({ state: "ready", models: 1, profile: { presentation: "full", instruction: false } })).toBe(true)
     expect(officialModelLock(account("ready"))).toBe(false)
     expect(embeddingModelChoices({
       state: "ready", models: 1, source_id: "gateway:a", label: "Server",

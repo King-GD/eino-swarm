@@ -39,7 +39,7 @@ type projectView struct {
 }
 
 func (s *Server) viewProject(p *store.Project) projectView {
-	return projectView{
+	v := projectView{
 		ID:                     p.ID,
 		Name:                   p.Name,
 		SystemPrompt:           p.SystemPrompt,
@@ -58,6 +58,13 @@ func (s *Server) viewProject(p *store.Project) projectView {
 		CreatedAt:              p.CreatedAt.Format(timeFormat),
 		UpdatedAt:              p.UpdatedAt.Format(timeFormat),
 	}
+	if !s.engine.Providers().ModelPolicy().Configurable {
+		v.NuwaPlannerProviderID = ""
+		v.NuwaPlannerModel = ""
+		v.NuwaExecutorProviderID = ""
+		v.NuwaExecutorModel = ""
+	}
+	return v
 }
 
 func (s *Server) projectSkills(projectID string) []memory.SkillInfo {

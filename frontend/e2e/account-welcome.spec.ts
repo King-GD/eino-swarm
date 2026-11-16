@@ -49,8 +49,8 @@ test("choosing the own-model path opens Settings on Models", async ({ page }) =>
   expect(saved).toEqual([{ ui: { welcome_dismissed: true } }])
 })
 
-test("a ready server catalog is a selectable default beside an own provider", async ({ page }) => {
-  let settingsBody: { settings: { models: Record<string, unknown> } } | undefined
+test("a legacy server catalog is a selectable default beside an own provider", async ({ page }) => {
+  let settingsBody: { settings: { models: Record<string, unknown>; model_policy?: unknown } } | undefined
   await page.route("**/api/meta", async (route) => {
     const response = await route.fetch()
     const body = await response.json()
@@ -66,6 +66,7 @@ test("a ready server catalog is a selectable default beside an own provider", as
         const response = await route.fetch()
         settingsBody = await response.json()
         settingsBody!.settings.models.default_source = "provider"
+        delete settingsBody!.settings.model_policy
       }
       await route.fulfill({ json: settingsBody })
       return

@@ -42,7 +42,7 @@ it("a data-plane 401 updates the mounted account controller immediately", async 
   } finally { unmount() }
 })
 
-it("a data-plane 403 rechecks privileges without logging out or deleting independent PC ownership", async () => {
+it("a denied catalog avoids a refresh loop and explicit account refresh preserves PC ownership", async () => {
   let reads = 0
   let allowed = true
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
@@ -56,6 +56,8 @@ it("a data-plane 403 rechecks privileges without logging out or deleting indepen
     saveLink({ hubURL: session.origin, hostPub: "owned", fingerprint: "owned", ticket: "ticket", sessionID: "session", gatewayOrigin: session.origin, gatewayOwnerID: session.user.id, gatewayHostID: "pc", gatewayMobileID: session.device.id })
     allowed = false
     await act(async () => { await expect(discoverModels(provider, vi.fn(async () => new Response("{}", { status: 403 })))).rejects.toMatchObject({ status: 403 }) })
+    expect(reads).toBe(1)
+    await act(async () => { await result.current.refresh() })
     expect(reads).toBe(2)
     expect(result.current.status).toBe("authorized")
     expect(result.current.bootstrap?.models.api_access_enabled).toBe(false)

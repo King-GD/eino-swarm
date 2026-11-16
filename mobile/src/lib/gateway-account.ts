@@ -40,10 +40,13 @@ export type GatewayDevice = { id: string; expires_at: string; name?: string; pla
 export type GatewaySession = { origin: string; token: string; user: GatewayUser; device: GatewayDevice }
 export type GatewayHost = { id: string; name: string; hostname: string; display_name?: string; version: string; online: boolean; enabled: boolean; owner_user_id?: string; host_pub?: string; host_fp?: string }
 export type GatewayModelProfile = { label: string; tools?: string[]; context_window?: number }
+export type GatewayModelRole = { id: string; enabled: boolean; label: string }
+export type GatewayModelSourceDescriptor = { source_id: string; source_kind: "gateway"; label: string; execution: "phone"; api_base_url: string; catalog_url: string; api_access_enabled: boolean }
 export type GatewayBootstrap = {
+  gateway_models?: GatewayModelSourceDescriptor
   user: GatewayUser
   device: GatewayDevice
-  models: { source_id: string; source_kind: "gateway"; label: string; execution: "phone"; api_base_url: string; catalog_url: string; api_access_enabled: boolean; profile?: GatewayModelProfile }
+  models: { source_id: string; source_kind: "gateway"; label: string; execution: "phone"; api_base_url: string; catalog_url: string; api_access_enabled: boolean; profile?: GatewayModelProfile; configurable?: boolean; defaults?: Record<string,string>; roles?: GatewayModelRole[]; client_catalog_url?: string }
   pairlink: { enabled: boolean; hub_url: string; redeem_url: string; websocket_url: string; info_url: string }
   heartbeat_interval: number
   presence_ttl: number
@@ -133,6 +136,7 @@ export function clearGatewayPending() { localStorage.removeItem(PENDING_KEY) }
 async function request<T>(origin: string, path: string, fetcher: typeof fetch, token = "", body?: unknown, signal?: AbortSignal): Promise<{ data: T; meta?: { total?: number } }> {
   const headers: Record<string, string> = { "Content-Type": "application/json" }
   if (token) headers.Authorization = "Bearer " + token
+  if (path === "/bootstrap") headers["X-AIGateway-Model-Roles"] = "2"
   const controller = new AbortController()
   const aborted = () => controller.abort()
   signal?.addEventListener("abort", aborted, { once: true })
@@ -285,6 +289,28 @@ function validateBootstrap(origin: string, bootstrap: GatewayBootstrap, session:
     [bootstrap.pairlink.info_url, origin + "/pairlink/v1/info"], [bootstrap.pairlink.websocket_url, origin.replace(/^http/, "ws") + "/pairlink/v1/ws"],
   ]
   if (expected.some(([value, target]) => value !== target)) throw new GatewayError(0, "invalid_gateway_response")
+  const invalid = () => { throw new GatewayError(0, "invalid_gateway_response") }
+  const models = bootstrap.models
+  if (typeof models.api_access_enabled !== "boolean" || (models.configurable !== undefined && typeof models.configurable !== "boolean")) invalid()
+  if (models.client_catalog_url !== undefined && models.client_catalog_url !== origin + "/client/models/v1/preset/models") invalid()
+  const roleIDs = new Set(["conversation", "title", "compact", "translation", "naming", "embedding", "ocr", "decisions", "transcription", "speech", "image"])
+  if (models.roles !== undefined) {
+    if (!Array.isArray(models.roles) || models.roles.length > roleIDs.size) invalid()
+    const seen = new Set<string>()
+    for (const role of models.roles) {
+      if (!role || !roleIDs.has(role.id) || seen.has(role.id) || typeof role.enabled !== "boolean" || typeof role.label !== "string" || role.label.length > 255 || /[\u0000-\u001f\u007f]/.test(role.label)) invalid()
+      seen.add(role.id)
+    }
+    models.roles = models.roles.map(({ id, enabled, label }) => ({ id, enabled, label }))
+  }
+  if (models.defaults !== undefined) {
+    if (!models.defaults || typeof models.defaults !== "object" || Array.isArray(models.defaults) || Object.entries(models.defaults).some(([role, name]) => !roleIDs.has(role) || typeof name !== "string" || !name || name.length > 255)) invalid()
+  }
+  if (bootstrap.gateway_models !== undefined) {
+    const source = bootstrap.gateway_models
+    if (!source || typeof source.source_id !== "string" || !source.source_id.startsWith("gateway:") || source.source_id.length > 128 || source.source_id === models.source_id || source.source_kind !== "gateway" || source.execution !== "phone" || typeof source.label !== "string" || source.label.length > 255 || typeof source.api_access_enabled !== "boolean" || source.api_base_url !== origin + "/client/models/v1/gateway" || source.catalog_url !== origin + "/client/models/v1/gateway/models") invalid()
+    bootstrap.gateway_models = { source_id: source.source_id, source_kind: "gateway", execution: "phone", label: source.label, api_access_enabled: source.api_access_enabled, api_base_url: source.api_base_url, catalog_url: source.catalog_url }
+  }
   const profile = acceptAccountProfile(bootstrap.models.profile)
   if (profile) bootstrap.models.profile = profile
   else delete bootstrap.models.profile

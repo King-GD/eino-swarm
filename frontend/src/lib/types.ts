@@ -1,5 +1,7 @@
 /** The wire contract with the Go server. Kept in one file so a change in the
  *  backend shows up here as a type error rather than as a blank panel. */
+import type { SpeechSettings, SpeechSnapshot } from "./speech-types"
+import type { ModelPolicy, ModelRef, ModelRole } from "./model-policy"
 
 export type EventKind =
   | "user_message"
@@ -477,9 +479,13 @@ export interface AccountModelKinds {
   embedding: number
   ocr: number
   decisions: number
+  transcription?: number
+  speech?: number
   other: number
   unclassified: number
   embedding_models?: string[]
+  transcription_models?: string[]
+  speech_models?: string[]
 }
 
 export interface AccountModels {
@@ -521,6 +527,8 @@ export interface PresenceClient {
 }
 
 export interface Meta {
+	model_policy?: ModelPolicy
+  speech?: SpeechSnapshot
   startup?: "restoring" | "ready"
   restore?: { completed: number; total: number; failed?: number }
   version: string
@@ -614,8 +622,11 @@ export interface ProviderSettings {
 }
 
 export interface Settings {
+	model_policy?: ModelPolicy
+  speech?: SpeechSettings
   server: { addr: string; open_browser: boolean }
   models: {
+	bindings?: Partial<Record<ModelRole, ModelRef>>
     default: string
     /** Whose models a new conversation starts on when both exist. */
     default_source?: ModelSource
@@ -653,6 +664,7 @@ export type SettingsPatch = Omit<Partial<Settings>, "models" | "swarm" | "ui"> &
   /** The server keeps every field a patch leaves out. */
   ui?: Partial<UISettings>
   models?: {
+    bindings?: Partial<Record<ModelRole, ModelRef>>
     default: string
     default_source?: ModelSource
     account_model?: string

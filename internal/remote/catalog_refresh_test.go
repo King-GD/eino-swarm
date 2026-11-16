@@ -185,9 +185,13 @@ func TestRefreshCatalogRejectsUpstreamFailureAndMalformedLists(t *testing.T) {
 }
 
 func TestRefreshCatalogCancellationAndFrameBudgetFailClosed(t *testing.T) {
+	e := testEngine(t)
+	if err := e.UpdateConfig(func(c *config.Config) error { c.Product.Mode = config.ProductModeLocal; return nil }); err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	resp := handleCatalogRefresh(ctx, testEngine(t), Request{ID: "cancelled"}, "relay", "s")
+	resp := handleCatalogRefresh(ctx, e, Request{ID: "cancelled"}, "relay", "s")
 	if resp.OK || resp.Code != "refresh_failed" {
 		t.Fatalf("cancelled refresh=%+v", resp)
 	}
@@ -195,7 +199,6 @@ func TestRefreshCatalogCancellationAndFrameBudgetFailClosed(t *testing.T) {
 	if resp.OK || resp.Code != "refresh_failed" {
 		t.Fatalf("unavailable engine=%+v", resp)
 	}
-	e := testEngine(t)
 	resp = Handle(e, config.RemoteConfig{}, Request{Op: OpRefreshCatalog}, "relay", "s")
 	if !resp.OK || len(resp.Models) == 0 || resp.Models[0].Model != provider.MockModelName {
 		t.Fatalf("offline discovery must stay offline: %+v", resp)
@@ -244,6 +247,9 @@ func TestRefreshCatalogListsAccountModelsFirstWithoutTheirCredential(t *testing.
 	}))
 	defer server.Close()
 	e := catalogEngine(t, config.Provider{ID: "endpoint", Label: "Endpoint", BaseURL: server.URL + "/v1", APIKey: "own-key", Model: "own-a"})
+	if err := e.Config().Update(func(c *config.Config) error { c.Product.Mode = ""; return nil }); err != nil {
+		t.Fatal(err)
+	}
 	src, err := provider.NewAccountSource(accountModelsSourceID, "Server", "https://account.invalid/client/desktop/v1", accountModelsToken,
 		provider.Catalog{Names: []string{"server-a", "server-b"}})
 	if err != nil {

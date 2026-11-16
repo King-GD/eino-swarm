@@ -97,7 +97,8 @@ func (h *Host) phoneAllows() (bool, bool) {
 	if pool := h.eng.Providers(); pool != nil {
 		mock = pool.IsMock()
 	}
-	return installAllows(mock, h.cfg.Snapshot().Product.FOFA(), h.AccountModels().State)
+	work, _ := installAllows(mock, h.cfg.Snapshot().Product.FOFA(), h.AccountModels().State)
+	return work, h.eng.Providers().ModelPolicy().Configurable
 }
 
 func installAllows(mock, fofa bool, accountState string) (bool, bool) {
@@ -107,7 +108,7 @@ func installAllows(mock, fofa bool, accountState string) (bool, bool) {
 	if mock {
 		return true, false
 	}
-	signedIn := accountState != "" && accountState != AccountSignedOut
+	signedIn := accountState == AccountReady
 	return signedIn, false
 }
 

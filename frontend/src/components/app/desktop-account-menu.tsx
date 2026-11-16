@@ -15,7 +15,7 @@ import type { MessageKey } from "@/lib/i18n"
 import { remoteAccountName } from "@/lib/remote-account-name"
 import { defaultRemoteSettings, type RemoteLoginStatus, type RemoteStatus } from "@/lib/types"
 import { useDesktopAccount } from "@/lib/use-remote-status"
-import { useT } from "@/lib/use-t"
+import { useT, type Translate } from "@/lib/use-t"
 import { useApp } from "@/store/app"
 import { openSettings } from "@/store/settings-sheet"
 import { RemoteLoginSection } from "./settings-remote-login"
@@ -48,6 +48,27 @@ function summaryKey(status: RemoteStatus | undefined, unavailable: boolean): Mes
     return "desktopAccount.offline"
   }
   return summaries[state] ?? "desktopAccount.error"
+}
+
+// A mode switch shares backup admission. The engine sentence names a backup
+// or restore; the portrait click needs the conversation that is still running.
+function modeSwitchNotice(error: unknown, translate: Translate): string | undefined {
+  if (!error || typeof error !== "object" || (error as { code?: unknown }).code !== "backup_busy") return
+  const active = (error as { details?: { active?: unknown } }).details?.active
+  const titles: string[] = []
+  if (Array.isArray(active)) {
+    for (const item of active) {
+      if (!item || typeof item !== "object") continue
+      const row = item as { id?: unknown; title?: unknown }
+      const title = typeof row.title === "string" ? row.title.trim() : ""
+      const id = typeof row.id === "string" ? row.id.trim() : ""
+      const label = title || id
+      if (label) titles.push(label)
+    }
+  }
+  if (titles.length === 1) return translate("desktopAccount.modeBusyTask", { title: titles[0] })
+  if (titles.length > 1) return translate("desktopAccount.modeBusyTasks", { count: titles.length })
+  return translate("desktopAccount.modeBusy")
 }
 
 /** A local account entry, independent of the transcript and the Phone settings
@@ -110,7 +131,7 @@ export function DesktopAccountMenu() {
     unlocking.current = true
     void api.saveSettings({ product: { mode } })
       .then(() => refreshMetaAndModels())
-      .catch((error) => toastError(errorMessage(error)))
+      .catch((error) => toastError(modeSwitchNotice(error, t) ?? errorMessage(error)))
       .finally(() => { unlocking.current = false })
   }
   const settings = () => {

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
+	"github.com/LubyRuffy/eino-swarm/internal/provider"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 )
 
@@ -86,6 +87,12 @@ func (e *Engine) DefaultNuwaModelPair() (NuwaModelPair, error) {
 // fills the catalog default. Disabling, or enabling again with a saved pair,
 // leaves the stored columns unchanged.
 func (e *Engine) ResolveNuwaModelPair(enabled bool, existing *store.Project, supplied *NuwaModelPair) (*NuwaModelPair, error) {
+	if e.pool.OfficialOnly() {
+		if supplied != nil {
+			return nil, provider.ErrModelPolicy
+		}
+		return nil, nil
+	}
 	if supplied != nil {
 		pair := *supplied
 		if err := e.ValidateNuwaModelPair(pair); err != nil {
@@ -120,6 +127,9 @@ func (e *Engine) ValidateNuwaModelPair(pair NuwaModelPair) error {
 // SaveNuwaModelPair writes a validated pair without changing Nuwa mode.
 // Closing the mode does not call this, so the previous choice stays.
 func (e *Engine) SaveNuwaModelPair(id string, pair NuwaModelPair) (*store.Project, error) {
+	if e.pool.OfficialOnly() {
+		return nil, provider.ErrModelPolicy
+	}
 	if err := e.ValidateNuwaModelPair(pair); err != nil {
 		return nil, err
 	}

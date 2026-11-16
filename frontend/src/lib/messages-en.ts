@@ -1,4 +1,5 @@
 import { backoffEn } from "./messages-backoff"
+import { modelPolicyEn } from "./messages-model-policy"
 import { remoteLoginEn } from "./messages-remote-login"
 import { desktopAccountEn } from "./messages-desktop-account"
 import { memoryEn } from "./messages-memory-en"
@@ -11,7 +12,11 @@ import { backupEn } from "./messages-backup"
 
 /** English UI chrome. Keys are stable; Chinese lives in messages-zh.ts.
  *  Agent replies and protocol markers (quoted-send wrappers) stay English. */
+import { speechEn } from "./messages-speech"
+
 export const en = {
+  ...modelPolicyEn,
+  ...speechEn,
   ...backupEn,
   ...mcpEN,
   ...backoffEn,
@@ -169,8 +174,6 @@ export const en = {
   "composer.placeholderPlan": "What should we plan?",
   "composer.placeholderAsk": "Type an answer, or pick a choice above",
   "composer.attach": "Attach files",
-  "composer.decision": "Decision",
-  "composer.decisionFailed": "The decision did not finish.",
   "composer.attachHint": "Attach files to the workspace",
   "composer.thinking": "Thinking level",
   "composer.thinkingDefault": "Default thinking",
@@ -270,6 +273,11 @@ export const en = {
   "selection.menu": "Selection",
   "selection.add": "Add to chat",
   "selection.sideChat": "Ask in side chat",
+  "selection.translate": "Translate",
+  "selection.translating": "Translating…",
+  "selection.translation": "Translation",
+  "selection.translateFailed": "Translation failed. Try again.",
+  "selection.translateTooLong": "The selection is too long to translate.",
   "sideChat.title": "Side chat",
   "sideChat.open": "Open side chat",
   "sideChat.close": "Close side chat",

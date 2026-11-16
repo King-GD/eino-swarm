@@ -7,6 +7,7 @@ package desktop
 #cgo LDFLAGS: -framework Cocoa -framework WebKit
 #include "recovery_snapshot_darwin.h"
 #include <stdlib.h>
+int zwaiPresentedCaptureAvailable(void);
 */
 import "C"
 
@@ -79,17 +80,42 @@ func desktopSnapshotResult(request C.uint64_t, status C.int, pixels *C.uchar, le
 	deliverRecoverySnapshot(uint64(request), int(status), copied)
 }
 
+//export presentedFrameStatus
+func presentedFrameStatus(pixels *C.uchar, length C.int, width C.int, height C.int) C.int {
+	if pixels == nil || length < 1 {
+		return 0
+	}
+	view := unsafe.Slice((*byte)(unsafe.Pointer(pixels)), int(length))
+	return C.int(presentedSampleStatus(view, int(width), int(height)))
+}
+
+func presentedCaptureAvailable() bool {
+	return C.zwaiPresentedCaptureAvailable() != 0
+}
+
+func presentedFrameStatusFromSample(pixels []byte, width, height int) int {
+	if len(pixels) == 0 {
+		return int(presentedFrameStatus(nil, 0, C.int(width), C.int(height)))
+	}
+	buf := C.CBytes(pixels)
+	defer C.free(buf)
+	return int(presentedFrameStatus((*C.uchar)(buf), C.int(len(pixels)), C.int(width), C.int(height)))
+}
+
 func deliverRecoverySnapshot(request uint64, status int, pixels []byte) {
 	value, ok := snapshotRequests.Load(request)
 	if !ok {
 		return
 	} // A timed-out snapshot can complete after replacement began.
 	result := snapshotReply{}
-	if status != 0 {
-		result.err = fmt.Errorf("native renderer snapshot failed (code %d)", int(status))
-	} else if len(pixels) != recoverySnapshotSide*recoverySnapshotSide*4 {
+	switch {
+	case status == recoveryPresentationBlank:
+		result.err = errPresentedFrameBlank
+	case status != 0:
+		result.err = fmt.Errorf("native renderer snapshot failed (code %d)", status)
+	case len(pixels) != recoverySnapshotSide*recoverySnapshotSide*4:
 		result.err = fmt.Errorf("native renderer snapshot has invalid pixels")
-	} else {
+	default:
 		result.pixels = pixels
 	}
 	select {

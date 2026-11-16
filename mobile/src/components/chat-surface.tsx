@@ -59,6 +59,7 @@ export function ChatSurface({
           reconnecting={reconnecting}
           providers={providers}
           gatewaySourceID={account.gatewaySourceID}
+          gatewaySourceIDs={account.gatewaySourceIDs}
           onSelectHost={onSelectHost}
           onAddHost={onAddHost}
           onUnlink={onUnlink}

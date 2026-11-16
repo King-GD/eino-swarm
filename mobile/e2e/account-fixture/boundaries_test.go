@@ -202,3 +202,31 @@ func TestFixtureHTTPProofAndTransportFailureBoundaries(t *testing.T) {
 		t.Fatal("fixture target observation did not detect an actual visit")
 	}
 }
+
+func TestBrowserBootstrapCanNegotiateModelRoles(t *testing.T) {
+	// The browser walkthrough must reach authenticated bootstrap rather than
+	// fail its preflight after the client adds role-version negotiation.
+	server := httptest.NewServer(&fixture{})
+	t.Cleanup(server.Close)
+	request, err := http.NewRequest(http.MethodOptions, server.URL+clientPrefix+"/bootstrap", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Origin", "https://phone.invalid")
+	request.Header.Set("Access-Control-Request-Method", http.MethodGet)
+	request.Header.Set("Access-Control-Request-Headers", "authorization,content-type,x-aigateway-model-roles")
+	response, err := server.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("preflight status = %d", response.StatusCode)
+	}
+	allowed := strings.ToLower(response.Header.Get("Access-Control-Allow-Headers"))
+	for _, name := range []string{"authorization", "content-type", "x-aigateway-model-roles"} {
+		if !strings.Contains(allowed, name) {
+			t.Fatalf("browser bootstrap cannot send %s", name)
+		}
+	}
+}

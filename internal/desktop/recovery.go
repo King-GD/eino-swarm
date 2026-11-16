@@ -294,11 +294,18 @@ func (c *recoveryController) run(ctx context.Context) {
 					continue
 				}
 				clearProbe()
-				if input.err != nil || !snapshotMatchesProbe(input.pixels, first, second, input.probe) {
+				// WebKit can acknowledge the covered probe while the window
+				// the user sees is one flat colour. That is a failed paint.
+				probeStage = ""
+				switch {
+				case errors.Is(input.err, errPresentedFrameBlank):
+					probeStage = "presentation_blank"
+				case input.err != nil:
+					probeStage = "snapshot_error"
+				case !snapshotMatchesProbe(input.pixels, first, second, input.probe):
 					probeStage = "snapshot_mismatch"
-					if input.err != nil {
-						probeStage = "snapshot_error"
-					}
+				}
+				if probeStage != "" {
 					state.failed(now)
 					report("probe_failed", probeStage)
 					continue

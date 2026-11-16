@@ -59,8 +59,11 @@ func TestProfileSkipsTheCatalogAndPublishesOneAlias(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if pool.OfficialOnly() || am.State().Profile.Presentation != config.AccountPresentationFull {
-		t.Fatalf("full presentation did not take effect: %+v", am.State().Profile)
+	if !pool.OfficialOnly() || am.State().Profile.Presentation != config.AccountPresentationOfficial {
+		t.Fatalf("local presentation changed server policy: %+v", am.State().Profile)
+	}
+	if err := cfg.Update(func(c *config.Config) error { c.Product.Mode = config.ProductModeLocal; return nil }); err != nil {
+		t.Fatal(err)
 	}
 	personal, err := pool.ResolveModel("default", "kept-model")
 	if err != nil || personal.ID == accountModelsSourceID {

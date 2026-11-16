@@ -90,7 +90,7 @@ test("semantic search is off until a model is pinned", async ({ page }) => {
   await page.getByRole("button", { name: "Settings" }).click()
   const dialog = page.getByRole("dialog")
   await dialog.getByRole("tab", { name: "Models" }).click()
-  await expect(dialog.getByLabel("Semantic search")).not.toBeChecked()
+  await expect(dialog.getByRole("switch", { name: "Semantic search", exact: true })).not.toBeChecked()
   await expect(dialog.getByLabel("Embedding model")).toHaveCount(0)
 })
 
@@ -315,24 +315,23 @@ test("pins a title-generation model when more than one name is listed", async ({
     await page.getByRole("button", { name: "Settings" }).click()
     const dialog = page.getByRole("dialog")
     await dialog.getByRole("tab", { name: "Models" }).click()
-    await dialog.getByText("Auxiliary models").scrollIntoViewIfNeeded()
-    await expect(dialog.getByText("Auxiliary models")).toBeVisible()
-    const picker = dialog.getByLabel("Title generation model")
-    await expect(picker).toContainText("Automatic")
+    const picker = dialog.getByRole("combobox", { name: "Conversation title Provider", exact: true })
+    await expect(picker).toContainText("Use default")
     await picker.click()
-    await page.getByRole("option", { name: "beta" }).click()
+    await page.getByRole("option", { name: provider.label || provider.id, exact: true }).click()
+    await dialog.getByLabel("Conversation title Model", { exact: true }).fill("beta")
+    await dialog.getByLabel("Conversation title Model", { exact: true }).press("Tab")
     await dialog.getByRole("button", { name: "Back to app" }).click()
     await expect(dialog).toBeHidden()
 
     const saved = await (await request.get("/api/settings")).json()
-    expect(saved.settings.swarm.title_model).toBe("beta")
-    expect(saved.settings.swarm.title_provider).toBe(provider.id)
+    expect(saved.settings.models.bindings.title).toEqual({ provider_id: provider.id, model: "beta" })
 
     await page.getByRole("button", { name: "Settings" }).click()
     await page.getByRole("dialog").getByRole("tab", { name: "Models" }).click()
     await expect(
-      page.getByRole("dialog").getByLabel("Title generation model"),
-    ).toContainText("beta")
+      page.getByRole("dialog").getByLabel("Conversation title Model", { exact: true }),
+    ).toHaveValue("beta")
     await page.getByRole("dialog").getByRole("button", { name: "Back to app" }).click()
   } finally {
     await request.put("/api/settings", {
@@ -363,7 +362,7 @@ test("discovers models into the default dropdown", async ({ page, request }) => 
     ).toBeVisible()
     await expect(dialog.getByRole("textbox", { name: "Base URL" })).toHaveCount(0)
     await dialog.getByRole("button", { name: `${heading} details` }).click()
-    await expect(dialog.getByLabel("Provider")).toBeVisible()
+    await expect(dialog.getByLabel("Provider", { exact: true })).toBeVisible()
     await expect(dialog.getByLabel("Base URL")).toHaveValue(
       "http://endpoint.invalid/v1",
     )

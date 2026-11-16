@@ -5,9 +5,18 @@ iOS and Android apps. **Sign in** uses the built-in default Gateway
 required. Finish device authorization in the system browser. Pending/rejected
 accounts show only review status. Approved accounts list their online PCs in
 **User center**; selecting one connects without a QR and remembers that PC for
-reconnection. API access is independent: approved users with an enabled API
-grant and Key can use **Server** models in Chat without any PC. An approved
-account without API permission can still connect to its PCs.
+reconnection. Account mode waits for a same-account PC and a ready engine,
+even when the account has API access. The waiting page explains how to install
+and open the desktop app, sign in to the same gateway and keep it online. There
+is no direct gateway Chat fallback. Disconnecting returns to that page; the draft
+and history remain mounted for reconnection.
+
+Paired voice uses the selected PC's safe settings only while it is online and
+ready. Gateway voice uses the phone's own same-origin credential. Cached status
+cannot enable offline calls. Both directions default off. Dictation creates an
+editable draft and never sends it; read aloud skips code blocks. LOCAL direct
+Chat can configure recognition and spoken-answer models independently under its
+personal model services, using only this phone's provider credentials.
 
 After connecting to a PC, open **Menu → Manage projects**, or **Manage projects**
 from New conversation. Create or edit the PC's project name, shared instruction,
@@ -38,16 +47,19 @@ For packaged cold-launch/background/relaunch regression, use
 `e2e/ios-scene-lifecycle.swift` with the disposable native fixture described in
 [Testing](../docs/TESTING.md#ios-scene-startup-regression).
 
-A phone with no computer opens on **Sign in to zwai**. Scanning a QR code,
-pasting a pairing link and using your own model service are under **Other
-ways**, so anonymous pairing and private providers work unchanged. When this
-phone has no saved computer or active connection and the account has exactly one
-online, enabled PC, it connects to that PC once right after the sign-in
-completes. The marker lives in memory only, clears on failure, sign-out, a new
-sign-in or a server change, and a relaunch never auto-selects; with several
-online PCs, or any existing connection, you choose from the list (nothing is
-guessed). A signed-in phone with no connected PC lists its computers on the home
-page, with the same **Other ways**, and Add a PC lists them above the QR options.
+A new phone opens on **Sign in**. Account mode exposes no personal model,
+anonymous QR, or direct Chat bypass. The existing three taps on the User center
+portrait toggle a persisted phone-only LOCAL debug mode, retaining login and saved
+data. Each touch counts once. A successful switch closes the User center dialog
+and reveals the selected mode. Switching rebuilds the phone page; unsent composer
+drafts are not retained. The debug switch works even when a managed third-party
+account hides its model catalog. LOCAL restores personal models and anonymous
+pairing under **Other ways**. When signed in, it independently reads the authorized
+private preset and Gateway catalogs and groups them beside personal providers.
+A denied or empty source has no group; model names shared across sources keep
+separate routes. Source credentials and catalogs stay in memory.
+After a fresh sign-in, the only online enabled PC is selected once when there is
+no saved or active PC; a returning session or several PCs requires a selection.
 
 User center shows the Gateway and PC display names provided by the Gateway.
 A safe public `avatar_url` on `fofa.info`, `nosec.org`, `baimaohui.net`, or a subdomain of one of those roots is shown
@@ -83,22 +95,15 @@ Version-read and browser-launch acknowledgements each stop waiting after fifteen
 seconds or Sign out. A failed launch can be retried explicitly; the app does not
 automatically open another browser or claim to cancel an OS action already sent.
 
-When bootstrap includes `models.profile`, Chat shows that server's name and
-sends the alias `account`. It does not call `/v1/models`. **Models** offers
-**Official model** or **All models**; the choice is stored on this phone and
-defaults to Official model. Choosing All models asks first, because this
-phone's own model services do not have the account's online capabilities. The guidance text is not stored, and the workspace
-tool allowlist is applied by a PC engine turn rather than by direct chat.
-A paired phone has no second switch: it receives the PC's already filtered
-catalog. Signing out drops the profile.
-
-Server model sources are ephemeral, named by Gateway/account identity and never
-stored in personal endpoint settings. Identically named server and phone models
-remain distinct choices. Existing conversations retain the selected source;
-a missing source never falls back to another provider. PC Agent conversations
-use the PC's catalog and execute on that PC. Sign-out removes only account
-credentials and managed tickets, retaining private providers and anonymous
-pairings. **User center → Other server** changes the default for self-hosting.
+The selected PC publishes `model_policy`. An editable gateway permits the PC's
+model picker; a managed third-party preset hides it and project planner/executor
+selectors. The phone has no second Official/All models switch. LOCAL Chat
+shows third-party presets and Gateway models only when the server authorizes
+those sources. A source returning 403 disappears without signing out or hiding
+other sources. Refresh retries transient failures while retaining this account's
+last catalog. Account mode continues to require a ready PC. Sign-out removes account
+credentials and managed tickets, retaining private providers and anonymous pairings.
+**User center → Other server** changes the default for self-hosting.
 
 Open **User center → Web tools** from the menu or the settings icon in an open
 conversation. The preferences and their status summaries live there. Each
@@ -108,7 +113,7 @@ Gateway/account has two independent preferences:
   Search/Fetch when the signed-in account is approved, enabled and unexpired;
   otherwise it keeps ordinary model chat. Explicit Cloud server requires that
   session before sending any model request. Off sends ordinary chat without
-  these functions. This applies to server models and personal endpoints alike;
+  these functions. This applies to LOCAL personal endpoints;
   the selected model must support standard function calling.
 - **PC conversations**: Follow PC, This PC, or Server cloud. Follow PC always
   clears the conversation override and uses that PC's global setting. Phone
@@ -261,7 +266,9 @@ wait is the banner (next check, **Run now**, **Cancel wait**).
 Each finished PC turn leaves a divider stamped with its host completion time,
 including scheduled checks whose automatic input is hidden on the phone.
 `schedule_report` stays on the `report_schedule` chip.
-An unfinished `/goal` shows Pursuing / Blocked / Paused; paused or blocked
+An unfinished `/goal` shows an explicit **Goal mode** strip with its objective
+and Pursuing / Auto-run paused status. The strip stays visible in the chat,
+Agents, worker log and Outputs pages. Resume controls stay in the main chat; paused or blocked
 objectives retain Start. Completion removes the goal strip immediately and
 keeps it hidden after reopening; the stored objective, completion state and
 conversation history remain on the PC. A localized completion notice stays in
@@ -704,3 +711,5 @@ keeps a static failure warning after recovery, with other work still usable. The
 rejects work mutations with `code: restoring`; a rejected Run now never marks
 the thread running. Stop and saved-history reads remain available. Internal
 `engine_restore` events advance replay cursors without rendering diagnostic JSON.
+
+Gateway bootstrap 请求带 `X-AIGateway-Model-Roles: 2`，声明支持十一角色列表；原有九角色响应仍兼容，模型配置权限继续由网关策略决定。
