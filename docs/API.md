@@ -320,7 +320,7 @@ endpoint:
 |---|---|
 | `signed_out` | no device login on this machine |
 | `pending` | signed in; the model catalog has not been read yet |
-| `ready` | the catalog was read (`models` is the total count). `kinds` counts `chat`, `unclassified`, `embedding`, `ocr`, `decisions`, `transcription`, `speech` and `other`; `embedding_models`, `transcription_models` and `speech_models` list their respective model names. `source_id` is the runtime `gateway:<32 hex>` id. Conversation rows in `GET /api/models` are the `chat` and unclassified names. When the server publishes fixed roles, `roles` is the read-only list `{id,enabled,label}` and a FOFA install uses those names instead of the catalog. The list may include `transcription`, `speech` and `image`. Voice uses `transcription` and `speech` when separately enabled in Settings → Voice; see `F-148` / `C-048`. Image generation remains display-only. An old server omits `roles` or returns only the first six or eight roles. LOCAL ignores the field |
+| `ready` | the catalog was read (`models` is the total count). `kinds` counts `chat`, `unclassified`, `embedding`, `ocr`, `decisions`, `transcription`, `speech` and `other`; `embedding_models`, `transcription_models` and `speech_models` list their respective model names. `source_id` is the runtime `gateway:<32 hex>` id. Conversation rows in `GET /api/models` are the `chat` and unclassified names. When the server publishes fixed roles, `roles` is the read-only list `{id,enabled,label}` and a FOFA install uses those names instead of the catalog. The list may include `transcription`, `speech`, `image`, `translation` and `naming`. Bootstrap requests them with `X-AIGateway-Model-Roles: 2`. Voice uses `transcription` and `speech` when separately enabled in Settings → Voice; see `F-148` / `C-048`. Image generation remains display-only. An enabled `translation` role posts selection translation to the account base `/translations`; an enabled `naming` role posts conversation and schedule naming to `/naming`. While those roles are off, selection translation keeps the conversation model and naming keeps `title`. An old server omits `roles` or returns only the first six, eight or nine roles. LOCAL ignores the field |
 | `no_access` | signed in but the account may not use the model API |
 | `unavailable` | signed in but the catalog could not be used; `reason` is one of `rejected`, `unsupported`, `network`, `gateway`, `unsafe_response`, `no_models` |
 
@@ -2200,6 +2200,20 @@ ids belong to. Unknown ids are
 same URL filters the response the way `GET /api/threads` does. The sidebar
 sends the ids of one group (Recents or one project) and lists everything
 afterwards. Responds `{"threads": […]}`.
+
+### `POST /api/threads/:id/translation` → `200`
+
+Translate one selection into Simplified Chinese. Send `{"text":"…"}`. The text
+must be nonblank and at most 8000 Unicode characters. The body is limited to
+96 KiB. The response is `{"text":"…"}`. An enabled FOFA `translation` role
+calls `POST /client/desktop/v1/translations`; otherwise the conversation model
+is used. The call does not create a turn or quote. Empty or invalid text is
+`400` `selection_translation_invalid`. Text over the character limit, or a body
+over 96 KiB, is `400` `selection_translation_too_long` or `413`
+`selection_translation_too_long`. Two translations may run at once; another is
+`429` `selection_translation_busy`. A missing conversation is `404`. Timeout is
+`504` `selection_translation_timeout`. Other model failures are `502`
+`selection_translation_unavailable` and do not include the upstream body.
 
 ### `POST /api/threads/:id/side-chat` → `200`
 

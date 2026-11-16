@@ -631,6 +631,9 @@ func TestFOFARolesUseFixedNamesAndStayReadOnly(t *testing.T) {
 		{"id": "decisions", "enabled": true, "label": "决策"},
 	}
 	g.bootstrap = func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-AIGateway-Model-Roles") != "2" {
+			t.Errorf("role header %q", r.Header.Get("X-AIGateway-Model-Roles"))
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
 			"user": map[string]any{"id": strings.Repeat("2", 32), "username": "Account"},
@@ -662,9 +665,11 @@ func TestFOFARolesUseFixedNamesAndStayReadOnly(t *testing.T) {
 		map[string]any{"id": "transcription", "enabled": false, "label": "语音识别"},
 		map[string]any{"id": "speech", "enabled": true, "label": "语音合成"},
 		map[string]any{"id": "image", "enabled": true, "label": "图片生成"},
+		map[string]any{"id": "translation", "enabled": true, "label": "翻译"},
+		map[string]any{"id": "naming", "enabled": false, "label": "命名"},
 	)
 	st = am.Refresh(context.Background())
-	if st.State != AccountReady || len(st.Roles) != 9 || st.Roles[6].ID != "transcription" || st.Roles[6].Enabled || st.Roles[7].ID != "speech" || !st.Roles[7].Enabled || st.Roles[7].Label != "语音合成" || st.Roles[8].ID != "image" || !st.Roles[8].Enabled || st.Roles[8].Label != "图片生成" {
+	if st.State != AccountReady || len(st.Roles) != 11 || st.Roles[6].ID != "transcription" || st.Roles[6].Enabled || st.Roles[7].ID != "speech" || !st.Roles[7].Enabled || st.Roles[7].Label != "语音合成" || st.Roles[8].ID != "image" || !st.Roles[8].Enabled || st.Roles[8].Label != "图片生成" || st.Roles[9].ID != "translation" || !st.Roles[9].Enabled || st.Roles[9].Label != "翻译" || st.Roles[10].ID != "naming" || st.Roles[10].Enabled || st.Roles[10].Label != "命名" {
 		t.Fatalf("speech and image roles = %+v", st.Roles)
 	}
 	if name, _, ok := pool.ConversationDefault(accountModelsSourceID); !ok || name != "conversation" {

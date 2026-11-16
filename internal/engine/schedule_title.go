@@ -60,22 +60,27 @@ func (e *Engine) runScheduleTitle(id, origin, prompt, providerID, model string) 
 	if origin != "" {
 		turnID = e.lastTurnID(origin)
 	}
-	builder, err := e.pool.ModelBuilder(ctx, providerID, model, "", e.callRecorder(origin, turnID))
-	if err != nil {
-		e.log.Warn("could not build the schedule namer", "schedule", id, "err", err)
-		return
+	var raw string
+	var err error
+	if accountID, _, ok := e.enabledAccountRole("naming"); ok {
+		raw, err = e.pool.CompleteFixedChat(ctx, accountID, "naming", scheduleTitlePrompt(), titleInput(prompt, ""), e.cfg.SwarmSnapshot().CompletionTokenLimit())
+	} else {
+		builder, buildErr := e.pool.ModelBuilder(ctx, providerID, model, "", e.callRecorder(origin, turnID))
+		err = buildErr
+		if err == nil {
+			var out *schema.Message
+			out, err = titleGenerate(ctx, builder(TitleAgentID, TitleAgentID), []*schema.Message{
+				schema.SystemMessage(scheduleTitlePrompt()),
+				schema.UserMessage(titleInput(prompt, "")),
+			})
+			if out != nil {
+				raw = out.Content
+			}
+		}
 	}
-	out, err := titleGenerate(ctx, builder(TitleAgentID, TitleAgentID), []*schema.Message{
-		schema.SystemMessage(scheduleTitlePrompt()),
-		schema.UserMessage(titleInput(prompt, "")),
-	})
 	if err != nil {
 		e.log.Warn("schedule namer failed", "schedule", id, "err", err)
 		return
-	}
-	raw := ""
-	if out != nil {
-		raw = out.Content
 	}
 	title := sanitizeTitle(raw)
 	if title == "" {

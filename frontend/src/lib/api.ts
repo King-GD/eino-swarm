@@ -267,6 +267,14 @@ async function requestResponse(path: string, init?: RequestInit): Promise<Respon
   return res
 }
 
+function translateSelection(id: string, text: string, signal: AbortSignal): Promise<{ text: string }> {
+  return request<{ text: string }>(`/api/threads/${encodeURIComponent(id)}/translation`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+    signal,
+  })
+}
+
 async function askSideChat(
   id: string,
   body: { question: string; quote?: string; history?: SideChatExchange[]; provider_id?: string; model?: string },
@@ -702,6 +710,7 @@ export const api = {
   },
 
   askSideChat,
+  translateSelection,
   decideThread: (id: string) =>
     request<{ text: string }>(`/api/threads/${id}/decision`, { method: "POST" }).then((r) => r.text),
   startTurn: (

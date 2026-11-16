@@ -159,24 +159,29 @@ func (e *Engine) runTitle(threadID string, turn *store.Turn, userText, final str
 	defer cancel()
 	ctx = provider.WithoutRouteRecovery(ctx)
 
-	fallbackProvider, fallbackModel := e.cfg.SwarmSnapshot().ResolveTitle(turn.ProviderID, turn.Model)
-	providerID, model := e.applyRoleModel(turn.ProviderID, "title", fallbackProvider, fallbackModel)
-	builder, err := e.pool.ModelBuilder(ctx, providerID, model, "", e.callRecorder(threadID, turn.ID))
+	var raw string
+	var err error
+	if id, _, ok := e.enabledAccountRole("naming"); ok {
+		raw, err = e.pool.CompleteFixedChat(ctx, id, "naming", titlePrompt(), titleInput(userText, final), e.cfg.SwarmSnapshot().CompletionTokenLimit())
+	} else {
+		fallbackProvider, fallbackModel := e.cfg.SwarmSnapshot().ResolveTitle(turn.ProviderID, turn.Model)
+		providerID, modelName := e.applyRoleModel(turn.ProviderID, "title", fallbackProvider, fallbackModel)
+		builder, buildErr := e.pool.ModelBuilder(ctx, providerID, modelName, "", e.callRecorder(threadID, turn.ID))
+		err = buildErr
+		if err == nil {
+			var out *schema.Message
+			out, err = titleGenerate(ctx, builder(TitleAgentID, TitleAgentID), []*schema.Message{
+				schema.SystemMessage(titlePrompt()),
+				schema.UserMessage(titleInput(userText, final)),
+			})
+			if out != nil {
+				raw = out.Content
+			}
+		}
+	}
 	if err != nil {
 		e.recordTitle(threadID, turn.ID, "", err.Error())
 		return
-	}
-	out, err := titleGenerate(ctx, builder(TitleAgentID, TitleAgentID), []*schema.Message{
-		schema.SystemMessage(titlePrompt()),
-		schema.UserMessage(titleInput(userText, final)),
-	})
-	if err != nil {
-		e.recordTitle(threadID, turn.ID, "", err.Error())
-		return
-	}
-	raw := ""
-	if out != nil {
-		raw = out.Content
 	}
 	title := sanitizeTitle(raw)
 	if title == "" {

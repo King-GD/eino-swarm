@@ -598,7 +598,7 @@ func parseAccountRoles(raw json.RawMessage) ([]provider.AccountRole, error) {
 		return nil, nil
 	}
 	var rows []provider.AccountRole
-	if json.Unmarshal(raw, &rows) != nil || len(rows) > 9 {
+	if json.Unmarshal(raw, &rows) != nil || len(rows) > 11 {
 		return nil, errAccountResponse
 	}
 	if len(rows) == 0 {
@@ -609,7 +609,7 @@ func parseAccountRoles(raw json.RawMessage) ([]provider.AccountRole, error) {
 		role := &rows[i]
 		role.ID = strings.TrimSpace(role.ID)
 		switch role.ID {
-		case "conversation", "title", "compact", "embedding", "ocr", "decisions", "transcription", "speech", "image":
+		case "conversation", "title", "compact", "translation", "naming", "embedding", "ocr", "decisions", "transcription", "speech", "image":
 		default:
 			return nil, errAccountResponse
 		}
@@ -653,6 +653,9 @@ func (a *AccountModels) get(ctx context.Context, target, token string) ([]byte, 
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
+	if req.URL.Path == desktopModelsPrefix+"bootstrap" {
+		req.Header.Set("X-AIGateway-Model-Roles", "2")
+	}
 	resp, err := a.client.Do(req)
 	if err != nil {
 		// Transport errors can quote the URL; the caller reports only a class.

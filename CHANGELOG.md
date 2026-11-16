@@ -111,14 +111,20 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
 
 ### Added
 
-- FOFA reads up to nine fixed server model roles when the account bootstrap
-  includes them. The account details show each switch and name, and those
-  controls cannot be edited. Conversation requests use `conversation`. Naming
-  and compact follow `conversation` while their own roles are off. Embedding,
-  OCR and decisions run only while those roles are on. Voice settings use the
-  speech recognition and synthesis roles; image generation remains read-only.
-  An older server that returns the first six or eight roles
-  still works. LOCAL keeps the ordinary catalog. (`F-173`)
+- FOFA reads up to eleven fixed server model roles when the account bootstrap
+  includes them. Bootstrap sends `X-AIGateway-Model-Roles: 2`, so a current
+  gateway also returns translation and naming. The account details show each
+  switch and name, and those controls cannot be edited. Conversation requests
+  use `conversation`. Conversation naming uses `title` and compact uses
+  `compact`; each follows `conversation` while its own role is off. An enabled
+  `naming` role posts conversation and schedule naming to `/naming`. An enabled
+  `translation` role translates an English selection from the Chinese selection
+  menu through `/translations`; while it is off, that translation uses the
+  conversation model. Embedding, OCR and decisions run only while those roles
+  are on. Voice settings use the speech recognition and synthesis roles; image
+  generation remains read-only. An older server that returns the first six,
+  eight or nine roles still works. LOCAL keeps the ordinary catalog.
+  (`F-173`, `F-181`)
 
 - PC-owned Voice settings with separate, initially disabled dictation and read
   aloud controls on desktop, Web and phone. Gateway audio goes directly from

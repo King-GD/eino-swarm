@@ -60,17 +60,18 @@ type Options struct {
 
 // Server owns the router.
 type Server struct {
-	opts       Options
-	engine     *engine.Engine
-	log        *slog.Logger
-	router     *gin.Engine
-	terminals  *terminal.Hub
-	remote     *remote.Host
-	search     *search.Service
-	presence   *presence
-	updater    update.Checker
-	sideChats  chan struct{}
-	audioCalls chan struct{}
+	opts         Options
+	engine       *engine.Engine
+	log          *slog.Logger
+	router       *gin.Engine
+	terminals    *terminal.Hub
+	remote       *remote.Host
+	search       *search.Service
+	presence     *presence
+	updater      update.Checker
+	sideChats    chan struct{}
+	translations chan struct{}
+	audioCalls   chan struct{}
 }
 
 // New builds the server and its routes.
@@ -88,11 +89,12 @@ func New(opts Options) (*Server, error) {
 
 	s := &Server{
 		opts: opts, engine: opts.Engine, log: opts.Logger,
-		terminals:  terminal.NewHub(terminal.MaxSessions),
-		presence:   newPresence(),
-		updater:    opts.Updater,
-		sideChats:  make(chan struct{}, sideChatConcurrency),
-		audioCalls: make(chan struct{}, speechHTTPConcurrency),
+		terminals:    terminal.NewHub(terminal.MaxSessions),
+		presence:     newPresence(),
+		updater:      opts.Updater,
+		sideChats:    make(chan struct{}, sideChatConcurrency),
+		translations: make(chan struct{}, selectionTranslationConcurrency),
+		audioCalls:   make(chan struct{}, speechHTTPConcurrency),
 	}
 	r := gin.New()
 	r.Use(gin.Recovery(), s.accessLog())
@@ -182,6 +184,7 @@ func New(opts Options) (*Server, error) {
 		api.POST("/threads/:id/turns", s.startTurn)
 		api.POST("/threads/:id/steer", s.steer)
 		api.POST("/threads/:id/side-chat", s.askSideChat)
+		api.POST("/threads/:id/translation", s.translateSelection)
 		api.POST("/threads/:id/decision", s.decideThread)
 		api.POST("/threads/:id/preempt", s.preempt)
 		api.DELETE("/threads/:id/steers/:seq", s.retractSteer)
@@ -305,6 +308,10 @@ func (s *Server) fail(c *gin.Context, err error) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "invalid_draft"})
 	case errors.Is(err, engine.ErrInvalidSideChat):
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Side chat question or history is invalid.", "code": "invalid_side_chat"})
+	case errors.Is(err, engine.ErrInvalidSelectionTranslation):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "The selection cannot be translated.", "code": "selection_translation_invalid"})
+	case errors.Is(err, engine.ErrSelectionTranslationTooLong):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "The selection is too long to translate.", "code": "selection_translation_too_long"})
 	case errors.Is(err, engine.ErrInvalidDesktopRecovery):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "invalid_desktop_recovery"})
 	case errors.Is(err, ErrEngineStopping):

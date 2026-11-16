@@ -1,7 +1,8 @@
-import { MessageSquare, MessageSquarePlus } from "lucide-react"
+import { Languages, Loader2, MessageSquare, MessageSquarePlus } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
+import { ApiError, api } from "@/lib/api"
 import {
   QUOTE_SELECTION_EVENT,
   menuPosition,
@@ -9,22 +10,32 @@ import {
   readTextSelection,
   type PageSelection,
 } from "@/lib/selection"
+import { englishSelection } from "@/lib/selection-language"
 import { useT } from "@/lib/use-t"
 import { TERMINAL_SELECTION_EVENT, type TerminalSelection } from "@/lib/terminal"
 
-/** Offers quote actions after a selection inside a quote source settles. */
+type SelectionTranslation = { status: "loading" | "done" | "error"; text: string; error?: string }
+
+/** Offers quote actions after a selection inside a quote source settles.
+ *  Translation stays beside that selection; it is not a quote. */
 export function SelectionMenu({
+  threadId,
   onAdd,
   onAsk,
 }: {
+  threadId?: string
   onAdd: (text: string) => void
   onAsk?: (text: string) => void
 }) {
   const t = useT()
   const [active, setActive] = useState<PageSelection | null>(null)
   const [clearSelection, setClearSelection] = useState<(() => void) | null>(null)
+  const [translation, setTranslation] = useState<SelectionTranslation | null>(null)
+  const translateAbort = useRef<AbortController | null>(null)
   const menu = useRef<HTMLDivElement>(null)
   const canAsk = Boolean(onAsk && !clearSelection)
+  const selectionText = active?.text ?? ""
+  const showTranslate = t.locale === "zh" && Boolean(threadId) && englishSelection(selectionText)
 
   useEffect(() => {
     let pressed = false
@@ -87,6 +98,7 @@ export function SelectionMenu({
       if (!fromEventTarget(event.target)) apply(true, true)
     }
     const hide = () => {
+      translateAbort.current?.abort()
       terminal = null
       dismissedClick = false
       setClearSelection(null)
@@ -136,20 +148,55 @@ export function SelectionMenu({
     }
   }, [])
 
+  useEffect(() => {
+    setTranslation(null)
+  }, [selectionText])
+
+  useEffect(() => () => {
+    translateAbort.current?.abort()
+  }, [selectionText])
+
   useLayoutEffect(() => {
     const el = menu.current
     if (!active || !el) return
     const { left } = menuPosition(active.rect, windowViewport(), el.offsetWidth)
     el.style.left = `${left}px`
-  }, [active, canAsk, t.locale])
+  }, [active, canAsk, showTranslate, t.locale, translation?.status])
 
   if (!active) return null
   const pos = menuPosition(active.rect, windowViewport())
   const choose = (action: (text: string) => void) => {
+    translateAbort.current?.abort()
     clearSelection?.()
     window.getSelection()?.removeAllRanges()
     setActive(null)
     action(active.text)
+  }
+  const translate = () => {
+    if (!threadId) return
+    translateAbort.current?.abort()
+    const controller = new AbortController()
+    translateAbort.current = controller
+    setTranslation({ status: "loading", text: "" })
+    void api.translateSelection(threadId, active.text, controller.signal).then(
+      (result) => {
+        if (controller.signal.aborted) return
+        if (!result.text.trim()) {
+          setTranslation({ status: "error", text: "", error: t("selection.translateFailed") })
+          return
+        }
+        setTranslation({ status: "done", text: result.text })
+      },
+      (error: unknown) => {
+        if (controller.signal.aborted) return
+        const tooLong = error instanceof ApiError && error.code === "selection_translation_too_long"
+        setTranslation({
+          status: "error",
+          text: "",
+          error: t(tooLong ? "selection.translateTooLong" : "selection.translateFailed"),
+        })
+      },
+    )
   }
 
   return (
@@ -158,7 +205,7 @@ export function SelectionMenu({
       data-testid="selection-menu"
       role="menu"
       aria-label={t("selection.menu")}
-      className="fixed z-50 flex rounded-md border border-border bg-popover p-0.5 text-popover-foreground shadow-md"
+      className="fixed z-50 flex max-w-sm flex-col rounded-md border border-border bg-popover p-0.5 text-popover-foreground shadow-md"
       style={{
         top: pos.top,
         left: pos.left,
@@ -186,6 +233,31 @@ export function SelectionMenu({
           <MessageSquare />
           {t("selection.sideChat")}
         </Button>
+      ) : null}
+      {showTranslate ? (
+        <Button
+          role="menuitem"
+          variant="ghost"
+          size="sm"
+          aria-busy={translation?.status === "loading"}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={translate}
+        >
+          {translation?.status === "loading" ? <Loader2 className="animate-spin" /> : <Languages />}
+          {t("selection.translate")}
+        </Button>
+      ) : null}
+      {translation ? (
+        <div
+          role="status"
+          aria-live="polite"
+          aria-label={t("selection.translation")}
+          className="max-h-48 overflow-auto border-t border-border px-2.5 py-2 text-(length:--chrome-font-size) whitespace-pre-wrap wrap-anywhere"
+        >
+          {translation.status === "loading" ? t("selection.translating")
+            : translation.status === "error" ? <span className="text-destructive">{translation.error}</span>
+            : translation.text}
+        </div>
       ) : null}
     </div>
   )

@@ -31,6 +31,20 @@ func (e *Engine) roleModel(providerID, role string) (modelName string, ok bool) 
 	return "", true
 }
 
+// enabledAccountRole returns a FOFA role only while that role is switched on.
+// A missing or disabled role leaves the caller on its existing model.
+func (e *Engine) enabledAccountRole(role string) (providerID, modelName string, ok bool) {
+	if e == nil || e.cfg == nil || e.pool == nil || !e.cfg.Product.FOFA() {
+		return "", "", false
+	}
+	id := e.pool.AccountSourceID()
+	enabled, configured := e.pool.AccountRole(id, role)
+	if !configured || !enabled {
+		return "", "", false
+	}
+	return id, role, true
+}
+
 func (e *Engine) applyRoleModel(providerID, role, fallbackProvider, fallbackModel string) (string, string) {
 	modelName, ok := e.roleModel(providerID, role)
 	if !ok {
