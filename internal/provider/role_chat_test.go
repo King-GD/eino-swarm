@@ -46,9 +46,9 @@ func TestCompleteFixedChatHidesTheUpstreamBody(t *testing.T) {
 
 	p := New(configFor(t, true))
 	src := accountSourceFor(t, srv.URL, "secret-token", "conversation")
-	src.SetRoles([]AccountRole{{ID: "naming", Enabled: true}})
+	src.SetRoles([]AccountRole{{ID: "title", Enabled: true}})
 	p.SetAccountSource(src)
-	_, err := p.CompleteFixedChat(context.Background(), src.ID(), "naming", "system", "source", 0)
+	_, err := p.CompleteFixedChat(context.Background(), src.ID(), "title", "system", "source", 0)
 	if err == nil || strings.Contains(err.Error(), secret) {
 		t.Fatalf("error %v", err)
 	}

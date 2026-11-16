@@ -25,6 +25,7 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Enabled account `title` uses the dedicated `/naming` route; legacy `naming` is ignored.
 - Preserve account model configuration policy when API/model access is unavailable; keep managed presets locked and reject account calls before model construction.
 
 - Count each portrait touch once, including synthesized zero-detail clicks, and

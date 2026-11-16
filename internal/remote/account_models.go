@@ -628,12 +628,15 @@ func parseAccountRoles(raw json.RawMessage) ([]provider.AccountRole, error) {
 	if len(rows) == 0 {
 		return nil, nil
 	}
+	kept := make([]provider.AccountRole, 0, len(rows))
 	seen := map[string]bool{}
-	for i := range rows {
-		role := &rows[i]
+	for _, role := range rows {
 		role.ID = strings.TrimSpace(role.ID)
+		if role.ID == "naming" {
+			continue
+		}
 		switch role.ID {
-		case "conversation", "title", "compact", "translation", "naming", "embedding", "ocr", "decisions", "transcription", "speech", "image":
+		case "conversation", "title", "compact", "translation", "embedding", "ocr", "decisions", "transcription", "speech", "image":
 		default:
 			return nil, errAccountResponse
 		}
@@ -648,8 +651,9 @@ func parseAccountRoles(raw json.RawMessage) ([]provider.AccountRole, error) {
 		if len(role.Label) > 255 || strings.IndexFunc(role.Label, func(r rune) bool { return r < 0x20 || r == 0x7f }) >= 0 {
 			return nil, errAccountResponse
 		}
+		kept = append(kept, role)
 	}
-	return rows, nil
+	return kept, nil
 }
 
 // sameOriginURL accepts only an absolute URL on exactly the credential's
