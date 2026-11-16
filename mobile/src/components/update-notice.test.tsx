@@ -7,7 +7,7 @@ vi.mock("@/lib/app-update", async () => {
     ...actual,
     checkForAppUpdate: vi.fn(),
     installUpdate: vi.fn(),
-    dismissUpdate: vi.fn(),
+    dismissUpdate: vi.fn((version: string, store?: Parameters<typeof actual.dismissUpdate>[1]) => actual.dismissUpdate(version, store)),
     listenDownloadProgress: vi.fn(async () => () => undefined),
   }
 })
@@ -35,7 +35,7 @@ describe("UpdateNotice", () => {
     setLocale("en")
     vi.mocked(checkForAppUpdate).mockReset()
     vi.mocked(installUpdate).mockReset()
-    vi.mocked(dismissUpdate).mockReset()
+    vi.mocked(dismissUpdate).mockClear()
     vi.mocked(listenDownloadProgress).mockReset()
     vi.mocked(listenDownloadProgress).mockResolvedValue(() => undefined)
   })
@@ -112,5 +112,14 @@ describe("UpdateNotice", () => {
     fireEvent.click(await screen.findByRole("button", { name: t("update.later") }))
     expect(dismissUpdate).toHaveBeenCalledWith("2.4.0")
     expect(screen.queryByRole("button", { name: t("update.upgrade") })).not.toBeInTheDocument()
+  })
+
+  it("hides a second offer when either one is dismissed", async () => {
+    vi.mocked(checkForAppUpdate).mockResolvedValue(offer)
+    render(<><UpdateNotice /><UpdateNotice /></>)
+    const later = await screen.findAllByRole("button", { name: t("update.later") })
+    expect(later).toHaveLength(2)
+    fireEvent.click(later[0])
+    await waitFor(() => expect(screen.queryByRole("button", { name: t("update.upgrade") })).not.toBeInTheDocument())
   })
 })

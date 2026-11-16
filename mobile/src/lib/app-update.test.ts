@@ -8,6 +8,7 @@ import {
   checkForAppUpdate,
   classifyLatestRelease,
   dismissUpdate,
+  watchUpdateDismissal,
   downloadStatus,
   formatByteSize,
   installUpdate,
@@ -160,6 +161,23 @@ describe("app update", () => {
     })
     expect(second?.version).toBe("2.4.0")
     expect(again).not.toHaveBeenCalled()
+  })
+
+  it("tells every open update notice that this version was skipped", () => {
+    const seen: string[] = []
+    const stop = watchUpdateDismissal(() => { seen.push("one") })
+    const stopOther = watchUpdateDismissal(() => { seen.push("two") })
+    try {
+      dismissUpdate("  ", memoryStore())
+      expect(seen).toEqual([])
+      dismissUpdate("2.4.0", memoryStore())
+      expect(seen).toEqual(["one", "two"])
+    } finally {
+      stop()
+      stopOther()
+    }
+    dismissUpdate("2.4.0", memoryStore())
+    expect(seen).toEqual(["one", "two"])
   })
 
   it("hides a version the person already skipped, until a later one exists", async () => {

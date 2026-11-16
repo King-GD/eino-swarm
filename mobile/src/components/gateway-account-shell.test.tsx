@@ -112,6 +112,9 @@ describe("gateway account shell", () => {
     render(<GatewayAccountShell><Menu /></GatewayAccountShell>)
     fireEvent.click(screen.getByRole("button", { name: "Open user center" }))
     const dialog = screen.getByRole("dialog", { name: "User center" })
+    expect(within(dialog).getByLabelText("Phone chat Web tools")).toHaveValue("auto")
+    expect(within(dialog).getByLabelText("PC conversation Web tools")).toHaveValue("inherit")
+    expect(within(dialog).queryByRole("button", { name: "Other server" })).not.toBeInTheDocument()
     const portrait = within(dialog).getByTestId("account-portrait")
     fireEvent.click(portrait); fireEvent.click(portrait); fireEvent.click(portrait)
     expect(localStorage.getItem("zwai.phone.mode")).toBe("account")
@@ -143,6 +146,9 @@ describe("gateway account shell", () => {
     expect(screen.queryByLabelText("Message")).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Menu" })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Other server" })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Phone chat Web tools")).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("PC conversation Web tools")).not.toBeInTheDocument()
   })
 
   it("hides local menus and switches mode after three portrait clicks", async () => {
@@ -320,14 +326,15 @@ describe("gateway account shell", () => {
     expect(screen.queryByRole("radio",{name:"All models"})).not.toBeInTheDocument()
   })
 
-  it("opens default-server sign-in without asking for server configuration and Android Back closes its overlay", async () => {
+  it("opens default-server sign-in without server or web-tool controls, and Android Back closes its overlay", async () => {
     localStorage.setItem("zwai.phone.mode", "local")
     render(<App />)
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }))
     expect(screen.getByTestId("gateway-account")).toBeVisible()
+    expect(screen.queryByRole("button", { name: "Other server" })).not.toBeInTheDocument()
     expect(screen.queryByLabelText("Server address")).not.toBeInTheDocument()
-    expect(screen.getByLabelText("Phone chat Web tools")).toHaveValue("auto")
-    expect(screen.getByLabelText("PC conversation Web tools")).toHaveValue("inherit")
+    expect(screen.queryByLabelText("Phone chat Web tools")).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("PC conversation Web tools")).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }))
     expect(mocks.account.login).toHaveBeenCalledOnce()
     await act(async () => { expect(window.__zwaiAndroidBack?.()).toBe(true) })

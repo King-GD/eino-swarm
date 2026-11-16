@@ -3,7 +3,6 @@ import { X } from "lucide-react"
 import { AccountPcList } from "@/components/account-pc-list"
 import type { GatewayAccountController } from "@/components/gateway-account-shell"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import type { DirectProvider } from "@/lib/direct-provider"
 import { AccountPortrait } from "@/components/account-portrait"
 import { t } from "@/lib/i18n"
@@ -11,6 +10,7 @@ import { gatewayUserDisplayName } from "@/lib/gateway-names"
 import { WebExecutionSettings } from "@/components/web-execution-settings"
 import type { PcWebSnapshot } from "@/components/pc-web-execution-status"
 import { SpeechStatus } from "@/components/speech-status"
+import { UpdateNotice } from "@/components/update-notice"
 
 export function GatewayAccountScreen({ account, providers, modelBusy, modelError, pcWeb, onClose, onConnect, onRefresh, onOtherWays, onToggleMode, pcRequired=false }: {
   pcRequired?: boolean
@@ -41,10 +41,7 @@ export function GatewayAccountScreen({ account, providers, modelBusy, modelError
     window.clearTimeout(clickTimer.current)
     onToggleMode?.()
   }
-  const [formError, setFormError] = useState("")
   const [otherWays, setOtherWays] = useState(false)
-  const [advanced, setAdvanced] = useState(false)
-  const [server, setServer] = useState(account.origin)
   const authorized = account.status === "authorized"
   const accountName = account.session ? gatewayUserDisplayName(account.session.user) : ""
   const waiting = ["checking", "authorization_pending", "account_pending", "account_rejected"].includes(account.status) || Boolean(account.session && account.status === "access_denied")
@@ -55,7 +52,9 @@ export function GatewayAccountScreen({ account, providers, modelBusy, modelError
     : account.status === "access_denied" ? t(account.session ? "account.accessDenied" : "account.denied")
     : account.status === "expired" ? t("account.expired") : ""
   return (
-    <main data-testid="gateway-account" className="mx-auto flex h-full max-w-lg flex-col overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+    <div className="mx-auto flex h-full max-w-lg flex-col">
+      <UpdateNotice />
+      <main data-testid="gateway-account" className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-[env(safe-area-inset-bottom)]">
       <header className="flex h-12 shrink-0 items-center border-b border-border px-4">
         <h1 className="flex-1 text-base font-semibold">{t("account.title")}</h1>
         {onClose ? <Button variant="ghost" className="size-10 px-0" aria-label={t("home.close")} onClick={onClose}><X className="size-5" aria-hidden /></Button> : null}
@@ -79,7 +78,7 @@ export function GatewayAccountScreen({ account, providers, modelBusy, modelError
           <p className="text-sm leading-relaxed text-muted-foreground">{t("account.hint")}</p>
           <Button disabled={account.busy} onClick={() => void account.login()}>{t("account.login")}</Button>
         </> : null}
-        {!waiting && !pcRequired ? <WebExecutionSettings pcWeb={pcWeb} /> : null}
+        {authorized && !pcRequired ? <WebExecutionSettings pcWeb={pcWeb} /> : null}
         {!waiting && !pcRequired ? <SpeechStatus /> : null}
         {authorized ? <>
           {!pcRequired && (providers.length > 0 || modelBusy || modelError) ? <section className="flex flex-col gap-2">
@@ -112,17 +111,8 @@ export function GatewayAccountScreen({ account, providers, modelBusy, modelError
         </> : null}
         {(authorized || waiting) ? <Button variant="outline" disabled={account.busy} onClick={() => void onRefresh()}>{t("account.retry")}</Button> : null}
         {(account.session || waiting) ? <Button variant="ghost" onClick={() => void account.logout()}>{t("account.logout")}</Button> : null}
-        {!waiting ? <>
-          <Button variant="ghost" onClick={() => setAdvanced((value) => !value)} aria-expanded={advanced}>{t("account.advanced")}</Button>
-          {advanced ? <form className="flex flex-col gap-2" onSubmit={(event) => { event.preventDefault(); setFormError(""); try { account.setOrigin(server) } catch { setFormError(t("chat.badUrl")) } }}>
-            <label htmlFor="account-server" className="text-sm">{t("account.server")}</label>
-            <Input id="account-server" value={server} onChange={(event) => setServer(event.target.value)} autoCapitalize="off" autoCorrect="off" spellCheck={false} />
-            <p className="text-xs text-muted-foreground">{t("account.serverHint")}</p>
-            <Button variant="outline" type="submit">{t("account.saveServer")}</Button>
-          </form> : null}
-          {formError ? <p role="alert" className="text-sm text-destructive">{formError}</p> : null}
-        </> : null}
       </div>
-    </main>
+      </main>
+    </div>
   )
 }

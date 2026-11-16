@@ -942,7 +942,8 @@ default. On Desktop, **Settings → Tools → Web tools run on** selects
 **Automatic**, **This device**, or **Server cloud**. Automatic uses the
 account after Gateway authorization and stays local while anonymous. A cloud
 failure remains visible. New execution choices apply from the next turn. The
-phone has its own two choices, saved by Gateway and account. See
+phone has its own two choices, saved by Gateway and account. LOCAL User
+center shows them only after sign-in. See
 [tools](CONFIG.md#tools) and the [phone guide](../mobile/README.md).
 
 ## Updates
