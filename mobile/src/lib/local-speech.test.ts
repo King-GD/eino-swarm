@@ -33,3 +33,12 @@ it("refuses damaged, gateway, or deleted provider references", async () => {
   expect(localSpeechSnapshot().output.ready).toBe(false)
   await expect(localPhoneSpeechCall("speak", "text", new AbortController().signal)).rejects.toThrow("unavailable")
 })
+
+it("persists the selected streaming PCM format without saving the provider credential", () => {
+  const settings = defaultSpeechSettings()
+  settings.output = { ...settings.output, enabled: true, provider_id: "own", model: "voice", format: "pcm" as typeof settings.output.format }
+  saveLocalSpeech(settings)
+  expect(loadLocalSpeech().output.format).toBe("pcm")
+  expect(localSpeechSnapshot().output).toMatchObject({ ready: true, format: "pcm" })
+  expect(localStorage.getItem("zwai.phone.localSpeech")).not.toContain("own-key")
+})

@@ -34,6 +34,15 @@ if "__ZWAI_GATEWAY_FIXTURE_ORIGIN__" in scenario_source:
     if not gateway:
         raise SystemExit("The account scenario needs a loopback origin")
     scenario_source = scenario_source.replace("__ZWAI_GATEWAY_FIXTURE_ORIGIN__", gateway)
+speech_observer = os.environ.get("IOS_LAYOUT_SPEECH_OBSERVER", "")
+if speech_observer not in ("", "1"):
+    raise SystemExit("IOS_LAYOUT_SPEECH_OBSERVER must be 1 when enabled")
+if speech_observer and (not gateway or os.environ.get("IOS_LAYOUT_PRESERVE_PUBLIC") != "1"):
+    raise SystemExit("The passive speech observer requires a loopback gateway and preserved public bytes")
+observer_source = ""
+if speech_observer:
+    observer_file = mobile / "e2e/account-fixture/speech-observer.js"
+    observer_source = observer_file.read_text().replace("__ZWAI_SPEECH_FIXTURE_ORIGIN__", gateway)
 public = Path(os.environ.get("IOS_LAYOUT_PUBLIC", str(mobile / "ios/App/App/public")))
 if not (public / "index.html").is_file():
     raise SystemExit("Run npm run build and npx cap copy ios first")
@@ -54,6 +63,8 @@ if phone_mode:
     bootstrap += 'localStorage.setItem("zwai.phone.mode",' + json.dumps(phone_mode) + ');'
 if gateway:
     bootstrap += 'localStorage.setItem("zwai.phone.gateway.origin",' + json.dumps(gateway) + ');'
+if observer_source:
+    bootstrap += "\n" + observer_source
 if os.environ.get("IOS_LAYOUT_PRESERVE_PUBLIC") == "1":
     # A signed IPA's web bytes can be used unchanged in the simulator. Only
     # this private native wrapper selects offline input before the first page.

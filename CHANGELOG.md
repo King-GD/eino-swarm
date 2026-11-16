@@ -4,6 +4,16 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). GitHub Releases start
 at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
+## [0.1.81] - 2026-11-17
+
+### Changed
+
+- PCM streaming read aloud on desktop/Web and direct phone speech requests:
+  playback starts as audio arrives, with raw PCM and OpenAI speech SSE support.
+  Select PCM as the audio format in speech settings; MP3/WAV and PC-local phone
+  RPC retain complete-segment playback. Stop cancels the stream and queued audio.
+  (`F-148`, `C-048`)
+
 ## [0.1.80] - 2026-11-16
 
 ### Changed

@@ -1,4 +1,5 @@
 import type { SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
+import { speechAudioResponse, type SpeechAudio, type SpeechAudioStream } from "../../../frontend/src/lib/speech-stream"
 import { gatewayAuthorityCurrent, notifyGatewayRefusal, watchGatewayAuthority } from "./gateway-authority"
 import type { GatewaySession } from "./gateway-account"
 import { gatewayFetch } from "./gateway-fetch"
@@ -8,6 +9,38 @@ import { OpAudioCancel, OpAudioChunk, OpAudioSpeech, OpAudioTranscribe, type Rem
 
 export class SpeechCallError extends Error {
   constructor(readonly code: "unavailable" | "failed" | "timeout" | "too_large" | "invalid_audio" | "empty" | "permission" = "failed") { super(code); this.name = "SpeechCallError" }
+}
+
+/** A response retains timeout and authority through queued playback. Successful
+ * EOF leaves ownership with the consumer until its explicit cancel(). */
+export function retainSpeechStream(stream: SpeechAudioStream, release: () => void, check: () => void, mapFailure: (error: unknown) => unknown = error => error, signal?: AbortSignal): SpeechAudioStream {
+  let closed = false
+  const cancel = () => {
+    if (closed) return
+    closed = true
+    signal?.removeEventListener("abort", cancel)
+    stream.cancel()
+    release()
+  }
+  if (signal?.aborted) cancel(); else signal?.addEventListener("abort", cancel, { once: true })
+  return {
+    sampleRate: stream.sampleRate,
+    signal: stream.signal ?? signal,
+    cancel,
+    chunks: (async function* () {
+      let completed = false
+      try {
+        check()
+        for await (const chunk of stream.chunks) {
+          check()
+          yield chunk
+        }
+        check()
+        completed = true
+      } catch (error) { throw mapFailure(error) }
+      finally { if (!completed) cancel() }
+    })(),
+  }
 }
 
 export function speechFileName(mime: string): string {
@@ -50,22 +83,34 @@ async function boundedBody(response: Response, maximum: number, signal: AbortSig
 
 /** The PC supplies parameters, never a request URL or a credential. Construct
  * the ordinary Mobile data-plane endpoint from the phone's own live session. */
-export async function gatewaySpeechCall(snapshot: SpeechSnapshot, session: GatewaySession, operation: "transcribe" | "speak", input: Blob | string, signal: AbortSignal, fetcher: typeof fetch = gatewayFetch): Promise<string | Blob> {
+export async function gatewaySpeechCall(snapshot: SpeechSnapshot, session: GatewaySession, operation: "transcribe" | "speak", input: Blob | string, signal: AbortSignal, fetcher: typeof fetch = gatewayFetch): Promise<string | SpeechAudio> {
   if (snapshot.execution !== "gateway" || snapshot.gateway_origin !== session.origin || !gatewayAuthorityCurrent(session)) throw new SpeechCallError("unavailable")
   return endpointSpeechCall(snapshot, session.origin + "/v1", session.token, operation, input, signal, fetcher, session)
 }
 
 /** Also used by LOCAL phone bindings. The endpoint and credential are supplied
  * by this device's provider record, never by a cached PC speech snapshot. */
-export async function endpointSpeechCall(snapshot: SpeechSnapshot, baseURL: string, apiKey: string, operation: "transcribe" | "speak", input: Blob | string, signal: AbortSignal, fetcher: typeof fetch = fetch, authority?: GatewaySession): Promise<string | Blob> {
+export async function endpointSpeechCall(snapshot: SpeechSnapshot, baseURL: string, apiKey: string, operation: "transcribe" | "speak", input: Blob | string, signal: AbortSignal, fetcher: typeof fetch = fetch, authority?: GatewaySession): Promise<string | SpeechAudio> {
   const option = operation === "transcribe" ? snapshot.input : snapshot.output
   if (!option.enabled || !option.ready) throw new SpeechCallError("unavailable")
   const aborter = new AbortController()
-  const abort = () => aborter.abort()
+  let timedOut = false
+  const abort = () => aborter.abort(timedOut ? new SpeechCallError("timeout") : undefined)
   if (signal.aborted) abort(); else signal.addEventListener("abort", abort, { once: true })
   const unwatch = authority ? watchGatewayAuthority(authority, abort) : () => undefined
-  let timedOut = false
   const timer = setTimeout(() => { timedOut = true; abort() }, option.timeout_seconds * 1000)
+  let retained = false
+  const release = () => { clearTimeout(timer); unwatch(); signal.removeEventListener("abort", abort); abort() }
+  const check = () => {
+    if ((authority && !gatewayAuthorityCurrent(authority)) || aborter.signal.aborted) throw new DOMException("Aborted", "AbortError")
+  }
+  const mapFailure = (error: unknown): unknown => {
+    if (timedOut) return new SpeechCallError("timeout")
+    if (aborter.signal.aborted) return new DOMException("Aborted", "AbortError")
+    if (error instanceof SpeechCallError || (error instanceof Error && error.name === "AbortError")) return error
+    const code = error && typeof error === "object" && "code" in error ? error.code : undefined
+    return new SpeechCallError(code === "too_large" || code === "invalid_audio" || code === "empty" ? code : "failed")
+  }
   try {
     let body: FormData | string
     const headers: Record<string, string> = apiKey ? { Authorization: "Bearer " + apiKey } : {}
@@ -81,6 +126,7 @@ export async function endpointSpeechCall(snapshot: SpeechSnapshot, baseURL: stri
       if (typeof input !== "string" || !input.trim() || Array.from(input).length > snapshot.limits.chunk_chars) throw new SpeechCallError("too_large")
       headers["Content-Type"] = "application/json"
       body = JSON.stringify({ model: snapshot.output.model, input, response_format: snapshot.output.format, speed: snapshot.output.speed,
+        ...(snapshot.output.format === "pcm" ? { stream_format: "audio" } : {}),
         ...(snapshot.output.voice ? { voice: snapshot.output.voice } : {}), ...(snapshot.output.instructions ? { instructions: snapshot.output.instructions } : {}) })
     }
     const response = await fetcher(baseURL.replace(/\/$/, "") + "/audio/" + (operation === "transcribe" ? "transcriptions" : "speech"), {
@@ -90,6 +136,15 @@ export async function endpointSpeechCall(snapshot: SpeechSnapshot, baseURL: stri
       await response.body?.cancel().catch(() => undefined)
       if (authority) notifyGatewayRefusal(authority, response.status)
       throw new SpeechCallError(response.status === 401 || response.status === 403 ? "permission" : "failed")
+    }
+    if (operation === "speak" && snapshot.output.format === "pcm") {
+      const audio = await speechAudioResponse(response, aborter.signal, snapshot.limits.output_bytes, true)
+      check()
+      if ("chunks" in audio) {
+        retained = true
+        return retainSpeechStream(audio, release, check, mapFailure, aborter.signal)
+      }
+      return audio
     }
     const maximum = operation === "transcribe" ? snapshot.limits.input_bytes : snapshot.limits.output_bytes
     const bytes = await boundedBody(response, maximum, aborter.signal)
@@ -105,11 +160,8 @@ export async function endpointSpeechCall(snapshot: SpeechSnapshot, baseURL: stri
     if (!bytes.length || !(mime.startsWith("audio/") || mime === "application/octet-stream")) throw new SpeechCallError("invalid_audio")
     return new Blob([new Uint8Array(bytes).buffer], { type: mime === "application/octet-stream" ? (snapshot.output.format === "wav" ? "audio/wav" : "audio/mpeg") : mime })
   } catch (error) {
-    if (timedOut) throw new SpeechCallError("timeout")
-    if (aborter.signal.aborted) throw new DOMException("Aborted", "AbortError")
-    if (error instanceof SpeechCallError || (error instanceof Error && error.name === "AbortError")) throw error
-    throw new SpeechCallError()
-  } finally { clearTimeout(timer); unwatch(); signal.removeEventListener("abort", abort) }
+    throw mapFailure(error)
+  } finally { if (!retained) release() }
 }
 
 function audioResponse(response: RemoteResponse, id: string) {

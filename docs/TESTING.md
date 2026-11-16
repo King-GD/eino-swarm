@@ -21,6 +21,18 @@ Gateway direct calls with the phone's own session and local PC chunk/cancel RPC.
 Run the corresponding browser E2E with isolated ports/data/output and do not
 rebuild a Vite dist while serving a case.
 
+Streaming regressions hold the upstream open while asserting the first audio
+has already reached the actual HTTP client and Web Audio player. Shared stream
+and media tests exercise raw PCM, split samples, SSE framing and completion,
+backpressure, size limits, stop and replacement ownership. Phone transport tests
+retain timeout, account authority and exact-PC cancellation through the entire
+stream. `frontend/e2e/speech-stream.spec.ts` drives the existing Read aloud action
+against held PCM/SSE upstreams and checks actual scheduled samples before EOF,
+then completion or cancellation. `mobile/e2e/speech-stream.spec.ts` checks direct
+Gateway playback before EOF and cancellation of the held request on Stop.
+MP3/WAV and PC-local RPC remain compatibility regressions. These fixtures use no
+real model or credentials.
+
 Settings regressions keep voice input, read aloud and resource limits inside
 Models for LOCAL and configurable ordinary Gateway accounts. Managed third-party
 accounts have only the Speech parameter page and no Models navigation or model,
@@ -35,6 +47,19 @@ recording controls, permission refusal/recovery and playback. Report physical
 device capture separately from simulator-generated media. Preserve first
 failures, audio MIME/byte evidence, target identity and cleanup receipts outside
 the checkout; never invoke a real model from an automated test.
+
+The phone streaming case also runs in the iPhone WebKit project. Its real HTTP
+fixture answers real CORS preflights and asserts that WebKit made one before
+testing playback through the streaming POST.
+Settings tests distinguish generating speech from actual scheduled playback.
+Expiry after HTTP EOF must still stop queued sources until playback releases
+the stream; a retired stream must not stop a replacement playback owner.
+
+The packaged PCM/SSE cases are `ios-speech-stream.swift` and Android
+`SpeechStreamingTest`. Their synthetic account fixture retains real native
+start/stop/disconnect/context-close observations and complete-sample natural
+completion. Preparation is separate from execution and exact-package acceptance;
+see [the native speech fixture guide](../mobile/e2e/account-fixture/speech-stream.md).
 
 ## Headless Web presence (`C-001`)
 

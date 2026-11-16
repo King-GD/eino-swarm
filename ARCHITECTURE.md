@@ -577,7 +577,8 @@ The phone reuses the explicitly selected PC's safe snapshot in PC conversations
 and direct Chat. Gateway execution uses the phone's own current Mobile session
 against the matching Gateway's ordinary `/v1/audio/*`; audio never goes through
 the PC in this mode. Its per-PC cache contains no key, token or local endpoint,
-is bound to the pairing authority, and remains usable with the PC offline.
+is bound to the pairing authority, and permits execution only while that exact
+PC link is live and its engine is ready.
 Changes made on an unreachable PC apply after the next synchronization. Unlink
 removes that cache; another PC/account is never an implicit fallback.
 
@@ -593,7 +594,13 @@ The shared browser recorder owns acquired microphone tracks through cancellation
 including late permission grants. PC dictation updates the existing durable draft;
 phone dictation edits its existing composer. Playback extracts Markdown prose,
 skips fenced code, and sequences bounded speech segments through one cancelable
-player. Native microphone declarations and packaged-app behavior remain separate
+player. Selecting PCM enables incremental 24 kHz mono S16LE playback for PC/Web
+and direct phone HTTP calls. The Go service retains model ownership and
+configuration/timeout cancellation through the response reader's lifetime and
+flushes each chunk. The shared renderer consumes raw PCM or OpenAI speech SSE,
+preserves samples across byte boundaries and cancels every queued audio source
+with its request. MP3/WAV and PC-local RPC still buffer complete segments.
+Native microphone declarations and packaged-app behavior remain separate
 acceptance gates. See `F-148` / `C-048` and [Testing](docs/TESTING.md).
 
 ## Official server account models

@@ -59,6 +59,86 @@ describe("phone speech calls follow the PC's execution mode", () => {
     expect(result).toMatchObject({ type: "audio/wav", size: 3 })
   })
 
+  it.each(["audio/wav", "audio/mpeg"])("rejects Gateway %s instead of buffering a requested PCM stream", async (mime) => {
+    const streaming = { ...config, output: { ...config.output, format: "pcm" as const } }
+    const response = new Response(new Uint8Array([0, 1]), { headers: { "Content-Type": mime } })
+    const cancel = vi.spyOn(response.body!, "cancel")
+    const fetcher = vi.fn<typeof fetch>(async () => response)
+    await expect(gatewaySpeechCall(streaming, session, "speak", "text", new AbortController().signal, fetcher)).rejects.toMatchObject({ code: "invalid_audio" })
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toMatchObject({ response_format: "pcm", stream_format: "audio" })
+    expect(cancel).toHaveBeenCalledOnce()
+    expect(fetcher).toHaveBeenCalledOnce()
+  })
+
+  it("returns PCM before synthesis finishes and retains logout cancellation after the headers", async () => {
+    const streaming = { ...config, output: { ...config.output, format: "pcm" as SpeechSnapshot["output"]["format"] } }
+    let body!: ReadableStreamDefaultController<Uint8Array>
+    const cancelled = vi.fn()
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(new ReadableStream<Uint8Array>({
+      start(controller) { body = controller; controller.enqueue(new Uint8Array([1, 2])) }, cancel: cancelled,
+    }), { headers: { "Content-Type": "audio/pcm" } }))
+    let settled = false
+    const pending = gatewaySpeechCall(streaming, session, "speak", "text", new AbortController().signal, fetcher).then(value => { settled = true; return value })
+    try {
+      await vi.waitFor(() => expect(settled).toBe(true), { timeout: 100 })
+      const result = await pending
+      expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toMatchObject({ response_format: "pcm", stream_format: "audio" })
+      expect(result).toHaveProperty("chunks")
+      if (typeof result === "string" || !("chunks" in result)) throw new Error("Expected PCM stream")
+      const reader = result.chunks[Symbol.asyncIterator]()
+      expect(await reader.next()).toMatchObject({ done: false, value: new Uint8Array([1, 2]) })
+      const next = reader.next()
+      clearGatewaySession()
+      await expect(next).rejects.toMatchObject({ name: "AbortError" })
+      expect(cancelled).toHaveBeenCalledOnce()
+    } finally { if (!settled) { body.close(); await pending } }
+  })
+
+  it("keeps the PCM timeout and total byte limit active while consuming the stream", async () => {
+    vi.useFakeTimers()
+    const streaming = { ...config, output: { ...config.output, format: "pcm" as SpeechSnapshot["output"]["format"], timeout_seconds: 1 } }
+    const cancelled = vi.fn()
+    const result = await gatewaySpeechCall(streaming, session, "speak", "text", new AbortController().signal, async () => new Response(new ReadableStream({ cancel: cancelled }), { headers: { "Content-Type": "audio/pcm" } }))
+    if (typeof result === "string" || !("chunks" in result)) throw new Error("Expected PCM stream")
+    const next = result.chunks[Symbol.asyncIterator]().next().catch(error => error)
+    await vi.advanceTimersByTimeAsync(1001)
+    expect(await next).toMatchObject({ code: "timeout" })
+    expect(cancelled).toHaveBeenCalledOnce()
+
+    const limited = await gatewaySpeechCall({ ...streaming, limits: { ...streaming.limits, output_bytes: 3 } }, session, "speak", "text", new AbortController().signal, async () => new Response(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array([1, 2])); controller.enqueue(new Uint8Array([3, 4])); controller.close() } }), { headers: { "Content-Type": "audio/pcm" } }))
+    if (typeof limited === "string" || !("chunks" in limited)) throw new Error("Expected PCM stream")
+    const reader = limited.chunks[Symbol.asyncIterator]()
+    await expect(reader.next()).resolves.toMatchObject({ value: new Uint8Array([1, 2]), done: false })
+    await expect(reader.next()).rejects.toMatchObject({ code: "too_large" })
+  })
+
+  it("retains Gateway expiry after PCM EOF until queued playback releases the stream", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-11-16T00:00:00Z"))
+    const expiring = { ...session, device: { ...session.device, expires_at: new Date(Date.now() + 1000).toISOString() } }
+    saveGatewaySession(expiring)
+    const streaming = { ...config, output: { ...config.output, format: "pcm" as const } }
+    let requestSignal!: AbortSignal
+    const result = await gatewaySpeechCall(streaming, expiring, "speak", "text", new AbortController().signal, async (_url, init) => {
+      requestSignal = init!.signal as AbortSignal
+      return new Response(new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new Uint8Array([1, 2])); controller.close() } }), { headers: { "Content-Type": "audio/pcm" } })
+    })
+    if (typeof result === "string" || !("chunks" in result)) throw new Error("Expected PCM stream")
+    try {
+      const reader = result.chunks[Symbol.asyncIterator]()
+      await expect(reader.next()).resolves.toMatchObject({ done: false, value: new Uint8Array([1, 2]) })
+      await expect(reader.next()).resolves.toMatchObject({ done: true })
+      // Network EOF can precede the final scheduled AudioBufferSource ending.
+      // Its authority must still be live, and expiry must reach that consumer.
+      expect(requestSignal.aborted).toBe(false)
+      const playbackSignal = (result as typeof result & { signal?: AbortSignal }).signal
+      expect(playbackSignal).toBe(requestSignal)
+      await vi.advanceTimersByTimeAsync(1001)
+      expect(playbackSignal?.aborted).toBe(true)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally { result.cancel() }
+  })
+
   it("uses only local audio RPCs for a configured local PC and always releases the temporary audio", async () => {
     const rpc = vi.fn<RemoteLink["rpc"]>(async (req) => {
       if (req.op === "audio_transcribe") return { ok: true, audio: { audio_id: req.audio_id!, text: "from PC" } } as RemoteResponse

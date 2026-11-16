@@ -20,7 +20,7 @@ export interface SpeechInputSettings extends SpeechConnectionSettings {
 export interface SpeechOutputSettings extends SpeechConnectionSettings {
   voice: string
   speed: number
-  format: "mp3" | "wav"
+  format: "mp3" | "wav" | "pcm"
   instructions: string
   timeout_seconds: number
 }

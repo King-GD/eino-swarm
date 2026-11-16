@@ -154,8 +154,8 @@ func (c *Config) validateSpeech() (err error) {
 	if s.Input.RecordingFormat != "auto" && s.Input.RecordingFormat != "wav" {
 		return fmt.Errorf("speech recording format must be auto or wav")
 	}
-	if s.Output.Format != "mp3" && s.Output.Format != "wav" {
-		return fmt.Errorf("speech output format must be mp3 or wav")
+	if s.Output.Format != "mp3" && s.Output.Format != "wav" && s.Output.Format != "pcm" {
+		return fmt.Errorf("speech output format must be mp3, wav or pcm")
 	}
 	if math.IsNaN(s.Output.Speed) || math.IsInf(s.Output.Speed, 0) || s.Output.Speed < .25 || s.Output.Speed > 4 {
 		return fmt.Errorf("speech speed must be between 0.25 and 4")

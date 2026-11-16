@@ -1,12 +1,13 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { useState } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { SpeechSettings } from "./settings-speech"
+import { speechPlayback } from "@/lib/speech-media"
 import { defaultSpeechSettings } from "@/lib/speech-types"
 import type { Settings, Meta } from "@/lib/types"
 import { useApp } from "@/store/app"
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 function setup(mode: "local" | "fofa", onChange = vi.fn(), onFlush = vi.fn(async () => {})) {
   useApp.setState({ meta: { product_mode: mode } as Meta })
@@ -21,6 +22,19 @@ function setup(mode: "local" | "fofa", onChange = vi.fn(), onFlush = vi.fn(async
 }
 
 describe("Speech settings", () => {
+  it("distinguishes generating from playing in the reading test", () => {
+    let snapshot: ReturnType<typeof speechPlayback.getSnapshot> = { key: "settings:speech", state: "loading" }
+    let changed: (() => void) | undefined
+    vi.spyOn(speechPlayback, "getSnapshot").mockImplementation(() => snapshot)
+    vi.spyOn(speechPlayback, "subscribe").mockImplementation((listener) => { changed = listener; return () => {} })
+    setup("local")
+    expect(screen.getByRole("status")).toHaveTextContent("Generating speech…")
+    act(() => { snapshot = { key: "settings:speech", state: "playing" }; changed?.() })
+    expect(screen.getByRole("status")).toHaveTextContent("Playing audio")
+    act(() => { snapshot = { state: "idle" }; changed?.() })
+    expect(screen.queryByRole("status")).toBeNull()
+  })
+
   it("configures local speech independently and preserves a saved secret until explicitly cleared", () => {
     const { onChange } = setup("local")
     fireEvent.change(screen.getAllByLabelText("API base URL")[0], { target: { value: "http://speech.invalid/v1" } })

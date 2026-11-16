@@ -11,6 +11,10 @@ const snapshot = {
 }
 
 describe("PC-owned phone speech configuration", () => {
+  it("retains the PC's streaming PCM choice for the exact pairing", () => {
+    expect(saveSpeechCache(pc, { ...snapshot, output: { ...snapshot.output, format: "pcm" } })?.snapshot.output.format).toBe("pcm")
+    expect(loadSpeechCache(pc)?.snapshot.output.format).toBe("pcm")
+  })
   it("retains safe gateway settings for this exact pairing when the PC is offline", () => {
     saveSpeechCache(pc, { ...snapshot, api_key: "must-not-copy", input: { ...snapshot.input, token: "must-not-copy" } }, 123)
     const stored = loadSpeechCache(pc)

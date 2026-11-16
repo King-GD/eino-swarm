@@ -1,4 +1,5 @@
 import { speechSegments, speechText } from "./speech-text"
+import type { SpeechAudio, SpeechAudioStream } from "./speech-stream"
 
 let audioOwner: (() => void) | undefined
 function claimAudio(cancel: () => void) { audioOwner?.(); audioOwner = cancel }
@@ -171,10 +172,15 @@ async function recordingWAV(blob: Blob): Promise<Blob> {
 }
 
 export interface SpeechPlaybackSnapshot { key?: string; state: "idle" | "loading" | "playing" }
-export interface SpeechPlaybackOptions { chunkChars: number; synthesize: (text: string, signal: AbortSignal) => Promise<Blob> }
+export interface SpeechPlaybackOptions { chunkChars: number; synthesize: (text: string, signal: AbortSignal) => Promise<SpeechAudio> }
+
+interface QueuedSource { source: AudioBufferSourceNode; ended: Promise<void>; finish(): void }
+interface PlaybackOwner {
+  key: string; controller: AbortController; context: AudioContext; sources: Set<QueuedSource>; cancel(): void; audio?: SpeechAudioStream
+}
 
 class SpeechPlayback {
-  private current?: { key: string; controller: AbortController; context: AudioContext; source?: AudioBufferSourceNode; ended?: () => void; cancel: () => void }
+  private current?: PlaybackOwner
   private snapshot: SpeechPlaybackSnapshot = { state: "idle" }
   private listeners = new Set<() => void>()
   getSnapshot = () => this.snapshot
@@ -185,11 +191,78 @@ class SpeechPlayback {
     if (!current) return
     this.current = undefined
     current.controller.abort()
-    if (current.source) { try { current.source.stop() } catch { /* Already ended. */ } current.source.disconnect() }
-    current.ended?.()
+    current.audio?.cancel()
+    for (const queued of current.sources) {
+      try { queued.source.stop() } catch { /* Already ended. */ }
+      queued.source.disconnect()
+      queued.finish()
+    }
     if (current.context.state !== "closed") void current.context.close().catch(() => undefined)
     releaseAudio(current.cancel)
     this.publish({ state: "idle" })
+  }
+
+  private queue(current: PlaybackOwner, buffer: AudioBuffer, when?: number): QueuedSource {
+    const source = current.context.createBufferSource()
+    source.buffer = buffer
+    source.connect(current.context.destination)
+    let resolve!: () => void
+    const ended = new Promise<void>((yes) => { resolve = yes })
+    const queued = { source, ended, finish: () => { current.sources.delete(queued); resolve() } }
+    current.sources.add(queued)
+    source.onended = () => { source.disconnect(); queued.finish() }
+    source.start(when)
+    this.publish({ key: current.key, state: "playing" })
+    return queued
+  }
+
+  private async playPCM(current: PlaybackOwner, audio: SpeechAudioStream): Promise<void> {
+    current.audio = audio
+    const cancelled = () => {
+      if (this.current !== current) return
+      current.controller.abort(audio.signal?.reason)
+      this.stop()
+    }
+    audio.signal?.addEventListener("abort", cancelled, { once: true })
+    let leftover: number | undefined
+    let count = 0
+    let nextTime = current.context.currentTime
+    try {
+      if (audio.signal?.aborted) { cancelled(); return }
+      for await (const chunk of audio.chunks) {
+        if (current.controller.signal.aborted) return
+        let bytes = chunk
+        if (leftover !== undefined) { bytes = new Uint8Array(chunk.length + 1); bytes[0] = leftover; bytes.set(chunk, 1); leftover = undefined }
+        if (bytes.length % 2) leftover = bytes[bytes.length - 1]
+        const samples = Math.floor(bytes.length / 2)
+        for (let offset = 0; offset < samples;) {
+          // Backpressure bounds the scheduled queue even for one large read.
+          while (current.sources.size >= 4) {
+            await current.sources.values().next().value!.ended
+            if (current.controller.signal.aborted) return
+          }
+          const length = Math.min(samples - offset, audio.sampleRate / 4)
+          const buffer = current.context.createBuffer(1, length, audio.sampleRate)
+          const channel = buffer.getChannelData(0)
+          const view = new DataView(bytes.buffer, bytes.byteOffset + offset * 2, length * 2)
+          for (let i = 0; i < length; i++) channel[i] = view.getInt16(i * 2, true) / 32768
+          nextTime = Math.max(nextTime, current.context.currentTime)
+          this.queue(current, buffer, nextTime)
+          nextTime += buffer.duration
+          count += length; offset += length
+        }
+      }
+      if (current.controller.signal.aborted) return
+      if (leftover !== undefined) throw new Error("The speech service returned an incomplete PCM sample.")
+      if (!count) throw new Error("The speech service returned empty audio.")
+      await Promise.all([...current.sources].map((queued) => queued.ended))
+    } finally {
+      audio.signal?.removeEventListener("abort", cancelled)
+      audio.cancel()
+      if (current.audio === audio) current.audio = undefined
+      const cause = current.controller.signal.reason
+      if (current.controller.signal.aborted && cause instanceof Error && cause.name !== "AbortError") throw cause
+    }
   }
 
   /** Resume audio synchronously from the click, before waiting for synthesis. */
@@ -200,7 +273,7 @@ class SpeechPlayback {
     if (!globalThis.AudioContext) throw new Error("Audio playback is not available in this browser.")
     const context = new AudioContext()
     const resume = context.resume()
-    const current = { key, controller: new AbortController(), context, cancel: this.stop } as NonNullable<SpeechPlayback["current"]>
+    const current: PlaybackOwner = { key, controller: new AbortController(), context, sources: new Set(), cancel: this.stop }
     claimAudio(current.cancel)
     this.current = current
     this.publish({ key, state: "loading" })
@@ -210,28 +283,24 @@ class SpeechPlayback {
       for (const part of parts) {
         if (signal.aborted) return
         this.publish({ key, state: "loading" })
-        const blob = await options.synthesize(part, signal)
-        if (signal.aborted) return
+        const result = await options.synthesize(part, signal)
+        if (signal.aborted) { if ("chunks" in result) result.cancel(); return }
+        if ("chunks" in result) { await this.playPCM(current, result); continue }
+        const blob = result
         if (!blob.size || !/^audio\//i.test(blob.type)) throw new Error("The speech service did not return playable audio.")
+        if (blob.type.split(";")[0].toLowerCase() === "audio/pcm") {
+          await this.playPCM(current, { sampleRate: 24000, cancel: () => undefined, chunks: (async function* () { yield new Uint8Array(await blob.arrayBuffer()) })() })
+          continue
+        }
+        if (blob.type.split(";")[0].toLowerCase() === "audio/l16") throw new Error("The speech service returned an unsupported audio format.")
         const audio = await context.decodeAudioData(await blob.arrayBuffer())
         if (signal.aborted) return
         if (!audio.duration) throw new Error("The speech service returned empty audio.")
-        const source = context.createBufferSource()
-        current.source = source
-        source.buffer = audio
-        source.connect(context.destination)
-        this.publish({ key, state: "playing" })
-        await new Promise<void>((resolve) => {
-          current.ended = resolve
-          source.onended = () => resolve()
-          source.start()
-        })
-        source.disconnect()
-        current.source = undefined
-        current.ended = undefined
+        await this.queue(current, audio).ended
       }
     } catch (error) {
       if (!signal.aborted) throw error
+      if (signal.reason instanceof Error && signal.reason.name !== "AbortError") throw signal.reason
     } finally {
       if (this.current === current) this.stop()
     }

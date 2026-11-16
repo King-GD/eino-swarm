@@ -20,6 +20,57 @@ const signIn = (owner = "owner") => saveGatewaySession({ origin: speech.gateway_
 afterEach(() => { act(() => setPhoneSpeechSource(undefined, null)); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe("phone speech capability follows the selected PC", () => {
+  it("preserves Gateway expiry through the selected-PC stream wrapper after EOF", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-11-16T00:00:00Z"))
+    signIn()
+    const session = loadGatewaySession()!
+    saveGatewaySession({ ...session, device: { ...session.device, expires_at: new Date(Date.now() + 1000).toISOString() } })
+    setPhoneSpeechSource(pc, { alive: () => true } as RemoteLink)
+    expect(acceptPhoneSpeechConfig(pc, { ...speech, output: { ...speech.output, enabled: true, format: "pcm" } })).toBe(true)
+    let requestSignal!: AbortSignal
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (_url, init) => {
+      requestSignal = init!.signal as AbortSignal
+      return new Response(new Uint8Array([0, 1]), { headers: { "Content-Type": "audio/pcm" } })
+    }))
+    const audio = await synthesizePhoneSpeech("read this", new AbortController().signal)
+    if (!("chunks" in audio)) throw new Error("Expected PCM stream")
+    try {
+      const reader = audio.chunks[Symbol.asyncIterator]()
+      await expect(reader.next()).resolves.toMatchObject({ done: false })
+      await expect(reader.next()).resolves.toMatchObject({ done: true })
+      expect(audio.signal).toBe(requestSignal)
+      expect(audio.signal?.aborted).toBe(false)
+      await vi.advanceTimersByTimeAsync(1001)
+      expect(audio.signal?.aborted).toBe(true)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally { audio.cancel() }
+  })
+
+  it.each(["disconnect", "configuration"] as const)("cancels PCM playback after headers on selected-PC %s", async (change) => {
+    signIn()
+    const config = { ...speech, output: { ...speech.output, enabled: true, format: "pcm" as SpeechSnapshot["output"]["format"] } }
+    const link = { alive: () => true } as RemoteLink
+    setPhoneSpeechSource(pc, link)
+    expect(acceptPhoneSpeechConfig(pc, config)).toBe(true)
+    let requestSignal!: AbortSignal
+    const cancelled = vi.fn()
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (_url, init) => {
+      requestSignal = init!.signal as AbortSignal
+      return new Response(new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new Uint8Array([1, 2])) }, cancel: cancelled }), { headers: { "Content-Type": "audio/pcm" } })
+    }))
+    const audio = await synthesizePhoneSpeech("read this", new AbortController().signal)
+    if (!("chunks" in audio)) throw new Error("Expected PCM stream")
+    const reader = audio.chunks[Symbol.asyncIterator]()
+    await expect(reader.next()).resolves.toMatchObject({ done: false, value: new Uint8Array([1, 2]) })
+    const next = reader.next()
+    if (change === "disconnect") setPhoneSpeechSource(pc, null)
+    else acceptPhoneSpeechConfig(pc, { ...config, output: { ...config.output, enabled: false } })
+    await expect(next).rejects.toMatchObject({ name: "AbortError" })
+    expect(requestSignal.aborted).toBe(true)
+    expect(cancelled).toHaveBeenCalledOnce()
+  })
+
   it.each(["transcribe", "speak"] as const)("cancels an ongoing Gateway %s request on PC disconnect before reconnecting", async (operation) => {
     signIn()
     const config = { ...speech, output: { ...speech.output, enabled: true } }

@@ -33,6 +33,16 @@ apply. All responses are `no-store`.
 | `POST /api/audio/speech` | JSON `{ "text": "…" }`, one bounded prose segment; returns audio bytes with their MIME. Finished answers and the PC selection menu both use this endpoint |
 | `POST /api/audio/models` | JSON `{ "kind": "input" }` or `output`; discovers the configured voice service's models by capability |
 
+With `speech.output.format: pcm`, `/api/audio/speech` flushes audio as it arrives
+instead of buffering the segment. The upstream request uses
+`response_format: "pcm"` and `stream_format: "audio"`. Responses are `audio/pcm`
+(mono 24 kHz, signed 16-bit little-endian) or an upstream `text/event-stream`
+containing OpenAI `speech.audio.delta` base64 audio and `speech.audio.done`.
+A failure after headers terminates the HTTP stream; it is not a successful
+partial audio file. Limits, configuration checks and cancellation remain active
+until the response is closed. MP3/WAV and the PC-local phone RPC retain
+complete-segment semantics.
+
 `GET /api/settings` and `PUT /api/settings` include `speech.input`,
 `speech.output` and `speech.limits`. Each direction has `enabled`, `source`
 (`account`, `provider`, `custom`), `provider_id`, `base_url`, `model` and

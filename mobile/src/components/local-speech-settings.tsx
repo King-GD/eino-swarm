@@ -19,7 +19,12 @@ export function LocalSpeechSettings({ providers }: { providers: DirectProvider[]
       </select></label>
       <label className="text-sm">{t("speech.model")}<Input value={settings[kind].model} onChange={e => update({ ...settings, [kind]: { ...settings[kind], model: e.target.value } })} /></label>
       {kind === "input" ? <label className="text-sm">{t("speech.language")}<Input value={settings.input.language} onChange={e => update({ ...settings, input: { ...settings.input, language: e.target.value } })} /></label>
-        : <label className="text-sm">{t("speech.voice")}<Input value={settings.output.voice} onChange={e => update({ ...settings, output: { ...settings.output, voice: e.target.value } })} /></label>}
+        : <>
+          <label className="text-sm">{t("speech.voice")}<Input value={settings.output.voice} onChange={e => update({ ...settings, output: { ...settings.output, voice: e.target.value } })} /></label>
+          <label className="text-sm">{t("speech.outputFormat")}<select className="mt-1 w-full rounded border border-border bg-background p-2" value={settings.output.format} onChange={e => update({ ...settings, output: { ...settings.output, format: e.target.value as SpeechSettings["output"]["format"] } })}>
+            <option value="mp3">MP3</option><option value="wav">WAV</option><option value="pcm">{t("speech.pcmStreaming")}</option>
+          </select></label>
+        </>}
     </fieldset>)}
   </section>
 }

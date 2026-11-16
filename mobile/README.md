@@ -25,9 +25,14 @@ time. Both directions default off. Tap the microphone beside Send, finish or
 cancel in the recording panel, then edit the recognized draft before sending.
 Read aloud beside Copy plays completed prose and skips code blocks.
 Gateway voice uses this phone's own login and calls that same Gateway directly;
-synced settings remain usable while the PC is offline. Local voice runs through
+synced settings permit execution only while that exact PC link is live and its
+engine is ready. Local voice runs through
 the selected PC only while it is online and its local model is configured.
 No PC key/token reaches the phone and no failure silently changes source.
+
+Choose **PCM (streaming playback)** as the audio format to start direct Gateway
+or personal-service playback as audio arrives. MP3/WAV retain complete-segment
+playback. The encrypted PC-local route also waits for a completed segment.
 
 After connecting to a PC, open **Menu → Manage projects**, or **Manage projects**
 from New conversation. Create or edit the PC's project name, shared instruction,

@@ -100,8 +100,8 @@ export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery
       {connection("output", speech.output)}
       <Field label={t("speech.voice")} query={query}><Input value={speech.output.voice} placeholder={t("speech.modelDefault")} onChange={(event) => update("output", { voice: event.target.value })} /></Field>
       <Field label={t("speech.speed")} query={query}><Input type="number" step={0.1} min={0.25} max={4} value={speech.output.speed} onChange={(event) => update("output", { speed: Number(event.target.value) })} /></Field>
-      <SettingsChoice label={t("speech.outputFormat")} query={query} value={speech.output.format} onValueChange={(format) => update("output", { format: format as "mp3" | "wav" })}>
-        <SelectItem value="mp3">MP3</SelectItem><SelectItem value="wav">WAV</SelectItem>
+      <SettingsChoice label={t("speech.outputFormat")} query={query} value={speech.output.format} onValueChange={(format) => update("output", { format: format as SpeechOutputSettings["format"] })}>
+        <SelectItem value="mp3">MP3</SelectItem><SelectItem value="wav">WAV</SelectItem><SelectItem value="pcm">{t("speech.pcmStreaming")}</SelectItem>
       </SettingsChoice>
       <Field label={t("speech.instructions")} query={query} wide><Input value={speech.output.instructions} onChange={(event) => update("output", { instructions: event.target.value })} /></Field>
       <Field label={t("speech.timeout")} query={query}><Input type="number" min={1} value={speech.output.timeout_seconds} onChange={(event) => update("output", { timeout_seconds: Number(event.target.value) })} /></Field>
@@ -167,6 +167,7 @@ function SpeechSettingsTest({ settings, onFlush }: { settings: Settings; onFlush
           await onFlush(); return synthesizeSpeech(part, signal, speech.limits.output_bytes)
         } }).catch((error) => toastError(error instanceof Error ? error.message : t("speech.failed")))
       }}>{playback.key === "settings:speech" ? t("speech.stopReading") : t("speech.testReading")}</Button>
+      {playback.key === "settings:speech" ? <span role="status" aria-live="polite" className="text-xs text-muted-foreground">{t(playback.state === "loading" ? "speech.generating" : "speech.playing")}</span> : null}
     </SettingsRow>
   </SettingsSection>
 }

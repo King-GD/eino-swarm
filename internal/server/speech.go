@@ -112,6 +112,10 @@ func (s *Server) synthesizeAudio(c *gin.Context) {
 		s.failSpeech(c, &speech.Error{Code: "speech_invalid_text", Status: 400})
 		return
 	}
+	if service.Snapshot().Output.Format == "pcm" {
+		s.streamSynthesizedAudio(c, service, input.Text)
+		return
+	}
 	audio, err := service.Synthesize(c.Request.Context(), input.Text)
 	if err != nil {
 		s.failSpeech(c, err)

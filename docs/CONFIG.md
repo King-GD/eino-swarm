@@ -42,6 +42,12 @@ LOCAL and an editable gateway allow personal providers. A managed third-party
 gateway supplies the models and hides model/endpoint controls; ordinary voice
 parameters remain editable.
 
+`speech.output.format` accepts `mp3` (the existing default), `wav` and `pcm`.
+Select **PCM (streaming playback)** to play a response while it is generated.
+The service must return mono 24 kHz signed 16-bit little-endian PCM, either as
+audio chunks or OpenAI speech SSE events. MP3/WAV remain complete-segment
+playback. Phone PC-local RPC remains buffered.
+
 Paired phones use the selected PC's safe projection only while that PC is online
 and its engine is ready. Gateway audio uses the phone's own same-origin account
 credential. A cached projection is status information and cannot authorize an

@@ -8,11 +8,9 @@ import (
 	"io"
 	"mime"
 	"mime/multipart"
-	"net/http"
 	"net/textproto"
 	"path/filepath"
 	"strings"
-	"time"
 	"unicode/utf8"
 )
 
@@ -123,6 +121,9 @@ func (s *Service) Synthesize(ctx context.Context, text string) (Audio, error) {
 	}
 	output := selected.settings.Output
 	body := map[string]any{"model": selected.target.Model, "input": text, "response_format": output.Format, "speed": output.Speed}
+	if output.Format == "pcm" {
+		body["stream_format"] = "audio"
+	}
 	if output.Voice != "" {
 		body["voice"] = output.Voice
 	}
@@ -137,7 +138,7 @@ func (s *Service) Synthesize(ctx context.Context, text string) (Audio, error) {
 	if err != nil {
 		return Audio{}, err
 	}
-	mediaType, _, err = mime.ParseMediaType(mediaType)
+	mediaType, params, err := mime.ParseMediaType(mediaType)
 	if err != nil {
 		return Audio{}, failure("speech_invalid_response", 502)
 	}
@@ -145,85 +146,27 @@ func (s *Service) Synthesize(ctx context.Context, text string) (Audio, error) {
 		mediaType = "audio/mpeg"
 		if output.Format == "wav" {
 			mediaType = "audio/wav"
+		} else if output.Format == "pcm" {
+			mediaType = "audio/pcm"
 		}
 	}
-	if !strings.HasPrefix(mediaType, "audio/") || len(data) == 0 {
+	if !strings.HasPrefix(mediaType, "audio/") || len(data) == 0 || (output.Format == "pcm" && (mediaType != "audio/pcm" || !pcmParameters(params) || len(data)%2 != 0)) {
 		return Audio{}, failure("speech_invalid_response", 502)
 	}
 	return Audio{MIME: mediaType, Data: data}, nil
 }
 
 func (s *Service) perform(ctx context.Context, selected selection, path, contentType string, body []byte, limit int64) ([]byte, string, error) {
-	ctx, timeoutCancel := context.WithTimeout(ctx, time.Duration(selected.timeout)*time.Second)
-	defer timeoutCancel()
-	ctx, cancel := context.WithCancelCause(ctx)
-	defer cancel(nil)
-	watchDone := make(chan struct{})
-	go func() {
-		defer close(watchDone)
-		ticker := time.NewTicker(100 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if !s.unchanged(selected) {
-					cancel(failure("speech_configuration_changed", 409))
-					return
-				}
-			}
-		}
-	}()
-	defer func() { cancel(nil); <-watchDone }()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(selected.target.BaseURL, "/")+path, bytes.NewReader(body))
+	stream, err := s.performStream(ctx, selected, path, contentType, body, limit, func() {})
 	if err != nil {
-		return nil, "", failure("speech_not_configured", 400)
+		return nil, "", err
 	}
-	req.Header.Set("Content-Type", contentType)
-	if selected.target.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+selected.target.APIKey)
-	}
-	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	resp, err := client.Do(req)
+	defer stream.Body.Close()
+	raw, err := io.ReadAll(stream.Body)
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, "", context.Cause(ctx)
-		}
-		return nil, "", failure("speech_unavailable", 502)
+		return nil, "", err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		status, code := 502, "speech_upstream_error"
-		switch resp.StatusCode {
-		case 401:
-			status, code = 401, "speech_authentication_required"
-		case 403:
-			status, code = 403, "speech_access_denied"
-		case 429:
-			status, code = 429, "speech_rate_limited"
-		case 400, 415, 422:
-			status, code = 400, "speech_parameters_rejected"
-		}
-		return nil, "", failure(code, status)
-	}
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
-	if err != nil {
-		if ctx.Err() != nil {
-			return nil, "", context.Cause(ctx)
-		}
-		return nil, "", failure("speech_invalid_response", 502)
-	}
-	if int64(len(raw)) > limit {
-		return nil, "", failure("speech_output_size", 413)
-	}
-	if ctx.Err() != nil {
-		return nil, "", context.Cause(ctx)
-	}
-	if !s.unchanged(selected) {
-		return nil, "", failure("speech_configuration_changed", 409)
-	}
-	return raw, resp.Header.Get("Content-Type"), nil
+	return raw, stream.MIME, nil
 }
 
 // Failure returns an HTTP status and safe code for either transport adapter.

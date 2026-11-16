@@ -51,6 +51,7 @@ type flow struct {
 }
 
 type fixture struct {
+	speech                            speechFixture
 	mu                                sync.Mutex
 	origin, anonymous                 string
 	review                            string
@@ -120,6 +121,9 @@ func (f *fixture) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if f.speechRoute(w, r) {
 		return
 	}
 	if r.URL.Path == "/fixture/loopback-ws" {
@@ -494,6 +498,7 @@ func loopbackListener(address string) (net.Listener, error) {
 }
 
 func main() {
+	speechStream := flag.Bool("speech-stream", false, "real loopback model pool for native streaming speech acceptance")
 	listen := flag.String("listen", "127.0.0.1:0", "literal loopback listen address")
 	directory := flag.String("data-dir", "", "private disposable fixture directory")
 	ready := flag.String("ready-file", "", "private JSON readiness receipt")
@@ -539,13 +544,19 @@ func main() {
 		panic(err)
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	eng := engine.New(cfg, db, provider.NewMock(cfg), logger)
-	f.engine = eng
-	thread, err := eng.CreateThread("Native PC conversation", "", "")
-	if err != nil {
-		panic(err)
+	pool := provider.NewMock(cfg)
+	if *speechStream {
+		pool = provider.New(cfg)
 	}
-	f.pcThreadID = thread.ID
+	eng := engine.New(cfg, db, pool, logger)
+	f.engine = eng
+	if !*speechStream {
+		thread, err := eng.CreateThread("Native PC conversation", "", "")
+		if err != nil {
+			panic(err)
+		}
+		f.pcThreadID = thread.ID
+	}
 	f.host = remote.New(eng, cfg, logger)
 	f.host.Start()
 	identity, err := cfg.RemoteIdentity()

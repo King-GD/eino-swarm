@@ -98,7 +98,7 @@ func New(opts Options) (*Server, error) {
 		audioCalls:   make(chan struct{}, speechHTTPConcurrency),
 	}
 	r := gin.New()
-	r.Use(gin.Recovery(), s.accessLog())
+	r.Use(gin.CustomRecovery(recoverServerPanic), s.accessLog())
 	// A local app has no cross-origin clients to serve, and a permissive CORS
 	// policy on a loopback port is how a random web page in another tab gets
 	// to read the user's conversations. Same-origin only, no exceptions.

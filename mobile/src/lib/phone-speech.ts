@@ -1,12 +1,13 @@
 import { useEffect, useSyncExternalStore } from "react"
 import type { SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
 import { speechPlayback } from "../../../frontend/src/lib/speech-media"
+import type { SpeechAudio } from "../../../frontend/src/lib/speech-stream"
 import { GATEWAY_ACCOUNT_EVENT, loadGatewaySession } from "./gateway-account"
 import { gatewayAuthorityCurrent, sameGatewayAuthority, GATEWAY_REFUSAL_EVENT } from "./gateway-authority"
 import type { RemoteLink } from "./link"
 import { OpSpeechConfig } from "./rpc"
 import { forgetSpeechCache, loadSpeechCache, pruneSpeechCaches, saveSpeechCache, speechBinding, type SyncedSpeech } from "./speech-cache"
-import { gatewaySpeechCall, localSpeechCall, SpeechCallError } from "./speech-transport"
+import { gatewaySpeechCall, localSpeechCall, retainSpeechStream, SpeechCallError } from "./speech-transport"
 import type { SavedLink } from "./store"
 import { LOCAL_SPEECH_EVENT, localPhoneSpeechCall, localSpeechSnapshot } from "./local-speech"
 
@@ -157,35 +158,40 @@ export function usePhoneSpeechSync(link: RemoteLink | null, pc: SavedLink | unde
 
 export function usePhoneSpeech(): PhoneSpeechState { return useSyncExternalStore(subscribe, snapshot, snapshot) }
 
-async function call(operation: "transcribe" | "speak", input: Blob | string, signal: AbortSignal): Promise<string | Blob> {
-  if (standalone) {
-    const controller=new AbortController(),abort=()=>controller.abort()
-    requests.add(controller)
-    if(signal.aborted)abort();else signal.addEventListener("abort",abort,{once:true})
-    try { return await localPhoneSpeechCall(operation,input,controller.signal) }
-    finally { requests.delete(controller);signal.removeEventListener("abort",abort) }
-  }
+async function call(operation: "transcribe" | "speak", input: Blob | string, signal: AbortSignal): Promise<string | SpeechAudio> {
+  const local = standalone
   const target = source
   const speech = target?.cached?.snapshot
-  if (!target || !target.link?.alive() || !speech || !(operation === "transcribe" ? state.inputReady : state.outputReady)) throw new SpeechCallError("unavailable")
+  if (!local && (!target || !target.link?.alive() || !speech || !(operation === "transcribe" ? state.inputReady : state.outputReady))) throw new SpeechCallError("unavailable")
   const controller = new AbortController()
   const abort = () => controller.abort()
   requests.add(controller)
   if (signal.aborted) abort(); else signal.addEventListener("abort", abort, { once: true })
+  let retained = false
+  const release = () => { signal.removeEventListener("abort", abort); requests.delete(controller); abort() }
+  const check = () => {
+    if (controller.signal.aborted || (local ? !standalone : source !== target || !target?.link?.alive())) throw new DOMException("Aborted", "AbortError")
+  }
   try {
-    let result: string | Blob
-    if (speech.execution === "gateway") {
+    let result: string | SpeechAudio
+    if (local) {
+      result = await localPhoneSpeechCall(operation, input, controller.signal)
+    } else if (speech!.execution === "gateway") {
       const session = loadGatewaySession()
       if (!session) throw new SpeechCallError("unavailable")
-      result = await gatewaySpeechCall(speech, session, operation, input, controller.signal)
+      result = await gatewaySpeechCall(speech!, session, operation, input, controller.signal)
     } else {
-      if (!target.link?.alive()) throw new SpeechCallError("unavailable")
-      result = await localSpeechCall(speech, target.link, operation, input, controller.signal)
+      if (!target?.link?.alive()) throw new SpeechCallError("unavailable")
+      result = await localSpeechCall(speech!, target.link, operation, input, controller.signal)
     }
-    if (controller.signal.aborted || source !== target) throw new DOMException("Aborted", "AbortError")
+    check()
+    if (typeof result !== "string" && "chunks" in result) {
+      retained = true
+      return retainSpeechStream(result, release, check, undefined, controller.signal)
+    }
     return result
-  } finally { signal.removeEventListener("abort", abort); requests.delete(controller) }
+  } finally { if (!retained) release() }
 }
 
 export async function transcribePhoneSpeech(blob: Blob, signal: AbortSignal): Promise<string> { return await call("transcribe", blob, signal) as string }
-export async function synthesizePhoneSpeech(text: string, signal: AbortSignal): Promise<Blob> { return await call("speak", text, signal) as Blob }
+export async function synthesizePhoneSpeech(text: string, signal: AbortSignal): Promise<SpeechAudio> { return await call("speak", text, signal) as SpeechAudio }

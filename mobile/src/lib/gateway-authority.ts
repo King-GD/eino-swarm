@@ -29,18 +29,32 @@ export function gatewayAuthorityCurrent(session: GatewaySession): boolean {
 /** Every request using this authority is cancelled on a refusal as well as a
  * logout, replacement or expiry. A 403 does not destroy the account credential. */
 export function watchGatewayAuthority(session: GatewaySession, invalidate: () => void): () => void {
-  const changed = () => { if (!gatewayAuthorityCurrent(session)) invalidate() }
-  const unwatchRefusal = watchGatewayRefusal((refusal) => { if (sameGatewayAuthority(session, refusal.session)) invalidate() })
-  window.addEventListener(GATEWAY_ACCOUNT_EVENT, changed)
-  window.addEventListener("storage", changed)
-  const remaining = Math.max(0, Date.parse(session.device.expires_at) - Date.now())
-  // Browsers clamp long timers; refresh events enforce long-lived credentials
-  // until they are within the maximum supported timer range.
-  const timer = remaining <= 2_147_483_647 ? setTimeout(invalidate, remaining) : undefined
-  return () => {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let closed = false
+  const cleanup = () => {
+    if (closed) return
+    closed = true
     unwatchRefusal()
     window.removeEventListener(GATEWAY_ACCOUNT_EVENT, changed)
     window.removeEventListener("storage", changed)
     clearTimeout(timer)
   }
+  const refuse = () => { if (!closed) { cleanup(); invalidate() } }
+  const changed = () => {
+    if (closed) return
+    clearTimeout(timer)
+    timer = undefined
+    if (!gatewayAuthorityCurrent(session)) { refuse(); return }
+    const current = loadGatewaySession()!
+    const remaining = Math.max(0, Date.parse(current.device.expires_at) - Date.now())
+    // Same-authority refreshes may extend or shorten a live request's lease.
+    // Recheck saved authority at expiry before trusting any older timer.
+    // Browsers clamp long timers; later account/storage events re-arm those.
+    if (remaining <= 2_147_483_647) timer = setTimeout(changed, remaining)
+  }
+  const unwatchRefusal = watchGatewayRefusal((refusal) => { if (sameGatewayAuthority(session, refusal.session)) refuse() })
+  window.addEventListener(GATEWAY_ACCOUNT_EVENT, changed)
+  window.addEventListener("storage", changed)
+  changed()
+  return cleanup
 }

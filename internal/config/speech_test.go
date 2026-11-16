@@ -110,4 +110,8 @@ func TestOldConfigsGetSpeechDefaultsWithoutEnablingVoice(t *testing.T) {
 	if err := cfg.validateSpeech(); err != nil {
 		t.Fatal(err)
 	}
+	cfg.Speech.Output.Format = "pcm"
+	if err := cfg.validateSpeech(); err != nil {
+		t.Fatal(err)
+	}
 }

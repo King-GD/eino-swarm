@@ -1,4 +1,5 @@
 import { defaultSpeechSettings, type SpeechSettings, type SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
+import type { SpeechAudio } from "../../../frontend/src/lib/speech-stream"
 import { isPersonalProvider, loadProviders } from "./direct-provider"
 import { loadPhoneMode } from "./phone-mode"
 import { endpointSpeechCall, SpeechCallError } from "./speech-transport"
@@ -22,6 +23,7 @@ export function loadLocalSpeech(): SpeechSettings {
     }
     if (typeof saved.input?.language === "string") value.input.language = saved.input.language
     if (typeof saved.output?.voice === "string") value.output.voice = saved.output.voice
+    if (saved.output?.format === "mp3" || saved.output?.format === "wav" || saved.output?.format === "pcm") value.output.format = saved.output.format
   } catch { /* Missing or damaged preferences start disabled. */ }
   return value
 }
@@ -30,7 +32,7 @@ export function saveLocalSpeech(settings: SpeechSettings): void {
   if (loadPhoneMode() !== "local") throw new SpeechCallError("unavailable")
   const clean = Object.fromEntries((["input", "output"] as const).map(kind => [kind, {
     enabled: settings[kind].enabled, provider_id: settings[kind].provider_id, model: settings[kind].model,
-    ...(kind === "input" ? { language: settings.input.language } : { voice: settings.output.voice }),
+    ...(kind === "input" ? { language: settings.input.language } : { voice: settings.output.voice, format: settings.output.format }),
   }]))
   localStorage.setItem(key, JSON.stringify(clean))
   window.dispatchEvent(new Event(LOCAL_SPEECH_EVENT))
@@ -46,7 +48,7 @@ export function localSpeechSnapshot(): SpeechSnapshot {
   }
 }
 
-export async function localPhoneSpeechCall(operation: "transcribe" | "speak", input: Blob | string, signal: AbortSignal): Promise<string | Blob> {
+export async function localPhoneSpeechCall(operation: "transcribe" | "speak", input: Blob | string, signal: AbortSignal): Promise<string | SpeechAudio> {
   if (loadPhoneMode() !== "local") throw new SpeechCallError("unavailable")
   const settings = loadLocalSpeech(), kind = operation === "transcribe" ? "input" : "output"
   const endpoint = loadProviders().find(p => p.id === settings[kind].provider_id && isPersonalProvider(p))

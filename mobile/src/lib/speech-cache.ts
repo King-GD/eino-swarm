@@ -31,7 +31,7 @@ export function safeSpeechSnapshot(raw: unknown): SpeechSnapshot | undefined {
   if (!input || !output || !limits) return
   if ([input.enabled, input.ready, output.enabled, output.ready].some((item) => typeof item !== "boolean")) return
   for (const [item, maximum] of [[input.model, 256], [output.model, 256], [input.label, 8192], [output.label, 8192], [input.language, 64], [input.prompt, 8192], [output.voice, 256], [output.instructions, 8192]] as const) if (text(item, maximum) === undefined) return
-  if (!["auto", "wav"].includes(input.recording_format as string) || !["mp3", "wav"].includes(output.format as string)) return
+  if (!["auto", "wav"].includes(input.recording_format as string) || !["mp3", "wav", "pcm"].includes(output.format as string)) return
   if (!count(input.max_duration_seconds, 3600) || !count(input.timeout_seconds, 3600) || !count(output.timeout_seconds, 3600)) return
   if (typeof output.speed !== "number" || !Number.isFinite(output.speed) || output.speed < 0.25 || output.speed > 4) return
   if (!count(limits.input_bytes, 256 * 1024 * 1024) || !count(limits.output_bytes, 256 * 1024 * 1024) || !count(limits.chunk_chars, 4096) || !count(limits.staging_ttl_seconds, 3600)) return
@@ -52,7 +52,7 @@ export function safeSpeechSnapshot(raw: unknown): SpeechSnapshot | undefined {
       enabled: output.enabled as boolean, ready: output.ready as boolean,
       ...(text(output.reason, 256) ? { reason: text(output.reason, 256) } : {}),
       model: output.model as string, label: output.label as string, voice: output.voice as string,
-      speed: output.speed, format: output.format as "mp3" | "wav", instructions: output.instructions as string, timeout_seconds: output.timeout_seconds,
+      speed: output.speed, format: output.format as "mp3" | "wav" | "pcm", instructions: output.instructions as string, timeout_seconds: output.timeout_seconds,
     },
     limits: { input_bytes: limits.input_bytes, output_bytes: limits.output_bytes, chunk_chars: limits.chunk_chars, staging_ttl_seconds: limits.staging_ttl_seconds },
   }
