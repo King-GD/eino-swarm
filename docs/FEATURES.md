@@ -320,7 +320,7 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-173 FOFA install and local model controls
 
-- 客户端区分 LOCAL 与 gateway，持久默认值仍为 fofa。默认必须登录且账号 ready；仅用户中心头像三击保留 LOCAL 调试入口，没有普通模式配置。切换要求 turn／worker／恢复／辅助模型请求全部空闲。桌面 LOCAL 使用个人 provider；手机 LOCAL 还聚合服务端分别授权的第三方预置和网关模型分组。普通 gateway 可配置 provider 和功能模型，未覆盖项跟随服务端更新，显式覆盖保持，恢复默认删覆盖。`decisions` 只作后台调用，不出现在功能模型、输入框、账号类型计数或角色清单里，结果也不进入对话。托管第三方账号隐藏所有模型配置，只用预置。接口也拒绝越权，旧 full 偏好不能解锁。手机 gateway 必须有同账号在线 ready PC，无 PC 保持引导页。入口：用户中心头像三击、模型设置和网关 bootstrap；关联 `C-040`／`C-046`／`C-013`；实现证据：`internal/provider/model_policy_test.go`、`internal/engine/model_policy_test.go`、`internal/server/settings_model_policy_test.go`、`frontend/e2e/model-policy.spec.ts`、`frontend/e2e/product-mode.spec.ts`、`mobile/e2e/phone-account-mode.spec.ts`。
+- 客户端区分 LOCAL 与 gateway，持久默认值仍为 fofa。默认必须登录且账号 ready；仅用户中心头像三击保留 LOCAL 调试入口，没有普通模式配置。切换要求 turn／worker／恢复／辅助模型请求全部空闲。桌面与手机 LOCAL 使用个人 provider，并聚合服务端分别授权的第三方预置和网关模型分组。普通 gateway 可配置 provider 和功能模型，未覆盖项跟随服务端更新，显式覆盖保持，恢复默认删覆盖。`decisions` 只作后台调用，不出现在功能模型、输入框、账号类型计数或角色清单里，结果也不进入对话。托管第三方账号隐藏所有模型配置，只用预置。接口也拒绝越权，旧 full 偏好不能解锁。手机 gateway 必须有同账号在线 ready PC，无 PC 保持引导页。入口：用户中心头像三击、模型设置和网关 bootstrap；关联 `C-040`／`C-046`／`C-013`；实现证据：`internal/provider/model_policy_test.go`、`internal/engine/model_policy_test.go`、`internal/server/settings_model_policy_test.go`、`frontend/e2e/model-policy.spec.ts`、`frontend/e2e/product-mode.spec.ts`、`mobile/e2e/phone-account-mode.spec.ts`。
 - 既有服务端角色保持兼容：title／compact 关闭时使用 conversation；embedding／ocr／decisions／transcription／speech 按开关执行。translation 和 title（`/naming`）的专用路由按 F-181／C-049 和现有命名实现生效；LOCAL 忽略服务端角色。托管配置不可由客户端替换。
 
 ### F-175 Provider cloud built-in tools

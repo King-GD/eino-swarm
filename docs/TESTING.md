@@ -9072,3 +9072,5 @@ field write was observed racing that snapshot and is retained in private red-run
 evidence, not accepted by a later green retry.
 
 0.1.80 的原生 Account／LOCAL 验收：iOS `testNativeSignedInAccountWaitsForPCThenLocalKeepsLogin` 和 Android `accountWaitsForPCAndDebugLocalRetainsLogin` 从真实合成 CAS／PKCE 登录进入 Account 等待页，确认不会发现直连目录；通过实际头像三击进入 LOCAL 保留登录和授权来源，再切回 Account 并连接同账号 PC，检查真实加密 RPC。直接模型的重定向、取消及分块流用例显式在 LOCAL 执行；用户中心关闭后进入聊天，不依赖已移除的 Chat history 按钮。
+
+桌面 LOCAL 的授权双目录由 `internal/remote/account_local_sources_test.go` 覆盖：个人、预置和额外网关模型可并列，实际模型请求保持来源身份；撤权、空列表和退出不改用其他接口。

@@ -34,6 +34,7 @@ type accountGateway struct {
 	catalog   func(w http.ResponseWriter, r *http.Request)
 	requests  []string
 	auths     []string
+	extra     func(w http.ResponseWriter, r *http.Request) bool
 }
 
 func newAccountGateway(t *testing.T) *accountGateway {
@@ -42,7 +43,7 @@ func newAccountGateway(t *testing.T) *accountGateway {
 		g.mu.Lock()
 		g.requests = append(g.requests, r.URL.RequestURI())
 		g.auths = append(g.auths, r.Header.Get("Authorization"))
-		bootstrap, catalog := g.bootstrap, g.catalog
+		bootstrap, catalog, extra := g.bootstrap, g.catalog, g.extra
 		g.mu.Unlock()
 		switch r.URL.Path {
 		case "/client/desktop/v1/bootstrap":
@@ -50,6 +51,9 @@ func newAccountGateway(t *testing.T) *accountGateway {
 		case "/client/desktop/v1/models":
 			catalog(w, r)
 		default:
+			if extra != nil && extra(w, r) {
+				return
+			}
 			http.NotFound(w, r)
 		}
 	}))
@@ -714,10 +718,12 @@ func TestFOFARolesUseFixedNamesAndStayReadOnly(t *testing.T) {
 	if pool.AccountSourceID() != "" || pool.OfficialOnly() {
 		t.Fatal("LOCAL used a retained account source")
 	}
+	var accountVisible bool
 	for _, row := range pool.List() {
-		if row.Source == provider.SourceAccount {
-			t.Fatal("LOCAL exposed account models")
-		}
+		accountVisible = accountVisible || row.Source == provider.SourceAccount
+	}
+	if !accountVisible {
+		t.Fatal("LOCAL lost the authorized account catalog")
 	}
 
 }

@@ -102,10 +102,15 @@ func TestPhoneCatalogLocksTheOfficialName(t *testing.T) {
 	if err := e.Config().Update(func(c *config.Config) error { c.Product.Mode = config.ProductModeLocal; return nil }); err != nil {
 		t.Fatal(err)
 	}
+	var accountVisible bool
 	for _, row := range modelViews(e) {
-		if row.ProviderID == accountModelsSourceID || row.Locked {
-			t.Fatalf("LOCAL retained gateway: %+v", row)
+		if row.Locked {
+			t.Fatalf("LOCAL retained a managed selection lock: %+v", row)
 		}
+		accountVisible = accountVisible || row.ProviderID == accountModelsSourceID
+	}
+	if !accountVisible {
+		t.Fatal("LOCAL lost the signed-in gateway")
 	}
 
 }

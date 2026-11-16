@@ -759,7 +759,7 @@ conversation can still select it, and a turn already on it keeps running.
 ```
 
 `source` is `account` for the signed-in server's models and `provider` for the
-user's own endpoints. LOCAL returns only personal rows. An editable gateway
+user's own endpoints. LOCAL returns personal rows plus separately authorized signed-in third-party and gateway catalogs, with distinct provider IDs. An editable gateway
 returns account and personal rows. A managed preset returns only its own
 conversation row, irrespective of legacy `account_presentation`; a profile uses
 its label and the alias `account`, never the broader catalog. A gateway with no

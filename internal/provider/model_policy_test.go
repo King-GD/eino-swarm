@@ -51,7 +51,7 @@ func TestRoleBindingsFollowPresetUntilExplicitlyOverridden(t *testing.T) {
 	if ref, configured := p.RoleSelection("title", "own", "fallback"); configured || ref.Model != "fallback" {
 		t.Fatal("LOCAL inherited preset")
 	}
-	if err := p.validateModelSelection(src.id, "server-model"); !errors.Is(err, ErrAccountLoginRequired) {
+	if err := p.validateModelSelection(src.id, "server-model"); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok, err := p.RoleProvider("ocr"); ok || err != nil {
@@ -178,16 +178,19 @@ func TestManagedPresetCannotBeUnlockedByPresentation(t *testing.T) {
 	}
 }
 
-func TestLocalDebugDoesNotPublishSignedInGatewayModels(t *testing.T) {
+func TestLocalDebugListsSignedInGatewayModelsBesidePersonalProviders(t *testing.T) {
 	cfg := config.Default()
 	cfg.Product.Mode = config.ProductModeLocal
 	cfg.Models.Providers[0].Model = "personal"
 	p := New(cfg)
 	p.SetAccountSource(accountSourceFor(t, "https://gateway.invalid/v1", "private"))
+	var gateway, personal bool
 	for _, row := range p.List() {
-		if row.Source == SourceAccount {
-			t.Fatal("LOCAL included a gateway model")
-		}
+		gateway = gateway || row.Source == SourceAccount
+		personal = personal || row.Source == SourceProvider && row.Model == "personal"
+	}
+	if !gateway || !personal {
+		t.Fatal("LOCAL lost an authorized source")
 	}
 	if p.DefaultProviderID() != cfg.Models.Default {
 		t.Fatal("LOCAL followed the signed-in account")

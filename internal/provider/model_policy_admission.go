@@ -29,7 +29,7 @@ func (p *Pool) BeginModelUse() (func(), error) {
 func (p *Pool) trackedModel(inner model.BaseChatModel, prov config.Provider) model.BaseChatModel {
 	mode := p.cfg.ProductSnapshot().Resolved()
 	owner := ""
-	if src := p.activeAccount(); src != nil {
+	if src := p.accountForExecution(prov.ID); src != nil {
 		owner = src.owner
 	}
 	tracked := &recordingModel{inner: inner, policyUse: func() (func(), error) {
@@ -42,7 +42,7 @@ func (p *Pool) trackedModel(inner model.BaseChatModel, prov config.Provider) mod
 			return nil, ErrModelPolicy
 		}
 		if strings.HasPrefix(prov.ID, config.AccountSourcePrefix) {
-			src := p.activeAccount()
+			src := p.accountForExecution(prov.ID)
 			if src == nil || src.id != prov.ID || src.owner != owner || src.token != prov.APIKey || src.baseURL != prov.BaseURL {
 				release()
 				return nil, ErrModelPolicy

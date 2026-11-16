@@ -52,10 +52,12 @@ func TestOfficialProfileStaysLockedUntilLocalDebug(t *testing.T) {
 	if err != nil || own.Model != "own-model" {
 		t.Fatalf("LOCAL=%+v %v", own, err)
 	}
+	var accountVisible bool
 	for _, row := range pool.List() {
-		if row.Source == SourceAccount {
-			t.Fatal("LOCAL exposed gateway")
-		}
+		accountVisible = accountVisible || row.Source == SourceAccount
+	}
+	if !accountVisible {
+		t.Fatal("LOCAL lost the signed-in account source")
 	}
 
 }

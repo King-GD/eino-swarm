@@ -619,14 +619,17 @@ published on `account_models.kinds` for the settings summary and the embedding
 picker. `models.account_model` selects which conversation name a new server
 chat starts on. The pool resolves a conversation's
 stored id against both, and returns `ErrAccountLoginRequired` instead of falling
-back when a stored `gateway:` id has no source. The projection exists only in
+back when a stored `gateway:` id has no source. In local mode that refresh also
+reads the bootstrap's same-origin third-party catalog and, when the response
+enables it, the original gateway catalog. An empty desktop catalog adopts the
+third-party catalog instead of reporting no access. Those catalogs are extra
+account sources the pool lists only while local mode is signed in. The projection exists only in
 memory: `internal/config` rejects the reserved prefix in `models.providers`, and
 `models.default_source` (`account`/`provider`, migrated from the old
 default-provider rule) picks which one a new conversation starts on.
 The client has LOCAL and gateway execution sources. The persisted default name
 `fofa` remains compatible. `provider.ModelPolicy` projects the active source,
-server edit permission and functional defaults. LOCAL ignores retained account
-state. Editable gateways combine their preset with scoped explicit overrides;
+server edit permission and functional defaults. LOCAL preserves signed-in catalogs beside personal providers without applying a managed selection lock. Editable gateways combine their preset with scoped explicit overrides;
 managed third-party gateways expose and execute only their own preset. Legacy
 profile/role bootstrap responses imply managed unless the server explicitly grants
 configuration. `models.account_presentation` cannot unlock it.

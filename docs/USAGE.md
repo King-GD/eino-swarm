@@ -103,7 +103,7 @@ See [Configuration](CONFIG.md).
 embedding, recognition, spoken-answer and OCR models. The decisions role is a
 background call and is not listed. Unchanged gateway
 roles follow updated server defaults. An explicit choice stays until **Use default**
-removes it. LOCAL works without login and uses only your own configured models.
+removes it. LOCAL works without login and uses your configured models plus any separately authorized account catalogs.
 
 In local mode, **Settings → Models** also edits base URL, API key, discovery
 and the default. The switch on a provider row shows that endpoint in the composer; off hides it

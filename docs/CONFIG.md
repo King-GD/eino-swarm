@@ -173,8 +173,8 @@ default on load, so a partially hand-edited file always starts.
 signed-in account (`--mock` skips login). The gateway decides whether its model
 preset is editable. An ordinary account can select personal providers and override
 functional defaults; a managed third-party account cannot open model settings or
-select other models. `local` needs no gateway login and ignores retained gateway
-models, profiles and roles.
+select other models. `local` needs no gateway login and keeps a signed-in account available. It lists separately authorized third-party
+and gateway catalogs beside personal providers, grouped by source.
 
 No normal Settings row switches modes. The account portrait's existing triple-click
 debug entry switches LOCAL/gateway while idle, retaining login and personal settings.
@@ -363,7 +363,7 @@ computer control, shell execution, hosted MCP approvals or arbitrary tool types.
 
 Gateway catalogs, profiles and credentials remain in memory; they are never
 saved as `models.providers`. Provider IDs beginning with `gateway:` are reserved.
-LOCAL lists only personal providers. An ordinary gateway lists its catalog and
+LOCAL lists personal providers and separately authorized signed-in account catalogs. An ordinary gateway lists its catalog and
 personal providers. A managed gateway exposes only its own conversation preset;
 legacy `account_presentation: full` cannot unlock other models.
 

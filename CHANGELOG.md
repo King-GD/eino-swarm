@@ -15,6 +15,7 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - Phone Account mode requires a same-account ready PC and shows setup guidance
   while unavailable. LOCAL can use personal services and separately authorized
   third-party and Gateway catalogs, grouped by source with independent routing.
+- Desktop LOCAL also retains authorized third-party and Gateway catalogs beside personal providers.
 - Third-party preset and extra Gateway model authorization remain server-owned;
   an empty or denied source is hidden without expiring the account login.
 

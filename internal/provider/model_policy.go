@@ -169,6 +169,19 @@ func (p *Pool) validateModelSelection(id, name string) error {
 	if p.mock {
 		return nil
 	}
+	if p.localExecution() && strings.HasPrefix(id, config.AccountSourcePrefix) {
+		source := p.accountForExecution(id)
+		if source == nil {
+			return ErrAccountLoginRequired
+		}
+		if source.unavailable {
+			return ErrAccountModelsUnavailable
+		}
+		if name != "" && !source.permits(name) {
+			return ErrModelPolicy
+		}
+		return nil
+	}
 	src := p.activeAccount()
 	if src != nil && src.unavailable && id == src.id {
 		return ErrAccountModelsUnavailable
