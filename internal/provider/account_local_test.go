@@ -146,13 +146,18 @@ func TestLocalCatalogRetentionRequiresExactConnectionAndClearingRevokesIt(t *tes
 		{src.ID(), "https://changed.invalid/v1", "session", false},
 		{src.ID(), "https://source.invalid/v1", "renewed", false},
 	} {
-		if src.MatchesCatalogConnection(tc.id, tc.url, tc.token) != tc.want {
+		if (src.CopyForCatalogConnection(tc.id, tc.url, tc.token) != nil) != tc.want {
 			t.Fatal("catalog connection identity mismatch")
 		}
 	}
 	var absent *AccountSource
-	if absent.MatchesCatalogConnection(src.ID(), "https://source.invalid/v1", "session") {
+	if absent.CopyForCatalogConnection(src.ID(), "https://source.invalid/v1", "session") != nil {
 		t.Fatal("nil catalog matched")
+	}
+	retained := src.CopyForCatalogConnection(src.ID(), "https://source.invalid/v1", "session")
+	retained.SetAccountOwner("new-publication")
+	if retained == src || src.owner != "" {
+		t.Fatal("retention mutated the published source")
 	}
 	if src.ModelCount() != 2 {
 		t.Fatal("catalog count lost non-chat models")

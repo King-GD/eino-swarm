@@ -119,10 +119,15 @@ func NewUnavailableAccountSource(id, label, baseURL, token string, configurable 
 // ID is the provider id conversations store for this source.
 func (s *AccountSource) ID() string { return s.id }
 
-// MatchesCatalogConnection allows refresh to retain only this credential's
-// catalog at the endpoint still authorized by the latest bootstrap.
-func (s *AccountSource) MatchesCatalogConnection(id, baseURL, token string) bool {
-	return s != nil && s.id == id && s.baseURL == baseURL && s.token == token
+// CopyForCatalogConnection retains only this credential's still-authorized
+// connection. The copy lets refresh set publication metadata without mutating
+// the source concurrently used by existing model handles.
+func (s *AccountSource) CopyForCatalogConnection(id, baseURL, token string) *AccountSource {
+	if s == nil || s.id != id || s.baseURL != baseURL || s.token != token {
+		return nil
+	}
+	copy := *s
+	return &copy
 }
 
 // ModelCount includes non-chat models, just like the fetched catalog count.

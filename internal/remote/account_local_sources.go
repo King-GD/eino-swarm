@@ -74,7 +74,7 @@ func (a *AccountModels) switchableCatalogs(ctx context.Context, boot accountBoot
 		case catalogKeep:
 			a.log.Warn("account catalog refresh failed; retaining only its authorized cached source")
 			for _, cached := range a.pool.LocalAccountSources() {
-				if cached.MatchesCatalogConnection(ref.sourceID, ref.apiBaseURL, token) {
+				if cached := cached.CopyForCatalogConnection(ref.sourceID, ref.apiBaseURL, token); cached != nil {
 					sources = append(sources, switchableSource{src: cached, models: cached.ModelCount(), preset: ref.sameAsPreset})
 					break
 				}
