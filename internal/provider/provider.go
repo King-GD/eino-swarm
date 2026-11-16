@@ -158,6 +158,9 @@ func (p *Pool) Resolve(id string) (config.Provider, error) {
 		id = p.DefaultProviderID()
 	}
 	if src := p.activeAccount(); src != nil && id == src.ID() {
+		if src.unavailable {
+			return config.Provider{}, ErrAccountModelsUnavailable
+		}
 		return src.provider(p.accountModel()), nil
 	}
 	if strings.HasPrefix(id, config.AccountSourcePrefix) {
@@ -187,6 +190,9 @@ func (p *Pool) Resolve(id string) (config.Provider, error) {
 func (p *Pool) ResolveModel(id, model string) (config.Provider, error) {
 	if p.OfficialOnly() {
 		src := p.activeAccount()
+		if src.unavailable {
+			return config.Provider{}, ErrAccountModelsUnavailable
+		}
 		if id == src.id && model != "" {
 			if !src.permits(model) {
 				return config.Provider{}, ErrModelPolicy

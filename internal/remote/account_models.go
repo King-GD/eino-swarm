@@ -387,7 +387,8 @@ func (a *AccountModels) fetch(ctx context.Context, id accountIdentity) accountOu
 	if !boot.access {
 		s := who
 		s.State, s.Label = AccountNoAccess, boot.label
-		return accountOutcome{state: s}
+		source := provider.NewUnavailableAccountSource(boot.sourceID, boot.label, id.origin+strings.TrimSuffix(desktopModelsPrefix, "/"), id.token, boot.editable != nil && *boot.editable)
+		return accountOutcome{state: s, source: source}
 	}
 	if !boot.configurable() && len(boot.roles) > 0 {
 		return fetchRoles(boot, id.token, who)
@@ -587,6 +588,7 @@ func parseAccountBootstrap(raw []byte, origin string) (accountBootstrap, error) 
 		label = ""
 	}
 	out := accountBootstrap{sourceID: m.SourceID, label: label, access: m.APIAccessEnabled, userID: envelope.Data.User.ID, avatarURL: envelope.Data.User.AvatarURL}
+	out.editable = m.Configurable
 	if !m.APIAccessEnabled {
 		return out, nil
 	}

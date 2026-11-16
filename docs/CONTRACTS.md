@@ -801,3 +801,5 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 - 变更规则：同步 API、库通知文档、数据模型、功能清单、两端 reducer、Trace 和 UI/原生回归；变更类型：Added；来源：GitHub Issue #95，用户 2026-10-22 要求逐次生成说明原因和恢复状态。
 
 语音设置入口随模型配置权限显示：LOCAL 和可配置的普通网关账号在 Settings → Models 编辑功能模型及语音参数；托管第三方账号隐藏 Models，只在 Speech 入口显示语音开关、音色和资源参数，不显示模型、Provider 或凭据配置。
+
+模型配置权限独立于账号目录可用性：有效 bootstrap 的 `configurable` 在 API 权限关闭时仍保留同账号 scope。普通账号可以继续配置和调用自己的服务，托管第三方仍不能切换；不可用账号来源不产生目录项、不能发起模型调用。尚未取得有效网关策略的账号不能借保留的个人选择执行模型请求。验证：`internal/remote/model_policy_no_access_test.go`。

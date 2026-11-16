@@ -75,6 +75,11 @@ func (p *Pool) ModelPolicy() ModelPolicy {
 // conversation bindings are resolved separately so a managed login can retain
 // them for a later LOCAL session without executing them.
 func (p *Pool) ValidateConversationSelection(id, name string) error {
+	if p.activeAccount() == nil {
+		if err := p.validateModelSelection(id, name); err != nil {
+			return err
+		}
+	}
 	if src := p.activeAccount(); src != nil && src.managed {
 		if (id != "" && id != src.id) || (name != "" && name != src.provider("").Model) {
 			return ErrModelPolicy
@@ -170,6 +175,12 @@ func (p *Pool) validateModelSelection(id, name string) error {
 		return nil
 	}
 	src := p.activeAccount()
+	if src == nil && p.cfg.ProductSnapshot().Resolved() != config.ProductModeLocal && p.cfg.Snapshot().Remote.AuthMode == config.RemoteAuthAccount {
+		return ErrModelPolicy
+	}
+	if src != nil && src.unavailable && id == src.id {
+		return ErrAccountModelsUnavailable
+	}
 	if strings.HasPrefix(id, config.AccountSourcePrefix) && (src == nil || src.id != id) {
 		return ErrAccountLoginRequired
 	}

@@ -20,6 +20,7 @@ const (
 // gets once the account is gone. The code is stable; nothing falls back to a
 // provider that happens to have a model with the same name.
 var ErrAccountLoginRequired = errors.New("account_login_required: sign in to the server again to use its models")
+var ErrAccountModelsUnavailable = errors.New("server models are unavailable for this account")
 
 // AccountSource is the model catalog of the signed-in server account, held
 // only in memory. It is never written to config.yaml, and the credential it
@@ -36,11 +37,12 @@ type AccountSource struct {
 	types   map[string]string
 	// profiled replaces the catalog with one official alias. The fields below
 	// are empty for an ordinary catalog.
-	profiled bool
-	profile  accountProfile
-	roles    []AccountRole
-	managed  bool
-	defaults map[string]string
+	profiled    bool
+	profile     accountProfile
+	roles       []AccountRole
+	unavailable bool
+	managed     bool
+	defaults    map[string]string
 }
 
 // AccountRole is a read-only server switch. ID is the model name a FOFA
@@ -105,6 +107,13 @@ func NewAccountSource(id, label, baseURL, token string, cat Catalog) (*AccountSo
 		id: id, label: strings.TrimSpace(label), baseURL: baseURL, token: token,
 		names: append([]string(nil), cat.Names...), windows: windows, types: types,
 	}, nil
+}
+
+// NewUnavailableAccountSource retains validated bootstrap policy independently
+// of the catalog. The caller has already checked its origin and source identity;
+// this projection cannot issue account model calls and contains no model names.
+func NewUnavailableAccountSource(id, label, baseURL, token string, configurable bool) *AccountSource {
+	return &AccountSource{id: id, label: label, baseURL: baseURL, token: token, managed: !configurable, unavailable: true}
 }
 
 // ID is the provider id conversations store for this source.
@@ -345,7 +354,7 @@ func (p *Pool) SetAccountSource(src *AccountSource) {
 // AccountSourceID is the id of the published account source, empty when
 // signed out.
 func (p *Pool) AccountSourceID() string {
-	if src := p.activeAccount(); src != nil {
+	if src := p.activeAccount(); src != nil && !src.unavailable {
 		return src.ID()
 	}
 	return ""
@@ -402,7 +411,7 @@ func (s *AccountSource) equal(o *AccountSource) bool {
 	if s == nil || o == nil {
 		return s == o
 	}
-	if s.managed != o.managed || !maps.Equal(s.defaults, o.defaults) || s.owner != o.owner || s.id != o.id || s.label != o.label || s.baseURL != o.baseURL || s.token != o.token || len(s.names) != len(o.names) || len(s.windows) != len(o.windows) || len(s.types) != len(o.types) || !s.sameProfile(o) {
+	if s.unavailable != o.unavailable || s.managed != o.managed || !maps.Equal(s.defaults, o.defaults) || s.owner != o.owner || s.id != o.id || s.label != o.label || s.baseURL != o.baseURL || s.token != o.token || len(s.names) != len(o.names) || len(s.windows) != len(o.windows) || len(s.types) != len(o.types) || !s.sameProfile(o) {
 		return false
 	}
 	for i, name := range s.names {
