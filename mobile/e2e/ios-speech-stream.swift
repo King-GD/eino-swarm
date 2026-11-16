@@ -10,6 +10,7 @@ final class BindFlowTests: XCTestCase {
 
   func testNativePCMAndSSEStartBeforeEOFStopTheSourceAndFinishNormally() throws {
     continueAfterFailure = false
+    try assertBlankImagesRejected()
     let app = XCUIApplication()
     defer { app.terminate() }
     _ = try read("/fixture/control?review=approved&pc=show&api=on&start=normal&catalog=normal&model=normal")
@@ -186,12 +187,26 @@ final class BindFlowTests: XCTestCase {
     }
   }
 
+  /// Exercise the actual classifier against images with no visible content.
+  private func assertBlankImagesRejected() throws {
+    let bounds = CGRect(x: 0, y: 0, width: 400, height: 800)
+    for color in [UIColor.white, UIColor.black, UIColor.clear] {
+      let image = UIGraphicsImageRenderer(size: bounds.size).image { context in
+        color.setFill()
+        context.fill(bounds)
+      }
+      XCTAssertFalse(try hasVisibleContent(image).visible, "blank images must never accept native visibility")
+    }
+  }
+
   /// Crop away OS status/home areas. Both dark and light samples are required,
   /// so neither a white nor a black image can pass on elapsed time or AX alone.
   private func hasVisibleContent(_ image: UIImage) throws -> (visible: Bool, dark: Int, light: Int, samples: Int) {
     let full = try XCTUnwrap(image.cgImage)
     let crop = try XCTUnwrap(full.cropping(to: CGRect(x: 0, y: CGFloat(full.height) * 0.12, width: CGFloat(full.width), height: CGFloat(full.height) * 0.80)))
-    let width = 160, height = 320
+    // Downscaling sparse text can blend every dark glyph into the background.
+    // Sample original pixels so the same contrast rule measures actual content.
+    let width = crop.width, height = crop.height
     var bytes = [UInt8](repeating: 0, count: width * height * 4)
     let space = CGColorSpaceCreateDeviceRGB()
     try bytes.withUnsafeMutableBytes { buffer in
@@ -199,13 +214,19 @@ final class BindFlowTests: XCTestCase {
         bytesPerRow: width * 4, space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
       context.draw(crop, in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
     }
-    var dark = 0, light = 0
-    for offset in stride(from: 0, to: bytes.count, by: 4) {
-      let luma = (Int(bytes[offset]) * 299 + Int(bytes[offset + 1]) * 587 + Int(bytes[offset + 2]) * 114) / 1000
-      if luma < 90 { dark += 1 }
-      if luma > 165 { light += 1 }
+    var dark = 0, light = 0, samples = 0
+    for y in stride(from: 0, to: height, by: 8) {
+      for x in stride(from: 0, to: width, by: 8) {
+        let offset = (y * width + x) * 4
+        let red = Int(bytes[offset])
+        let green = Int(bytes[offset + 1])
+        let blue = Int(bytes[offset + 2])
+        let luma = (red * 299 + green * 587 + blue * 114) / 1000
+        if luma < 90 { dark += 1 }
+        if luma > 165 { light += 1 }
+        samples += 1
+      }
     }
-    let samples = width * height
     return (dark * 500 > samples && light * 500 > samples, dark, light, samples)
   }
 }
