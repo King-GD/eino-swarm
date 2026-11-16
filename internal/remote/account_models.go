@@ -121,6 +121,7 @@ func NewAccountModels(cfg *config.Config, pool *provider.Pool, log *slog.Logger)
 	}
 	if id, ok := a.identity(); ok {
 		a.state = AccountModelsState{State: AccountPending, Username: id.username, DisplayName: id.displayName, AvatarURL: id.avatarURL}
+		a.pool.SetAccountSource(unavailableAccountPolicy(id, "", "", false))
 	} else {
 		a.state = AccountModelsState{State: AccountSignedOut}
 	}
@@ -299,7 +300,7 @@ func (a *AccountModels) Seal() {
 	if a.publishedToken == now.token && a.publishedOrigin == now.origin {
 		return
 	}
-	a.pool.SetAccountSource(nil)
+	a.pool.SetAccountSource(unavailableAccountPolicy(now, "", "", false))
 	a.published = false
 	a.publishedToken, a.publishedOrigin = "", ""
 	a.state = AccountModelsState{State: AccountPending, Username: now.username, DisplayName: now.displayName, AvatarURL: now.avatarURL}
@@ -335,6 +336,9 @@ func (a *AccountModels) publish(fetched accountIdentity, o accountOutcome) Accou
 // apply writes the outcome. The caller holds a.mu and has decided that the
 // outcome belongs to the current credential.
 func (a *AccountModels) apply(fetched accountIdentity, o accountOutcome) AccountModelsState {
+	if o.source == nil && fetched.token != "" && o.state.State != AccountSignedOut {
+		o.source = unavailableAccountPolicy(fetched, "", o.state.Label, false)
+	}
 	if o.source != nil {
 		o.source.SetAccountOwner(fetched.userID)
 	}
@@ -387,7 +391,7 @@ func (a *AccountModels) fetch(ctx context.Context, id accountIdentity) accountOu
 	if !boot.access {
 		s := who
 		s.State, s.Label = AccountNoAccess, boot.label
-		source := provider.NewUnavailableAccountSource(boot.sourceID, boot.label, id.origin+strings.TrimSuffix(desktopModelsPrefix, "/"), id.token, boot.editable != nil && *boot.editable)
+		source := unavailableAccountPolicy(id, boot.sourceID, boot.label, boot.editable != nil && *boot.editable)
 		return accountOutcome{state: s, source: source}
 	}
 	if !boot.configurable() && len(boot.roles) > 0 {

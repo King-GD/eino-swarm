@@ -65,7 +65,7 @@ func TestUnavailableAccountRejectsOpenedHTTPModelAndPreservesOrdinaryPersonalAcc
 	if _, _, err := pool.WorkerModel(t.Context(), cfg.Models.Providers[0].ID, "personal-model", "", nil); !errors.Is(err, ErrModelPolicy) {
 		t.Fatalf("managed preset unlocked a worker model: %v", err)
 	}
-	pool.SetAccountSource(nil)
+	pool.SetAccountSource(NewUnavailableAccountSource("", "", source.baseURL, source.token, false))
 	if _, err := personal.Generate(t.Context(), input); !errors.Is(err, ErrModelPolicy) {
 		t.Fatalf("unknown policy admitted an existing model: %v", err)
 	}
