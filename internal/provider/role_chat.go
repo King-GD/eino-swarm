@@ -28,9 +28,10 @@ type fixedChatRequest struct {
 	MaxTokens int                `json:"max_tokens,omitempty"`
 }
 
-// CompleteFixedChat posts one non-streaming Chat Completions body to the
-// desktop translation or naming route. The role id is the model. The response
-// body stays out of the error.
+// CompleteFixedChat posts one non-streaming Chat Completions body to a desktop
+// route that does not mount hosted tools. translation uses /translations.
+// title uses /naming. The role id is the model. The response body stays out
+// of the error.
 func (p *Pool) CompleteFixedChat(ctx context.Context, providerID, role, system, user string, maxTokens int) (string, error) {
 	path, ok := fixedChatPath(role)
 	if !ok {
@@ -83,7 +84,7 @@ func fixedChatPath(role string) (string, bool) {
 	switch strings.TrimSpace(role) {
 	case "translation":
 		return translationChatPath, true
-	case "naming":
+	case "title":
 		return namingChatPath, true
 	default:
 		return "", false

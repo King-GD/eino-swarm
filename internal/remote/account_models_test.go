@@ -666,11 +666,16 @@ func TestFOFARolesUseFixedNamesAndStayReadOnly(t *testing.T) {
 		map[string]any{"id": "speech", "enabled": true, "label": "语音合成"},
 		map[string]any{"id": "image", "enabled": true, "label": "图片生成"},
 		map[string]any{"id": "translation", "enabled": true, "label": "翻译"},
-		map[string]any{"id": "naming", "enabled": false, "label": "命名"},
+		map[string]any{"id": "naming", "enabled": true, "label": "命名"},
 	)
 	st = am.Refresh(context.Background())
-	if st.State != AccountReady || len(st.Roles) != 11 || st.Roles[6].ID != "transcription" || st.Roles[6].Enabled || st.Roles[7].ID != "speech" || !st.Roles[7].Enabled || st.Roles[7].Label != "语音合成" || st.Roles[8].ID != "image" || !st.Roles[8].Enabled || st.Roles[8].Label != "图片生成" || st.Roles[9].ID != "translation" || !st.Roles[9].Enabled || st.Roles[9].Label != "翻译" || st.Roles[10].ID != "naming" || st.Roles[10].Enabled || st.Roles[10].Label != "命名" {
+	if st.State != AccountReady || len(st.Roles) != 10 || st.Roles[6].ID != "transcription" || st.Roles[6].Enabled || st.Roles[7].ID != "speech" || !st.Roles[7].Enabled || st.Roles[7].Label != "语音合成" || st.Roles[8].ID != "image" || !st.Roles[8].Enabled || st.Roles[8].Label != "图片生成" || st.Roles[9].ID != "translation" || !st.Roles[9].Enabled || st.Roles[9].Label != "翻译" {
 		t.Fatalf("speech and image roles = %+v", st.Roles)
+	}
+	for _, role := range st.Roles {
+		if role.ID == "naming" {
+			t.Fatalf("retired naming role was kept: %+v", st.Roles)
+		}
 	}
 	if name, _, ok := pool.ConversationDefault(accountModelsSourceID); !ok || name != "conversation" {
 		t.Fatalf("conversation model after extra roles = %q ok=%v", name, ok)
