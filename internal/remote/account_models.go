@@ -252,11 +252,11 @@ func (a *AccountModels) identity() (accountIdentity, bool) {
 }
 
 type accountOutcome struct {
-	state     AccountModelsState
-	source    *provider.AccountSource
-	local     []*provider.AccountSource
-	keepLocal bool
-	transient bool
+	state        AccountModelsState
+	source       *provider.AccountSource
+	local        []*provider.AccountSource
+	localUpdated bool
+	transient    bool
 }
 
 // Refresh reads the account's bootstrap and model catalog and publishes the
@@ -330,6 +330,13 @@ func (a *AccountModels) publish(fetched accountIdentity, o accountOutcome) Accou
 		return a.state
 	case o.transient && a.published:
 		// A brief outage must not take working models away mid-conversation.
+		// A fresh bootstrap can nevertheless revoke independent LOCAL sources.
+		if o.localUpdated {
+			for _, source := range o.local {
+				source.SetAccountOwner(fetched.userID)
+			}
+			a.pool.SetLocalAccountSources(o.local)
+		}
 		a.log.Warn("account models refresh failed; keeping the last working catalog", "reason", o.state.Reason)
 		return a.state
 	}
@@ -349,9 +356,7 @@ func (a *AccountModels) apply(fetched accountIdentity, o accountOutcome) Account
 		source.SetAccountOwner(fetched.userID)
 	}
 	a.pool.SetAccountSource(o.source)
-	if o.source == nil || !o.keepLocal {
-		a.pool.SetLocalAccountSources(o.local)
-	}
+	a.pool.SetLocalAccountSources(o.local)
 	a.published = o.source != nil
 	if o.source != nil {
 		a.publishedToken, a.publishedOrigin = fetched.token, fetched.origin

@@ -119,6 +119,15 @@ func NewUnavailableAccountSource(id, label, baseURL, token string, configurable 
 // ID is the provider id conversations store for this source.
 func (s *AccountSource) ID() string { return s.id }
 
+// MatchesCatalogConnection allows refresh to retain only this credential's
+// catalog at the endpoint still authorized by the latest bootstrap.
+func (s *AccountSource) MatchesCatalogConnection(id, baseURL, token string) bool {
+	return s != nil && s.id == id && s.baseURL == baseURL && s.token == token
+}
+
+// ModelCount includes non-chat models, just like the fetched catalog count.
+func (s *AccountSource) ModelCount() int { return len(s.names) }
+
 // String and GoString use value receivers so that a dereferenced copy, which
 // fmt would otherwise print field by field, hides the credential as well.
 func (s AccountSource) String() string {

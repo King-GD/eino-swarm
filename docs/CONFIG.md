@@ -363,7 +363,11 @@ computer control, shell execution, hosted MCP approvals or arbitrary tool types.
 
 Gateway catalogs, profiles and credentials remain in memory; they are never
 saved as `models.providers`. Provider IDs beginning with `gateway:` are reserved.
-LOCAL lists personal providers and separately authorized signed-in account catalogs. An ordinary gateway lists its catalog and
+LOCAL lists personal providers and separately authorized signed-in account catalogs.
+Each account catalog refreshes independently: a temporary outage retains only
+that same connection's previously authorized catalog. Fresh bootstrap revocations,
+denied responses and empty catalogs remove their own source even during a sibling outage.
+An ordinary gateway lists its catalog and
 personal providers. A managed gateway exposes only its own conversation preset;
 legacy `account_presentation: full` cannot unlock other models.
 

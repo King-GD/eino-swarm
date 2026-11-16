@@ -25,25 +25,19 @@ const (
 
 // attachSwitchableCatalogs adds the authorized third-party preset and original
 // gateway catalogs while LOCAL is signed in. A denied or empty catalog is
-// omitted. A transient failure keeps the catalogs already published.
+// omitted. A transient failure retains only that still-authorized source.
 func (a *AccountModels) attachSwitchableCatalogs(ctx context.Context, boot accountBootstrap, token string, o accountOutcome) accountOutcome {
-	if o.state.State != AccountReady && o.state.State != AccountNoAccess {
+	if o.state.State != AccountReady && o.state.State != AccountNoAccess && !o.transient {
 		return o
 	}
-	sources, keep := a.switchableCatalogs(ctx, boot, token)
-	if keep {
-		o.keepLocal = true
-		if o.state.State == AccountNoAccess && a.hasPublishedCatalog() {
-			o.transient = true
-		}
-		return o
-	}
+	sources := a.switchableCatalogs(ctx, boot, token)
+	o.localUpdated = true
 	var extra []*provider.AccountSource
 	for _, item := range sources {
 		if item.src == nil {
 			continue
 		}
-		if o.source == nil && item.preset {
+		if o.source == nil && item.preset && !o.transient {
 			kinds := item.src.Kinds()
 			o.source = item.src
 			o.state.State = AccountReady
@@ -63,13 +57,9 @@ func (a *AccountModels) attachSwitchableCatalogs(ctx context.Context, boot accou
 	return o
 }
 
-func (a *AccountModels) hasPublishedCatalog() bool {
-	return a != nil && a.pool != nil && (a.pool.AccountSourceID() != "" || len(a.pool.LocalAccountSources()) > 0)
-}
-
-func (a *AccountModels) switchableCatalogs(ctx context.Context, boot accountBootstrap, token string) ([]switchableSource, bool) {
+func (a *AccountModels) switchableCatalogs(ctx context.Context, boot accountBootstrap, token string) []switchableSource {
 	var refs []accountCatalogRef
-	if boot.clientCatalogURL != "" {
+	if boot.access && boot.clientCatalogURL != "" {
 		refs = append(refs, accountCatalogRef{sourceID: boot.sourceID, label: boot.label, apiBaseURL: boot.apiBaseURL, catalogURL: boot.clientCatalogURL, sameAsPreset: true})
 	}
 	if boot.gatewayCatalog != nil {
@@ -82,11 +72,16 @@ func (a *AccountModels) switchableCatalogs(ctx context.Context, boot accountBoot
 		case catalogReady:
 			sources = append(sources, item)
 		case catalogKeep:
-			a.log.Warn("account catalog refresh failed; keeping the last switchable models")
-			return nil, true
+			a.log.Warn("account catalog refresh failed; retaining only its authorized cached source")
+			for _, cached := range a.pool.LocalAccountSources() {
+				if cached.MatchesCatalogConnection(ref.sourceID, ref.apiBaseURL, token) {
+					sources = append(sources, switchableSource{src: cached, models: cached.ModelCount(), preset: ref.sameAsPreset})
+					break
+				}
+			}
 		}
 	}
-	return sources, false
+	return sources
 }
 
 type switchableSource struct {

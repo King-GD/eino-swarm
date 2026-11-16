@@ -131,3 +131,38 @@ func TestAbsentCatalogOwnersAndOfflinePoolsDoNotPublishAccountSources(t *testing
 		t.Fatal("offline mode retained a real account source")
 	}
 }
+
+func TestLocalCatalogRetentionRequiresExactConnectionAndClearingRevokesIt(t *testing.T) {
+	cfg := configFor(t, true)
+	cfg.Product.Mode = config.ProductModeLocal
+	pool := New(cfg)
+	src := accountSourceFor(t, "https://source.invalid/v1", "session", "chat", "embedding")
+	for _, tc := range []struct {
+		id, url, token string
+		want           bool
+	}{
+		{src.ID(), "https://source.invalid/v1", "session", true},
+		{"other", "https://source.invalid/v1", "session", false},
+		{src.ID(), "https://changed.invalid/v1", "session", false},
+		{src.ID(), "https://source.invalid/v1", "renewed", false},
+	} {
+		if src.MatchesCatalogConnection(tc.id, tc.url, tc.token) != tc.want {
+			t.Fatal("catalog connection identity mismatch")
+		}
+	}
+	var absent *AccountSource
+	if absent.MatchesCatalogConnection(src.ID(), "https://source.invalid/v1", "session") {
+		t.Fatal("nil catalog matched")
+	}
+	if src.ModelCount() != 2 {
+		t.Fatal("catalog count lost non-chat models")
+	}
+	pool.SetLocalAccountSources([]*AccountSource{src})
+	pool.SetLocalAccountSources(nil)
+	if pool.LocalAccountSources() != nil {
+		t.Fatal("explicit clear retained catalog")
+	}
+	if err := pool.validateModelSelection(src.ID(), "chat"); !errors.Is(err, ErrAccountLoginRequired) {
+		t.Fatal(err)
+	}
+}
