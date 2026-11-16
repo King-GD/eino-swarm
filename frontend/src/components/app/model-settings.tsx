@@ -67,10 +67,11 @@ export function ModelsTab({
 }) {
   const t = useT()
   const account = useApp((s) => s.meta?.account_models)
-  const local = useApp((s) => s.meta?.product_mode) === "local"
   const listed = useApp((s) => s.models)
   const accountReady = account?.state === "ready" && account.models > 0
-  const officialOnly = officialModelLock(account, settings.model_policy)
+  const mode = useApp((s) => s.meta?.product_mode)
+  const currentPolicy = useApp((s) => s.meta?.model_policy) ?? settings.model_policy
+  const officialOnly = mode === undefined || (currentPolicy ? officialModelLock(account, currentPolicy) : mode !== "local")
   const serverStarts = serverStartsConversations(settings.models.default_source, accountReady) && !officialOnly
   const [busy, setBusy] = useState<string>()
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set([

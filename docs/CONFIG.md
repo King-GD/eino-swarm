@@ -1015,3 +1015,5 @@ original marketing version even after this configuration changes. Build numbers
 remain package-derived and must increase beyond all remote builds/uploads.
 This signing configuration is managed outside the application Settings; see
 [release setup and recovery](RELEASE.md#testflight-version-and-build-number).
+
+语音设置入口随模型配置权限显示：LOCAL 和可配置的普通网关账号在 Settings → Models 编辑功能模型及语音参数；托管第三方账号隐藏 Models，只在 Speech 入口显示语音开关、音色和资源参数，不显示模型、Provider 或凭据配置。

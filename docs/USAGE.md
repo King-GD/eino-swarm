@@ -1096,3 +1096,5 @@ functions, and appear in the same turn's Trace. Web sources remain clickable
 in answers. Paired phone sessions using the PC inherit its provider
 configuration. Independent phone direct chat has its own configuration. See
 [provider cloud tools](CONFIG.md#provider-cloud-tools).
+
+语音设置入口随模型配置权限显示：LOCAL 和可配置的普通网关账号在 Settings → Models 编辑功能模型及语音参数；托管第三方账号隐藏 Models，只在 Speech 入口显示语音开关、音色和资源参数，不显示模型、Provider 或凭据配置。

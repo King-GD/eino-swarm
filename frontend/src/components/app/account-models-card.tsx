@@ -24,14 +24,15 @@ export function AccountModelsCard({
   const t = useT()
   const account = useApp((s) => s.meta?.account_models)
   const fofa = useApp((s) => s.meta?.product_mode) === "fofa"
-  const local = useApp((s) => s.meta?.product_mode) === "local"
   const problem = accountModelsProblem(account)
   const ready = account?.state === "ready"
   const tally = accountKindTally(account?.kinds)
   const visibleRoles = (account?.roles ?? []).filter((role) => role.id !== "decisions")
   const ownReady = settings.models.providers.some((p) => p.ready && p.enabled !== false)
   const source = settings.models.default_source ?? "account"
-  const officialOnly = officialModelLock(account, settings.model_policy)
+  const mode = useApp((s) => s.meta?.product_mode)
+  const currentPolicy = useApp((s) => s.meta?.model_policy) ?? settings.model_policy
+  const officialOnly = mode === undefined || (currentPolicy ? officialModelLock(account, currentPolicy) : mode !== "local")
   const kindText: Record<Exclude<AccountKindKey, "decisions">, MessageKey> = {
     chat: "accountModels.kind.chat",
     unclassified: "accountModels.kind.unclassified",

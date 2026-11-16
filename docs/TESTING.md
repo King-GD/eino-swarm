@@ -22,12 +22,11 @@ Run the corresponding browser E2E with isolated ports/data/output and do not
 rebuild a Vite dist while serving a case.
 
 Settings regressions keep voice input, read aloud and resource limits inside
-Models, with no separate Speech navigation item. Voice search terms select
-Models and its autosave flush persists pending credentials before discovery or
-leaving the page. Models remains reachable in local and Gateway modes, including
-signed-out Gateway installs; Gateway never exposes local provider, default,
-auxiliary or account-presentation editing. Browser speech cases enter through
-Models before exercising recording and playback.
+Models for LOCAL and configurable ordinary Gateway accounts. Managed third-party
+accounts have only the Speech parameter page and no Models navigation or model,
+provider, endpoint or credential controls. Voice search and autosave retain the
+active permission boundary; delayed metadata cannot reopen a managed model editor.
+
 
 Headless and fixture checks do not accept physical microphone capture or native
 playback. Mac acceptance runs only in the identified `ci-macOS` guest through

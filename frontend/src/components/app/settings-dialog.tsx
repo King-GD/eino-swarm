@@ -16,7 +16,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 
 import { MemorySettings } from "@/components/app/memory-settings"
 import { ModelsTab } from "@/components/app/model-settings"
-import { speechSettingsSearch } from "@/components/app/settings-speech"
+import { SpeechSettings as SpeechTab, speechSettingsSearch } from "@/components/app/settings-speech"
 import { GeneralTab } from "@/components/app/settings-general"
 import { PersonalityTab } from "@/components/app/settings-personality"
 import { BackupTab } from "@/components/app/settings-backup"
@@ -375,8 +375,9 @@ export function SettingsDialog({
 
   const productMode = useApp((s) => s.meta?.product_mode)
   const modelPolicy = useApp((s) => s.meta?.model_policy)
+  const managedModels = modelPolicy ? !modelPolicy.configurable : productMode === "fofa"
   const visibleNav = nav.filter((s) =>
-    settingsMatch(query, s.label, s.keys) && !((modelPolicy ? !modelPolicy.configurable : productMode === "fofa") && s.id === "models"),
+    settingsMatch(query, s.label, s.keys) && (s.id === "models" ? !managedModels : s.id === "speech" ? managedModels : true),
   )
   // Radix used to fire an empty value when the panes were not TabsContent.
   // An unknown id paints a blank sheet with no rail highlight.

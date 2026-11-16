@@ -92,16 +92,15 @@ describe("server models on the Models page", () => {
     expect(screen.getByRole("heading", { name: "Voice input" })).toBeVisible()
   })
 
-  it("closes an outstanding account-presentation edit when the install switches to FOFA", async () => {
+  it("ignores a retained account profile in LOCAL without offering an account-presentation switch", () => {
     const account = meta({ state: "ready", models: 1, profile: { presentation: "official", instruction: true, restrict_tools: false, tools: [] } })
     useApp.setState({ meta: { ...account, product_mode: "local" } })
     const onChange = vi.fn()
     render(<ModelsTab settings={settings()} onChange={onChange} />)
-    fireEvent.click(screen.getByRole("combobox", { name: "Model list" }))
-    fireEvent.click(await screen.findByRole("option", { name: "All models" }))
-    expect(await screen.findByRole("dialog", { name: "Switch to all models?" })).toBeVisible()
+    expect(screen.queryByRole("combobox", { name: "Model list" })).toBeNull()
+    expect(screen.getByRole("button", { name: "Add a provider" })).toBeVisible()
     act(() => useApp.setState({ meta: { ...account, product_mode: "fofa" } }))
-    expect(screen.queryByRole("dialog", { name: "Switch to all models?" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Add a provider" })).toBeNull()
     expect(onChange).not.toHaveBeenCalled()
   })
 
@@ -161,10 +160,10 @@ describe("server models on the Models page", () => {
   it("keeps managed models locked without a presentation override", async () => {
     fake.status = signedIn
     useApp.setState({
-      meta: meta({
+      meta: { ...meta({
         state: "ready", models: 1, label: "Partner model",
         profile: { presentation: "official", instruction: true, restrict_tools: true, tools: ["read"] },
-      }),
+      }), product_mode: "fofa" },
       models: [{ ...row("gateway:x", "account", "account"), label: "Partner model", default: true, default_follows_setting: true }],
     })
     const onChange = vi.fn()

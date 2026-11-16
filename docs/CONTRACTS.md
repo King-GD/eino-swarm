@@ -24,7 +24,7 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 
 - 状态：active；类型：configuration；作用范围：本机 `product.mode`、设置与 meta、开始一轮工作的 HTTP 和配对手机 RPC；关联功能：`F-173`、`F-170`、`F-171`、`F-220`。
 - 契约内容：没有 `product` 键、空 mode 和 `fofa` 都是 FOFA，保存时不把这个键写进 `config.yaml`。只有 `local` 会写入。其它值在 Load 和 Save 时拒绝。`GET /api/meta` 的 `product_mode` 与 `GET /api/settings` 的 `product.mode` 只返回 `fofa` 或 `local`。界面没有这个设置项。桌面账号详情头像连续点击三次在 `local` 与 `fofa` 之间切换；写回 `fofa` 时键再次省略。
-- 允许行为：FOFA 下 Stop、回答、读取和与当前模型设置相同的保存；`--mock` 开始回合；`pending`、`ready`、`no_access`、`unavailable` 视为已登录。禁止行为：FOFA 下改变 provider、默认模型、发现模型，或在未登录时开始回合、steer、继续、重试、压缩、跟进、侧聊、选区翻译、决策、复查、创建或立即运行日程、抢占、实现计划和恢复目标。服务器发布固定模型角色时，FOFA 只读使用这些角色，LOCAL 忽略。失败语义：模型变更为 `403` `custom_models_disabled`，磁盘上的 provider 不变；未登录工作为 `403` `login_required`；非法 mode 为 `400` `invalid_product_mode`。不变量：切到 LOCAL 后原先保存的 provider 仍在。边界条件：同一次保存里先改为 `local` 再改模型可以成功；改回 `fofa` 的同时改模型整次拒绝。没有账号组件的进程不发明登录拒绝。
+- 允许行为：FOFA 下 Stop、回答、读取和与当前模型设置相同的保存；`--mock` 开始回合；`pending`、`ready`、`no_access`、`unavailable` 视为已登录。禁止行为：托管第三方网关下改变 provider、默认模型、发现模型；普通网关按当前 model_policy.configurable 授权编辑；在未登录时开始回合、steer、继续、重试、压缩、跟进、侧聊、选区翻译、决策、复查、创建或立即运行日程、抢占、实现计划和恢复目标。服务器发布固定模型角色时，FOFA 只读使用这些角色，LOCAL 忽略。失败语义：托管模型变更为 `403` `custom_models_disabled`，磁盘上的 provider 不变；未登录工作为 `403` `login_required`；非法 mode 为 `400` `invalid_product_mode`。不变量：切到 LOCAL 后原先保存的 provider 仍在。边界条件：同一次保存里先改为 `local` 再改模型可以成功；改回 `fofa` 的同时改模型整次拒绝。没有账号组件的进程不发明登录拒绝。
 - 证据：实现 `internal/config/product.go`、`internal/server/product_mode.go`、`internal/server/settings.go`、`internal/remote/pump.go`；测试 `internal/config/product_test.go`、`internal/server/product_mode_http_test.go`、`internal/remote/product_gate_test.go`、`frontend/src/components/app/desktop-account-menu.test.tsx`、`frontend/e2e/product-mode.spec.ts`；变更类型：Added。
 
 ## C-045 iOS shell reads static plugin config before the page starts
@@ -799,3 +799,5 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 - 输入与排序：该 generation 的独立内存快照保留此前工具 call／result 身份、数值类型、多模态、provenance 及所有 system 原序，不包含本次耗尽的输出。仅下一次 RunWith 抑制重复构造 system；原 instruction 变量不改。旧 ADK iterator 与真实 AfterModel 回写完成后才能返回并续接，不能按文字相似度删历史、伪造运行中工具失败或重建 Registry／session／worker。快照不新增 JSON／YAML 提示词留存；不可独立复制的 opaque／循环值使恢复不可用。跨 engine 的后台命令继续沿未知效果边界核验，不保证同 PID 复连。模型 `models/generation/ModelGenerationRecovery.tla` 检查该排序及 NoJoin 故障开关；真实 Registry／HTTP 的调度注入反例和回归仍必需，模型不替代实际代码证据。
 - 证据：实现 `signal.go`、`internal/engine`、`frontend/src/lib/transcript.ts`、`mobile/src/lib/transcript.ts`；测试 `generation_test.go`、`internal/engine/generation_test.go`、`internal/engine/generation_http_test.go`、`frontend/src/lib/transcript-generation.test.ts`、`mobile/src/lib/transcript-generation.test.ts`。
 - 变更规则：同步 API、库通知文档、数据模型、功能清单、两端 reducer、Trace 和 UI/原生回归；变更类型：Added；来源：GitHub Issue #95，用户 2026-10-22 要求逐次生成说明原因和恢复状态。
+
+语音设置入口随模型配置权限显示：LOCAL 和可配置的普通网关账号在 Settings → Models 编辑功能模型及语音参数；托管第三方账号隐藏 Models，只在 Speech 入口显示语音开关、音色和资源参数，不显示模型、Provider 或凭据配置。

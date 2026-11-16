@@ -135,30 +135,36 @@ describe("Settings dialog", () => {
 
   it.each([
     ["signed out without a profile", undefined],
-    ["signed in with a full catalog", { state: "ready", models: 1, profile: { presentation: "full" } }],
-  ] as const)("keeps account models and voice settings available in FOFA when %s", async (_label, account_models) => {
+    ["signed in with a retained profile", { state: "ready", models: 1, profile: { presentation: "full" } }],
+  ] as const)("keeps voice parameters without model configuration for a managed account when %s", async (_label, account_models) => {
     const speech = defaultSpeechSettings()
     speech.input = { ...speech.input, source: "custom", base_url: "http://private-speech.invalid/v1", model: "private-speech-model", has_api_key: true }
     speech.output = { ...speech.output, source: "custom", base_url: "http://private-speech.invalid/v1", has_api_key: true }
-    vi.mocked(api.settings).mockResolvedValue({ ...base, speech })
-    useApp.setState({ meta: { product_mode: "fofa", account_models } as Meta })
-    renderDialog({ initialSection: "models" })
-    await screen.findByRole("heading", { name: "Models" })
-    expect(screen.getByRole("tab", { name: "Models" })).toHaveAttribute("aria-selected", "true")
-    expect(screen.queryByRole("tab", { name: "Speech" })).toBeNull()
-    expect(screen.getByTestId("account-models-card")).toBeVisible()
-    expect(screen.getByRole("heading", { name: "Voice input" })).toBeVisible()
+    const model_policy = { mode: "gateway" as const, configurable: false, ready: true, scope: "gateway:managed" }
+    vi.mocked(api.settings).mockResolvedValue({ ...base, speech, model_policy })
+    useApp.setState({ meta: { product_mode: "fofa", account_models, model_policy } as Meta })
+    renderDialog({ initialSection: "speech" })
+    await screen.findByRole("heading", { name: "Voice input" })
+    expect(screen.getByRole("tab", { name: "Speech" })).toHaveAttribute("aria-selected", "true")
+    expect(screen.queryByRole("tab", { name: "Models" })).toBeNull()
+    expect(screen.queryByTestId("account-models-card")).toBeNull()
     expect(screen.getByRole("heading", { name: "Read aloud" })).toBeVisible()
     expect(screen.queryByRole("button", { name: "Add a provider" })).toBeNull()
-    expect(screen.queryByRole("button", { name: "Endpoint details" })).toBeNull()
     expect(screen.queryByRole("combobox", { name: "Model list" })).toBeNull()
-    expect(screen.queryByRole("combobox", { name: "New conversations start with" })).toBeNull()
-    expect(screen.queryByRole("heading", { name: "Auxiliary models" })).toBeNull()
     expect(screen.queryByLabelText("API base URL")).toBeNull()
     expect(screen.queryByLabelText("API key")).toBeNull()
-    expect(screen.queryByDisplayValue("http://private-speech.invalid/v1")).toBeNull()
     expect(screen.queryByDisplayValue("private-speech-model")).toBeNull()
-    expect(screen.getAllByText("Managed by the gateway")).toHaveLength(2)
+  })
+
+  it("keeps Models and personal providers available for a configurable Gateway account", async () => {
+    const model_policy = { mode: "gateway" as const, configurable: true, ready: true, scope: "gateway:ordinary" }
+    vi.mocked(api.settings).mockResolvedValue({ ...base, model_policy })
+    useApp.setState({ meta: { product_mode: "fofa", model_policy } as Meta })
+    renderDialog({ initialSection: "models" })
+    await screen.findByRole("heading", { name: "Models", level: 2 })
+    expect(screen.getByRole("button", { name: "Add a provider" })).toBeVisible()
+    expect(screen.getByRole("heading", { name: "Voice input" })).toBeVisible()
+    expect(screen.queryByRole("tab", { name: "Speech" })).toBeNull()
   })
 
   it("saves voice switches from Models without rewriting the model configuration", async () => {
@@ -230,7 +236,7 @@ describe("Settings dialog", () => {
   it("saves voice switches through the independent Speech page", async () => {
     useApp.setState({ meta: { product_mode: "fofa" } as Meta })
     renderDialog({ initialSection: "speech" })
-    await screen.findByRole("heading", { name: "Speech" })
+    await screen.findByRole("heading", { name: "Voice input" })
     fireEvent.click(screen.getAllByLabelText("Enabled")[0])
     await waitFor(() => expect(api.saveSettings).toHaveBeenCalled())
     const patch = vi.mocked(api.saveSettings).mock.lastCall![0]
