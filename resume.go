@@ -359,6 +359,8 @@ func (h *Handle) resetForResume(fromID string) {
 	h.inbox = nil
 	h.cancel = nil
 	h.handoff = workerHandoff{}
+	h.preemptedByCap = false
+	h.preemptedCap = 0
 	h.resumedFrom = fromID
 	h.spawned = time.Now()
 }

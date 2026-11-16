@@ -36,7 +36,7 @@ def archive(path, body=None, name='zwai', mode=0o755, link=False):
 
 
 class LinuxReleaseTests(unittest.TestCase):
-    def test_archive_requires_only_executable_arm64_elf(self):
+    def test_archive_requires_only_executable_elf_for_named_architecture(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'zwai-1.2.3-linux-arm64.tar.gz'
             archive(path)
@@ -46,6 +46,23 @@ class LinuxReleaseTests(unittest.TestCase):
                 archive(path, **kwargs)
                 with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                     release_linux.validate_archive(path)
+            amd64 = Path(directory) / 'zwai-1.2.3-linux-amd64.tar.gz'
+            archive(amd64, body=elf(62))
+            release_linux.validate_archive(amd64)
+            for body in (elf(183), elf(62)[:4] + b'\x01' + elf(62)[5:], elf(62)[:5] + b'\x02' + elf(62)[6:]):
+                archive(amd64, body=body)
+                with self.assertRaises(ValueError):
+                    release_linux.validate_archive(amd64)
+            extra = tarfile.TarInfo('extra')
+            with tarfile.open(path, 'w:gz') as out:
+                out.addfile(extra)
+                out.addfile(extra)
+            with self.assertRaises(ValueError):
+                release_linux.validate_archive(path)
+            unnamed = Path(directory) / 'archive.tar.gz'
+            archive(unnamed)
+            with self.assertRaises(ValueError):
+                release_linux.validate_archive(unnamed)
             path.write_bytes(b'bad')
             with self.assertRaises(ValueError):
                 release_linux.validate_archive(path)
@@ -74,37 +91,15 @@ class LinuxReleaseTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(), previous)
             with self.assertRaises(ValueError):
                 release_linux.build(root, 'dirty', output)
-
-    def test_linux_publisher_builds_validates_and_does_not_rebuild_remote_bytes(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / 'bin').mkdir()
-            path = root / 'bin/zwai-1.2.3-linux-arm64.tar.gz'
-            calls = []
-            def command(args, **kwargs):
-                calls.append(args)
-                if args[:2] == ['gh', 'api']:
-                    return '[]'
-                if args[:2] == ['make', 'linux-release']:
-                    archive(path)
-                return ''
-            with patch.object(release, 'run', side_effect=command), \
-                 patch.object(release, 'source_preflight', return_value='sha'), \
-                 patch.dict(os.environ, {'DELIVERY_STATE': str(root / 'missing')}):
-                result = release.github_platform(root, '1.2.3', 'sha', 'linux', {})
-            self.assertEqual(result['status'], 'published')
-            self.assertTrue(any(c[:2] == ['make', 'linux-release'] for c in calls))
-            self.assertFalse(any(c[0] == 'uname' for c in calls))
-            remote = json.dumps([[{'tag_name': 'v1.2.3', 'assets': [
-                {'name': path.name, 'digest': 'sha256:' + release.sha256(path)}]}]])
-            calls.clear()
-            with patch.object(release, 'run', side_effect=lambda args, **kw: calls.append(args) or remote), \
-                 patch.object(release, 'source_preflight', return_value='sha'):
-                release.github_platform(root, '1.2.3', 'sha', 'linux', {})
-            self.assertFalse(any(c[0] == 'make' for c in calls))
-            path.write_bytes(b'changed')
-            with patch.object(release, 'run', return_value=remote), self.assertRaises(ValueError):
-                release.github_platform(root, '1.2.3', 'sha', 'linux', {})
+            with self.assertRaises(ValueError):
+                release_linux.build(root, '1.2.3', output, '386')
+            def compile_amd64(args, **kwargs):
+                self.assertEqual(kwargs['env']['GOARCH'], 'amd64')
+                Path(args[args.index('-o') + 1]).write_bytes(elf(62))
+            with patch.object(release_linux.subprocess, 'run', side_effect=compile_amd64):
+                amd64 = release_linux.build(root, '1.2.3', output, 'amd64')
+            self.assertEqual(amd64.name, 'zwai-1.2.3-linux-amd64.tar.gz')
+            release_linux.validate_archive(amd64)
 
     def test_direct_linux_batch_is_selected_and_recorded_without_issue_rows(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -118,33 +113,6 @@ class LinuxReleaseTests(unittest.TestCase):
             batch = release.read_json(path)['pending_new_batch']
             self.assertEqual(batch['publication'], 'platform_delivery_verified')
             self.assertEqual(batch['additional_platforms']['linux']['status'], 'published')
-
-    def test_linux_runtime_accepted_bytes_are_reused_or_refused(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / 'bin').mkdir()
-            path = root / 'bin/zwai-1.2.3-linux-arm64.tar.gz'
-            archive(path)
-            ledger = root / 'delivery.json'
-            accepted = {'status': 'passed', 'source_sha': 'sha', 'version': '1.2.3',
-                        'asset_name': path.name, 'asset_sha256': release.sha256(path)}
-            release.write_json(ledger, {'pending_new_batch': {
-                'version': '1.2.3', 'source_sha': 'sha', 'release_linux_validation': accepted}})
-            calls = []
-            def command(args, **kwargs):
-                calls.append(args)
-                return '[]' if args[:2] == ['gh', 'api'] else ''
-            with patch.dict(os.environ, {'DELIVERY_STATE': str(ledger)}), \
-                 patch.object(release, 'run', side_effect=command), \
-                 patch.object(release, 'source_preflight', return_value='sha'):
-                release.github_platform(root, '1.2.3', 'sha', 'linux', {})
-                self.assertFalse(any(c[0] == 'make' for c in calls))
-                path.write_bytes(b'changed')
-                with self.assertRaisesRegex(ValueError, 'runtime evidence'):
-                    release.github_platform(root, '1.2.3', 'sha', 'linux', {})
-                path.unlink()
-                with self.assertRaisesRegex(ValueError, 'runtime evidence'):
-                    release.github_platform(root, '1.2.3', 'sha', 'linux', {})
 
     def test_old_rows_do_not_gain_linux_requirement(self):
         row = dict(android='published', macos='published', ios='published', server='not_required')

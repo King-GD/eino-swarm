@@ -82,6 +82,8 @@ type Handle struct {
 	workerToolNames   *[]string
 	modelBinding      *ModelBinding
 	handoff           workerHandoff
+	preemptedByCap    bool
+	preemptedCap      int
 }
 
 // Activity returns the agent's most recent streamed text tail (thinking or
@@ -136,6 +138,20 @@ func (h *Handle) Elapsed() time.Duration {
 // Cancel force-cancels this agent (same effect as close_agent on it).
 func (h *Handle) Cancel() {
 	h.mu.Lock()
+	cancel := h.cancel
+	h.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// preemptForCap stops one holder because the live cap now leaves it outside
+// the task's running set. The flag is what completeWorker turns into a
+// cancellation reason; Cancel alone would only say the context ended.
+func (h *Handle) preemptForCap(n int) {
+	h.mu.Lock()
+	h.preemptedByCap = true
+	h.preemptedCap = n
 	cancel := h.cancel
 	h.mu.Unlock()
 	if cancel != nil {
@@ -804,7 +820,8 @@ func (r *Registry) Close() {
 // SetMaxConcurrent updates the live cap and wakes waiters. Settings can
 // raise it while workers are already queued; assigning MaxConcurrent
 // after the first spawn used to be a no-op because the semaphore was
-// created once.
+// created once. Lowering it stops the newest holders until the task is
+// back within the number; the earliest keep running.
 func (r *Registry) SetMaxConcurrent(n int) {
 	if n <= 0 {
 		n = defaultMaxConcurrent
@@ -818,7 +835,9 @@ func (r *Registry) SetMaxConcurrent(n int) {
 		return
 	}
 	r.mu.Unlock()
-	g.resize(n)
+	for _, h := range g.resize(n) {
+		h.preemptForCap(n)
+	}
 }
 
 func (r *Registry) slotGate() *slotGate {
@@ -834,9 +853,9 @@ func (r *Registry) slotGate() *slotGate {
 	return r.slots
 }
 
-func (r *Registry) acquireSlot() { r.slotGate().acquire() }
+func (r *Registry) acquireSlot(h *Handle) { r.slotGate().acquire(h) }
 
-func (r *Registry) releaseSlot() { r.slotGate().release() }
+func (r *Registry) releaseSlot(id string) { r.slotGate().release(id) }
 
 // ManagerConfig returns a ready-to-use ChatModelAgentConfig for the manager:
 // it wires the five lifecycle tools and the fork_context history middleware in

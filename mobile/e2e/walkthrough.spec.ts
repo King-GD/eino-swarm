@@ -297,7 +297,14 @@ test("Add to chat gets its own row below a bottom transcript selection", async (
   expect(selection).not.toBeNull()
   expect(action).not.toBeNull()
   expect(action!.y - selection!.bottom).toBeGreaterThanOrEqual(6)
-  expect(action!.y - selection!.bottom).toBeLessThanOrEqual(56)
+  // Copy controls and the durable completion timestamp belong to the
+  // transcript too. The separate action row follows that whole viewport;
+  // a fixed text-to-button gap mistakes this metadata for misplaced chrome.
+  const transcript = await page.getByTestId("transcript").boundingBox()
+  expect(transcript).not.toBeNull()
+  const rowGap = action!.y - (transcript!.y + transcript!.height)
+  expect(rowGap).toBeGreaterThanOrEqual(0)
+  expect(rowGap).toBeLessThanOrEqual(8)
   expect(action!.x + action!.width).toBeLessThanOrEqual(367)
 })
 

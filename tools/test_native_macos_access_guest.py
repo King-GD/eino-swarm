@@ -161,6 +161,26 @@ class GuestMaintenanceTests(unittest.TestCase):
         (dead / "responses/work.json").unlink()
         self.assertIsNone(self.inventory([dead], [])["current_peer_roots"])
 
+    def test_foreign_uid_pid_reuse_does_not_own_a_completed_queues_children(self):
+        dead, _ = self.controller("reused-pid", 90)
+        claim = {"id": "done", "nonce": "inventory-secret"}
+        claim_path = dead / "claims/done.json"
+        response_path = dead / "responses/done.json"
+        claim_path.write_text(json.dumps(claim))
+        response_path.write_text(json.dumps({**claim, "status": "exited", "exit_code": 0}))
+        original = {path: path.read_bytes() for path in dead.rglob("*.json")}
+        # A root login now occupies a long-dead ci controller's numeric PID.
+        # Its shell must neither count as that queue's child nor be signalled.
+        unrelated = ["90 1 0 login", "91 90 501 -zsh"]
+        self.assertEqual(self.inventory([dead], unrelated)["current_peer_roots"], [])
+        self.assertEqual({path: path.read_bytes() for path in original}, original)
+        # Same-UID identity ambiguity and incomplete/live effects still refuse.
+        self.assertIsNone(self.inventory([dead], ["90 1 501 unknown", "91 90 501 -zsh"])["current_peer_roots"])
+        response_path.unlink()
+        self.assertIsNone(self.inventory([dead], unrelated)["current_peer_roots"])
+        response_path.write_text(json.dumps({**claim, "status": "interrupted", "pid": 91}))
+        self.assertIsNone(self.inventory([dead], unrelated)["current_peer_roots"])
+
     def test_process_inventory_is_unknown_when_ps_or_queue_identity_cannot_be_verified(self):
         active, line = self.controller("active", 100)
         self.assertIsNone(self.inventory([active], [line], exit_code=1)["current_peer_roots"])

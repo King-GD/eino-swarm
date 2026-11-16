@@ -26,7 +26,12 @@ test("three clicks on the account portrait reveal model controls", async ({ page
 
   await page.getByRole("button", { name: "Settings" }).click()
   const settings = page.getByRole("dialog")
-  await expect(settings.getByRole("tab", { name: "Models" })).toHaveCount(0)
+  await settings.getByRole("tab", { name: "Models" }).click()
+  await expect(settings.getByRole("heading", { name: "Voice input" })).toBeVisible()
+  await expect(settings.getByRole("tab", { name: "Speech" })).toHaveCount(0)
+  await expect(settings.getByRole("button", { name: "Add a provider" })).toHaveCount(0)
+  await expect(settings.getByLabel("API base URL")).toHaveCount(0)
+  await expect(settings.getByLabel("API key")).toHaveCount(0)
   await settings.getByRole("button", { name: "Back to app" }).click()
 
   await page.getByRole("button", { name: "Account" }).click()
@@ -45,6 +50,8 @@ test("three clicks on the account portrait reveal model controls", async ({ page
   await expect(page.getByLabel("Model")).toBeVisible()
   await page.getByRole("button", { name: "Settings" }).click()
   await expect(page.getByRole("dialog").getByRole("tab", { name: "Models" })).toBeVisible()
+  await page.getByRole("dialog").getByRole("tab", { name: "Models" }).click()
+  await expect(page.getByRole("dialog").getByRole("button", { name: "Add a provider" })).toBeVisible()
   await page.getByRole("button", { name: "Back to app" }).click()
 
   await page.getByRole("button", { name: "Account" }).click()
@@ -60,5 +67,7 @@ test("three clicks on the account portrait reveal model controls", async ({ page
   await page.getByTestId("desktop-account-dialog").getByRole("button", { name: "Close" }).click()
   await expect(page.getByLabel("Model")).toHaveCount(0)
   await page.getByRole("button", { name: "Settings" }).click()
-  await expect(page.getByRole("dialog").getByRole("tab", { name: "Models" })).toHaveCount(0)
+  await page.getByRole("dialog").getByRole("tab", { name: "Models" }).click()
+  await expect(page.getByRole("dialog").getByRole("heading", { name: "Voice input" })).toBeVisible()
+  await expect(page.getByRole("dialog").getByRole("button", { name: "Add a provider" })).toHaveCount(0)
 })

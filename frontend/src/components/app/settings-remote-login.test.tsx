@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { AccountSignIn } from "./account-sign-in"
 import { RemoteTab } from "./settings-remote"
 import { RemoteLoginSection } from "./settings-remote-login"
 import { DesktopAccountMenu } from "./desktop-account-menu"
@@ -245,4 +246,22 @@ describe("Account phone connection", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
     expect(api.remoteStatus).toHaveBeenCalledTimes(reads)
   })
+})
+
+// Both account entry points must let the user's browser authorize a headless host.
+it("offers the public verification link in Settings and account sign-in, then removes it on cancel", async () => {
+  const uri = "https://hub.example/login?desktop_code=PUBLIC"
+  const manual = { ...pending, login: { ...pending.login!, verification_uri: uri } }
+  vi.mocked(api.remoteStatus).mockResolvedValue(manual)
+  const view = render(<><AccountSignIn /><RemoteLoginSection enabled status={manual} unavailable={false} busy={false} onStart={vi.fn()} onCancel={vi.fn()} /></>)
+  await waitFor(() => expect(screen.getAllByRole("link", { name: "Open sign-in page" })).toHaveLength(2))
+  for (const link of screen.getAllByRole("link", { name: "Open sign-in page" })) {
+    expect(link).toHaveAttribute("href", uri)
+    expect(link).toHaveAttribute("target", "_blank")
+    expect(link).toHaveAttribute("rel", "noopener noreferrer")
+  }
+  expect(screen.getAllByText(uri)).toHaveLength(2)
+  // Even a stale link in a terminal payload must not remain actionable.
+  view.rerender(<RemoteLoginSection enabled status={{ ...manual, login: { ...manual.login!, state: "cancelled" } }} unavailable={false} busy={false} onStart={vi.fn()} onCancel={vi.fn()} />)
+  expect(screen.queryByRole("link")).not.toBeInTheDocument()
 })

@@ -29,6 +29,7 @@ import { AccountModelsCard } from "./account-models-card"
 import { AuxiliaryModels } from "./auxiliary-models"
 import { FunctionalModels } from "./functional-models"
 import { SearchSettingsPanel } from "./settings-search"
+import { SpeechSettings } from "./settings-speech"
 import { ConfirmDeleteDialog } from "./confirm-delete-dialog"
 import { ProviderWindows } from "./provider-windows"
 import { ProviderCloudTools } from "./provider-cloud-tools"
@@ -48,6 +49,7 @@ type ProviderConfig = Settings["models"]["providers"][number]
 export function ModelsTab({
   settings,
   onChange,
+  onFlush = async () => {},
   query = "",
   toolsDrafts = {},
   toolsErrors = {},
@@ -56,6 +58,7 @@ export function ModelsTab({
 }: {
   settings: Settings
   onChange: (s: Settings) => void
+  onFlush?: () => Promise<void>
   query?: string
   toolsDrafts?: ProviderToolsDrafts
   toolsErrors?: Record<string, MessageKey>
@@ -64,6 +67,7 @@ export function ModelsTab({
 }) {
   const t = useT()
   const account = useApp((s) => s.meta?.account_models)
+  const local = useApp((s) => s.meta?.product_mode) === "local"
   const listed = useApp((s) => s.models)
   const accountReady = account?.state === "ready" && account.models > 0
   const officialOnly = officialModelLock(account, settings.model_policy)
@@ -76,6 +80,10 @@ export function ModelsTab({
       .map((p) => p.id),
   ]))
   const [doomed, setDoomed] = useState<ProviderConfig>()
+
+  useEffect(() => {
+    if (officialOnly) setDoomed(undefined)
+  }, [officialOnly])
 
   useEffect(() => {
     setOpen((previous) => {
@@ -262,8 +270,9 @@ export function ModelsTab({
           {t("settings.models.add")}
         </Button>
       ) : null}
+      <SpeechSettings settings={settings} onChange={onChange} onFlush={onFlush} query={query} />
       <ConfirmDeleteDialog
-        open={Boolean(doomed)}
+        open={!officialOnly && Boolean(doomed)}
         title={t("provider.deleteTitle", {
           name: doomed ? providerHeading(doomed) : "",
         })}

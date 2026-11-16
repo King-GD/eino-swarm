@@ -70,6 +70,8 @@ test("desktop reload keeps the launcher's presence slot alive", async ({ page, r
 })
 
 test("a web tab leaves a native-owned hold alone and reserves its own presence", async ({ page, request }) => {
+  // The headless web launcher owns its own web slot independently of this tab.
+  const webBefore = (await clients(request)).filter((c) => c.surface === "web").map((c) => c.id)
   const response = await request.post("/api/presence", { data: { surface: "desktop" } })
   expect(response.ok()).toBe(true)
   const { id } = await response.json() as { id: string }
@@ -84,11 +86,13 @@ test("a web tab leaves a native-owned hold alone and reserves its own presence",
     await holdLauncherPresence(launcher, id)
     await page.goto(`/?presence=${encodeURIComponent(id)}`)
     await expect(page.getByRole("heading", { name: "What should we work on?" })).toBeVisible()
-    await expect.poll(async () => (await clients(request)).filter((c) => c.surface === "web").length).toBe(1)
+    await expect.poll(async () => (await clients(request)).filter((c) => c.surface === "web").length).toBe(webBefore.length + 1)
     const current = await clients(request)
     expect(current.filter((c) => c.surface === "desktop").map((c) => c.id)).toEqual([id])
-    expect(current.find((c) => c.surface === "web")?.id).not.toBe(id)
+    expect(current.find((c) => c.surface === "web" && !webBefore.includes(c.id))?.id).not.toBe(id)
     expect(frontendReservations).toBe(1)
+    await page.close()
+    await expect.poll(async () => (await clients(request)).filter((c) => c.surface === "web").map((c) => c.id)).toEqual(webBefore)
     expect(await launcher.evaluate(() => (window as LauncherHold).launcherHoldEnded)).toBe(false)
     expect(await launcher.evaluate(() => (window as LauncherHold).launcherHoldError)).toBeUndefined()
   } finally {

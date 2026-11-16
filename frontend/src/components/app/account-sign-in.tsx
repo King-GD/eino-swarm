@@ -6,14 +6,14 @@ import type { RemoteStatus } from "@/lib/types"
 import { useDesktopAccount } from "@/lib/use-remote-status"
 import { useT } from "@/lib/use-t"
 
+import { LoginVerificationLink } from "./login-verification-link"
 import { loginErrorMessage, loginStateMessage } from "./settings-remote-login"
 import { settingsHintClass, settingsLabelClass } from "./settings-field"
 
 const inFlight = ["starting", "authorization_pending", "account_pending", "account_rejected"]
 
-/** The one-button path to the server account: start, show the browser
- *  confirmation code, cancel. Go owns the browser step; this only reads safe
- *  status. Signing in enables the account link in the same server action. */
+/** Go owns authorization and polling. This view also exposes the validated
+ *  public link when the host cannot open a browser. */
 export function AccountSignIn({ compact = false }: { compact?: boolean }) {
   const t = useT()
   const connection = useDesktopAccount()
@@ -30,8 +30,7 @@ export function AccountSignIn({ compact = false }: { compact?: boolean }) {
   }
   // A signed-out account has nothing to report; every other state does.
   const showState = state !== "signed_out" && state !== "authorized"
-  // A browser build cannot open the system browser, so a banner has no
-  // sign-in to offer; the models page explains why.
+  // Hide an unavailable account entry in the compact banner.
   if (compact && status && !status.login_available) return null
 
   return (
@@ -54,6 +53,7 @@ export function AccountSignIn({ compact = false }: { compact?: boolean }) {
           <code className="select-all font-mono text-(length:--chrome-font-size)">{login.user_code}</code>
         </div>
       ) : null}
+      <LoginVerificationLink login={login} />
       {state === "authorized" ? null : (
         <div className="flex flex-wrap gap-2">
           {active ? (

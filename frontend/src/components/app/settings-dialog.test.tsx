@@ -1,10 +1,11 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { SettingsDialog } from "./settings-dialog"
 import { ToastStack } from "./toast-stack"
 import { defaultAppearance } from "@/lib/appearance"
+import { defaultSpeechSettings } from "@/lib/speech-types"
 import { defaultRemoteSettings, type Meta, type RemoteStatus, type Settings } from "@/lib/types"
 import { useApp } from "@/store/app"
 
@@ -129,15 +130,101 @@ describe("Settings dialog", () => {
       online: false,
     })
     vi.mocked(api.remoteBindings).mockResolvedValue([])
-    useApp.setState({ meta: undefined })
+    useApp.setState({ meta: { product_mode: "local" } as Meta })
   })
 
-  it("hides Models while this install is in the default product mode", async () => {
-    useApp.setState({ meta: { product_mode: "fofa" } as Meta })
+  it.each([
+    ["signed out without a profile", undefined],
+    ["signed in with a full catalog", { state: "ready", models: 1, profile: { presentation: "full" } }],
+  ] as const)("keeps account models and voice settings available in FOFA when %s", async (_label, account_models) => {
+    const speech = defaultSpeechSettings()
+    speech.input = { ...speech.input, source: "custom", base_url: "http://private-speech.invalid/v1", model: "private-speech-model", has_api_key: true }
+    speech.output = { ...speech.output, source: "custom", base_url: "http://private-speech.invalid/v1", has_api_key: true }
+    vi.mocked(api.settings).mockResolvedValue({ ...base, speech })
+    useApp.setState({ meta: { product_mode: "fofa", account_models } as Meta })
+    renderDialog({ initialSection: "models" })
+    await screen.findByRole("heading", { name: "Models" })
+    expect(screen.getByRole("tab", { name: "Models" })).toHaveAttribute("aria-selected", "true")
+    expect(screen.queryByRole("tab", { name: "Speech" })).toBeNull()
+    expect(screen.getByTestId("account-models-card")).toBeVisible()
+    expect(screen.getByRole("heading", { name: "Voice input" })).toBeVisible()
+    expect(screen.getByRole("heading", { name: "Read aloud" })).toBeVisible()
+    expect(screen.queryByRole("button", { name: "Add a provider" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Endpoint details" })).toBeNull()
+    expect(screen.queryByRole("combobox", { name: "Model list" })).toBeNull()
+    expect(screen.queryByRole("combobox", { name: "New conversations start with" })).toBeNull()
+    expect(screen.queryByRole("heading", { name: "Auxiliary models" })).toBeNull()
+    expect(screen.queryByLabelText("API base URL")).toBeNull()
+    expect(screen.queryByLabelText("API key")).toBeNull()
+    expect(screen.queryByDisplayValue("http://private-speech.invalid/v1")).toBeNull()
+    expect(screen.queryByDisplayValue("private-speech-model")).toBeNull()
+    expect(screen.getAllByText("Managed by the gateway")).toHaveLength(2)
+  })
+
+  it("saves voice switches from Models without rewriting the model configuration", async () => {
+    useApp.setState({ meta: { product_mode: "local" } as Meta })
+    renderDialog({ initialSection: "models" })
+    await screen.findByRole("heading", { name: "Voice input" })
+    expect(screen.getByRole("heading", { name: "Models", level: 2 })).toBeVisible()
+    expect(screen.queryByRole("heading", { name: "Speech", level: 2 })).toBeNull()
+    expect(screen.queryByRole("tab", { name: "Speech" })).toBeNull()
+    fireEvent.click(screen.getAllByLabelText("Enabled")[0])
+    await waitFor(() => expect(api.saveSettings).toHaveBeenCalled())
+    const patch = vi.mocked(api.saveSettings).mock.lastCall![0]
+    expect(patch.speech?.input.enabled).toBe(true)
+    expect(patch.speech?.output.enabled).toBe(false)
+    expect(patch.models).toBeUndefined()
+  })
+
+  it.each(["voice", "tts", "语音"])("opens Models when settings search matches %s", async (query) => {
+    useApp.setState({ meta: { product_mode: "local" } as Meta })
     renderDialog()
     await waitSettingsLoaded()
-    expect(screen.queryByRole("tab", { name: "Models" })).toBeNull()
-    expect(screen.getByRole("tab", { name: "General" })).toBeVisible()
+    fireEvent.change(screen.getByLabelText("Search settings"), { target: { value: query } })
+    expect(await screen.findByRole("tab", { name: "Models" })).toHaveAttribute("aria-selected", "true")
+    expect(screen.getAllByLabelText("Enabled")).toHaveLength(2)
+    expect(screen.queryByRole("tab", { name: "Speech" })).toBeNull()
+    fireEvent.change(screen.getByLabelText("Search settings"), { target: { value: "" } })
+    expect(screen.getByRole("tab", { name: "Models" })).toHaveAttribute("aria-selected", "true")
+  })
+
+  it("flushes voice edits before discovery and closing Models while preserving saved secrets", async () => {
+    const speech = defaultSpeechSettings()
+    speech.input.has_api_key = true
+    speech.output.has_api_key = true
+    vi.mocked(api.settings).mockResolvedValue({ ...base, speech })
+    useApp.setState({ meta: { product_mode: "local" } as Meta })
+    const onOpenChange = vi.fn()
+    let finishSave!: (value: Settings) => void
+    vi.mocked(api.saveSettings).mockReturnValueOnce(new Promise((done) => { finishSave = done }))
+    const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ models: ["voice-model"] })))
+    try {
+      renderDialog({ initialSection: "models", onOpenChange })
+      await screen.findByRole("heading", { name: "Voice input" })
+      const input = within(screen.getByRole("heading", { name: "Voice input" }).closest("section")!)
+      fireEvent.change(input.getByLabelText("API base URL"), { target: { value: "http://speech.invalid/v1" } })
+      fireEvent.click(input.getByRole("button", { name: "Discover models" }))
+      await waitFor(() => expect(api.saveSettings).toHaveBeenCalledOnce())
+      expect(fetcher).not.toHaveBeenCalled()
+      expect(vi.mocked(api.saveSettings).mock.lastCall![0].speech?.input.api_key).toBeUndefined()
+      expect(vi.mocked(api.saveSettings).mock.lastCall![0].speech?.output.api_key).toBeUndefined()
+      await act(async () => { finishSave(base) })
+      await waitFor(() => expect(fetcher).toHaveBeenCalledOnce())
+      expect(fetcher.mock.calls[0][0]).toBe("/api/audio/models")
+      vi.mocked(api.saveSettings).mockReturnValueOnce(new Promise((done) => { finishSave = done }))
+      fireEvent.change(screen.getByLabelText("Voice ID"), { target: { value: "speaker" } })
+      fireEvent.click(screen.getByRole("button", { name: "Back to app" }))
+      await waitFor(() => expect(api.saveSettings).toHaveBeenCalledTimes(2))
+      expect(onOpenChange).not.toHaveBeenCalled()
+      const patch = vi.mocked(api.saveSettings).mock.lastCall![0]
+      expect(patch.speech?.output.voice).toBe("speaker")
+      expect(patch.speech?.input.has_api_key).toBe(true)
+      expect(patch.speech?.input.api_key).toBeUndefined()
+      expect(patch.speech?.output.api_key).toBeUndefined()
+      expect(patch.models).toBeUndefined()
+      await act(async () => { finishSave(base) })
+      await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    } finally { fetcher.mockRestore() }
   })
 
   it("saves voice switches through the independent Speech page", async () => {

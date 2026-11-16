@@ -16,7 +16,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 
 import { MemorySettings } from "@/components/app/memory-settings"
 import { ModelsTab } from "@/components/app/model-settings"
-import { SpeechTab } from "@/components/app/settings-speech"
+import { speechSettingsSearch } from "@/components/app/settings-speech"
 import { GeneralTab } from "@/components/app/settings-general"
 import { PersonalityTab } from "@/components/app/settings-personality"
 import { BackupTab } from "@/components/app/settings-backup"
@@ -67,13 +67,13 @@ function sections(t: Translate) {
       id: "personality",
       label: t("settings.nav.personality"),
       icon: UserRound,
-      keys: "personality preferences tone style voice 人设 个性化 偏好 语气",
+      keys: "personality preferences tone style 人设 个性化 偏好 语气",
     },
     {
       id: "models",
       label: t("settings.nav.models"),
       icon: Cpu,
-      keys: "provider endpoint api key base url responses cloud builtin tools discover auxiliary title compact context window timeout first byte model embedding semantic search 模型 提供商 云端 内置 工具 嵌入 语义 搜索 首字节 等待 超时",
+      keys: `provider endpoint api key base url responses cloud builtin tools discover auxiliary title compact context window timeout first byte model embedding semantic search 模型 提供商 云端 内置 工具 嵌入 语义 搜索 首字节 等待 超时 ${speechSettingsSearch}`,
     },
     {
       id: "speech",
@@ -555,6 +555,7 @@ export function SettingsDialog({
                     <ModelsTab
                       settings={settings}
                       onChange={apply}
+                      onFlush={() => persistRef.current!.flush()}
                       query={query}
                       toolsDrafts={toolsDrafts}
                       toolsErrors={resolveProviderToolsDrafts(settings, toolsDrafts).errors}

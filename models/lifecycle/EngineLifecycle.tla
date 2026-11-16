@@ -31,6 +31,7 @@ CONSTANTS
     DeadlineKillsChild,     \* the handoff deadline also bounds the replacement child
     RestoreBeforeListen,    \* the replacement restores before publishing its lease
     StopRacesRestore,       \* Stop is not serialized with one conversation's restoration
+    HeadlessWaiterUnheld,   \* pre-170: web --no-open reports ready without a held client
     PresenceAfterWindow,    \* the shell opens its window before holding presence
     IdleCommitNonAtomic,    \* idle exit acts on an earlier sample, admission stays open
     FinishUngated,          \* handoff does not wait for an in-progress finalization
@@ -318,7 +319,15 @@ RefuseForeignRuntime ==
                    work, owner, stopped, stopAcked, gate, turns, successor>>
 
 -----------------------------------------------------------------------------
-(* Shell presence (desktop launch and the presence endpoints). *)
+(* Shell presence: desktop window or headless web waiter ready. *)
+
+(* serveWeb's old ready callback and signal wait did not hold any presence. *)
+UnheldWebReady ==
+    /\ HeadlessWaiterUnheld /\ launcher = "start" /\ target = "old"
+    /\ lease = target /\ Alive(target) /\ ~stopping[target]
+    /\ launcher' = "opened"
+    /\ UNCHANGED <<eng, lease, stopping, sampled, hold, target, deadline, work, owner,
+                   checkpoint, restorePhase, snapshot, stopped, stopAcked, gate, turns, successor>>
 
 Reserve ==
     /\ \/ launcher = "start" /\ target = "old"
@@ -388,7 +397,7 @@ Next ==
     \/ OldExits \/ Spawn \/ DeadlineExpires \/ DeadlineKillsReplacement
     \/ HumanCancelsLaunch
     \/ Publish \/ ReadCheckpoint \/ OccupyRuntime \/ RefuseForeignRuntime
-    \/ Reserve \/ Attach \/ FrontendAttaches \/ WindowCloses
+    \/ UnheldWebReady \/ Reserve \/ Attach \/ FrontendAttaches \/ WindowCloses
     \/ \E e \in Engines : IdleCommit(e) \/ IdleSample(e) \/ IdleExit(e)
 
 Spec == Init /\ [][Next]_vars
@@ -434,7 +443,7 @@ RegistryAlwaysAccounted == successor = "detached" => work # "none"
 RestoreOwnsProject == restorePhase # "foreign_claimed"
 ParkedSuccessorOwnsProject == successor # "foreign_claimed"
 
-(* A window the shell opened has an engine behind it until the window closes. *)
+(* A ready window or headless waiter has an engine until its owner closes. *)
 WindowHasEngine == launcher = "opened" => Alive(target)
 
 -----------------------------------------------------------------------------

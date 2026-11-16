@@ -178,6 +178,13 @@ the installation result; while it is pending, the frontend polls the read-only
 An unavailable progress read leaves the installation running. A failed install
 retains its confirmed version for a direct retry.
 
+A headless `web` shell (`--no-open` or browser opening disabled in config)
+holds a counted `web` presence through the same acknowledged HTTP handshake and
+bounded reconnection code as the desktop shell. Readiness follows that hold;
+recovery exhaustion fails the waiter, and signal shutdown joins its presence
+owner without stopping another client or turn. A browser-opening web shell
+continues to rely on its tab's presence.
+
 Both graphical shells load the **same** `http://127.0.0.1` origin, so there
 is exactly one implementation of uploads, downloads and the live event stream.
 Traffic lights follow the window (`?shell=desktop` or the native bridge), not
@@ -192,7 +199,8 @@ the probe even though the covered nonce matched; a missed, hidden, or refused
 sample does not. Recovery then uses the existing one reload and successor
 window. That decision is `models/desktop/RendererRecovery.tla`: a flat body
 is not healthy paint, an unknown capture is not blank, and the one reload
-precedes a bounded successor only while the window is in front. Background sampling precedes the first probe and follows theme and
+precedes a bounded successor only while the window is in front. Background
+sampling precedes the first probe and follows theme and
 dialog changes through a bounded same-origin message, independently of health
 and recovery budgets. A later decoration failure preserves the existing cover
 and continues real pixel checks.
@@ -559,8 +567,8 @@ overwriting or re-signing an executable already used by an engine/window.
 
 Voice is an independent request service (`internal/speech`), not a chat turn or
 tool. The PC alone persists `speech.input`, `speech.output` and bounded resource
-limits. Its Settings → Voice page publishes the safe readiness snapshot through
-HTTP metadata and Pairlink `speech_config`/catalog. Both directions default off.
+limits. The voice sections in Settings → Models publish the safe readiness
+snapshot through HTTP metadata and Pairlink `speech_config`/catalog. Both directions default off.
 The pool resolves Gateway `transcription`/`speech` roles separately from the
 conversation profile alias; local voice selects its own provider/custom model.
 PC renderers use same-origin `/api/audio/*`, keeping credentials in Go.
@@ -742,10 +750,12 @@ that socket itself.
 Gateway is an explicit `remote.auth_mode` alongside compatible `legacy` hubs.
 `internal/remote/login.go` owns the desktop device-authorization lifecycle:
 Go stages a private candidate credential before starting a Gateway flow,
-opens the Gateway-returned same-origin verification URL in the system
-browser, and polls with its secret device code and S256 proof. The browser
-receives only the public user code; the renderer receives only safe status,
-code, fingerprint and account metadata. Pending/rejected accounts do not
+validates the Gateway-returned same-origin verification URL before publishing it
+and optionally opening the host browser, then polls with its secret device code
+and S256 proof. A missing or failed host browser does not stop polling. The
+renderer receives safe status, the validated public link, code, fingerprint and
+account metadata; terminal status clears the link. The user can authorize a
+headless host from their own browser. Pending/rejected accounts do not
 register a host. Only a complete authorized receipt atomically replaces the
 private credential with its origin/account/host binding, after which the usual
 pairlink registration and WebSocket lifecycle starts. Authorization is distinct
@@ -1656,8 +1666,9 @@ worker before closing SQLite.
    a resizable gate, not a channel minted once: `PUT /settings`
    calls `ApplyLiveSwarmLimits` so workers already queued by a programmatic
    `Spawn` on a live or parked
-   `/goal` registry see the new budget without a restart, and so the
-   schedule ticker's frozen caps (active waits, min interval, default
+   `/goal` registry see the new budget without a restart. Lowering the cap
+   stops the newest holders until the running set fits; the earlier holders
+   keep their slots. The schedule ticker's frozen caps (active waits, min interval, default
    provider) match inbox create/resume/patch instead of racing
    `config.Replace`. If the
    manager hits `swarm.manager_max_iterations`, the turn **pauses** (still

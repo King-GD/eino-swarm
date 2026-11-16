@@ -126,6 +126,31 @@ func serveWeb(args []string, stop <-chan os.Signal, ready func(url string)) erro
 	if err != nil {
 		return err
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		select {
+		case <-stop:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	var fatal <-chan error
+	if *noOpen || !cfg.Server.OpenBrowser {
+		held, err := holdShellPresence(ctx, listen, "web")
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return fmt.Errorf("web: hold engine presence: %w", err)
+		}
+		fatal = held.fatal
+		defer func() {
+			held.release()
+			for range held.fatal {
+			}
+		}()
+	}
 	fmt.Println("zwai is running at", listen)
 	if !*noOpen && cfg.Server.OpenBrowser {
 		if err := app.OpenURL(listen); err != nil {
@@ -135,7 +160,13 @@ func serveWeb(args []string, stop <-chan os.Signal, ready func(url string)) erro
 	if ready != nil {
 		ready(listen)
 	}
-	<-stop
+	select {
+	case <-ctx.Done():
+	case err := <-fatal:
+		if ctx.Err() == nil {
+			return err
+		}
+	}
 	fmt.Println("\nstopping…")
 	return nil
 }

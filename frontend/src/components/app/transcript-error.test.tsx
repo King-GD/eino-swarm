@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { defaultAppearance } from "@/lib/appearance"
 import { OUTPUT_BUDGET_ERROR } from "@/lib/output-budget"
 import { emptyTranscript } from "@/lib/transcript"
-import type { Settings, Turn } from "@/lib/types"
+import type { Meta, Settings, Turn } from "@/lib/types"
 import { useApp } from "@/store/app"
 import { closeSettings, useSettingsSheet } from "@/store/settings-sheet"
 
@@ -217,7 +217,10 @@ describe("output budget error", () => {
       ...settings,
       models: { default: "current", providers: [provider("current"), provider("failed")] },
     })
-    useApp.setState({ turns: [{ id: "failed-turn", provider_id: "failed" } as Turn] })
+    useApp.setState({
+      meta: { product_mode: "local" } as Meta,
+      turns: [{ id: "failed-turn", provider_id: "failed" } as Turn],
+    })
     const user = userEvent.setup()
     render(<Harness text="the model sent no first byte within 30s" turnId="failed-turn" />)
     expect(screen.getByText(/increase the first-byte timeout/i)).toBeVisible()

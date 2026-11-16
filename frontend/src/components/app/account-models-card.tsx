@@ -24,6 +24,7 @@ export function AccountModelsCard({
   const t = useT()
   const account = useApp((s) => s.meta?.account_models)
   const fofa = useApp((s) => s.meta?.product_mode) === "fofa"
+  const local = useApp((s) => s.meta?.product_mode) === "local"
   const problem = accountModelsProblem(account)
   const ready = account?.state === "ready"
   const tally = accountKindTally(account?.kinds)

@@ -18,6 +18,17 @@ editable draft and never sends it; read aloud skips code blocks. LOCAL direct
 Chat can configure recognition and spoken-answer models independently under its
 personal model services, using only this phone's provider credentials.
 
+Voice input and read aloud are configured only on the PC in **Settings → Models**.
+This phone reuses the explicitly selected PC's safe settings in both PC
+conversations and direct Chat; **User center** shows read-only status and sync
+time. Both directions default off. Tap the microphone beside Send, finish or
+cancel in the recording panel, then edit the recognized draft before sending.
+Read aloud beside Copy plays completed prose and skips code blocks.
+Gateway voice uses this phone's own login and calls that same Gateway directly;
+synced settings remain usable while the PC is offline. Local voice runs through
+the selected PC only while it is online and its local model is configured.
+No PC key/token reaches the phone and no failure silently changes source.
+
 After connecting to a PC, open **Menu → Manage projects**, or **Manage projects**
 from New conversation. Create or edit the PC's project name, shared instruction,
 existing PC working directory (blank uses a managed directory), project memory,

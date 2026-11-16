@@ -17,6 +17,10 @@ models/scheduling/WakeConsentTimeline.tla checks multiple original human
 decisions, asynchronous classification and exact-ID cancellation deduplication.
 models/stream/ManagerCommentary.tla checks the order and privacy of admitted
 manager commentary before it enters the event stream.
+models/account/DeviceLogin.tla checks validated public-link publication, manual
+headless authorization, terminal link clearing and required human approval.
+models/release/LinuxRelease.tla checks both Linux architecture targets, name/machine
+agreement, exact runtime evidence for new uploads and immutable public bytes.
 models/account/AccountCatalog.tla checks that a published account catalog
 belongs to the current credential (C-040).
 models/account/DefaultSourceChoice.tla checks that the Settings default badge
@@ -39,6 +43,8 @@ another project's identity (C-044).
 models/mobile/IOSStartupPrompt.tla checks that iOS binds static cookie and HTTP
 flags before the page starts, and that the old synchronous startup prompt can
 stay unanswered (C-045).
+models/swarm/ConcurrencyCap.tla checks that one task's running sub-agents stay
+within the live cap, including after the cap is lowered (C-009).
 Every case sets its model's switch constants and states
 the expected outcome: the current design must pass every safety invariant;
 each historical or seeded behaviour must break the named invariant (checked
@@ -92,6 +98,12 @@ MODELS = {
         Model("model-mode", ROOT / "models" / "lifecycle" / "ModelModeAdmission.tla",
               ("SampleThenCommit",), ("TypeOK", "SwitchIsIdle"), ()),
         Model(
+            "concurrency-cap", ROOT / "models" / "swarm" / "ConcurrencyCap.tla",
+            ("ShrinkKeepsHolders",),
+            ("TypeOK", "HoldersWithinCap"),
+            (("MaxWorkers", 3),),
+        ),
+        Model(
             "generation-recovery", ROOT / "models" / "generation" / "ModelGenerationRecovery.tla",
             ("NoJoin",),
             ("TypeOK", "RecoveredHistoryOwnsEpoch", "RecoveryUsesCappedInput",
@@ -143,6 +155,24 @@ MODELS = {
             (),
         ),
         Model(
+            "peer-inventory", ROOT / "models" / "native" / "PeerInventory.tla",
+            ("NumericPIDOwnsChildren", "IgnoreClaims", "IgnoreSameUIDChildren", "IgnoreActiveController"),
+            ("TypeOK", "ClaimsRequired", "SameUIDChildrenRefuse", "ActiveControllerBusy", "ForeignReuseDoesNotBlock"),
+            (),
+        ),
+        Model(
+            "device-login", ROOT / "models" / "account" / "DeviceLogin.tla",
+            ("RequireBrowser", "PublishUnsafe", "RetainTerminalURL", "BypassApproval"),
+            ("TypeOK", "ManualLoginAvailable", "OnlyValidatedURL", "TerminalHidesURL", "ApprovalRequired"),
+            (),
+        ),
+        Model(
+            "linux-release", ROOT / "models" / "release" / "LinuxRelease.tla",
+            ("ArmOnly", "IgnoreMachine", "IgnoreReceipt", "RebuildPublic"),
+            ("TypeOK", "BothArchitecturesSupported", "MachineMatchesName", "ReceiptMatchesNewUpload", "PublicBytesPreserved"),
+            (),
+        ),
+        Model(
             "account", ROOT / "models" / "account" / "AccountCatalog.tla",
             ("StaleObservation", "UnsealedLogout"),
             ("TypeOK", "PublishedAgrees"),
@@ -156,7 +186,7 @@ MODELS = {
         ),
         Model(
             "lifecycle", ROOT / "models" / "lifecycle" / "EngineLifecycle.tla",
-            ("DeadlineKillsChild", "RestoreBeforeListen", "StopRacesRestore", "PresenceAfterWindow",
+            ("DeadlineKillsChild", "RestoreBeforeListen", "StopRacesRestore", "PresenceAfterWindow", "HeadlessWaiterUnheld",
              "IdleCommitNonAtomic", "FinishUngated", "ParkedNotCheckpointed", "IdleCountsOnlyManagers",
              "ParkedAdmissionNonAtomic", "ParkedOwnerCheckedLate", "RestoreOwnerCheckedLate"),
             ("TypeOK", "WorkHasLiveOwner", "CheckpointHasOwner", "StopIsFinal", "WindowHasEngine",
@@ -304,6 +334,12 @@ CASES: tuple[Case, ...] = (
     _case("model-mode-sampled", "seeded idle sample races a new task",
           ("SampleThenCommit",), "SwitchIsIdle", model="model-mode"),
     _case("model-mode-reach", "witness", witness="NeverSwitch", model="model-mode"),
+    _case("concurrency-cap-current", "one task's running sub-agents stay within the live cap",
+          model="concurrency-cap"),
+    _case("concurrency-cap-shrink-keeps-holders",
+          "historical, shipped through v0.1.77: lowering the cap left workers that already held a slot running",
+          ("ShrinkKeepsHolders",), "HoldersWithinCap", model="concurrency-cap"),
+    _case("concurrency-cap-reach-preempt", "witness", witness="NeverPreempted", model="concurrency-cap"),
     _case("ios-startup-current", "iOS binds static cookie and HTTP flags before the page starts",
           model="ios-startup"),
     _case("ios-startup-sync-prompt",
@@ -406,6 +442,41 @@ CASES: tuple[Case, ...] = (
         ("installed-skills-reach-reinstall", "NeverReinstalledWithPendingCleanup"),
         ("installed-skills-reach-delete-with-stage", "NeverDeletedWithStagedUpload"),
     )),
+    _case("peer-inventory-current", "UID separates reused PIDs; terminal claims still required", model="peer-inventory"),
+    _case("peer-inventory-numeric-pid", "old numeric PID attributes foreign children to dead queue",
+          ("NumericPIDOwnsChildren",), "ForeignReuseDoesNotBlock", model="peer-inventory"),
+    _case("peer-inventory-claims", "missing or live effect receipt is ignored",
+          ("IgnoreClaims",), "ClaimsRequired", model="peer-inventory"),
+    _case("peer-inventory-owned-children", "same-UID ambiguous children are ignored",
+          ("IgnoreSameUIDChildren",), "SameUIDChildrenRefuse", model="peer-inventory"),
+    _case("peer-inventory-active", "an active controller is mistaken for dead history",
+          ("IgnoreActiveController",), "ActiveControllerBusy", model="peer-inventory"),
+    _case("peer-inventory-reach-quiet", "witness", witness="NeverForeignQuiet", model="peer-inventory"),
+    _case("peer-inventory-reach-refusal", "witness", witness="NeverUnresolvedRefused", model="peer-inventory"),
+    _case("device-login-current", "validated manual login survives absent or failed browser", model="device-login"),
+    _case("device-login-browser-required", "old browser gate refuses a headless login",
+          ("RequireBrowser",), "ManualLoginAvailable", model="device-login"),
+    _case("device-login-unsafe-url", "unvalidated Gateway URL reaches local status",
+          ("PublishUnsafe",), "OnlyValidatedURL", model="device-login"),
+    _case("device-login-terminal-url", "terminal status retains a pending link",
+          ("RetainTerminalURL",), "TerminalHidesURL", model="device-login"),
+    _case("device-login-bypass", "credentials activate without human approval",
+          ("BypassApproval",), "ApprovalRequired", model="device-login"),
+    *(_case(name, "witness", witness=witness, model="device-login") for name, witness in (
+        ("device-login-reach-manual", "NeverManualAuthorized"),
+        ("device-login-reach-unsafe", "NeverUnsafeRejected"),
+        ("device-login-reach-cancel", "NeverCancelledPending"),
+    )),
+    _case("linux-release-current", "two validated architecture archives; exact runtime receipts and immutable public bytes", model="linux-release"),
+    _case("linux-release-arm-only", "original release only supports arm64", ("ArmOnly",), "BothArchitecturesSupported", model="linux-release"),
+    _case("linux-release-machine", "archive name disagrees with ELF machine", ("IgnoreMachine",), "MachineMatchesName", model="linux-release"),
+    _case("linux-release-receipt", "new upload lacks matching architecture/source/bytes evidence", ("IgnoreReceipt",), "ReceiptMatchesNewUpload", model="linux-release"),
+    _case("linux-release-rebuild", "partial publication rebuilds existing public bytes", ("RebuildPublic",), "PublicBytesPreserved", model="linux-release"),
+    *(_case(name, "witness", witness=witness, model="linux-release") for name, witness in (
+        ("linux-release-reach-amd64", "NeverAMD64Uploaded"),
+        ("linux-release-reach-arm64", "NeverARM64Uploaded"),
+        ("linux-release-reach-retry", "NeverPublicRetry"),
+    )),
     _case("account-current", "publish rechecks the credential and login or logout seals the catalog",
           model="account"),
     _case("account-stale-observation", "a fetch publishes the credential it observed after that credential changed",
@@ -499,6 +570,8 @@ CASES: tuple[Case, ...] = (
     _case("nuwa-reach-restore", "witness", witness="NeverRestored", model="nuwa"),
     _case("nuwa-reach-result", "witness", witness="NeverSharedResult", model="nuwa"),
     _case("nuwa-reach-delegation", "witness", witness="NeverDelegated", model="nuwa"),
+    _case("headless-web-unheld", "pre-170: serveWeb reports ready but never holds presence",
+          ("HeadlessWaiterUnheld",), "WindowHasEngine"),
     _case("current", "current design: every switch off"),
     _case("restore-owner-checked-late", "tagged project checked only after runtime occupation",
           ("RestoreOwnerCheckedLate",), "RestoreOwnsProject"),

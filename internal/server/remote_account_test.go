@@ -77,13 +77,9 @@ func TestAccountSidebarLoginEnablesOnlyAccountConnectionAfterValidIntent(t *test
 	}
 }
 
-func TestAccountSidebarLoginCannotChangeConfigWithoutBrowserOrPersistence(t *testing.T) {
+func TestAccountSidebarLoginCannotChangeConfigWithoutPersistence(t *testing.T) {
 	h := newHarness(t)
 	before := h.app.Config.Snapshot().Remote
-	h.json(http.MethodPost, "/api/remote/login", map[string]any{"enable_account": true}, http.StatusNotImplemented)
-	if h.app.Config.Snapshot().Remote != before {
-		t.Fatal("unavailable browser changed config")
-	}
 	service, err := server.New(server.Options{Engine: h.app.Engine, OpenURL: func(string) error { return nil }})
 	if err != nil {
 		t.Fatal(err)

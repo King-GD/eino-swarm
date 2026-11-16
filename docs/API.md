@@ -320,7 +320,7 @@ endpoint:
 |---|---|
 | `signed_out` | no device login on this machine |
 | `pending` | signed in; the model catalog has not been read yet |
-| `ready` | the catalog was read (`models` is the total count). `kinds` counts `chat`, `unclassified`, `embedding`, `ocr`, `decisions`, `transcription`, `speech` and `other`; `embedding_models`, `transcription_models` and `speech_models` list their respective model names. `source_id` is the runtime `gateway:<32 hex>` id. Conversation rows in `GET /api/models` are the `chat` and unclassified names. When the server publishes fixed roles, `roles` is the read-only list `{id,enabled,label}` and a FOFA install uses those names instead of the catalog. The list may include `transcription`, `speech`, `image`, `translation` and `naming`. Voice uses `transcription` and `speech` when separately enabled in Settings → Voice; see `F-148` / `C-048`. Image generation remains display-only. An enabled `translation` role posts Chat Completions JSON to the account base `/translations`; an enabled `naming` role posts conversation and schedule naming to `/naming`. While those roles are off, selection translation keeps the conversation model and naming keeps `title`. An old server omits `roles` or returns only the first six, eight or nine roles. LOCAL ignores the field. The account card omits the `decisions` count and role |
+| `ready` | the catalog was read (`models` is the total count). `kinds` counts `chat`, `unclassified`, `embedding`, `ocr`, `decisions`, `transcription`, `speech` and `other`; `embedding_models`, `transcription_models` and `speech_models` list their respective model names. `source_id` is the runtime `gateway:<32 hex>` id. Conversation rows in `GET /api/models` are the `chat` and unclassified names. When the server publishes fixed roles, `roles` is the read-only list `{id,enabled,label}` and a FOFA install uses those names instead of the catalog. The list may include `transcription`, `speech`, `image`, `translation` and `naming`. Voice uses `transcription` and `speech` when separately enabled in Settings → Models; see `F-148` / `C-048`. Image generation remains display-only. An enabled `translation` role posts Chat Completions JSON to the account base `/translations`; an enabled `naming` role posts conversation and schedule naming to `/naming`. While those roles are off, selection translation keeps the conversation model and naming keeps `title`. An old server omits `roles` or returns only the first six, eight or nine roles. LOCAL ignores the field. The account card omits the `decisions` count and role |
 | `no_access` | signed in but the account may not use the model API |
 | `unavailable` | signed in but the catalog could not be used; `reason` is one of `rejected`, `unsupported`, `network`, `gateway`, `unsafe_response`, `no_models` |
 
@@ -1066,8 +1066,8 @@ another verified login provides a name. Ordinary usernames remain readable.
 `state` is `signed_out`, `signing_out`, `starting`, `authorization_pending`,
 `account_pending`, `account_rejected`, `authorized`, `access_denied`, `expired`, `error` or
 `cancelled`. `authorized` alone does not prove the WebSocket is online.
-`login_available` means this local server can open the system browser; a web
-server without that capability cannot begin login. The rail account entry and
+`login_available` means this local server has a remote host that supports device
+sign-in. A headless Web/server build can begin login without a browser launcher. The rail account entry and
 Phone page share one local status watch, once a second while visible, and one
 mutation fence. The last subscriber leaving cancels reads. Phone actions require
 enabled/Hub/mode to match the saved status. Network read failure reports unknown
@@ -1083,11 +1083,17 @@ details until recovery.
 
 ### `POST /api/remote/login`
 
-Body `{}` starts or retries a Gateway account login. Go stages a private candidate, opens
-the Gateway-returned same-origin verification URL in the system browser, and owns polling
-with S256 proof. It returns `202` with the same safe status; a later status read
-shows the public confirmation code and PC fingerprint. No verification URL,
-Host Token, secret device code or verifier is returned to the renderer.
+Body `{}` starts or retries a Gateway account login. Go stages a private candidate,
+validates the Gateway-returned verification URL and owns polling with S256 proof.
+It returns `202` with the same safe status. Pending status includes the public
+`user_code`, PC fingerprint and `verification_uri`. The URL must pass the existing
+same-origin path/query allowlist before either publication or optional system-browser
+launch: only the single matching public `desktop_code` parameter is permitted.
+The UI offers a link that can be opened or copied on the user's own device.
+A missing host browser or failed launch does not end polling; `browser_unavailable`
+is an advisory on pending status. No Host Token, secret device code or verifier
+is returned to the renderer. Authorized, cancelled, expired, denied and error
+states clear the link; an unreadable status hides cached links.
 
 The explicit sidebar and Phone-page account actions send
 `{"enable_account":true}`. Phone presents sign-in and a switch for this PC's
@@ -1128,8 +1134,7 @@ Go respects Gateway `429 Retry-After`, with a ten-minute/120-poll bound. Safe
 login error codes are `network_unavailable`, `gateway_unavailable`,
 `device_conflict`, `access_denied`, `unsafe_response`, `browser_unavailable`
 and `credential_unavailable`. They do not carry remote response bodies.
-Missing system-browser support returns `501 remote_login_unavailable`;
-incompatible config or unavailable local credentials returns
+Incompatible config or unavailable local credentials returns
 `409 remote_login_unavailable`; malformed/extra request fields return `400`.
 
 Body `{"new_device":true,"confirmed":true}` is the explicitly confirmed recovery

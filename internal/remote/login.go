@@ -14,15 +14,16 @@ import (
 // LoginStatus is safe for the local UI. Device codes, proof and credentials
 // never cross the local REST boundary or enter operational diagnostics.
 type LoginStatus struct {
-	State       string `json:"state"`
-	UserCode    string `json:"user_code,omitempty"`
-	HostFP      string `json:"host_fp,omitempty"`
-	HostID      string `json:"host_id,omitempty"`
-	UserID      string `json:"user_id,omitempty"`
-	Username    string `json:"username,omitempty"`
-	DisplayName string `json:"display_name,omitempty"`
-	AvatarURL   string `json:"avatar_url,omitempty"`
-	ErrorCode   string `json:"error_code,omitempty"`
+	State           string `json:"state"`
+	UserCode        string `json:"user_code,omitempty"`
+	VerificationURI string `json:"verification_uri,omitempty"`
+	HostFP          string `json:"host_fp,omitempty"`
+	HostID          string `json:"host_id,omitempty"`
+	UserID          string `json:"user_id,omitempty"`
+	Username        string `json:"username,omitempty"`
+	DisplayName     string `json:"display_name,omitempty"`
+	AvatarURL       string `json:"avatar_url,omitempty"`
+	ErrorCode       string `json:"error_code,omitempty"`
 }
 
 type loginAttempt struct {
@@ -41,9 +42,6 @@ type loginAttempt struct {
 // startLogin stages a candidate before any remote request. Starting another
 // login invalidates ownership of the previous result before cancelling it.
 func (h *Host) startLogin(open func(string) error, newDevice bool) error {
-	if open == nil {
-		return errors.New("remote: system browser is unavailable")
-	}
 	h.mu.Lock()
 	if h.logoutActive != nil {
 		h.mu.Unlock()
@@ -220,12 +218,17 @@ func (h *Host) runLogin(attempt *loginAttempt) {
 		h.publishLogin(attempt, LoginStatus{State: "error", ErrorCode: "unsafe_response"})
 		return
 	}
-	if !h.publishLogin(attempt, LoginStatus{State: "authorization_pending", UserCode: started.UserCode}) {
+	if !h.publishLogin(attempt, LoginStatus{State: "authorization_pending", UserCode: started.UserCode, VerificationURI: started.VerificationURI}) {
 		return
 	}
-	if err := attempt.open(started.VerificationURI); err != nil {
-		h.publishLogin(attempt, LoginStatus{State: "error", ErrorCode: "browser_unavailable"})
-		return
+	// A local browser is optional. The validated link also lets the user's own
+	// browser authorize a headless host; launcher failures must not end polling.
+	if attempt.open != nil {
+		if err := attempt.open(started.VerificationURI); err != nil {
+			if !h.publishLogin(attempt, LoginStatus{State: "authorization_pending", UserCode: started.UserCode, VerificationURI: started.VerificationURI, ErrorCode: "browser_unavailable"}) {
+				return
+			}
+		}
 	}
 	wait := waitLogin
 	if h.loginWait != nil {
@@ -261,7 +264,7 @@ func (h *Host) runLogin(attempt *loginAttempt) {
 			}
 			// The same proof can reconcile a response lost after authorization. Keep
 			// the private candidate for an explicit retry after this flow expires.
-			if !h.publishLogin(attempt, LoginStatus{State: "authorization_pending", UserCode: started.UserCode, ErrorCode: "network_unavailable"}) {
+			if !h.publishLogin(attempt, LoginStatus{State: "authorization_pending", UserCode: started.UserCode, VerificationURI: started.VerificationURI, ErrorCode: "network_unavailable"}) {
 				return
 			}
 			delay = loginInterval
@@ -270,7 +273,7 @@ func (h *Host) runLogin(attempt *loginAttempt) {
 		delay = loginInterval
 		switch polled.Status {
 		case "authorization_pending", "account_pending", "account_rejected":
-			if !h.publishLogin(attempt, LoginStatus{State: polled.Status, UserCode: started.UserCode}) {
+			if !h.publishLogin(attempt, LoginStatus{State: polled.Status, UserCode: started.UserCode, VerificationURI: started.VerificationURI}) {
 				return
 			}
 		case "access_denied", "expired":

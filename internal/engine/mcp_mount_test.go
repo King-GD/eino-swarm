@@ -208,8 +208,12 @@ func TestZeroDirectLoadDoesNotConnectBeforeTheModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A terminal turn may still have a memory review reading the config.
-	if err := e.UpdateConfig(func(c *config.Config) error { c.MCP.DirectLoadPercent = 5; return nil }); err != nil {
+	// The turn can finish before its background review; publish this change
+	// through the same lock that protects the review's configuration snapshot.
+	if err := e.cfg.Update(func(next *config.Config) error {
+		next.MCP.DirectLoadPercent = 5
+		return nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 	restored, err := e.applyMCPSurface(t.Context(), turn, set, true)

@@ -136,7 +136,7 @@ window.
 |---|---|---|---|
 | macOS | `make desktop-release` | GitHub `vX.Y.Z`, host architecture zip | ZIP 有 Finder 图标资源与 plist 引用，远端 SHA-256 匹配 |
 | Windows | `make windows-release` | same GitHub Release, amd64 and arm64 zips | 两份 zip 都只有根上的 `zwai.exe`，PE 机器类型与文件名一致，远端 SHA-256 匹配 |
-| Linux arm64 | `make linux-release` | same GitHub Release, `zwai-<version>-linux-arm64.tar.gz` | archive contains only executable `zwai` (0755), ELF64 AArch64; remote SHA-256 matches |
+| Linux amd64/arm64 | `make linux-release` | same GitHub Release, both architecture tar.gz archives | each contains only executable `zwai` (0755), ELF64 little-endian matching its named architecture; per-archive runtime receipt and remote SHA-256 match |
 | Android | APK-only `make mobile-android-release` | same GitHub Release | remote SHA-256 matches |
 | iOS | Capacitor sync, `xcodebuild archive/exportArchive`, distribution signature/profile, `xcrun altool` | existing App Store Connect app | all configured groups attached, VALID, internal READY_FOR_BETA_TESTING and external IN_BETA_TESTING; any review submission must be APPROVED |
 
@@ -526,10 +526,15 @@ aliases are updated, retaining the existing ledger and unrelated history. Closed
 Issues are never reopened merely for publication waits. `--check` does not write
 platform/daily success records or mutate Apple; it can fetch Git and create a lock.
 
-### Linux arm64 Web/CLI package
+### Linux amd64/arm64 Web/CLI packages
 
 `make linux-release VERSION=x.y.z` builds the current frontend and cross-compiles
-with `GOOS=linux GOARCH=arm64 CGO_ENABLED=0` and the Wails `server` build tag.
+both `amd64` and `arm64` with `GOOS=linux CGO_ENABLED=0` and the Wails `server`
+build tag. Set `LINUX_ARCHES=amd64` or `LINUX_ARCHES=arm64` to build one target.
+The script also accepts `--arch amd64 arm64` (its standalone default remains
+arm64). Names are `zwai-<version>-linux-<arch>.tar.gz`; ELF machine 62 belongs
+only to amd64 and 183 only to arm64. Class 64, little-endian, executable mode,
+regular-file-only contents and exact single-entry validation apply to both.
 This package provides `web`, `engine`, `tui` and the other CLI commands; it
 defaults to Web mode and refuses native desktop commands. It has no GTK/WebKit
 requirement and includes the frontend in the executable. Extract the archive
@@ -546,10 +551,23 @@ A batch that explicitly lists `linux` publishes through
 `python3 tools/release.py --version x.y.z --platform linux`. Old issue rows
 without `linux` gain no delivery obligation. The in-app updater does not
 install this archive. Cross-compilation and ELF validation prove packaging;
-record Linux arm64 execution and offline Web behavior separately. Failed
+record execution and offline Web behavior separately for each architecture,
+identifying native execution versus emulation. Failed
 builds leave an existing archive untouched; publication never overwrites
 different bytes under an existing asset name.
 
-A passed `release_linux_validation` receipt binds `status`, `version`,
-`source_sha`, `asset_name` and `asset_sha256` to the runtime-tested archive.
-Publication reuses those exact bytes; a missing or changed file fails closed.
+Before publishing a new Linux batch, build and runtime-test both archives.
+`release_linux_validation` binds top-level `status: passed`, `version` and
+`source_sha`, with an `assets` object keyed by `amd64` and `arm64`. Each entry
+requires `status: passed`, matching `arch`, `asset_name` and `asset_sha256`.
+Publication requires this receipt for each new upload and never rebuilds the
+accepted archives. Missing/mismatched receipts, files or ELF identity fail before
+upload. An already public asset is instead verified against its remote digest;
+a partial upload retry preserves/downloads those exact public bytes and checks
+the other architecture independently. A fully public retry needs both remote
+digests. An old single-archive receipt cannot accept a newly added architecture.
+Already public versions remain frozen; resume their original platforms through
+their exact frozen source/tooling, rather than adding new-source bytes to them.
+
+This distribution path provides downloadable archives for both NAS/VPS CPU
+families. It does not introduce a maintained container image or Dockerfile.
