@@ -98,6 +98,9 @@ type Pool struct {
 	// account is the signed-in server's model catalog, nil when signed out.
 	// Atomic because Resolve is reached from paths that already hold mu.
 	account atomic.Pointer[AccountSource]
+	// localAccounts holds extra server catalogs LOCAL can switch among.
+	// Gateway mode does not list them. Signing out clears them.
+	localAccounts atomic.Pointer[localAccountList]
 
 	mu             sync.Mutex
 	cache          map[string]model.BaseChatModel
@@ -156,8 +159,12 @@ func (p *Pool) Resolve(id string) (config.Provider, error) {
 	if strings.TrimSpace(id) == "" {
 		id = p.DefaultProviderID()
 	}
-	if src := p.account.Load(); src != nil && id == src.ID() {
-		return src.provider(p.accountModel()), nil
+	if src := p.accountForExecution(id); src != nil {
+		preferred := ""
+		if primary := p.account.Load(); primary != nil && primary.ID() == src.ID() {
+			preferred = p.accountModel()
+		}
+		return src.provider(preferred), nil
 	}
 	if strings.HasPrefix(id, config.AccountSourcePrefix) {
 		return config.Provider{}, ErrAccountLoginRequired
@@ -240,17 +247,33 @@ func (p *Pool) List() []Info {
 		rows = listModels(p.cfg.Snapshot(), p.mock)
 	}
 	src := p.account.Load()
-	if src == nil {
+	if src == nil && len(p.localAccountSources()) == 0 {
 		return rows
 	}
-	accountDefault := p.DefaultProviderID() == src.ID()
+	accountDefault := src != nil && p.DefaultProviderID() == src.ID()
 	if accountDefault {
 		for i := range rows {
 			rows[i].Default = false
 			rows[i].DefaultFollowsSetting = false
 		}
 	}
-	return append(src.rows(accountDefault, p.accountModel()), rows...)
+	var accountRows []Info
+	if src != nil {
+		accountRows = append(accountRows, src.rows(accountDefault, p.accountModel())...)
+	}
+	if p.localExecution() {
+		seen := map[string]bool{}
+		if src != nil {
+			seen[src.ID()] = true
+		}
+		for _, extra := range p.localAccountSources() {
+			if extra == nil || seen[extra.ID()] {
+				continue
+			}
+			accountRows = append(accountRows, extra.rows(false, "")...)
+		}
+	}
+	return append(accountRows, rows...)
 }
 
 func (p *Pool) accountModel() string {

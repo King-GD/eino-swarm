@@ -176,7 +176,12 @@ default on load, so a partially hand-edited file always starts.
 `fofa` is the install people get. Work waits until an account is signed in
 (`--mock` does not), Settings has no Models section, and the composer has no
 model menu. Custom provider edits and model discovery are refused. `local`
-shows those controls and accepts provider edits. There is no Settings row for
+shows those controls and accepts provider edits. A signed-in local session
+keeps that login. The composer lists the authorized third-party preset and,
+when the server enables it, the original gateway catalog as separate account
+providers. The same model name can appear in both. A refused or empty catalog
+is omitted and is not a signed-out error. Switching back to `fofa` restores
+the managed role preset. There is no Settings row for
 this key. Set `product.mode: local` in the file, or click the portrait in the
 desktop account-details dialog three times in a row. Another three clicks
 writes `fofa` and the key is omitted again. A hand edit is read on the next load.

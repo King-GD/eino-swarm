@@ -315,6 +315,10 @@ func (p *Pool) SetAccountSource(src *AccountSource) {
 	if p.mock {
 		return
 	}
+	if src == nil && p.localAccounts.Load() != nil {
+		p.localAccounts.Store(nil)
+		p.Invalidate()
+	}
 	if prev := p.account.Load(); prev.equal(src) {
 		return
 	}

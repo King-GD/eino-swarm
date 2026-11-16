@@ -253,6 +253,8 @@ func (a *AccountModels) identity() (accountIdentity, bool) {
 type accountOutcome struct {
 	state     AccountModelsState
 	source    *provider.AccountSource
+	local     []*provider.AccountSource
+	keepLocal bool
 	transient bool
 }
 
@@ -336,6 +338,9 @@ func (a *AccountModels) publish(fetched accountIdentity, o accountOutcome) Accou
 // outcome belongs to the current credential.
 func (a *AccountModels) apply(fetched accountIdentity, o accountOutcome) AccountModelsState {
 	a.pool.SetAccountSource(o.source)
+	if o.source == nil || !o.keepLocal {
+		a.pool.SetLocalAccountSources(o.local)
+	}
 	a.published = o.source != nil
 	if o.source != nil {
 		a.publishedToken, a.publishedOrigin = fetched.token, fetched.origin
@@ -415,7 +420,11 @@ func (a *AccountModels) fetch(ctx context.Context, id accountIdentity) accountOu
 	if len(cat.Names) == 0 {
 		s := who
 		s.State, s.Reason, s.Label = AccountNoAccess, AccountReasonNoModels, boot.label
-		return accountOutcome{state: s}
+		outcome := accountOutcome{state: s}
+		if a.cfg != nil && !a.cfg.Product.FOFA() {
+			return a.attachSwitchableCatalogs(ctx, boot, id.token, outcome)
+		}
+		return outcome
 	}
 	source, err := provider.NewAccountSource(boot.sourceID, boot.label, boot.apiBaseURL, id.token, cat)
 	if err != nil {
@@ -426,7 +435,11 @@ func (a *AccountModels) fetch(ctx context.Context, id accountIdentity) accountOu
 	s.SourceID = source.ID()
 	kinds := source.Kinds()
 	s.Kinds = &kinds
-	return accountOutcome{state: s, source: source}
+	outcome := accountOutcome{state: s, source: source}
+	if a.cfg != nil && !a.cfg.Product.FOFA() {
+		return a.attachSwitchableCatalogs(ctx, boot, id.token, outcome)
+	}
+	return outcome
 }
 
 func fetchRoles(boot accountBootstrap, token string, who AccountModelsState) accountOutcome {
@@ -522,6 +535,8 @@ type accountBootstrap struct {
 	userID, avatarURL                       string
 	profile                                 *provider.AccountProfile
 	roles                                   []provider.AccountRole
+	clientCatalogURL                        string
+	gatewayCatalog                          *accountCatalogRef
 }
 
 // withPicture adopts a bootstrap avatar only for this same account. A missing
@@ -556,10 +571,12 @@ func parseAccountBootstrap(raw []byte, origin string) (accountBootstrap, error) 
 				Execution        string          `json:"execution"`
 				APIBaseURL       string          `json:"api_base_url"`
 				CatalogURL       string          `json:"catalog_url"`
+				ClientCatalogURL string          `json:"client_catalog_url"`
 				APIAccessEnabled bool            `json:"api_access_enabled"`
 				Profile          json.RawMessage `json:"profile"`
 				Roles            json.RawMessage `json:"roles"`
 			} `json:"models"`
+			GatewayModels json.RawMessage `json:"gateway_models"`
 		} `json:"data"`
 	}
 	if json.Unmarshal(raw, &envelope) != nil {
@@ -590,6 +607,9 @@ func parseAccountBootstrap(raw []byte, origin string) (accountBootstrap, error) 
 		return accountBootstrap{}, err
 	}
 	out.profile, out.roles = profile, roles
+	if err := out.parseSwitchableCatalogs(m.ClientCatalogURL, envelope.Data.GatewayModels, origin); err != nil {
+		return accountBootstrap{}, err
+	}
 	return out, nil
 }
 

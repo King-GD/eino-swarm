@@ -4,6 +4,16 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). GitHub Releases start
 at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
+## Unreleased
+
+### Fixed
+
+- Desktop LOCAL keeps a signed-in account. The composer lists that account's
+  authorized third-party preset and original gateway catalogs beside personal
+  providers, so an empty desktop catalog does not ask for another sign-in.
+  A stored gateway selection is not replaced by a same-named personal provider.
+  A refused or empty catalog is omitted; a transient failure keeps the last catalogs.
+
 ## [0.1.79] - 2026-11-15
 
 ### Fixed

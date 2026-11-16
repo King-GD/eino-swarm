@@ -757,7 +757,11 @@ real ids. Account rows come first, their `provider_id` is
 catalog is ready (they are never in `config.yaml`; no credential or endpoint is
 returned). A conversation that stored such an id and finds the account gone
 fails with the stable `account_login_required` error instead of falling back to
-a provider with a same-named model.
+a provider with a same-named model. In `local` mode a signed-in account can
+contribute more than one `gateway:` provider: the authorized third-party preset
+and the original gateway catalog. The same name stays on both when both list it.
+A catalog the server refuses or leaves empty is absent. A stored id that matches
+none of the published sources is still `account_login_required`.
 
 A catalog row may carry `model_type`. `chat` and a missing type stay in this
 list. `embedding`, `ocr` and `decisions` are omitted, and so is any other

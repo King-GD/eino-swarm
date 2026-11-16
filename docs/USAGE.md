@@ -97,7 +97,8 @@ A new install shows managed models and voice configuration in **Settings →
 Models**; the composer has no model menu. Work asks you to sign in first. Local
 provider controls appear after `product.mode: local` is set in the config file,
 or after three clicks on the portrait in account details. Another three clicks
-hides those local controls again. See [Configuration](CONFIG.md). The key is
+hides those local controls again. While you stay signed in, local mode still
+lists the server's authorized model catalogs next to your own providers. See [Configuration](CONFIG.md). The key is
 absent while the install is FOFA.
 
 In local mode, **Settings → Models** also edits base URL, API key, discovery
