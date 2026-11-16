@@ -8986,6 +8986,11 @@ projection and direct mutation refusal. `internal/engine/model_policy_test.go`
 covers exclusive source switching and managed project choices. The cached-builder
 and streaming HTTP tests in `internal/provider/model_policy_admission_test.go`
 prove that auxiliary calls hold the mode-switch gate through actual upstream use.
+`TestRunningTurnBlocksDebugSourceSwitchUntilIdle` checks refusal without stopping
+the active turn, then a successful idle switch.
+`TestOpenedModelCannotCrossDebugSourceSwitch` checks that an old model cannot
+make another HTTP request after switching and a newly resolved model uses the
+current source.
 
 `make model-check` includes `ModelModeAdmission`: the current protocol is safe,
 `SampleThenCommit` must violate `SwitchIsIdle`, and a witness reaches an idle

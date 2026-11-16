@@ -80,7 +80,7 @@ func TestModelStreamHoldsSourceUntilUpstreamCompletes(t *testing.T) {
 	}
 }
 
-func TestOpenedModelKeepsItsEndpointAfterDebugSourceSwitch(t *testing.T) {
+func TestOpenedModelCannotCrossDebugSourceSwitch(t *testing.T) {
 	var personal, account atomic.Int32
 	personalSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		personal.Add(1)
@@ -111,10 +111,10 @@ func TestOpenedModelKeepsItsEndpointAfterDebugSourceSwitch(t *testing.T) {
 	if err = cfg.Update(func(c *config.Config) error { c.Product.Mode = ""; return nil }); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = opened.Generate(t.Context(), []*schema.Message{schema.UserMessage("inspect")}); err != nil {
-		t.Fatalf("opened model stopped after the source switch: %v", err)
+	if _, err = opened.Generate(t.Context(), []*schema.Message{schema.UserMessage("inspect")}); !errors.Is(err, ErrModelPolicy) {
+		t.Fatalf("opened model crossed the source switch: %v", err)
 	}
-	if personal.Load() != 2 {
+	if personal.Load() != 1 {
 		t.Fatalf("opened model left its endpoint: hits=%d", personal.Load())
 	}
 
@@ -129,7 +129,7 @@ func TestOpenedModelKeepsItsEndpointAfterDebugSourceSwitch(t *testing.T) {
 	if _, err = fresh.Generate(t.Context(), []*schema.Message{schema.UserMessage("inspect")}); err != nil {
 		t.Fatal(err)
 	}
-	if personal.Load() != 2 || account.Load() != 1 {
+	if personal.Load() != 1 || account.Load() != 1 {
 		t.Fatalf("new request reused the opened endpoint: personal=%d account=%d", personal.Load(), account.Load())
 	}
 }
