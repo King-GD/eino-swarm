@@ -6,7 +6,15 @@ for (const { mime, ordinary } of [{ mime: "audio/pcm", ordinary: false }, { mime
     let response: ServerResponse | undefined
     let received: { authorization?: string; body: unknown } | undefined
     let closed = false
+    let preflights = 0
+    const networkFailures: Array<{ url: string; error: string | null }> = []
+    page.on("requestfailed", request => networkFailures.push({ url: new URL(request.url()).pathname, error: request.failure()?.errorText ?? null }))
+    page.on("pageerror", error => networkFailures.push({ url: "page", error: error.message }))
     const upstream = createServer((req, res) => {
+      if (req.method === "OPTIONS") {
+        preflights++
+        res.writeHead(204, { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "authorization, content-type" }); res.end(); return
+      }
       void (async () => {
         const chunks: Buffer[] = []
         for await (const chunk of req) chunks.push(Buffer.from(chunk))
@@ -59,6 +67,7 @@ for (const { mime, ordinary } of [{ mime: "audio/pcm", ordinary: false }, { mime
       expect(received).toMatchObject({ authorization: "Bearer agm_" + "a".repeat(64), body: { model: "speech", response_format: "pcm", stream_format: "sse" } })
       expect(response?.writableEnded).toBe(false)
       expect(closed).toBe(false)
+      if (info.project.name === "iphone-layout") expect(preflights).toBeGreaterThan(0)
       await page.screenshot({ path: info.outputPath("phone-streaming-before-eof.png") })
       await stop.click()
       await expect(stop).toHaveCount(0)

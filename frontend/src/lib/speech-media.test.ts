@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
 import { Blob as NodeBlob } from "node:buffer"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { speechPlayback, startSpeechRecording } from "./speech-media"
 import type { SpeechAudioStream } from "./speech-stream"
 
@@ -50,6 +50,7 @@ describe("speech media ownership", () => {
     expect(decode).toHaveBeenCalledOnce()
     expect(trackStop).toHaveBeenCalled()
   })
+
 
   it("releases a microphone granted after cancellation", async () => {
     let grant!: (stream: MediaStream) => void
@@ -161,6 +162,97 @@ describe("incremental PCM playback", () => {
     await current
     expect(sources.every((source) => source.stop.mock.calls.length === 1)).toBe(true)
     expect(currentCancel).toHaveBeenCalled()
+  })
+
+  it("stops queued PCM when its authority expires after the response has reached EOF", async () => {
+    const { sources } = contextFixture()
+    const authority = new AbortController()
+    const cancel = vi.fn()
+    let eof = false
+    const stream: SpeechAudioStream & { signal: AbortSignal } = {
+      sampleRate: 24000, signal: authority.signal, cancel,
+      chunks: (async function* () { yield new Uint8Array(48000); eof = true })(),
+    }
+    const playing = speechPlayback.play("answer", "Reply", { chunkChars: 100, synthesize: async () => stream })
+    try {
+      await vi.waitFor(() => expect(eof).toBe(true))
+      expect(sources).toHaveLength(4)
+      expect(sources.every((source) => source.stop.mock.calls.length === 0)).toBe(true)
+      // No account/logout event occurs here: the stream's expiry alone must
+      // cancel the still-scheduled tail after network consumption completed.
+      authority.abort()
+      expect(sources.every((source) => source.stop.mock.calls.length === 1)).toBe(true)
+      await playing
+      expect(cancel).toHaveBeenCalled()
+      expect(speechPlayback.getSnapshot()).toEqual({ state: "idle" })
+    } finally { speechPlayback.stop(); await playing }
+  })
+
+  it("an expired retired PCM stream cannot stop the replacement playback owner", async () => {
+    const { sources } = contextFixture()
+    const oldAuthority = new AbortController()
+    const oldStream: SpeechAudioStream & { signal: AbortSignal } = {
+      sampleRate: 24000, signal: oldAuthority.signal, cancel: vi.fn(),
+      chunks: (async function* () { yield new Uint8Array([0, 1]) })(),
+    }
+    const first = speechPlayback.play("old", "Old reply", { chunkChars: 100, synthesize: async () => oldStream })
+    await vi.waitFor(() => expect(sources).toHaveLength(1))
+    const current = speechPlayback.play("new", "New reply", { chunkChars: 100, synthesize: async () => ({
+      sampleRate: 24000, cancel: vi.fn(), chunks: (async function* () { yield new Uint8Array([0, 2]) })(),
+    }) })
+    try {
+      await vi.waitFor(() => expect(sources).toHaveLength(2))
+      await first
+      oldAuthority.abort()
+      expect(speechPlayback.getSnapshot().key).toBe("new")
+      expect(sources[1].stop).not.toHaveBeenCalled()
+    } finally { speechPlayback.stop(); await current }
+  })
+
+  it("releases completed PCM only after its queued tail and continues with the next segment", async () => {
+    const { sources } = contextFixture()
+    const signals: AbortSignal[] = []
+    const released = vi.fn()
+    const synthesize = vi.fn(async (): Promise<SpeechAudioStream> => {
+      const authority = new AbortController()
+      signals.push(authority.signal)
+      return { sampleRate: 24000, signal: authority.signal, cancel: () => { released(); authority.abort() },
+        chunks: (async function* () { yield new Uint8Array([0, 1]) })() }
+    })
+    const playing = speechPlayback.play("answer", "One. Two.", { chunkChars: 5, synthesize })
+    try {
+      await vi.waitFor(() => expect(sources).toHaveLength(1))
+      expect(released).not.toHaveBeenCalled()
+      expect(signals[0].aborted).toBe(false)
+      sources[0].onended?.()
+      await vi.waitFor(() => expect(sources).toHaveLength(2))
+      expect(released).toHaveBeenCalledOnce()
+      expect(signals[0].aborted).toBe(true)
+      expect(signals[1].aborted).toBe(false)
+      expect(speechPlayback.getSnapshot().key).toBe("answer")
+      sources[1].onended?.()
+      await playing
+      expect(released).toHaveBeenCalledTimes(2)
+      expect(sources.every((source) => source.stop.mock.calls.length === 0)).toBe(true)
+    } finally { speechPlayback.stop(); await playing }
+  })
+
+  it("preserves a timeout failure while cancelling PCM already queued after EOF", async () => {
+    const { sources } = contextFixture()
+    const deadline = new AbortController()
+    let eof = false
+    const playing = speechPlayback.play("answer", "Reply", { chunkChars: 100, synthesize: async () => ({
+      sampleRate: 24000, signal: deadline.signal, cancel: vi.fn(),
+      chunks: (async function* () { yield new Uint8Array([0, 1]); eof = true })(),
+    }) }).catch((error: unknown) => error)
+    try {
+      await vi.waitFor(() => expect(eof).toBe(true))
+      const failure = Object.assign(new Error("timeout"), { code: "timeout" })
+      deadline.abort(failure)
+      expect(await playing).toBe(failure)
+      expect(sources[0].stop).toHaveBeenCalledOnce()
+      expect(speechPlayback.getSnapshot()).toEqual({ state: "idle" })
+    } finally { speechPlayback.stop(); await playing }
   })
 
   it("refuses a truncated PCM sample and releases its response", async () => {

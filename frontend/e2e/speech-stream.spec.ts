@@ -40,11 +40,12 @@ for (const wire of ["pcm", "sse"] as const) {
       await page.addInitScript(() => {
         const original = AudioBufferSourceNode.prototype.start
         AudioBufferSourceNode.prototype.start = function (...args) {
+          const result = Reflect.apply(original, this, args)
           const target = window as typeof window & { speechSamples?: Array<{ rate: number; samples: number; peak: number }> }
           const samples = this.buffer?.getChannelData(0)
           ;(target.speechSamples ??= []).push({ rate: this.buffer?.sampleRate ?? 0, samples: samples?.length ?? 0,
             peak: samples ? Math.max(...samples.map(Math.abs)) : 0 })
-          original.apply(this, args)
+          return result
         }
       })
       await freshConversation(page)
@@ -60,13 +61,18 @@ for (const wire of ["pcm", "sse"] as const) {
       expect(audio.samples).toBeGreaterThan(0)
       expect(audio.peak).toBeCloseTo(1000 / 32768, 3)
       expect(ended).toBe(false)
+      expect(disconnected).toBe(false)
       if (wire === "pcm") {
         // The answer's Read-aloud filter changes while its label becomes Stop.
         await page.getByLabel("Stop reading", { exact: true }).click()
         await expect.poll(() => disconnected).toBe(true)
         expect(ended).toBe(false)
-      } else release()
+      } else {
+        release()
+        await expect.poll(() => ended).toBe(true)
+      }
       await expect(answer.getByLabel("Read aloud", { exact: true })).toBeVisible()
+      await expect(page.getByRole("alert")).toHaveCount(0)
     } catch (error) {
       primaryFailure = error
       throw error
