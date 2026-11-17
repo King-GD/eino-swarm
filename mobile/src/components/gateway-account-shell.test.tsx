@@ -1,3 +1,4 @@
+import { fixtureCapabilities, fixtureSourceCapabilities } from "@/test/capabilities"
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { App } from "@/app"
@@ -18,7 +19,7 @@ vi.mock("@/lib/use-gateway-account", () => ({ useGatewayAccount: () => mocks.acc
 vi.mock("@/lib/openai-client", async (original) => ({ ...await original<typeof import("@/lib/openai-client")>(), discoverModels: mocks.discover }))
 
 const session = { origin: "https://gateway.invalid", token: "agm_" + "a".repeat(64), user: { id: "owner", username: "User", approval_status: "approved" }, device: { id: "phone", expires_at: "2099-01-01T00:00:00Z" } }
-const bootstrap = { user: session.user, device: session.device, models: { source_id: "gateway:owner", source_kind: "gateway" as const, label: "Team", execution: "phone" as const, api_base_url: "https://gateway.invalid/v1", catalog_url: "https://gateway.invalid/v1/models", api_access_enabled: true }, pairlink: { enabled: true, hub_url: session.origin, redeem_url: session.origin + "/pairlink/v1/pairings/redeem", websocket_url: "wss://gateway.invalid/pairlink/v1/ws", info_url: session.origin + "/pairlink/v1/info" }, heartbeat_interval: 30, presence_ttl: 90 }
+const bootstrap = { capabilities: fixtureCapabilities(), capability_status: "ready" as const, user: session.user, device: session.device, models: { source_id: "gateway:owner", source_kind: "gateway" as const, label: "Team", execution: "phone" as const, api_base_url: "https://gateway.invalid/v1", catalog_url: "https://gateway.invalid/v1/models", api_access_enabled: true }, pairlink: { enabled: true, hub_url: session.origin, redeem_url: session.origin + "/pairlink/v1/pairings/redeem", websocket_url: "wss://gateway.invalid/pairlink/v1/ws", info_url: session.origin + "/pairlink/v1/info" }, heartbeat_interval: 30, presence_ttl: 90 }
 
 beforeEach(() => {
   vi.mocked(openSaved).mockReset()
@@ -66,8 +67,8 @@ describe("gateway account shell", () => {
     let pcMode = "fofa", acknowledge!: () => void
     const mutations: { op: string; product_mode?: string; provider_id?: string; model?: string }[] = []
     const rows: ModelChoice[] = [
-      { provider_id: "gateway:preset", provider_label: "Partner", catalog_group: "third_party", model: "shared-model" },
-      { provider_id: "gateway:original", provider_label: "Main", catalog_group: "original", model: "shared-model" },
+      { provider_id: "gateway:preset", provider_label: "Partner", catalog_group: "third_party", model: "shared-model", capabilities: fixtureSourceCapabilities() },
+      { provider_id: "gateway:original", provider_label: "Main", catalog_group: "original", model: "shared-model", capabilities: fixtureSourceCapabilities() },
     ]
     saveLink({ hubURL: session.origin, ticket: "ticket", hostPub: "pub", sessionID: "session", fingerprint: "account-pc", gatewayOrigin: session.origin, gatewayOwnerID: session.user.id, gatewayMobileID: session.device.id, gatewayHostID: "host" })
     saveGatewaySession(session)
@@ -150,7 +151,7 @@ describe("gateway account shell", () => {
       fireEvent.change(input, { target: { value: "Continue after the computer reconnects" } })
       const history = screen.getByTestId("transcript").textContent
       act(() => { first.close(); first.onDisconnect?.(new Error("offline")) })
-      expect(await screen.findByTestId("pc-wait")).toBeVisible()
+      expect(await screen.findByTestId("pc-connection")).toBeVisible()
       expect(screen.queryByRole("textbox", { name: /^Message$/ })).not.toBeInTheDocument()
       expect(input).not.toBeVisible()
       await act(async () => reconnect())
@@ -288,7 +289,7 @@ describe("gateway account shell", () => {
   })
 
   it("keeps device management accessible when API access is disabled and no PCs are connected", async () => {
-    mocks.account = { ...mocks.account, status: "authorized", session, bootstrap: { ...bootstrap, models: { ...bootstrap.models, api_access_enabled: false } } }
+    mocks.account = { ...mocks.account, status: "authorized", session, bootstrap: { ...bootstrap, models: { ...bootstrap.models, api_access_enabled: false }, capabilities: { ...bootstrap.capabilities, sources: { ...bootstrap.capabilities.sources, preset: { ...bootstrap.capabilities.sources.preset!, authorized: false } } } } }
     render(<App />)
     expect(screen.getByRole("heading", { name: "User center" })).toBeVisible()
     expect(screen.getByRole("heading", { name: "Your computers" })).toBeVisible()
@@ -305,7 +306,7 @@ describe("gateway account shell", () => {
       ...mocks.account,
       status: "authorized",
       session: { ...session, user: { ...session.user, username, display_name: "  林小明  " } },
-      bootstrap: { ...bootstrap, models: { ...bootstrap.models, api_access_enabled: false } },
+      bootstrap: { ...bootstrap, models: { ...bootstrap.models, api_access_enabled: false }, capabilities: { ...bootstrap.capabilities, sources: { ...bootstrap.capabilities.sources, preset: { ...bootstrap.capabilities.sources.preset!, authorized: false } } } },
       hosts: [
         { id: "pc-online", name: "open-abcdef0123456789", hostname: "desk-host", display_name: "  Office Mac  ", version: "1", online: true, enabled: true },
         { id: "pc-legacy", name: "open-abcdef0123456788", hostname: "  Home Mac  ", version: "1", online: false, enabled: true },
@@ -333,7 +334,7 @@ describe("gateway account shell", () => {
     mocks.account = {
       ...mocks.account, status: "authorized",
       session: { ...session, user: { ...session.user, display_name: "林小明", avatar_url: picture } },
-      bootstrap: { ...bootstrap, models: { ...bootstrap.models, api_access_enabled: false } },
+      bootstrap: { ...bootstrap, models: { ...bootstrap.models, api_access_enabled: false }, capabilities: { ...bootstrap.capabilities, sources: { ...bootstrap.capabilities.sources, preset: { ...bootstrap.capabilities.sources.preset!, authorized: false } } } },
     }
     const view = render(<App />)
     const image = document.querySelector("img")
@@ -395,7 +396,7 @@ describe("gateway account shell", () => {
     mocks.account = { ...mocks.account, status: "authorized", session, bootstrap }
     render(<App />)
     fireEvent.click(await screen.findByRole("button", { name: /^Model$/ }))
-    expect(await screen.findByRole("heading", { name: "Gateway · Team" })).toBeVisible()
+    expect(await screen.findByRole("heading", { name: "Third-party · Team" })).toBeVisible()
     expect(screen.getByRole("heading", { name: "Personal" })).toBeVisible()
     expect(screen.getAllByRole("radio", { name: "shared-model" })).toHaveLength(2)
     expect(localStorage.getItem("zwai.phone.providers")).not.toContain(session.token)
@@ -432,7 +433,7 @@ describe("gateway account shell", () => {
 
   it("keeps an account PC going offline during selection on the account refresh path", async () => {
     mocks.account = { ...mocks.account, status: "authorized", session,
-      bootstrap: { ...bootstrap, models: { ...bootstrap.models, api_access_enabled: false } },
+      bootstrap: { ...bootstrap, models: { ...bootstrap.models, api_access_enabled: false }, capabilities: { ...bootstrap.capabilities, sources: { ...bootstrap.capabilities.sources, preset: { ...bootstrap.capabilities.sources.preset!, authorized: false } } } },
       hosts: [{ id: "pc-online", name: "Work PC", hostname: "work", version: "1", online: true, enabled: true }],
       connectHost: vi.fn(async () => { throw new GatewayError(409, "host_offline") }),
     }
@@ -453,7 +454,7 @@ describe("gateway account shell", () => {
     expect(screen.getByRole("button", { name: "Connect Home PC" })).toBeDisabled()
     fireEvent.click(screen.getByRole("button", { name: "Connect Work PC" }))
     await waitFor(() => expect(mocks.account.connectHost).toHaveBeenCalledWith("pc-online"))
-    expect(mocks.account.connectHost).toHaveBeenCalledOnce()
+    expect(mocks.account.connectHost).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole("button", { name: "Scan QR" })).not.toBeInTheDocument()
   })
 })

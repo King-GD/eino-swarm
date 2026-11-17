@@ -1,3 +1,4 @@
+import { publishPairedCapabilities } from "@/lib/paired-capabilities"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest"
 import { defaultSpeechSettings } from "../../../frontend/src/lib/speech-types"
@@ -9,7 +10,11 @@ const mocks = vi.hoisted(() => ({ play: vi.fn(), stop: vi.fn(), cancel: vi.fn(),
 vi.mock("@/lib/phone-speech", () => ({ usePhoneSpeech: () => mocks.speech, cancelPhoneSpeech: mocks.cancel, synthesizePhoneSpeech: vi.fn() }))
 vi.mock("../../../frontend/src/lib/speech-media", () => ({ speechPlayback: { subscribe: () => () => {}, getSnapshot: () => mocks.playback, play: mocks.play, stop: mocks.stop } }))
 const props = () => ({ text: "Keep two hosts.", threadId: "t1", onAdd: vi.fn(), onDismiss: vi.fn(), onExpand: vi.fn() })
-const link = (rpc = vi.fn().mockResolvedValue({ ok: true, translation: "保留两台主机。" })) => ({ alive: () => true, rpc }) as unknown as RemoteLink
+const link = (rpc = vi.fn().mockResolvedValue({ ok: true, translation: "保留两台主机。" })) => {
+  const target = { alive: () => true, rpc } as unknown as RemoteLink
+  publishPairedCapabilities(target, { mode: "local", configurable: true, ready: true, scope: "fixture" })
+  return target
+}
 beforeEach(() => {
   vi.clearAllMocks()
   setLocale("zh")

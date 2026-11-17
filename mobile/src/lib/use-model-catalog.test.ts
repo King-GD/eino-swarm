@@ -5,8 +5,8 @@ import type { RemoteLink } from "./link"
 import { OpCatalog, OpRefreshCatalog, OpRefreshCapabilities, type ModelChoice, type RemoteResponse } from "./rpc"
 import { useModelCatalog } from "./use-model-catalog"
 
-const old = [{ provider_id: "p", model: "old-model", default: true }]
-const fresh = [{ provider_id: "p", model: "new-model", default: true }]
+const old = [{ provider_id: "p", model: "old-model", default: true, locked: false }]
+const fresh = [{ provider_id: "p", model: "new-model", default: true, locked: false }]
 const ok = (models: ModelChoice[]): RemoteResponse => ({ v: 1, id: "r", ok: true, models, reasoning_levels: ["low"] })
 function deferred() {
   let resolve!: (v: RemoteResponse) => void

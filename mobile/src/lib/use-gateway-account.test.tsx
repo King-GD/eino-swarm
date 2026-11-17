@@ -252,7 +252,7 @@ it.each([401, 403])("a current PC connection refusal %s immediately removes cach
     if (url.endsWith("/auth/me")) { reads++; return response({ user: { ...session.user, approval_status: rejected ? "rejected" : "approved" }, device: session.device }) }
     if (url.endsWith("/bootstrap")) return response(bootstrap)
     if (url.endsWith("/connect")) return new Promise<Response>((resolve) => { release = resolve })
-    if (url.includes("/link-hosts")) return response([{ id: "pc-1", name: "PC", enabled: true, online: true }])
+    if (url.includes("/link-hosts")) return response([{ id: "pc-1", name: "PC", enabled: true, online: true, host_pub: "rotated-key" }])
     return response({ ok: true })
   }))
   const { result, unmount } = renderHook(useGatewayAccount)

@@ -1,5 +1,11 @@
 # Testing
 
+Current phone regression fixtures declare negotiated source capabilities and paired
+LOCAL policy explicitly. Cached PC audio alone does not authorize Gateway audio;
+an unavailable cache may still leave a disabled Gateway snapshot. Connection tests
+wait until a dial has started before unmount and account for retained sockets when
+switching PCs; a reused valid ticket intentionally avoids another connect request.
+
 ## Voice input and spoken answers (F-148 / C-048)
 
 Versioned Gateway parameters have separate parser, publication and request-boundary regressions:

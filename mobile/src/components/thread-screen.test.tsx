@@ -1,3 +1,5 @@
+import { publishPairedCapabilities } from "@/lib/paired-capabilities"
+import type { RemoteLink } from "@/lib/link"
 import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
@@ -190,8 +192,10 @@ describe("ThreadScreen", () => {
     setLocale("zh")
     const rpc = vi.fn().mockResolvedValue({ ok: true, translation: "保留两台主机。" })
     const onSend = vi.fn()
+    const link = { rpc, alive: () => true } as unknown as RemoteLink
+    publishPairedCapabilities(link, { mode: "local", configurable: true, ready: true, scope: "fixture" })
     render(<ThreadScreen detail={{ id: "t1", title: "talk" }}
-      fileLink={{ rpc, alive: () => true } as never}
+      fileLink={link}
       blocks={[{ id: "a1", kind: "answer", text: "Keep two hosts." }]}
       onBack={vi.fn()} onSend={onSend} onSteer={vi.fn()} onStop={vi.fn()}
       onAnswer={vi.fn()} onAnswerStructured={vi.fn()} />)

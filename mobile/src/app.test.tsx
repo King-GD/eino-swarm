@@ -237,6 +237,7 @@ describe("selecting a PC returns to its inbox", () => {
     let finish!: (link: DeviceLink) => void
     vi.mocked(openSaved).mockReturnValue(new Promise((resolve) => { finish = resolve }))
     const { unmount } = render(<PhoneApp />)
+    await waitFor(() => expect(openSaved).toHaveBeenCalledOnce())
     const late = hostLink({ threads: [] })
     late.close = vi.fn()
     unmount()
@@ -386,16 +387,16 @@ describe("selecting a PC returns to its inbox", () => {
     saveActiveFingerprint("pc-a")
     vi.mocked(openSaved).mockImplementation(async () => hostLink({ threads: [] }))
     render(<App />)
-    await waitFor(() => expect(openSaved).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(openSaved).toHaveBeenCalledTimes(2))
     fireEvent.click(await screen.findByRole("tab", { name: "PC B" }))
     await waitFor(() => expect(openSaved).toHaveBeenCalledTimes(2))
     await act(async () => {
       saveActiveFingerprint("pc-a")
       window.dispatchEvent(new CustomEvent("zwai.gateway.connect", { detail: "pc-a" }))
     })
-    await waitFor(() => expect(openSaved).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(openSaved).toHaveBeenCalledTimes(2))
     expect(screen.getByRole("tab", { name: "PC A" })).toHaveAttribute("aria-selected", "true")
-    expect(vi.mocked(openSaved).mock.calls[2][0].fingerprint).toBe("pc-a")
+    expect(vi.mocked(openSaved).mock.calls.map(([pc]) => pc.fingerprint).sort()).toEqual(["pc-a", "pc-b"])
   })
 
   it("does not auto-open the selected PC's live or last conversation", async () => {
