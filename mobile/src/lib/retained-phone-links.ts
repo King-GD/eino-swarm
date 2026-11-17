@@ -14,7 +14,10 @@ export class RetainedPhoneLinks {
     const pending = this.opening.get(saved.fingerprint)
     if (pending && sameLinkAuthority(pending.saved, saved)) return pending.promise
     const operation = { saved: { ...saved }, promise: Promise.resolve(null as unknown as RemoteLink) }
-    operation.promise = Promise.resolve().then(() => open(saved)).then(link => {
+    operation.promise = Promise.resolve().then(() => {
+      if (this.opening.get(saved.fingerprint) !== operation || !valid()) throw new Error("offline")
+      return open(saved)
+    }).then(link => {
       if (this.opening.get(saved.fingerprint) !== operation || !valid()) {
         link.close()
         throw new Error("offline")

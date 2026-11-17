@@ -6,6 +6,15 @@ import type { RemoteLink } from "./link"
 const saved: SavedLink = { fingerprint: "pc", hubURL: "https://hub.invalid", ticket: "ticket", hostPub: "pub", sessionID: "session" }
 const link = () => ({ alive: () => true, close: vi.fn() }) as unknown as RemoteLink
 
+it("does not dial after cleanup wins before a queued background open", async () => {
+  const pool = new RetainedPhoneLinks(), open = vi.fn(async () => link())
+  const pending = pool.connect(saved, open, () => true)
+  const refused = expect(pending).rejects.toThrow("offline")
+  pool.close()
+  await refused
+  expect(open).not.toHaveBeenCalled()
+})
+
 it("shares one opening between background warming and foreground selection", async () => {
   const pool = new RetainedPhoneLinks(), connected = link()
   let finish!: (link: RemoteLink) => void
