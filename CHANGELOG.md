@@ -6,6 +6,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ## Unreleased
 
+## [0.1.83] - 2026-11-18
+
 ### Added
 
 - Gateway audio settings discover versioned parameters from authorized private catalogs on PC/Web and phone. Explicit choices are scoped to their account/source/model, omitted values follow gateway defaults, and changed or invalid choices require selection instead of silent replacement. Fixed model selection and audio parameter permissions remain independent. (`F-148`, `C-048`)
