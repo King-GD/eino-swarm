@@ -49,13 +49,12 @@ the socket. Background connection warming and 15-second heartbeats reuse that
 transport instead of replacing it. Only a real shared-socket failure starts
 recovery for its peers.
 
-Choose **PCM (streaming playback)** in Voice settings to start direct Gateway or
-personal-service playback as audio arrives. MP3/WAV retain complete-segment
-playback. The encrypted PC-local route also waits for a completed segment.
-
-Choose **PCM (streaming playback)** as the audio format to start direct Gateway
-or personal-service playback as audio arrives. MP3/WAV retain complete-segment
-playback. The encrypted PC-local route also waits for a completed segment.
+The phone account’s automatic Gateway output uses **PCM (streaming playback)**
+with SSE and 200-character segments, allowing audio to play before a segment
+finishes. The speech service must provide mono signed-16 LE PCM at 24 kHz.
+Explicit PC or personal output settings retain their format and segment limits.
+Select PCM in those settings for incremental direct HTTP playback; MP3/WAV and
+the encrypted PC-local route wait for a completed segment.
 The PC snapshot declares read-aloud execution separately from dictation: an
 ordinary configurable Gateway output uses the phone's matching Mobile login
 directly, while personal PC outputs use encrypted PC RPC. Older PC snapshots

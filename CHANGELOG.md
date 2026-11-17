@@ -8,6 +8,11 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Automatic phone Gateway read aloud now requests streaming PCM/SSE instead of
+  waiting for a complete MP3 segment. Explicit PC and personal audio formats stay
+  unchanged; the automatic phone profile uses shorter 200-character segments.
+  (`F-148`, `C-048`)
+
 - Phone Add to chat now appears for text selected inside an expanded thought,
   including a thought opened from a work group. The disclosure label and tool
   controls still do not quote. (`F-221`, `C-011`)

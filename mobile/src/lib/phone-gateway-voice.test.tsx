@@ -48,12 +48,14 @@ it("exposes complete Gateway recognition and playback when the PC has no voice c
   const requests: {url:string; body:unknown}[] = []
   vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (url, init) => {
     requests.push({url:String(url),body:init?.body})
-    return String(url).endsWith("transcriptions") ? new Response(JSON.stringify({text:"recognized words"}),{headers:{"Content-Type":"application/json"}}) : new Response(new Uint8Array([1,2]),{headers:{"Content-Type":"audio/mpeg"}})
+    return String(url).endsWith("transcriptions") ? new Response(JSON.stringify({text:"recognized words"}),{headers:{"Content-Type":"application/json"}}) : new Response(new Uint8Array([1,2]),{headers:{"Content-Type":"audio/pcm;rate=24000;channels=1"}})
   }))
   expect(await transcribePhoneSpeech(new Blob(["recording"],{type:"audio/wav"}),new AbortController().signal)).toBe("recognized words")
   expect((requests[0].body as FormData).get("model")).toBe("recognition-model")
-  await synthesizePhoneSpeech("The complete reply.",new AbortController().signal)
-  expect(JSON.parse(String(requests[1].body))).toMatchObject({model:"spoken-model",input:"The complete reply."})
+  const audio = await synthesizePhoneSpeech("The complete reply.",new AbortController().signal)
+  expect(audio).not.toBeInstanceOf(Blob)
+  if (!(audio instanceof Blob)) audio.cancel()
+  expect(JSON.parse(String(requests[1].body))).toMatchObject({model:"spoken-model",input:"The complete reply.",response_format:"pcm",stream_format:"sse"})
   expect(requests.map(r=>r.url)).toEqual(["https://gateway.test/v1/audio/transcriptions","https://gateway.test/v1/audio/speech"])
   expect(rpc).not.toHaveBeenCalled()
   act(() => setPhoneSpeechSource(pc,null))

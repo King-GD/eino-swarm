@@ -4,6 +4,9 @@ import type { GatewayBootstrap, GatewaySession } from "./gateway-account"
 
 export type GatewayVoiceModels = Record<string, Partial<Record<"transcription" | "speech", string>>>
 const roles = ["transcription", "speech"] as const
+// Keep an automatic stream segment well within the default request deadline.
+// Explicit PC/personal settings still supply their own limits.
+const automaticSpeechChunkChars = 200
 const name = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value)
 
 function sources(bootstrap: GatewayBootstrap) {
@@ -62,9 +65,9 @@ export async function discoverGatewayVoiceModels(bootstrap: GatewayBootstrap, re
 export function gatewayVoiceSnapshot(session: GatewaySession, bootstrap: GatewayBootstrap): SpeechSnapshot {
   const defaults = defaultSpeechSettings()
   const snapshot: SpeechSnapshot = {
-    execution: "gateway", gateway_origin: session.origin, limits: defaults.limits,
+    execution: "gateway", gateway_origin: session.origin, limits: { ...defaults.limits, chunk_chars: automaticSpeechChunkChars },
     input: { ...defaults.input, enabled: false, ready: false, label: "" },
-    output: { ...defaults.output, enabled: false, ready: false, label: "" },
+    output: { ...defaults.output, format: "pcm", enabled: false, ready: false, label: "" },
   }
   for (const role of roles) {
     for (const { kind, descriptor } of sources(bootstrap)) {

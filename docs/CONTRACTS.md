@@ -4,6 +4,8 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 
 ## C-048 Voice configuration follows the execution source
 
+- Automatic phone-owned Gateway playback selects PCM/SSE and segments prose at 200 Unicode characters; explicit PC and personal output formats and limits stay authoritative. This changes the automatic phone profile only, without changing the request deadline or global voice defaults. The service must deliver mono signed-16 LE 24 kHz PCM; a provider that ignores SSE or uses a different rate fails validation. Evidence: `mobile/src/lib/gateway-speech.ts`, `mobile/src/lib/gateway-speech.test.ts`, `mobile/src/lib/phone-gateway-voice.test.tsx`.
+
 - Phone voice HTTP errors retain the response status for the retryable UI message. Upstream response bodies and credentials stay out of that message. Network, timeout, empty recognition and size errors keep their distinct categories. Evidence: `mobile/src/lib/speech-transport.test.ts`, `mobile/src/components/speech-errors.test.ts`.
 
 - PC/Web and phone dictation remove only a complete leading `language …<asr_text>` decoder envelope before draft insertion. Plain text, incomplete prefixes and literal tags elsewhere remain unchanged; metadata-only results are empty recognition, never a draft. Raw provider responses remain unchanged. Evidence: `frontend/src/lib/transcription-text.test.ts`, `mobile/src/lib/phone-transcription-text.test.ts`.

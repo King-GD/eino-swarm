@@ -51,6 +51,8 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-148 Voice input and spoken answers
 
+- The phone account’s automatic Gateway output uses streaming PCM/SSE so playback can begin before the segment finishes. Automatic segments are bounded at 200 characters; explicit PC or personal audio settings keep their chosen format and limits. Evidence: `mobile/src/lib/gateway-speech.test.ts`, `mobile/src/lib/phone-gateway-voice.test.tsx`.
+
 - Phone voice errors identify the service's HTTP status without exposing its raw error body; transport and microphone permission failures remain distinct. Evidence: `mobile/src/lib/speech-transport.test.ts`, `mobile/src/components/speech-errors.test.ts`.
 
 - Dictation inserts transcript prose without a leading ASR language/control envelope. Plain text and literal markers elsewhere are preserved; metadata-only responses show empty recognition. Evidence: `frontend/src/lib/transcription-text.test.ts`, `mobile/src/lib/phone-transcription-text.test.ts`.
