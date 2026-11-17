@@ -4,6 +4,15 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). GitHub Releases start
 at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
+## Unreleased
+
+### Changed
+
+- File search reuses one completed scan of the listed workspace instead of
+  walking the tree on every query. Opening or refreshing the workspace root,
+  uploading, and deleting start a new scan. A query waits for that scan and
+  does not return a partial result. (`F-140`)
+
 ## [0.1.81] - 2026-11-17
 
 ### Changed

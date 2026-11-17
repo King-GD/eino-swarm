@@ -329,6 +329,7 @@ func (e *Engine) reloadAfterRestore(ctx context.Context, manifest backup.Manifes
 	e.configUpdateMu.Unlock()
 	e.ApplyLiveSwarmLimits()
 	e.forgetCachedMemory()
+	e.fileScans.dropAll()
 	e.closeAllRuntimes()
 	if e.store != nil {
 		e.store.ResetSequences()

@@ -3335,13 +3335,15 @@ suggestion. The phone receives the event and does not show it.
 
 `path` is workspace-relative and uses `/`. With no `q`, the response is every
 direct child of `dir` (`dir` empty or omitted is the workspace root). `q`
-searches the whole listed workspace and returns every match; it takes
-precedence over `dir`. A failed listing or search is an error with no partial
-`files` array. `uploaded` marks what the human put there, as opposed to what
-agents produced. Dot-directories, `node_modules` and `vendor` are omitted
-(agents can still read those paths). The Files panel loads the next directory
-when it is opened and uses `q` for its filter. The payload stays a flat list
-of that one result.
+searches the newest completed scan of the listed workspace and returns every
+match; it takes precedence over `dir`. Listing the workspace root, uploading,
+or deleting a file discards that scan and starts another. A query waits for
+the scan in progress. A failed or cancelled scan is an error with no partial
+`files` array, and a failed scan is not reused. `uploaded` marks what the
+human put there, as opposed to what agents produced. Dot-directories,
+`node_modules` and `vendor` are omitted (agents can still read those paths).
+The Files panel loads the next directory when it is opened and uses `q` for
+its filter. The payload stays a flat list of that one result.
 
 ### `POST /api/threads/:id/files` → `201`
 

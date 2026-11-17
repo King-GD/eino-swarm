@@ -118,6 +118,11 @@ type Engine struct {
 
 	index ThreadIndex
 
+	// fileScans is the Files panel's completed workspace listing. scanWorkspace
+	// replaces the walk in tests. Production leaves it nil.
+	fileScans     workspaceScans
+	scanWorkspace func(context.Context, string) ([]workspaceEntry, error)
+
 	// Frozen while the ticker is live so fireDueSchedules, inbox
 	// create/resume/patch, and schedule-claim default-provider reads
 	// never touch e.cfg (Replace copies the whole struct and races
@@ -559,6 +564,7 @@ func (e *Engine) Waiting() []string {
 // a review that is cut off mid-write would leave a note half stored, and a
 // review that never finishes must not keep the app open.
 func (e *Engine) Shutdown() {
+	e.fileScans.stop()
 	if e.mcp != nil {
 		defer e.mcp.Close()
 	}

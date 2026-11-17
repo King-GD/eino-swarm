@@ -68,49 +68,6 @@ func listDirectory(workspace, rel string) ([]FileEntry, error) {
 	return out, nil
 }
 
-// searchWorkspace returns every non-skipped entry whose slash path contains
-// query, case-insensitively. Cancellation returns no partial result.
-func searchWorkspace(ctx context.Context, workspace, query string) ([]FileEntry, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	needle := strings.ToLower(query)
-	out := make([]FileEntry, 0)
-	err := filepath.WalkDir(workspace, func(abs string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if abs == workspace {
-			return nil
-		}
-		if d.IsDir() && skipListedDir(d.Name()) {
-			return filepath.SkipDir
-		}
-		rel, err := filepath.Rel(workspace, abs)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
-		if !strings.Contains(strings.ToLower(rel), needle) {
-			return nil
-		}
-		item := FileEntry{Path: rel, Name: d.Name(), Dir: d.IsDir()}
-		if info, err := d.Info(); err == nil {
-			item.Size = info.Size()
-			item.Modified = info.ModTime()
-		}
-		out = append(out, item)
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func skipListedDir(name string) bool {
 	if strings.HasPrefix(name, ".") {
 		return true
@@ -148,21 +105,35 @@ func (e *Engine) ListFiles(threadID, dir string) ([]FileEntry, error) {
 		}
 		return nil, fmt.Errorf("engine: list %q: %w", dir, err)
 	}
+	if rel == "" {
+		// The file list just read the root. Names created since the last scan
+		// belong in the next search, so start that scan now and let the query
+		// wait for it instead of walking a second time.
+		e.invalidateFileScan(root)
+	}
 	return entries, nil
 }
 
 // SearchFiles returns every listed workspace entry whose path contains query.
-// It does not return a truncated sample: failure yields no rows.
+// It answers from the newest completed scan and waits when that scan is still
+// running. Failure, including cancellation, yields no rows.
 func (e *Engine) SearchFiles(ctx context.Context, threadID, query string) ([]FileEntry, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return nil, fmt.Errorf("engine: empty file search")
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	root := e.WorkspaceDir(threadID)
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return nil, fmt.Errorf("engine: workspace: %w", err)
 	}
-	entries, err := searchWorkspace(ctx, root, query)
+	listed, err := e.fileScans.paths(ctx, root, e.scanListed)
+	if err != nil {
+		return nil, fmt.Errorf("engine: search workspace: %w", err)
+	}
+	entries, err := filterWorkspaceEntries(ctx, root, query, listed)
 	if err != nil {
 		return nil, fmt.Errorf("engine: search workspace: %w", err)
 	}

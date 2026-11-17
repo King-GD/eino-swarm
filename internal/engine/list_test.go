@@ -148,6 +148,56 @@ func TestSearchFilesReturnsEveryMatchAndSkipsHiddenTrees(t *testing.T) {
 	}
 }
 
+func TestFileSearchReusesAFinishedScanUntilTheRootIsListedAgain(t *testing.T) {
+	// A project workspace can hold hundreds of thousands of listed names.
+	// Walking it again on every keystroke is the wait the Files panel shows.
+	// A finished scan has to answer the next query, and a later file stays
+	// out of that answer until the root is listed again.
+	e := newTestEngine(t)
+	th, _ := e.CreateThread("", "", "")
+	root := e.WorkspaceDir(th.ID)
+	notes := filepath.Join(root, "notes")
+	if err := os.MkdirAll(notes, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(notes, "keep.txt"), []byte("ab"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := e.SearchFiles(context.Background(), th.ID, "keep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Path != "notes/keep.txt" || got[0].Size != 2 {
+		t.Fatalf("first search = %+v", got)
+	}
+
+	if err := os.WriteFile(filepath.Join(notes, "keep-later.txt"), []byte("c"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.ListFiles(th.ID, "notes"); err != nil {
+		t.Fatal(err)
+	}
+	stale, err := e.SearchFiles(context.Background(), th.ID, "keep-later")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stale) != 0 {
+		t.Fatalf("search reused a scan that already saw the later file: %+v", stale)
+	}
+
+	if _, err := e.ListFiles(th.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := e.SearchFiles(context.Background(), th.ID, "keep-later")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fresh) != 1 || fresh[0].Path != "notes/keep-later.txt" || fresh[0].Size != 1 {
+		t.Fatalf("search after listing the root = %+v", fresh)
+	}
+}
+
 func TestWorkspaceListingFailsClosedWhenItCannotBeRead(t *testing.T) {
 	e := newTestEngine(t)
 	th, _ := e.CreateThread("", "", "")

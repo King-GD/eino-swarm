@@ -144,6 +144,7 @@ func (e *Engine) SaveUpload(threadID, name string, read func(dst string) error) 
 		return nil, err
 	}
 	_ = e.store.TouchThread(threadID)
+	e.invalidateFileScan(e.WorkspaceDir(threadID))
 	return att, nil
 }
 
@@ -168,7 +169,11 @@ func (e *Engine) DeleteFile(threadID, rel string) error {
 			return fmt.Errorf("engine: delete %s: %w", rel, err)
 		}
 	}
-	return e.store.DeleteAttachmentByPath(threadID, filepath.ToSlash(name))
+	if err := e.store.DeleteAttachmentByPath(threadID, filepath.ToSlash(name)); err != nil {
+		return err
+	}
+	e.invalidateFileScan(e.WorkspaceDir(threadID))
+	return nil
 }
 
 // uniquePath appends a counter until the path is free, so two uploads with the
