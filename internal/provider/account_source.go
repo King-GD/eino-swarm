@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/LubyRuffy/eino-swarm/internal/audioparams"
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 )
 
@@ -28,6 +29,7 @@ var ErrAccountModelsUnavailable = errors.New("server models are unavailable for 
 // carries exists only so this package can call the server: no accessor hands
 // it out, and every printable form hides it.
 type AccountSource struct {
+	audio        map[string]audioparams.Descriptor
 	negotiated   bool
 	capabilities *SourceCapabilities
 	catalogGroup string
@@ -460,7 +462,7 @@ func (s *AccountSource) equal(o *AccountSource) bool {
 	if s == nil || o == nil {
 		return s == o
 	}
-	if s.catalogGroup != o.catalogGroup {
+	if s.catalogGroup != o.catalogGroup || !reflect.DeepEqual(s.audio, o.audio) {
 		return false
 	}
 	if s.negotiated != o.negotiated || !reflect.DeepEqual(s.capabilities, o.capabilities) {

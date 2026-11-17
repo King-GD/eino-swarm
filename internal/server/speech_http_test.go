@@ -163,3 +163,18 @@ func TestSpeechHTTPUploadsRecordingAndReturnsAudioWithoutCreatingATurn(t *testin
 		t.Fatal("dictation created durable chat content")
 	}
 }
+
+func TestGatewayAudioSettingsRoundTripRetainsScopedInvalidPreferences(t *testing.T) {
+	h := newHarness(t)
+	h.json("PUT", "/api/settings", map[string]any{"speech": map[string]any{"gateway_parameters": map[string]any{"audio:one": map[string]any{"voice": "saved-invalid-voice", "speed": 8, "instructions": ""}}}}, 200)
+	h.json("PUT", "/api/settings", map[string]any{"speech": map[string]any{"output": map[string]any{"enabled": false}}}, 200)
+	settings := h.json("GET", "/api/settings", nil, 200)["settings"].(map[string]any)["speech"].(map[string]any)
+	preferences := settings["gateway_parameters"].(map[string]any)["audio:one"].(map[string]any)
+	if preferences["voice"] != "saved-invalid-voice" || preferences["speed"] != float64(8) || preferences["instructions"] != "" {
+		t.Fatal("settings discarded explicit preferences")
+	}
+	h.json("PUT", "/api/settings", map[string]any{"speech": map[string]any{"gateway_parameters": map[string]any{}}}, 200)
+	if len(h.app.Config.Snapshot().Speech.GatewayParameters) != 0 {
+		t.Fatal("explicit preference reset was ignored")
+	}
+}

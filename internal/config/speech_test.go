@@ -2,8 +2,11 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
+	"github.com/LubyRuffy/eino-swarm/internal/audioparams"
 	"math"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -39,7 +42,7 @@ func TestSpeechStaysOffUntilTheUserEnablesEachDirection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reloaded.Speech != cfg.Snapshot().Speech {
+	if !reflect.DeepEqual(reloaded.Speech, cfg.Snapshot().Speech) {
 		t.Fatalf("voice settings did not survive reload: %+v", reloaded.Speech)
 	}
 	raw, err := json.Marshal(reloaded.Speech)
@@ -85,7 +88,7 @@ func TestSpeechRejectsInvalidSettingsWithoutPublishingThem(t *testing.T) {
 			if err := cfg.Update(func(next *Config) error { edit(&next.Speech); return nil }); err == nil {
 				t.Fatal("invalid voice configuration was accepted")
 			}
-			if cfg.Speech != before {
+			if !reflect.DeepEqual(cfg.Speech, before) {
 				t.Fatal("a failed update changed live voice configuration")
 			}
 		})
@@ -96,7 +99,7 @@ func TestOldConfigsGetSpeechDefaultsWithoutEnablingVoice(t *testing.T) {
 	cfg := Default()
 	cfg.Speech = SpeechConfig{}
 	cfg.normalizeSpeech()
-	if cfg.Speech != DefaultSpeech() {
+	if !reflect.DeepEqual(cfg.Speech, DefaultSpeech()) {
 		t.Fatalf("normalized=%+v", cfg.Speech)
 	}
 	for _, source := range []string{SpeechSourceAccount, SpeechSourceProvider, SpeechSourceCustom} {
@@ -115,3 +118,41 @@ func TestOldConfigsGetSpeechDefaultsWithoutEnablingVoice(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestGatewayAudioPreferencesSurviveReloadAndSnapshotWithoutLegacySpeedBounds(t *testing.T) {
+	cfg, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	voice, speed := "saved-voice", 8.0
+	if err = cfg.Update(func(c *Config) error {
+		c.Speech.GatewayParameters = map[string]audioparams.Overrides{"audio:one": {Voice: &voice, Speed: &speed}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := cfg.Snapshot()
+	*snapshot.Speech.GatewayParameters["audio:one"].Voice = "changed"
+	if *cfg.Snapshot().Speech.GatewayParameters["audio:one"].Voice != "saved-voice" {
+		t.Fatal("snapshot mutated published preferences")
+	}
+	loaded, err := Load(cfg.DataDir())
+	if err != nil || !reflect.DeepEqual(cfg.Snapshot().Speech, loaded.Speech) {
+		t.Fatalf("preferences did not reload: %v", err)
+	}
+	for _, invalid := range []map[string]audioparams.Overrides{
+		{"": {}}, {strings.Repeat("a", 257): {}}, {"one": {Voice: ptrAudio(string([]byte{255}))}}, {"one": {Prompt: ptrAudio(strings.Repeat("x", 400001))}}, {"one": {Speed: ptrAudio(math.NaN())}}, {"one": {Speed: ptrAudio(0.0)}},
+	} {
+		if err = cfg.Update(func(c *Config) error { c.Speech.GatewayParameters = invalid; return nil }); err == nil {
+			t.Fatal("invalid preference accepted")
+		}
+	}
+	tooMany := map[string]audioparams.Overrides{}
+	for i := 0; i < 257; i++ {
+		tooMany[fmt.Sprint(i)] = audioparams.Overrides{}
+	}
+	if err = cfg.Update(func(c *Config) error { c.Speech.GatewayParameters = tooMany; return nil }); err == nil {
+		t.Fatal("unbounded preference map")
+	}
+}
+func ptrAudio[T any](v T) *T { return &v }

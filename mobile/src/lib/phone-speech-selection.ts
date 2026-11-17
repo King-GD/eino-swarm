@@ -11,7 +11,7 @@ export function selectPhoneSpeech(gateway: SpeechSnapshot | undefined, preferred
     const slot = preferred?.[kind]
     const route = preferred && speechRoute(preferred, kind)
     const custom = slot?.enabled && slot.model && (personal || route?.execution === "pc_local")
-    const pcGateway = slot?.enabled && slot.ready && slot.model && connected && route?.execution === "gateway" && gatewayAllowed(kind)
+    const pcGateway = slot?.enabled && (slot.ready || slot.audio !== undefined) && slot.model && connected && route?.execution === "gateway" && gatewayAllowed(kind)
     const usePreferred = Boolean(custom || pcGateway)
     const selected = usePreferred ? slot : gateway?.[kind]
     const selectedRoute = usePreferred ? route : gateway && speechRoute(gateway, kind)
@@ -38,7 +38,7 @@ export function speechExecutionKey(snapshot: SpeechSnapshot | undefined, owners:
   if (!snapshot) return ""
   const slot = (kind: "input" | "output") => {
     const value = snapshot[kind], route = speechRoute(snapshot, kind)
-    return [owners[kind], route?.execution, route?.gateway_origin, route?.source_id, value.enabled, value.ready, value.model, value.timeout_seconds]
+    return [owners[kind], route?.execution, route?.gateway_origin, route?.source_id, value.enabled, value.ready, value.model, value.timeout_seconds,value.audio]
   }
   return JSON.stringify([slot("input"), slot("output"), snapshot.input.language, snapshot.input.prompt, snapshot.input.recording_format, snapshot.input.max_duration_seconds,
     snapshot.output.voice, snapshot.output.speed, snapshot.output.format, snapshot.output.instructions, snapshot.limits])

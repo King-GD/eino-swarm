@@ -67,6 +67,12 @@ func (s *Service) Transcribe(ctx context.Context, audio Audio) (string, error) {
 	if value := selected.settings.Input.Prompt; value != "" {
 		fields["prompt"] = value
 	}
+	if selected.parameters != nil {
+		fields = map[string]string{"model": selected.target.Model}
+		for key, value := range selected.parameters {
+			fields[key] = value.(string)
+		}
+	}
 	for key, value := range fields {
 		if err = w.WriteField(key, value); err != nil {
 			return "", failure("speech_invalid_input", 400)
@@ -120,16 +126,7 @@ func (s *Service) Synthesize(ctx context.Context, text string) (Audio, error) {
 		return Audio{}, failure("speech_invalid_text", 400)
 	}
 	output := selected.settings.Output
-	body := map[string]any{"model": selected.target.Model, "input": text, "response_format": output.Format, "speed": output.Speed}
-	if output.Format == "pcm" {
-		body["stream_format"] = "audio"
-	}
-	if output.Voice != "" {
-		body["voice"] = output.Voice
-	}
-	if output.Instructions != "" {
-		body["instructions"] = output.Instructions
-	}
+	body := speechBody(selected, text, false)
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return Audio{}, failure("speech_invalid_input", 400)

@@ -1,3 +1,5 @@
+import { AudioParameterControls } from "../shared/audio-parameters"
+import { refreshCapabilities } from "@/lib/refresh-capabilities"
 import { policyAllows, policyConfigurable } from "@/lib/model-policy"
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react"
 import { Button } from "@/components/ui/button"
@@ -47,6 +49,8 @@ export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery
     discovery.current?.abort(); discovery.current = undefined; setDiscovering(undefined); setModels({})
   }, [connectionIdentity])
   useEffect(() => () => discovery.current?.abort(), [])
+  const audioIdentity = JSON.stringify([snapshot?.input.source_id, snapshot?.input.model, snapshot?.output.source_id, snapshot?.output.model])
+  useEffect(() => { if (snapshot?.input.execution === "gateway" || snapshot?.output.execution === "gateway") void refreshCapabilities().catch(() => undefined) }, [audioIdentity])
   if (!inputAllowed && !outputAllowed) return null
   const update = <K extends Kind>(kind: K, patch: Partial<(typeof speech)[K]>) => onChange({
     ...settings, speech: { ...speech, [kind]: { ...speech[kind], ...patch } },
@@ -91,12 +95,21 @@ export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery
       <span className="text-sm text-muted-foreground">{snapshot?.[kind].label || t("speech.gateway")}</span>
     </SettingsRow>}
   </>
+  const gateway = (kind: Kind) => snapshot?.[kind].execution === "gateway" || !local
+  const parameters = (kind: Kind) => {
+    const view = snapshot?.[kind].audio
+    return <AudioParameterControls view={view} role={kind === "input" ? "transcription" : "speech"} value={view ? speech.gateway_parameters?.[view.scope] ?? {} : {}} onChange={value => {
+      if (view) onChange({ ...settings, speech: { ...speech, gateway_parameters: { ...speech.gateway_parameters, [view.scope]: value } } })
+    }} labels={{ voice: t("speech.voice"), response_format: t("speech.outputFormat"), stream_format: t("speech.streamFormat"), language: t("speech.language"), speed: t("speech.speed"), instructions: t("speech.instructions"), prompt: t("speech.prompt"), follow: t("speech.audioFollow"), invalid: t("speech.audioInvalid"), unavailable: t("speech.audioUnavailable"), max_input_characters: t("speech.chunkLimit"), max_file_bytes: t("speech.inputLimit") }} />
+  }
   return <>
     {inputAllowed ? <SettingsSection title={t("speech.input")} description={t("speech.description")}>
       <Field label={t("speech.enabled")} query={query}><Switch checked={speech.input.enabled} onCheckedChange={(enabled) => update("input", { enabled })} /></Field>
       {connection("input", speech.input)}
+      {gateway("input") ? parameters("input") : <>
       <Field label={t("speech.language")} query={query}><Input value={speech.input.language} placeholder={t("speech.autoLanguage")} onChange={(event) => update("input", { language: event.target.value })} /></Field>
       <Field label={t("speech.prompt")} query={query} wide><Input value={speech.input.prompt} onChange={(event) => update("input", { prompt: event.target.value })} /></Field>
+      </>}
       <SettingsChoice label={t("speech.recordingFormat")} query={query} value={speech.input.recording_format} onValueChange={(recording_format) => update("input", { recording_format: recording_format as "auto" | "wav" })}>
         <SelectItem value="auto">{t("speech.autoFormat")}</SelectItem><SelectItem value="wav">WAV</SelectItem>
       </SettingsChoice>
@@ -106,12 +119,14 @@ export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery
     {outputAllowed ? <SettingsSection title={t("speech.output")}>
       <Field label={t("speech.enabled")} query={query}><Switch checked={speech.output.enabled} onCheckedChange={(enabled) => update("output", { enabled })} /></Field>
       {connection("output", speech.output)}
+      {gateway("output") ? parameters("output") : <>
       <Field label={t("speech.voice")} query={query}><Input value={speech.output.voice} placeholder={t("speech.modelDefault")} onChange={(event) => update("output", { voice: event.target.value })} /></Field>
       <Field label={t("speech.speed")} query={query}><Input type="number" step={0.1} min={0.25} max={4} value={speech.output.speed} onChange={(event) => update("output", { speed: Number(event.target.value) })} /></Field>
       <SettingsChoice label={t("speech.outputFormat")} query={query} value={speech.output.format} onValueChange={(format) => update("output", { format: format as SpeechOutputSettings["format"] })}>
         <SelectItem value="mp3">MP3</SelectItem><SelectItem value="wav">WAV</SelectItem><SelectItem value="pcm">{t("speech.pcmStreaming")}</SelectItem>
       </SettingsChoice>
       <Field label={t("speech.instructions")} query={query} wide><Input value={speech.output.instructions} onChange={(event) => update("output", { instructions: event.target.value })} /></Field>
+      </>}
       <Field label={t("speech.timeout")} query={query}><Input type="number" min={1} value={speech.output.timeout_seconds} onChange={(event) => update("output", { timeout_seconds: Number(event.target.value) })} /></Field>
     </SettingsSection> : null}
     <SettingsSection title={t("speech.limits")}>

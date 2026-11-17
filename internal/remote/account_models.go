@@ -418,6 +418,12 @@ func (a *AccountModels) fetch(ctx context.Context, id accountIdentity) (outcome 
 	defer func() {
 		if outcome.source != nil {
 			outcome.source.SetCapabilities(boot.sourceCapabilities("preset"))
+			capability := boot.sourceCapabilities("preset")
+			if capability != nil && capability.Authorized && capability.Available && (capability.Capabilities["speech"].AudioParametersVersion == 1 || capability.Capabilities["transcription"].AudioParametersVersion == 1) && boot.clientCatalogURL != "" {
+				if data, err := a.get(ctx, boot.clientCatalogURL, id.token); err == nil {
+					outcome.source.SetAudioParameters(data)
+				}
+			}
 		}
 		if a.cfg != nil && a.cfg.ProductSnapshot().Resolved() == config.ProductModeLocal {
 			outcome = a.attachSwitchableCatalogs(ctx, boot, id.token, outcome)

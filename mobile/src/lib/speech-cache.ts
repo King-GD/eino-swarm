@@ -1,3 +1,4 @@
+import { safeAudioOverrides } from "../../../frontend/src/lib/audio-parameters"
 import { sha256 } from "@noble/hashes/sha2.js"
 import type { SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
 import { bytesToHex, utf8 } from "./bytes"
@@ -30,10 +31,12 @@ export function safeSpeechSnapshot(raw: unknown): SpeechSnapshot | undefined {
   const limits = source.limits as Record<string, unknown> | undefined
   if (!input || !output || !limits) return
   if ([input.enabled, input.ready, output.enabled, output.ready].some((item) => typeof item !== "boolean")) return
-  for (const [item, maximum] of [[input.model, 256], [output.model, 256], [input.label, 8192], [output.label, 8192], [input.language, 64], [input.prompt, 8192], [output.voice, 256], [output.instructions, 8192]] as const) if (text(item, maximum) === undefined) return
+  const gatewayInput = input.execution === "gateway" || input.execution === undefined && source.execution === "gateway"
+  const gatewayOutput = output.execution === "gateway" || output.execution === undefined && source.execution === "gateway"
+  for (const [item, maximum] of [[input.model, 256], [output.model, 256], [input.label, 8192], [output.label, 8192], [input.language, 256], [input.prompt, gatewayInput && input.audio ? 400000 : 8192], [output.voice, 256], [output.instructions, gatewayOutput && output.audio ? 400000 : 8192]] as const) if (text(item, maximum) === undefined) return
   if (!["auto", "wav"].includes(input.recording_format as string) || !["mp3", "wav", "pcm"].includes(output.format as string)) return
   if (!count(input.max_duration_seconds, 3600) || !count(input.timeout_seconds, 3600) || !count(output.timeout_seconds, 3600)) return
-  if (typeof output.speed !== "number" || !Number.isFinite(output.speed) || output.speed < 0.25 || output.speed > 4) return
+  if (typeof output.speed !== "number" || !Number.isFinite(output.speed) || output.speed <= 0 || !gatewayOutput && (output.speed < 0.25 || output.speed > 4)) return
   if (!count(limits.input_bytes, 256 * 1024 * 1024) || !count(limits.output_bytes, 256 * 1024 * 1024) || !count(limits.chunk_chars, 4096) || !count(limits.staging_ttl_seconds, 3600)) return
   let outputRoute: Pick<SpeechSnapshot["output"], "execution" | "gateway_origin"> = {}
   let inputRoute: Pick<SpeechSnapshot["input"], "execution" | "gateway_origin"> = {}
@@ -60,6 +63,7 @@ export function safeSpeechSnapshot(raw: unknown): SpeechSnapshot | undefined {
     execution: source.execution, ...(origin ? { gateway_origin: origin } : {}),
     input: {
       ...inputRoute,
+      ...(gatewayInput && input.audio && typeof input.audio === "object" ? { audio: {version:0,status:"unsupported",scope:"",overrides:safeAudioOverrides((input.audio as Record<string,unknown>).overrides)} } : {}),
       ...(text(input.source_id, 128) ? { source_id: text(input.source_id, 128) } : {}),
       enabled: input.enabled as boolean, ready: input.ready as boolean,
       ...(text(input.reason, 256) ? { reason: text(input.reason, 256) } : {}),
@@ -68,6 +72,7 @@ export function safeSpeechSnapshot(raw: unknown): SpeechSnapshot | undefined {
     },
     output: {
       ...outputRoute,
+      ...(gatewayOutput && output.audio && typeof output.audio === "object" ? { audio: {version:0,status:"unsupported",scope:"",overrides:safeAudioOverrides((output.audio as Record<string,unknown>).overrides)} } : {}),
       ...(text(output.source_id, 128) ? { source_id: text(output.source_id, 128) } : {}),
       enabled: output.enabled as boolean, ready: output.ready as boolean,
       ...(text(output.reason, 256) ? { reason: text(output.reason, 256) } : {}),

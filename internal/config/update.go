@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"github.com/LubyRuffy/eino-swarm/internal/audioparams"
 	"maps"
 	"reflect"
 	"slices"
@@ -31,6 +32,7 @@ func cloneProvider(p Provider) Provider {
 
 func (c *Config) clone() *Config {
 	next := *c
+	next.Speech.GatewayParameters = audioparams.CloneOverrides(c.Speech.GatewayParameters)
 	next.mu = &sync.RWMutex{}
 	next.Models.Bindings = cloneBindings(c.Models.Bindings)
 	next.Models.Providers = slices.Clone(c.Models.Providers)
@@ -134,7 +136,7 @@ func (c *Config) publish(n *Config) {
 	if c.Search != n.Search {
 		c.Search = n.Search
 	}
-	if c.Speech != n.Speech {
+	if !reflect.DeepEqual(c.Speech, n.Speech) {
 		c.Speech = n.Speech
 	}
 	if c.Clients != n.Clients {

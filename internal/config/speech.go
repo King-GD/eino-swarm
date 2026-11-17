@@ -3,9 +3,11 @@ package config
 import (
 	"errors"
 	"fmt"
+	"github.com/LubyRuffy/eino-swarm/internal/audioparams"
 	"math"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 )
 
 // ErrInvalidSpeech identifies invalid voice settings without inspecting prose.
@@ -64,9 +66,10 @@ type SpeechLimits struct {
 
 // SpeechConfig is PC-owned; phones receive only a safe runtime projection.
 type SpeechConfig struct {
-	Input  SpeechInputConfig  `yaml:"input" json:"input"`
-	Output SpeechOutputConfig `yaml:"output" json:"output"`
-	Limits SpeechLimits       `yaml:"limits" json:"limits"`
+	GatewayParameters map[string]audioparams.Overrides `yaml:"gateway_parameters,omitempty" json:"gateway_parameters,omitempty"`
+	Input             SpeechInputConfig                `yaml:"input" json:"input"`
+	Output            SpeechOutputConfig               `yaml:"output" json:"output"`
+	Limits            SpeechLimits                     `yaml:"limits" json:"limits"`
 }
 
 // DefaultSpeech leaves both directions off and does not choose a model product.
@@ -129,6 +132,26 @@ func (c *Config) validateSpeech() (err error) {
 	}()
 	c.normalizeSpeech()
 	s := c.Speech
+	if len(s.GatewayParameters) > 256 {
+		return fmt.Errorf("too many gateway audio preferences")
+	}
+	for scope, o := range s.GatewayParameters {
+		if len(scope) > 256 || scope == "" {
+			return fmt.Errorf("invalid gateway audio scope")
+		}
+		for _, value := range o.Values() {
+			switch v := value.(type) {
+			case string:
+				if !utf8.ValidString(v) || len(v) > 400000 {
+					return fmt.Errorf("invalid gateway audio preference")
+				}
+			case float64:
+				if math.IsNaN(v) || math.IsInf(v, 0) || v <= 0 {
+					return fmt.Errorf("invalid gateway audio speed")
+				}
+			}
+		}
+	}
 	for _, endpoint := range []SpeechEndpoint{s.Input.SpeechEndpoint, s.Output.SpeechEndpoint} {
 		if strings.ContainsAny(endpoint.APIKey, "\r\n") {
 			return fmt.Errorf("speech API key must not contain line breaks")

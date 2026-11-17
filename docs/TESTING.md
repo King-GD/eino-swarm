@@ -2,6 +2,19 @@
 
 ## Voice input and spoken answers (F-148 / C-048)
 
+Versioned Gateway parameters have separate parser, publication and request-boundary regressions:
+`internal/audioparams/contract_test.go`, `internal/provider/audio_parameters_test.go`,
+`internal/remote/account_audio_parameters_test.go`, `internal/speech/audio_parameters_test.go`,
+`internal/server/speech_http_test.go`, `frontend/src/lib/audio-parameters.test.ts`,
+`frontend/src/components/shared/audio-parameters.test.tsx`, and
+`mobile/src/lib/gateway-audio-parameters.test.ts`. They cover a fixed model with editable
+voice, default omission, explicit empty values, an extended speed range, Unicode and
+actual file-byte limits, scoped persistence, source/account isolation, stale declarations,
+private catalog discovery and parameter-error refresh without replay. Phone cache tests
+retain only explicit preferences from the PC; the phone's own declaration authorizes them.
+These are protocol/UI fixture checks, not proof that the online gateway deployed the
+new declaration or that a physical device played audio.
+
 `internal/config/speech_test.go` and `internal/speech/service_test.go` cover
 independent switches, private settings, typed model discovery, Gateway role
 resolution, exact multipart/audio bytes, request limits and real HTTP

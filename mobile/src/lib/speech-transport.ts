@@ -1,4 +1,5 @@
-import { gatewayCapabilityAllows, gatewayCapabilityTarget } from "./gateway-capabilities"
+import { resolveAudioParameters } from "../../../frontend/src/lib/audio-parameters"
+import { authoritativeGatewayAudio, gatewayCapabilityAllows, gatewayCapabilityTarget, GATEWAY_CAPABILITY_REFRESH_EVENT } from "./gateway-capabilities"
 import { speechRoute, type SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
 import { speechAudioResponse, type SpeechAudio, type SpeechAudioStream } from "../../../frontend/src/lib/speech-stream"
 import { gatewayAuthorityCurrent, notifyGatewayRefusal, watchGatewayAuthority } from "./gateway-authority"
@@ -9,7 +10,7 @@ import { putFrames } from "./put-chunks"
 import { OpAudioCancel, OpAudioChunk, OpAudioSpeech, OpAudioTranscribe, type RemoteResponse } from "./rpc"
 
 export class SpeechCallError extends Error {
-  constructor(readonly code: "unavailable" | "failed" | "network" | "timeout" | "too_large" | "invalid_audio" | "empty" | "permission" = "failed", readonly httpStatus?: number) { super(code); this.name = "SpeechCallError" }
+  constructor(readonly code: "unavailable" | "failed" | "network" | "timeout" | "too_large" | "invalid_audio" | "empty" | "permission" | "invalid_audio_parameter" = "failed", readonly httpStatus?: number) { super(code); this.name = "SpeechCallError" }
 }
 
 /** A response retains timeout and authority through queued playback. Successful
@@ -89,7 +90,13 @@ export async function gatewaySpeechCall(snapshot: SpeechSnapshot, session: Gatew
   if (route?.execution !== "gateway" || route.gateway_origin !== session.origin || !gatewayAuthorityCurrent(session) || !gatewayCapabilityAllows(session, route.source_id, operation === "transcribe" ? "transcription" : "speech")) throw new SpeechCallError("unavailable")
   const target = gatewayCapabilityTarget(session, route.source_id, operation === "transcribe" ? "transcription" : "speech")
   if (!target) throw new SpeechCallError("unavailable")
-  return endpointSpeechCall(snapshot, target, session.token, operation, input, signal, fetcher, session)
+  const validated = authoritativeGatewayAudio(session,snapshot)
+  if (!validated) throw new SpeechCallError("unavailable")
+  if (validated[operation === "transcribe" ? "input" : "output"].reason === "invalid_audio_parameter") {
+    window.dispatchEvent(new Event(GATEWAY_CAPABILITY_REFRESH_EVENT))
+    throw new SpeechCallError("invalid_audio_parameter")
+  }
+  return endpointSpeechCall(validated, target, session.token, operation, input, signal, fetcher, session)
 }
 
 /** Also used by LOCAL phone bindings. The endpoint and credential are supplied
@@ -118,19 +125,24 @@ export async function endpointSpeechCall(snapshot: SpeechSnapshot, baseURL: stri
   }
   try {
     let body: FormData | string
+    const audio = option.audio
+    const parameters = authority && audio?.version === 1 && audio.status === "configured" ? resolveAudioParameters(audio,audio.overrides).request : undefined
     const headers: Record<string, string> = apiKey ? { Authorization: "Bearer " + apiKey } : {}
     if (operation === "transcribe") {
       if (typeof input === "string" || !input.size || input.size > snapshot.limits.input_bytes) throw new SpeechCallError("too_large")
       body = new FormData()
       body.append("model", snapshot.input.model)
       body.append("file", input, speechFileName(input.type))
-      body.append("response_format", "json")
-      if (snapshot.input.language) body.append("language", snapshot.input.language)
-      if (snapshot.input.prompt) body.append("prompt", snapshot.input.prompt)
+      if (parameters) { for (const [key,value] of Object.entries(parameters)) body.append(key,String(value)) }
+      else {
+        body.append("response_format", "json")
+        if (snapshot.input.language) body.append("language", snapshot.input.language)
+        if (snapshot.input.prompt) body.append("prompt", snapshot.input.prompt)
+      }
     } else {
       if (typeof input !== "string" || !input.trim() || Array.from(input).length > snapshot.limits.chunk_chars) throw new SpeechCallError("too_large")
       headers["Content-Type"] = "application/json"
-      body = JSON.stringify({ model: snapshot.output.model, input, response_format: snapshot.output.format, speed: snapshot.output.speed,
+      body = JSON.stringify(parameters ? {model:snapshot.output.model,input,...parameters} : { model: snapshot.output.model, input, response_format: snapshot.output.format, speed: snapshot.output.speed,
         ...(snapshot.output.format === "pcm" ? { stream_format: authority ? "sse" : "audio" } : {}),
         ...(snapshot.output.voice ? { voice: snapshot.output.voice } : {}), ...(snapshot.output.instructions ? { instructions: snapshot.output.instructions } : {}) })
     }
@@ -138,7 +150,12 @@ export async function endpointSpeechCall(snapshot: SpeechSnapshot, baseURL: stri
       method: "POST", headers, body, signal: aborter.signal, redirect: "error", credentials: "omit", cache: "no-store",
     })
     if (!response.ok) {
-      await response.body?.cancel().catch(() => undefined)
+      let code:unknown
+      try { const raw=await boundedBody(response,64<<10,aborter.signal);code=JSON.parse(new TextDecoder().decode(raw))?.error?.code } catch { /* Keep the HTTP failure when no bounded error envelope exists. */ }
+      if (authority && (code === "invalid_audio_parameter" || code === "audio_parameters_changed")) {
+        window.dispatchEvent(new Event(GATEWAY_CAPABILITY_REFRESH_EVENT))
+        throw new SpeechCallError("invalid_audio_parameter",response.status)
+      }
       if (authority) notifyGatewayRefusal(authority, response.status)
       throw new SpeechCallError(response.status === 401 || response.status === 403 ? "permission" : "failed", response.status)
     }

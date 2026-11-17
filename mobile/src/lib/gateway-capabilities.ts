@@ -1,3 +1,5 @@
+import { applyGatewayAudio, gatewayAudioView } from "./gateway-audio-parameters"
+import { speechRoute, type SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
 import { gatewayVoiceSnapshot, type GatewayVoiceModels } from "./gateway-speech"
 import { capabilityAllows, type CapabilityRole } from "../../../frontend/src/lib/capabilities"
 import type { GatewayBootstrap, GatewaySession } from "./gateway-account"
@@ -16,7 +18,7 @@ function policyKey(value: typeof current): string {
 export function publishGatewayCapabilities(session: GatewaySession, bootstrap: GatewayBootstrap): void {
   const policyChanged = policyKey(current) !== policyKey({ session, bootstrap })
   if (policyChanged) modelPolicyRevision++
-  const changed = policyChanged || JSON.stringify(current?.bootstrap.voice_models) !== JSON.stringify(bootstrap.voice_models)
+  const changed = policyChanged || JSON.stringify([current?.bootstrap.voice_models, current?.bootstrap.voice_parameters]) !== JSON.stringify([bootstrap.voice_models, bootstrap.voice_parameters])
   current = { session, bootstrap }
   if (changed) window.dispatchEvent(new Event(GATEWAY_CAPABILITIES_EVENT))
 }
@@ -45,8 +47,21 @@ function bootstrapFor(session: GatewaySession): GatewayBootstrap | undefined {
 }
 export function currentGatewayVoice(session: GatewaySession) {
   const bootstrap = bootstrapFor(session)
-  return bootstrap && gatewayVoiceSnapshot(session, bootstrap)
+  return bootstrap && applyGatewayAudio(gatewayVoiceSnapshot(session, bootstrap), session, bootstrap)
 }
 export function knownGatewayVoiceModels(session: GatewaySession): GatewayVoiceModels | undefined {
   return bootstrapFor(session)?.voice_models
 }
+
+/** Revalidate a PC selection against the phone's own catalog and device authority. */
+export function authoritativeGatewayAudio(session: GatewaySession, snapshot: SpeechSnapshot): SpeechSnapshot | undefined {
+ const bootstrap = bootstrapFor(session)
+ return bootstrap && applyGatewayAudio(snapshot, session, bootstrap)
+}
+export function currentGatewayAudioView(session: GatewaySession, snapshot: SpeechSnapshot, kind: "input" | "output") {
+ const bootstrap = bootstrapFor(session), route = speechRoute(snapshot,kind)
+ if (!bootstrap || route?.execution !== "gateway" || route.gateway_origin !== session.origin) return
+ return gatewayAudioView(session,bootstrap,route.source_id,snapshot[kind].model,kind === "input" ? "transcription" : "speech",snapshot[kind].audio?.overrides)
+}
+
+export function knownGatewayAudioParameters(session: GatewaySession) {return bootstrapFor(session)?.voice_parameters}

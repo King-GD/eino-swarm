@@ -51,7 +51,9 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-148 Voice input and spoken answers
 
-- The phone account’s automatic Gateway output uses streaming PCM/SSE so playback can begin before the segment finishes. Automatic segments are bounded at 200 characters; explicit PC or personal audio settings keep their chosen format and limits. Evidence: `mobile/src/lib/gateway-speech.test.ts`, `mobile/src/lib/phone-gateway-voice.test.tsx`.
+- Without a version-1 gateway audio declaration, the phone account’s automatic Gateway output uses streaming PCM/SSE so playback can begin before the segment finishes. Automatic segments are bounded at 200 characters; explicit PC or personal audio settings keep their chosen format and limits. Evidence: `mobile/src/lib/gateway-speech.test.ts`, `mobile/src/lib/phone-gateway-voice.test.tsx`.
+
+- PC Settings → Models (or Speech for a fixed account) and the phone User Center → Speech render authorized gateway audio choices and limits from the selected model's versioned private declaration. Audio parameter permissions remain independent of model-selection permissions. Unchanged options follow gateway defaults without becoming request overrides; scoped explicit preferences survive contract changes and show validation errors when no longer allowed. Personal LOCAL speech retains its existing settings. Gateway declaration failures/unknown versions disable dynamic controls and preserve preferences. Evidence: `internal/remote/account_audio_parameters_test.go`, `internal/speech/audio_parameters_test.go`, `frontend/src/components/shared/audio-parameters.test.tsx`, `mobile/src/lib/gateway-audio-parameters.test.ts`; contract `C-048`.
 
 - Phone voice errors identify the service's HTTP status without exposing its raw error body; transport and microphone permission failures remain distinct. Evidence: `mobile/src/lib/speech-transport.test.ts`, `mobile/src/components/speech-errors.test.ts`.
 
