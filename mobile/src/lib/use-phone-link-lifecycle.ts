@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, type RefObject } from "react"
 import { openLink, type RemoteLink } from "./link"
 import { gatewayUpgradePending } from "./gateway-link-upgrade"
 import { sameLinkAuthority } from "./link-authority"
-import { loadSavedLink, type SavedLink } from "./store"
+import { loadSavedLink, loadSavedLinks, type SavedLink } from "./store"
+import { RetainedPhoneLinks } from "./retained-phone-links"
 
 type Options = {
   allowsLink?: (link: SavedLink) => boolean
@@ -17,12 +18,24 @@ type Options = {
   error: (error?: string) => void; message: (error: unknown) => string
 }
 
-/** One installed transport and one generation-scoped opening operation. */
+/** One selected transport, retained inactive PCs and generation-scoped opening. */
 export function usePhoneLinkLifecycle(options: Options) {
   const latest = useRef(options)
   latest.current = options
   const opening = useRef<{ generation: number } | null>(null)
   const attempts = useRef(0)
+  const retained = useRef(new RetainedPhoneLinks())
+  const detach = useCallback(() => {
+    const o = latest.current
+    const previous = o.link.current, saved = o.authority.current
+    o.link.current = null
+    o.authority.current = null
+    o.install(null)
+    if (!previous) return
+    if (saved && o.allowsLink?.(saved) !== false && !gatewayUpgradePending(saved)
+      && loadSavedLinks().some(row => sameLinkAuthority(row, saved))) retained.current.retain(saved, previous)
+    else previous.close()
+  }, [])
   const close = useCallback(() => {
     const o = latest.current
     const previous = o.link.current
@@ -43,11 +56,13 @@ export function usePhoneLinkLifecycle(options: Options) {
     const valid = () => latest.current.allowsLink?.(saved) !== false && operation.generation === o.generation.current && sameLinkAuthority(saved, loadSavedLink())
     if (boot) o.busy(true)
     else o.reconnecting(true)
-    // Retire before dialing: a credential change must never leave two sockets.
-    close()
+    // Keep other PCs connected. A forced reconnect or changed credential still
+    // retires that PC's old socket before dialing its replacement.
+    if (!boot && force) close()
+    else detach()
     o.authority.current = saved
     try {
-      const next = await openLink(saved)
+      const next = retained.current.take(saved) ?? await openLink(saved)
       if (!valid()) { next.close(); return }
       o.authority.current = saved
       o.link.current = next
@@ -80,10 +95,11 @@ export function usePhoneLinkLifecycle(options: Options) {
         }
       }
     }
-  }, [close])
+  }, [close, detach])
   const boot = useCallback(() => run(true), [run])
   const recover = useCallback((force = false) => run(false, force), [run])
   options.recoverRef.current = recover
+  useEffect(() => { retained.current.reconcile(loadSavedLinks(), latest.current.allowsLink) })
   useEffect(() => {
     void boot()
     return () => {
@@ -94,7 +110,8 @@ export function usePhoneLinkLifecycle(options: Options) {
       o.link.current = null
       o.authority.current = null
       previous?.close()
+      retained.current.close()
     }
   }, [boot])
-  return { boot, recover, close }
+  return { boot, recover, close, detach }
 }

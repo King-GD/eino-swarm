@@ -11,6 +11,36 @@ const snapshot = {
 }
 
 describe("PC-owned phone speech configuration", () => {
+  it("retains a configurable Gateway output independently of the legacy input route without copying credentials", () => {
+    const raw = { ...snapshot, execution: "pc_local", gateway_origin: undefined,
+      output: { ...snapshot.output, execution: "gateway", gateway_origin: "https://gateway.test/", format: "pcm", api_key: "output-secret", token: "output-secret", base_url: "https://private-endpoint.test/v1" } }
+    const saved = saveSpeechCache(pc, raw)
+    expect(saved?.snapshot.output).toMatchObject({ execution: "gateway", gateway_origin: "https://gateway.test", format: "pcm" })
+    expect(loadSpeechCache(pc)?.snapshot.output).toEqual(saved?.snapshot.output)
+    const stored = localStorage.getItem("zwai.phone.speech")!
+    expect(stored).not.toContain("output-secret")
+    expect(stored).not.toContain("private-endpoint")
+  })
+
+  it("retains an explicit personal PC output when legacy Gateway input is unavailable", () => {
+    const raw = { ...snapshot, gateway_origin: undefined, input: { ...snapshot.input, enabled: false, ready: false },
+      output: { ...snapshot.output, execution: "pc_local" } }
+    expect(saveSpeechCache(pc, raw)?.snapshot.output).toMatchObject({ execution: "pc_local" })
+    expect(saveSpeechCache(pc, { ...raw, input: snapshot.input })).toBeUndefined()
+  })
+
+  it.each([
+    { execution: "gateway" },
+    { execution: "gateway", gateway_origin: "https://gateway.test/path" },
+    { execution: "gateway", gateway_origin: "https://user:secret@gateway.test" },
+    { execution: "other", gateway_origin: "https://gateway.test" },
+    { gateway_origin: "https://gateway.test" },
+    { execution: "pc_local", gateway_origin: "https://gateway.test" },
+  ])("refuses an incomplete or mixed output authority tuple: %j", (route) => {
+    expect(saveSpeechCache(pc, { ...snapshot, execution: "pc_local", gateway_origin: undefined,
+      output: { ...snapshot.output, ...route } })).toBeUndefined()
+  })
+
   it("retains the PC's streaming PCM choice for the exact pairing", () => {
     expect(saveSpeechCache(pc, { ...snapshot, output: { ...snapshot.output, format: "pcm" } })?.snapshot.output.format).toBe("pcm")
     expect(loadSpeechCache(pc)?.snapshot.output.format).toBe("pcm")

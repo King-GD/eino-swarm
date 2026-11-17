@@ -30,7 +30,9 @@ export function AccountModelsCard({
   const visibleRoles = (account?.roles ?? []).filter((role) => role.id !== "decisions")
   const ownReady = settings.models.providers.some((p) => p.ready && p.enabled !== false)
   const source = settings.models.default_source ?? "account"
-  const officialOnly = officialModelLock(account, settings.model_policy)
+  const mode = useApp((s) => s.meta?.product_mode)
+  const currentPolicy = useApp((s) => s.meta?.model_policy) ?? settings.model_policy
+  const officialOnly = mode === undefined || (currentPolicy ? officialModelLock(account, currentPolicy) : mode !== "local")
   const kindText: Record<Exclude<AccountKindKey, "decisions">, MessageKey> = {
     chat: "accountModels.kind.chat",
     unclassified: "accountModels.kind.unclassified",

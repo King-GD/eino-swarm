@@ -1,3 +1,4 @@
+import { speechPlayback } from "../../../frontend/src/lib/speech-media"
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
@@ -8,7 +9,6 @@ import type { RemoteLink } from "./link"
 import type { RemoteResponse } from "./rpc"
 import { loadSpeechCache } from "./speech-cache"
 import { notifyGatewayRefusal } from "./gateway-authority"
-import { speechPlayback } from "../../../frontend/src/lib/speech-media"
 
 const pc: SavedLink = { fingerprint: "pc-a", hostPub: "host", hubURL: "https://hub.test", ticket: "ticket", sessionID: "session", gatewayOwnerID: "owner", gatewayMobileID: "mobile", gatewayOrigin: "https://gateway.test" }
 const speech: SpeechSnapshot = {
@@ -140,6 +140,127 @@ describe("phone speech capability follows the selected PC", () => {
     if (operation === "transcribe") expect(outcome.value).toBe("Complete dictation")
     else expect(outcome.value).toMatchObject({ type: "audio/mpeg", size: 2 })
     view.unmount()
+  })
+
+
+  it.each(["account", "anonymous QR"])("streams an ordinary Gateway output for %s while ASR stays on the PC", async (binding) => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-11-16T00:00:00Z"))
+    signIn()
+    saveGatewaySession({ ...loadGatewaySession()!, device: { ...loadGatewaySession()!.device, expires_at: new Date(Date.now() + 1000).toISOString() } })
+    const rpc = vi.fn<RemoteLink["rpc"]>(async request => {
+      if (request.op === "audio_speech") throw new Error("Gateway output must not use PC audio RPC")
+      return { ok: true, audio: { audio_id: request.audio_id!, ...(request.op === "audio_transcribe" ? { text: "recognized on PC" } : {}) } } as RemoteResponse
+    })
+    const link = { alive: () => true, rpc } as unknown as RemoteLink
+    const configured = { ...speech, execution: "pc_local" as const, gateway_origin: undefined,
+      output: { ...speech.output, enabled: true, format: "pcm" as const, model: "configured-voice", execution: "gateway" as const, gateway_origin: speech.gateway_origin } }
+    let requestSignal!: AbortSignal
+    const fetcher = vi.fn<typeof fetch>(async (_url, init) => {
+      requestSignal = init!.signal as AbortSignal
+      return new Response('data: {"type":"speech.audio.delta","audio":"AAE="}\n\ndata: {"type":"speech.audio.done"}\n\n', { headers: { "Content-Type": "text/event-stream" } })
+    })
+    vi.stubGlobal("fetch", fetcher)
+    const selected = binding === "account" ? pc : { ...pc, gatewayOrigin: undefined, gatewayOwnerID: undefined, gatewayMobileID: undefined }
+    setPhoneSpeechSource(selected, link)
+    expect(acceptPhoneSpeechConfig(selected, configured)).toBe(true)
+    const view = renderHook(() => usePhoneSpeech())
+    let cancelAudio: () => void = () => undefined
+    try {
+      expect(view.result.current).toMatchObject({ inputReady: true, outputReady: true })
+      const recording = Object.assign(new Blob([new Uint8Array([0, 1])], { type: "audio/wav" }), { arrayBuffer: async () => new Uint8Array([0, 1]).buffer })
+      await expect(transcribePhoneSpeech(recording, new AbortController().signal)).resolves.toBe("recognized on PC")
+      const audio = await synthesizePhoneSpeech("text", new AbortController().signal)
+      if (!("chunks" in audio)) throw new Error("Expected Gateway PCM stream")
+      cancelAudio = () => audio.cancel()
+      const samples = []
+      for await (const chunk of audio.chunks) samples.push(...chunk)
+      expect(samples).toEqual([0, 1])
+      expect(fetcher).toHaveBeenCalledWith("https://gateway.test/v1/audio/speech", expect.objectContaining({ headers: { Authorization: "Bearer " + loadGatewaySession()!.token, "Content-Type": "application/json" } }))
+      expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toMatchObject({ model: "configured-voice", stream_format: "sse" })
+      expect(rpc.mock.calls.some(([request]) => request.op === "audio_speech")).toBe(false)
+      expect(requestSignal.aborted).toBe(false)
+      await vi.advanceTimersByTimeAsync(1001)
+      expect(audio.signal?.aborted).toBe(true)
+    } finally { cancelAudio(); view.unmount() }
+  })
+
+  it.each(["signed-out", "wrong-owner", "wrong-mobile", "wrong-bound-origin"])("refuses ordinary Gateway output authority %s without changing local ASR", async (reason) => {
+    signIn()
+    if (reason === "signed-out") clearGatewaySession()
+    if (reason === "wrong-owner") signIn("different-owner")
+    if (reason === "wrong-mobile") saveGatewaySession({ ...loadGatewaySession()!, device: { ...loadGatewaySession()!.device, id: "different-mobile" } })
+    const selected = reason === "wrong-bound-origin" ? { ...pc, gatewayOrigin: "https://different.test" } : pc
+    const link = { alive: () => true } as RemoteLink
+    const fetcher = vi.fn<typeof fetch>(); vi.stubGlobal("fetch", fetcher)
+    setPhoneSpeechSource(selected, link)
+    expect(acceptPhoneSpeechConfig(selected, { ...speech, execution: "pc_local", gateway_origin: undefined,
+      output: { ...speech.output, enabled: true, execution: "gateway", gateway_origin: speech.gateway_origin } })).toBe(true)
+    const view = renderHook(() => usePhoneSpeech())
+    try {
+      expect(view.result.current).toMatchObject({ inputReady: true, outputReady: false })
+      await expect(synthesizePhoneSpeech("text", new AbortController().signal)).rejects.toThrow("unavailable")
+      expect(fetcher).not.toHaveBeenCalled()
+    } finally { view.unmount() }
+  })
+
+  it("keeps explicit personal PC output usable when legacy Gateway ASR has no Mobile authority", async () => {
+    clearGatewaySession()
+    const rpc = vi.fn<RemoteLink["rpc"]>(async request => ({ ok: true, audio: request.op === "audio_speech"
+      ? { audio_id: request.audio_id!, mime: "audio/wav", size: 2 }
+      : request.op === "audio_chunk" ? { audio_id: request.audio_id!, mime: "audio/wav", size: 2, offset: 0, next: 2, more: false, data: "AAE=" }
+        : { audio_id: request.audio_id! } } as RemoteResponse))
+    const link = { alive: () => true, rpc } as unknown as RemoteLink
+    const fetcher = vi.fn<typeof fetch>(); vi.stubGlobal("fetch", fetcher)
+    setPhoneSpeechSource(pc, link)
+    expect(acceptPhoneSpeechConfig(pc, { ...speech, output: { ...speech.output, enabled: true, execution: "pc_local" } })).toBe(true)
+    const view = renderHook(() => usePhoneSpeech())
+    try {
+      expect(view.result.current).toMatchObject({ inputReady: false, outputReady: true })
+      await expect(synthesizePhoneSpeech("text", new AbortController().signal)).resolves.toMatchObject({ type: "audio/wav", size: 2 })
+      await expect(transcribePhoneSpeech(new Blob(["audio"]), new AbortController().signal)).rejects.toThrow("unavailable")
+      expect(fetcher).not.toHaveBeenCalled()
+    } finally { view.unmount() }
+  })
+
+  it("uses the legacy global PC route when an old host has no output authority fields", async () => {
+    clearGatewaySession()
+    const rpc = vi.fn<RemoteLink["rpc"]>(async request => ({ ok: true, audio: request.op === "audio_speech"
+      ? { audio_id: request.audio_id!, mime: "audio/wav", size: 2 }
+      : request.op === "audio_chunk" ? { audio_id: request.audio_id!, mime: "audio/wav", size: 2, offset: 0, next: 2, more: false, data: "AAE=" }
+        : { audio_id: request.audio_id! } } as RemoteResponse))
+    setPhoneSpeechSource(pc, { alive: () => true, rpc } as unknown as RemoteLink)
+    expect(acceptPhoneSpeechConfig(pc, { ...speech, execution: "pc_local", gateway_origin: undefined, output: { ...speech.output, enabled: true } })).toBe(true)
+    expect(loadSpeechCache(pc)?.snapshot.output).not.toHaveProperty("execution")
+    await expect(synthesizePhoneSpeech("text", new AbortController().signal)).resolves.toMatchObject({ type: "audio/wav", size: 2 })
+    expect(rpc.mock.calls[0][0].op).toBe("audio_speech")
+  })
+
+  it("preserves Gateway expiry through the selected-PC stream wrapper after EOF", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-11-16T00:00:00Z"))
+    signIn()
+    const session = loadGatewaySession()!
+    saveGatewaySession({ ...session, device: { ...session.device, expires_at: new Date(Date.now() + 1000).toISOString() } })
+    setPhoneSpeechSource(pc, { alive: () => true } as RemoteLink)
+    expect(acceptPhoneSpeechConfig(pc, { ...speech, output: { ...speech.output, enabled: true, format: "pcm" } })).toBe(true)
+    let requestSignal!: AbortSignal
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (_url, init) => {
+      requestSignal = init!.signal as AbortSignal
+      return new Response(new Uint8Array([0, 1]), { headers: { "Content-Type": "audio/pcm" } })
+    }))
+    const audio = await synthesizePhoneSpeech("read this", new AbortController().signal)
+    if (!("chunks" in audio)) throw new Error("Expected PCM stream")
+    try {
+      const reader = audio.chunks[Symbol.asyncIterator]()
+      await expect(reader.next()).resolves.toMatchObject({ done: false })
+      await expect(reader.next()).resolves.toMatchObject({ done: true })
+      expect(audio.signal).toBe(requestSignal)
+      expect(audio.signal?.aborted).toBe(false)
+      await vi.advanceTimersByTimeAsync(1001)
+      expect(audio.signal?.aborted).toBe(true)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally { audio.cancel() }
   })
 
   it.each(["disconnect", "configuration"] as const)("cancels PCM playback after headers on selected-PC %s", async (change) => {

@@ -19,6 +19,9 @@ SHA without reuploading completed platforms. The contributor rules are in
 [AGENTS.md](../AGENTS.md). `C-010` is in [CONTRACTS](CONTRACTS.md). The
 reconciliation command is in [TESTING](TESTING.md).
 
+先读[发布执行最短路径与已知阻塞](RELEASE_FAST_PATH.md)：明确开发验证与发布的交接、
+有效回执复用、阶段计时，以及 v0.1.81 暴露的测试工具与恢复问题。
+
 ## Local verification before publication
 
 Use [原生测试最短路径](NATIVE_TESTING_FAST_PATH.md) for input/admission checks,
@@ -125,7 +128,7 @@ and matching native acceptance; previous-version evidence never transfers.
 The 25–35 minute healthy-environment target remains unmeasured for this entry.
 
 `make release VERSION=x.y.z` publishes only the allocated batch's outstanding
-required platforms in macOS → Android → iOS → Windows → Linux order. Windows is required only when the workset lists
+required platforms in macOS → Android → Windows → Linux → iOS order. Windows is required only when the workset lists
 it; older ledger rows without a windows field do not gain one. The Windows
 build cross-compiles both architectures with CGO disabled and does not run a
 Windows desktop session. The in-app updater still installs only the Mac zip.
@@ -136,7 +139,7 @@ window.
 |---|---|---|---|
 | macOS | `make desktop-release` | GitHub `vX.Y.Z`, host architecture zip | ZIP 有 Finder 图标资源与 plist 引用，远端 SHA-256 匹配 |
 | Windows | `make windows-release` | same GitHub Release, amd64 and arm64 zips | 两份 zip 都只有根上的 `zwai.exe`，PE 机器类型与文件名一致，远端 SHA-256 匹配 |
-| Linux arm64 | `make linux-release` | same GitHub Release, `zwai-<version>-linux-arm64.tar.gz` | archive contains only executable `zwai` (0755), ELF64 AArch64; remote SHA-256 matches |
+| Linux amd64/arm64 | `make linux-release` | same GitHub Release, both architecture tar.gz archives | each contains only executable `zwai` (0755), ELF64 little-endian matching its named architecture; per-archive runtime receipt and remote SHA-256 match |
 | Android | APK-only `make mobile-android-release` | same GitHub Release | remote SHA-256 matches |
 | iOS | Capacitor sync, `xcodebuild archive/exportArchive`, distribution signature/profile, `xcrun altool` | existing App Store Connect app | all configured groups attached, VALID, internal READY_FOR_BETA_TESTING and external IN_BETA_TESTING; any review submission must be APPROVED |
 
@@ -162,6 +165,16 @@ matching receipt refuses Android upload. The receipt records prior installation,
 upgrade/signature and behavior acceptance; the hash check does not perform or
 replace those checks. A still-pending batch without this receipt retains the
 existing build entry. Existing public APKs retain their remote-digest retry rule.
+
+For Windows, `release_windows_validation` uses top-level `status: "passed"`,
+`version`, `source_sha`, and `assets` keyed by `amd64` and `arm64`. Each entry
+binds `status: "passed"`, `arch`, `asset_name` and `asset_sha256`. Keep both
+accepted ZIPs in `bin/`: publication verifies their bytes and PE architectures
+without rebuilding. A ready batch without receipts or a conflicting receipt
+refuses upload. Partial-publication recovery verifies existing remote digests
+and requires matching native evidence for each new archive; it never rebuilds
+the already public architecture. Legacy batches without receipts retain their
+build path only before any Windows asset is public, subject to native admission.
 
 Platform errors are printed immediately; independent platforms continue. The command
 exits non-zero if a required platform fails or is waiting. No version is incremented
@@ -515,8 +528,28 @@ An accepted build/upload is resumed, not uploaded again. Uncertain upload attemp
 stay `waiting_upload_confirmation` for investigation instead of blind retry. A
 failed Apple processing result stops this platform. Processing is polled every
 30 seconds, up to 600 seconds (`processing_timeout_seconds` in private config).
-Then the same command resumes compliance, associations and review. Apple review
-waits remain `waiting_beta_review`; rerun the iOS-only entry to observe completion.
+The iOS-only entry can resume compliance, associations and review, but it is a
+publication command and can mutate Apple; it is not a read-only status poll. Apple
+review waits remain `waiting_beta_review`. Observe the current build with GET-only
+queries first; an existing upload or review submission must not be repeated to
+resolve a query timeout. See the [recovery procedure](RELEASE_FAST_PATH.md#apple-处理与审核恢复)
+for supported queries, completion criteria and the implemented recovery paths.
+
+For a GET-only current-build observation, use:
+
+```bash
+python3 -B tools/release.py --version x.y.z --platform ios --ios-status --source-dir /absolute/frozen-checkout
+```
+
+It requires matching retained version/source, checks current marketing version,
+processing, expiry, review and both group directions, and returns JSON. Exit0
+means `available`; other observed states return1; invalid flag combinations return2.
+It does not call Xcode, scan historical quota/reviews, mutate Apple, write ledgers
+or take/create a publication lock. It always queries live state even if a retained
+first-public proof exists. Actual publication/recording remains a separate locked action.
+Historical builds already confirmed published in this app's ledger are excluded
+from per-build quota/detail/review reconciliation; unknown/pending builds still
+receive the existing checks. No historical availability date is changed.
 
 The Beijing natural day permits one **newly available** build, counted by first
 verified group availability, not upload/VALID date. Ready builds are reconciled
@@ -526,10 +559,15 @@ aliases are updated, retaining the existing ledger and unrelated history. Closed
 Issues are never reopened merely for publication waits. `--check` does not write
 platform/daily success records or mutate Apple; it can fetch Git and create a lock.
 
-### Linux arm64 Web/CLI package
+### Linux amd64/arm64 Web/CLI packages
 
 `make linux-release VERSION=x.y.z` builds the current frontend and cross-compiles
-with `GOOS=linux GOARCH=arm64 CGO_ENABLED=0` and the Wails `server` build tag.
+both `amd64` and `arm64` with `GOOS=linux CGO_ENABLED=0` and the Wails `server`
+build tag. Set `LINUX_ARCHES=amd64` or `LINUX_ARCHES=arm64` to build one target.
+The script also accepts `--arch amd64 arm64` (its standalone default remains
+arm64). Names are `zwai-<version>-linux-<arch>.tar.gz`; ELF machine 62 belongs
+only to amd64 and 183 only to arm64. Class 64, little-endian, executable mode,
+regular-file-only contents and exact single-entry validation apply to both.
 This package provides `web`, `engine`, `tui` and the other CLI commands; it
 defaults to Web mode and refuses native desktop commands. It has no GTK/WebKit
 requirement and includes the frontend in the executable. Extract the archive
@@ -546,10 +584,23 @@ A batch that explicitly lists `linux` publishes through
 `python3 tools/release.py --version x.y.z --platform linux`. Old issue rows
 without `linux` gain no delivery obligation. The in-app updater does not
 install this archive. Cross-compilation and ELF validation prove packaging;
-record Linux arm64 execution and offline Web behavior separately. Failed
+record execution and offline Web behavior separately for each architecture,
+identifying native execution versus emulation. Failed
 builds leave an existing archive untouched; publication never overwrites
 different bytes under an existing asset name.
 
-A passed `release_linux_validation` receipt binds `status`, `version`,
-`source_sha`, `asset_name` and `asset_sha256` to the runtime-tested archive.
-Publication reuses those exact bytes; a missing or changed file fails closed.
+Before publishing a new Linux batch, build and runtime-test both archives.
+`release_linux_validation` binds top-level `status: passed`, `version` and
+`source_sha`, with an `assets` object keyed by `amd64` and `arm64`. Each entry
+requires `status: passed`, matching `arch`, `asset_name` and `asset_sha256`.
+Publication requires this receipt for each new upload and never rebuilds the
+accepted archives. Missing/mismatched receipts, files or ELF identity fail before
+upload. An already public asset is instead verified against its remote digest;
+a partial upload retry preserves/downloads those exact public bytes and checks
+the other architecture independently. A fully public retry needs both remote
+digests. An old single-archive receipt cannot accept a newly added architecture.
+Already public versions remain frozen; resume their original platforms through
+their exact frozen source/tooling, rather than adding new-source bytes to them.
+
+This distribution path provides downloadable archives for both NAS/VPS CPU
+families. It does not introduce a maintained container image or Dockerfile.

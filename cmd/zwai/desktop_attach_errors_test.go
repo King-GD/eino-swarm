@@ -133,12 +133,12 @@ func TestDesktopPresenceHandshakeRejectsErrorsAndMalformedReservations(t *testin
 			}
 		})
 	}
-	if _, err := reserveDesktopPresence(context.Background(), ":invalid"); err == nil {
+	if _, err := reserveShellPresence(context.Background(), ":invalid", "desktop"); err == nil {
 		t.Fatal("invalid URL accepted")
 	}
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := reserveDesktopPresence(cancelled, "http://127.0.0.1:1"); err == nil {
+	if _, err := reserveShellPresence(cancelled, "http://127.0.0.1:1", "desktop"); err == nil {
 		t.Fatal("cancelled reserve was accepted")
 	}
 	for _, tc := range []struct {

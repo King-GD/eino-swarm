@@ -28,7 +28,8 @@ export class MockSpeech {
         execution: execution === "gateway" ? "gateway" : "pc_local",
         ...(execution === "gateway" ? { gateway_origin: location.origin } : {}),
         input: { ...settings.input, enabled, ready: enabled, model: "transcription", label: "transcription" },
-        output: { ...settings.output, enabled, ready: enabled, model: "speech", label: "speech", format: params.get("speech_format") === "pcm" ? "pcm" : "wav" },
+        output: { ...settings.output, enabled, ready: enabled, model: "speech", label: "speech", format: params.get("speech_format") === "pcm" ? "pcm" : "wav",
+          ...(params.get("speech_output") === "gateway" ? { execution: "gateway", gateway_origin: location.origin } : {}) },
         limits: settings.limits,
       }
       return { speech }

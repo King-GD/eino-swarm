@@ -2,6 +2,8 @@
 export interface SpeechAudioStream {
   chunks: AsyncIterable<Uint8Array>
   sampleRate: 24000
+  /** Request/authority cancellation also applies to already queued audio. */
+  signal?: AbortSignal
   cancel(): void
 }
 export type SpeechAudio = Blob | SpeechAudioStream
@@ -131,13 +133,14 @@ async function* eventAudio(chunks: AsyncIterable<Uint8Array>, maximum: number): 
   throw new SpeechStreamError("invalid_audio", "The speech stream ended before completion.")
 }
 
-/** Preserve incremental PCM/SSE responses; ordinary audio remains a Blob. */
+/** Preserve incremental PCM/SSE responses; ordinary audio remains a Blob.
+ * An explicit PCM request must not silently fall back to buffered audio. */
 export async function speechAudioResponse(response: Response, signal: AbortSignal, maxBytes: number, pcm = false): Promise<SpeechAudio> {
   const contentType = response.headers.get("Content-Type")?.toLowerCase() ?? ""
   const mime = contentType.split(";")[0].trim()
   const events = mime === "text/event-stream"
   const raw = mime === "audio/pcm" || (mime === "application/octet-stream" && pcm)
-  if ((!events && !raw && (!mime.startsWith("audio/") || mime === "audio/l16")) ||
+  if ((!events && !raw && (pcm || !mime.startsWith("audio/") || mime === "audio/l16")) ||
       (raw && !pcmParameters(contentType))) {
     await response.body?.cancel().catch(() => undefined)
     throw invalid()
@@ -153,7 +156,7 @@ export async function speechAudioResponse(response: Response, signal: AbortSigna
         if (!size) throw new SpeechStreamError("empty", "The speech service returned empty audio.")
       } finally { source.cancel() }
     })()
-    return { sampleRate: 24000, chunks, cancel: source.cancel }
+    return { sampleRate: 24000, chunks, signal, cancel: source.cancel }
   }
   const parts: Uint8Array<ArrayBuffer>[] = []
   let size = 0

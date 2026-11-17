@@ -27,6 +27,8 @@ type InputView struct {
 
 // OutputView describes on-demand playback using the PC's selected service.
 type OutputView struct {
+	Execution      string  `json:"execution"`
+	GatewayOrigin  string  `json:"gateway_origin,omitempty"`
 	Enabled        bool    `json:"enabled"`
 	Ready          bool    `json:"ready"`
 	Reason         string  `json:"reason,omitempty"`
@@ -64,7 +66,7 @@ func (s *Service) Snapshot() SnapshotView {
 	input, output := cfg.Speech.Input, cfg.Speech.Output
 	v := SnapshotView{Execution: "pc_local", Limits: cfg.Speech.Limits,
 		Input:  InputView{Enabled: input.Enabled, Model: input.Model, Language: input.Language, Prompt: input.Prompt, RecordingFormat: input.RecordingFormat, MaxDurationSeconds: input.MaxDurationSeconds, TimeoutSeconds: input.TimeoutSeconds},
-		Output: OutputView{Enabled: output.Enabled, Model: output.Model, Voice: output.Voice, Speed: output.Speed, Format: output.Format, Instructions: output.Instructions, TimeoutSeconds: output.TimeoutSeconds},
+		Output: OutputView{Execution: "pc_local", Enabled: output.Enabled, Model: output.Model, Voice: output.Voice, Speed: output.Speed, Format: output.Format, Instructions: output.Instructions, TimeoutSeconds: output.TimeoutSeconds},
 	}
 	if s.pool != nil && s.pool.OfficialOnly() {
 		v.Execution = "gateway"
@@ -83,6 +85,9 @@ func (s *Service) Snapshot() SnapshotView {
 		} else {
 			v.Output.Model = selection.target.Model
 			v.Output.Ready, v.Output.Reason, v.Output.Label = ready, reason, selection.target.Label
+			if gatewayOrigin := origin(selection.target.BaseURL); strings.HasPrefix(selection.target.ID, config.AccountSourcePrefix) && gatewayOrigin != "" {
+				v.Output.Execution, v.Output.GatewayOrigin = "gateway", gatewayOrigin
+			}
 		}
 		if v.Execution == "gateway" && selection.target.BaseURL != "" {
 			v.GatewayOrigin = origin(selection.target.BaseURL)
@@ -178,5 +183,5 @@ func origin(raw string) string {
 
 func (s *Service) unchanged(old selection) bool {
 	now, err := s.selectTarget(s.cfg.Snapshot(), old.isInput)
-	return err == nil && now.settings == old.settings && now.product == old.product && now.target.BaseURL == old.target.BaseURL && now.target.APIKey == old.target.APIKey && now.target.Model == old.target.Model
+	return err == nil && now.settings == old.settings && now.product == old.product && now.target.ID == old.target.ID && now.target.BaseURL == old.target.BaseURL && now.target.APIKey == old.target.APIKey && now.target.Model == old.target.Model
 }

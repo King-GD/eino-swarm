@@ -18,9 +18,32 @@ editable draft and never sends it; read aloud skips code blocks. LOCAL direct
 Chat can configure recognition and spoken-answer models independently under its
 personal model services, using only this phone's provider credentials.
 
+Voice input and read aloud are configured only on the PC in **Settings → Models**.
+This phone reuses the explicitly selected PC's safe settings in both PC
+conversations and direct Chat; **User center** shows read-only status and sync
+time. Both directions default off. Tap the microphone beside Send, finish or
+cancel in the recording panel, then edit the recognized draft before sending.
+Read aloud beside Copy plays completed prose and skips code blocks.
+Gateway voice uses this phone's own login and calls that same Gateway directly;
+synced settings permit execution only while that exact PC link is live and its
+engine is ready. Local voice runs through
+the selected PC only while it is online and its local model is configured.
+No PC key/token reaches the phone and no failure silently changes source.
+
 Choose **PCM (streaming playback)** in Voice settings to start direct Gateway or
 personal-service playback as audio arrives. MP3/WAV retain complete-segment
 playback. The encrypted PC-local route also waits for a completed segment.
+
+Choose **PCM (streaming playback)** as the audio format to start direct Gateway
+or personal-service playback as audio arrives. MP3/WAV retain complete-segment
+playback. The encrypted PC-local route also waits for a completed segment.
+The PC snapshot declares read-aloud execution separately from dictation: an
+ordinary configurable Gateway output uses the phone's matching Mobile login
+directly, while personal PC outputs use encrypted PC RPC. Older PC snapshots
+without the output route retain their global execution setting. Gateway PCM
+requests select SSE; standalone personal services retain their own audio protocol.
+User center shows the execution source beside each direction so mixed PC/Gateway
+settings remain visible.
 
 After connecting to a PC, open **Menu → Manage projects**, or **Manage projects**
 from New conversation. Create or edit the PC's project name, shared instruction,
@@ -234,6 +257,13 @@ inbox. Reopening reloads the PC values, including after an uncertain save.
 A reasoning-only group has one **Thought / 思考** control per entry, initially
 closed. One tap reveals its complete text; no extra activity-summary fold sits
 above it. Groups with tools retain their compact work summary.
+
+Switching PCs keeps the already-open connections alive and selects only the
+visible PC. Switching back reuses its live connection. A first connection or
+lost connection shows the selected PC's connecting state until its engine is
+ready, without opening User center. Inactive PCs cannot update the visible
+conversation. Removing a PC, changing its credential, signing out or leaving
+the phone page releases the affected connections.
 
 The phone is a compact screen on the same conversation as the desktop: same
 event kinds and seq (`watch` / `unwatch` / `log`), clipped bodies so a frame

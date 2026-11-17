@@ -100,8 +100,8 @@ type Pool struct {
 	// account is the signed-in server's model catalog, nil when signed out.
 	// Atomic because Resolve is reached from paths that already hold mu.
 	account atomic.Pointer[AccountSource]
-	// localAccounts holds the server catalogs LOCAL may switch among. Gateway
-	// mode does not list them; signing out clears them with the projection.
+	// localAccounts holds extra server catalogs LOCAL can switch among.
+	// Gateway mode does not list them. Signing out clears them.
 	localAccounts atomic.Pointer[localAccountList]
 
 	mu             sync.Mutex
@@ -162,6 +162,9 @@ func (p *Pool) Resolve(id string) (config.Provider, error) {
 		id = p.DefaultProviderID()
 	}
 	if src := p.accountForExecution(id); src != nil {
+		if src.unavailable {
+			return config.Provider{}, ErrAccountModelsUnavailable
+		}
 		preferred := ""
 		if !p.localExecution() {
 			preferred = p.accountModel()
@@ -195,6 +198,9 @@ func (p *Pool) Resolve(id string) (config.Provider, error) {
 func (p *Pool) ResolveModel(id, model string) (config.Provider, error) {
 	if p.OfficialOnly() {
 		src := p.activeAccount()
+		if src.unavailable {
+			return config.Provider{}, ErrAccountModelsUnavailable
+		}
 		if id == src.id && model != "" {
 			if !src.permits(model) {
 				return config.Provider{}, ErrModelPolicy
@@ -212,7 +218,7 @@ func (p *Pool) ResolveModel(id, model string) (config.Provider, error) {
 	if err != nil {
 		return config.Provider{}, err
 	}
-	if src := p.account.Load(); src != nil && src.profiled && prov.ID == src.ID() {
+	if src := p.accountForExecution(prov.ID); src != nil && src.profiled {
 		prov.Model = config.OfficialModelAlias
 		return prov, nil
 	}
@@ -263,18 +269,32 @@ func (p *Pool) List() []Info {
 	if !p.OfficialOnly() {
 		rows = listModels(p.cfg.Snapshot(), p.mock)
 	}
-	src := p.activeAccount()
-	if src == nil {
-		return rows
-	}
-	accountDefault := p.DefaultProviderID() == src.ID()
-	if accountDefault {
-		for i := range rows {
-			rows[i].Default = false
-			rows[i].DefaultFollowsSetting = false
+	var sources []*AccountSource
+	if p.localExecution() {
+		sources = append(sources, p.localAccountSources()...)
+		if primary := p.account.Load(); primary != nil {
+			sources = append(sources, primary)
 		}
+	} else if primary := p.activeAccount(); primary != nil {
+		sources = append(sources, primary)
 	}
-	return append(src.rows(accountDefault, p.accountModel()), rows...)
+	seen := map[string]bool{}
+	var accountRows []Info
+	for _, src := range sources {
+		if src == nil || src.unavailable || seen[src.ID()] {
+			continue
+		}
+		seen[src.ID()] = true
+		isDefault := p.DefaultProviderID() == src.ID()
+		if isDefault {
+			for i := range rows {
+				rows[i].Default = false
+				rows[i].DefaultFollowsSetting = false
+			}
+		}
+		accountRows = append(accountRows, src.rows(isDefault, p.accountModel())...)
+	}
+	return append(accountRows, rows...)
 }
 
 func (p *Pool) accountModel() string {

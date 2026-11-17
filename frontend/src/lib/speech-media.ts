@@ -102,8 +102,7 @@ export async function startSpeechRecording(options: SpeechRecordingOptions): Pro
       if (failure) { reject(failure); return }
       const blob = new Blob(chunks, { type })
       if (!blob.size) { reject(new Error("The recording contains no audio.")); return }
-      // WebKit records AAC in MP4. Normalize that container even in auto mode:
-      // PCM WAV also works with ASR decoders that cannot open MP4/M4A bytes.
+      // WebKit records AAC in MP4; normalize it for ASR container compatibility.
       if (options.format === "wav" || /^(audio|video)\/mp4(?:;|$)/i.test(type)) {
         void recordingWAV(blob).then((wav) => {
           if (cancelled || options.signal.aborted) reject(aborted())
@@ -220,10 +219,17 @@ class SpeechPlayback {
 
   private async playPCM(current: PlaybackOwner, audio: SpeechAudioStream): Promise<void> {
     current.audio = audio
+    const cancelled = () => {
+      if (this.current !== current) return
+      current.controller.abort(audio.signal?.reason)
+      this.stop()
+    }
+    audio.signal?.addEventListener("abort", cancelled, { once: true })
     let leftover: number | undefined
     let count = 0
     let nextTime = current.context.currentTime
     try {
+      if (audio.signal?.aborted) { cancelled(); return }
       for await (const chunk of audio.chunks) {
         if (current.controller.signal.aborted) return
         let bytes = chunk
@@ -251,7 +257,13 @@ class SpeechPlayback {
       if (leftover !== undefined) throw new Error("The speech service returned an incomplete PCM sample.")
       if (!count) throw new Error("The speech service returned empty audio.")
       await Promise.all([...current.sources].map((queued) => queued.ended))
-    } finally { audio.cancel(); if (current.audio === audio) current.audio = undefined }
+    } finally {
+      audio.signal?.removeEventListener("abort", cancelled)
+      audio.cancel()
+      if (current.audio === audio) current.audio = undefined
+      const cause = current.controller.signal.reason
+      if (current.controller.signal.aborted && cause instanceof Error && cause.name !== "AbortError") throw cause
+    }
   }
 
   /** Resume audio synchronously from the click, before waiting for synthesis. */
@@ -289,6 +301,7 @@ class SpeechPlayback {
       }
     } catch (error) {
       if (!signal.aborted) throw error
+      if (signal.reason instanceof Error && signal.reason.name !== "AbortError") throw signal.reason
     } finally {
       if (this.current === current) this.stop()
     }

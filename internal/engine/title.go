@@ -161,8 +161,8 @@ func (e *Engine) runTitle(threadID string, turn *store.Turn, userText, final str
 
 	var raw string
 	var err error
-	if id, _, ok := e.enabledAccountRole("naming"); ok {
-		raw, err = e.pool.CompleteFixedChat(ctx, id, "naming", titlePrompt(), titleInput(userText, final), e.cfg.SwarmSnapshot().CompletionTokenLimit())
+	if id, _, ok := e.enabledAccountRole("title"); ok {
+		raw, err = e.pool.CompleteFixedChat(ctx, id, "title", titlePrompt(), titleInput(userText, final), e.cfg.SwarmSnapshot().CompletionTokenLimit())
 	} else {
 		fallbackProvider, fallbackModel := e.cfg.SwarmSnapshot().ResolveTitle(turn.ProviderID, turn.Model)
 		providerID, modelName := e.applyRoleModel(turn.ProviderID, "title", fallbackProvider, fallbackModel)

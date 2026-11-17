@@ -29,6 +29,7 @@ import { AccountModelsCard } from "./account-models-card"
 import { AuxiliaryModels } from "./auxiliary-models"
 import { FunctionalModels } from "./functional-models"
 import { SearchSettingsPanel } from "./settings-search"
+import { SpeechSettings } from "./settings-speech"
 import { ConfirmDeleteDialog } from "./confirm-delete-dialog"
 import { ProviderWindows } from "./provider-windows"
 import { ProviderCloudTools } from "./provider-cloud-tools"
@@ -48,6 +49,7 @@ type ProviderConfig = Settings["models"]["providers"][number]
 export function ModelsTab({
   settings,
   onChange,
+  onFlush = async () => {},
   query = "",
   toolsDrafts = {},
   toolsErrors = {},
@@ -56,6 +58,7 @@ export function ModelsTab({
 }: {
   settings: Settings
   onChange: (s: Settings) => void
+  onFlush?: () => Promise<void>
   query?: string
   toolsDrafts?: ProviderToolsDrafts
   toolsErrors?: Record<string, MessageKey>
@@ -66,7 +69,9 @@ export function ModelsTab({
   const account = useApp((s) => s.meta?.account_models)
   const listed = useApp((s) => s.models)
   const accountReady = account?.state === "ready" && account.models > 0
-  const officialOnly = officialModelLock(account, settings.model_policy)
+  const mode = useApp((s) => s.meta?.product_mode)
+  const currentPolicy = useApp((s) => s.meta?.model_policy) ?? settings.model_policy
+  const officialOnly = mode === undefined || (currentPolicy ? officialModelLock(account, currentPolicy) : mode !== "local")
   const serverStarts = serverStartsConversations(settings.models.default_source, accountReady) && !officialOnly
   const [busy, setBusy] = useState<string>()
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set([
@@ -76,6 +81,10 @@ export function ModelsTab({
       .map((p) => p.id),
   ]))
   const [doomed, setDoomed] = useState<ProviderConfig>()
+
+  useEffect(() => {
+    if (officialOnly) setDoomed(undefined)
+  }, [officialOnly])
 
   useEffect(() => {
     setOpen((previous) => {
@@ -262,8 +271,9 @@ export function ModelsTab({
           {t("settings.models.add")}
         </Button>
       ) : null}
+      <SpeechSettings settings={settings} onChange={onChange} onFlush={onFlush} query={query} />
       <ConfirmDeleteDialog
-        open={Boolean(doomed)}
+        open={!officialOnly && Boolean(doomed)}
         title={t("provider.deleteTitle", {
           name: doomed ? providerHeading(doomed) : "",
         })}

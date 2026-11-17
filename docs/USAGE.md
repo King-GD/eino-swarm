@@ -7,7 +7,7 @@ behavior boundaries in [FEATURES](FEATURES.md) and [CONTRACTS](CONTRACTS.md).
 
 ## Voice input and read aloud
 
-Configure **Settings → Voice** on the PC. Voice input and spoken answers have
+Configure **Settings → Models** on the PC. Voice input and spoken answers have
 separate switches, both initially off. Managed gateway mode reuses the account's
 enabled recognition/speech roles; editable gateways allow functional overrides. In local mode choose a service and its voice
 model, or configure a separate OpenAI-compatible endpoint. Select the recognition
@@ -110,10 +110,10 @@ See [Configuration](CONFIG.md).
 embedding, recognition, spoken-answer and OCR models. The decisions role is a
 background call and is not listed. Unchanged gateway
 roles follow updated server defaults. An explicit choice stays until **Use default**
-removes it. LOCAL works without login and uses only your own configured models.
+removes it. LOCAL works without login and uses your configured models plus any separately authorized account catalogs.
 
-**Settings → Models** is base URL, API key, discover, and the default. The
-switch on a provider row shows that endpoint in the composer; off hides it
+In local mode, **Settings → Models** also edits base URL, API key, discovery
+and the default. The switch on a provider row shows that endpoint in the composer; off hides it
 from the model list without dropping a conversation that already uses it.
 Hiding the default moves new conversations to an endpoint that is still
 listed. The last endpoint stays on. The composer picker groups models by
@@ -344,8 +344,10 @@ Generic deadline or cancellation errors do not suggest a timeout setting.
 The response area shows a spinning "working…" as soon as the turn starts.
 Server progress then updates it with a ticking elapsed time and how many
 sub-agents are running. **Sub-agents at once** in Settings → Swarm takes
-effect immediately. Queued workers start under the new cap. Lowering it does
-not kill anyone already running.
+effect immediately. One task runs at most that many sub-agents at once.
+Lowering it stops the workers that took a slot last and leaves the earlier
+ones running. A stopped worker needs a free slot before it can resume.
+Workers already queued start when a slot opens.
 
 While the model is reasoning, developer view caps the block at ten lines and
 follows new tokens. Click the row to hide it while it is still running. After
@@ -879,8 +881,10 @@ supports this explicit switch. Switching closes the old phone page/connection.
 
 The circular **Account** button at the bottom of the left rail opens the
 account menu, even when the conversation list is hidden. **Sign in with
-Gateway** opens its own account dialog and the system browser. Opening the
-menu does not start sign-in. Compare the public code and the PC fingerprint
+Gateway** starts sign-in in its own account dialog and optionally opens the host
+browser. For a NAS, container or other headless host, choose **Open sign-in page**
+or copy the displayed link into your own browser. Missing host browser support
+does not stop authorization polling. Opening the menu does not start sign-in. Compare the public code and the PC fingerprint
 before authorizing the device. Explicit sign-in enables Gateway and phone
 connections and preserves your configured Hub and other settings. The address
 stays in configuration. Settings does not show or edit the server, Hub
@@ -1101,3 +1105,5 @@ functions, and appear in the same turn's Trace. Web sources remain clickable
 in answers. Paired phone sessions using the PC inherit its provider
 configuration. Independent phone direct chat has its own configuration. See
 [provider cloud tools](CONFIG.md#provider-cloud-tools).
+
+语音设置入口随模型配置权限显示：LOCAL 和可配置的普通网关账号在 Settings → Models 编辑功能模型及语音参数；托管第三方账号隐藏 Models，只在 Speech 入口显示语音开关、音色和资源参数，不显示模型、Provider 或凭据配置。

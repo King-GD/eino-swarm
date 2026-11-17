@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react"
-import type { SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
+import { speechRoute, type SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
 import { speechPlayback } from "../../../frontend/src/lib/speech-media"
 import type { SpeechAudio } from "../../../frontend/src/lib/speech-stream"
 import { GATEWAY_ACCOUNT_EVENT, loadGatewaySession } from "./gateway-account"
@@ -51,9 +51,15 @@ function publish(changed: boolean) {
     speech.gateway_origin === session.origin && gatewayAuthorityCurrent(session) &&
     (!source?.pc.gatewayOwnerID || source.pc.gatewayOwnerID === session.user.id) &&
     (!source?.pc.gatewayMobileID || source.pc.gatewayMobileID === session.device.id)))
+  const outputRoute = speech && speechRoute(speech, "output")
+  const outputAllowed = connected && (outputRoute?.execution === "pc_local" || Boolean(outputRoute?.execution === "gateway" && session &&
+    outputRoute.gateway_origin === session.origin && gatewayAuthorityCurrent(session) &&
+    (!source?.pc.gatewayOrigin || source.pc.gatewayOrigin === outputRoute.gateway_origin) &&
+    (!source?.pc.gatewayOwnerID || source.pc.gatewayOwnerID === session.user.id) &&
+    (!source?.pc.gatewayMobileID || source.pc.gatewayMobileID === session.device.id)))
   state = { epoch: state.epoch + (changed ? 1 : 0), snapshot: speech, syncedAt: source?.cached?.syncedAt,
     host: source?.pc.label || source?.pc.fingerprint, connected,
-    inputReady: Boolean(allowed && speech?.input.enabled && speech.input.ready), outputReady: Boolean(allowed && speech?.output.enabled && speech.output.ready) }
+    inputReady: Boolean(allowed && speech?.input.enabled && speech.input.ready), outputReady: Boolean(outputAllowed && speech?.output.enabled && speech.output.ready) }
   for (const listener of listeners) listener()
 }
 
@@ -178,7 +184,7 @@ async function call(operation: "transcribe" | "speak", input: Blob | string, sig
     let result: string | SpeechAudio
     if (local) {
       result = await localPhoneSpeechCall(operation, input, controller.signal)
-    } else if (speech!.execution === "gateway") {
+    } else if (speechRoute(speech!, operation === "transcribe" ? "input" : "output")?.execution === "gateway") {
       const session = loadGatewaySession()
       if (!session) throw new SpeechCallError("unavailable")
       result = await gatewaySpeechCall(speech!, session, operation, input, controller.signal)

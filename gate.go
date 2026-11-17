@@ -15,14 +15,17 @@ const defaultMaxConcurrent = 8
 // A buffered channel plus sync.Once cannot grow: Settings raising
 // max_concurrent used to leave queued workers blocked until a restart,
 // because the first spawn minted the only channel the registry would
-// ever have. Waiters sit on cond; resize broadcasts so a higher cap
-// lets them in without anyone finishing. A lower cap does not kill
-// in-flight workers — new acquires wait until held drops under it.
+// ever have. Waiters sit on cond; resize wakes them when the new cap is
+// above the number of holders. Holders are the workers actually inside a
+// model call, oldest first. A lower cap stops the newest holders until
+// that number is back within the cap; their slots stay occupied until
+// those workers leave, so a queued waiter cannot take a freed slot early.
 type slotGate struct {
-	mu   sync.Mutex
-	cond *sync.Cond
-	cap  int
-	held int
+	mu      sync.Mutex
+	cond    *sync.Cond
+	cap     int
+	held    int
+	holders []*Handle
 }
 
 func newSlotGate(n int) *slotGate {
@@ -34,32 +37,54 @@ func newSlotGate(n int) *slotGate {
 	return g
 }
 
-func (g *slotGate) acquire() {
+func (g *slotGate) acquire(h *Handle) {
 	g.mu.Lock()
 	for g.held >= g.cap {
 		g.cond.Wait()
 	}
 	g.held++
+	g.holders = append(g.holders, h)
 	g.mu.Unlock()
 }
 
-func (g *slotGate) release() {
+func (g *slotGate) release(id string) {
 	g.mu.Lock()
+	next := make([]*Handle, 0, len(g.holders))
+	for _, h := range g.holders {
+		if h.ID != id {
+			next = append(next, h)
+		}
+	}
+	g.holders = next
 	if g.held > 0 {
 		g.held--
 	}
-	g.cond.Signal()
+	if g.held < g.cap {
+		g.cond.Signal()
+	}
 	g.mu.Unlock()
 }
 
-func (g *slotGate) resize(n int) {
+// resize returns the newest holders that no longer fit. The caller stops
+// them after releasing this lock. held stays until those workers release,
+// so waiters remain blocked while the task is still at the new cap.
+func (g *slotGate) resize(n int) []*Handle {
 	if n <= 0 {
 		n = defaultMaxConcurrent
 	}
 	g.mu.Lock()
+	defer g.mu.Unlock()
 	g.cap = n
-	g.cond.Broadcast()
-	g.mu.Unlock()
+	var extra []*Handle
+	for len(g.holders) > g.cap {
+		last := len(g.holders) - 1
+		extra = append(extra, g.holders[last])
+		g.holders = g.holders[:last]
+	}
+	if g.held < g.cap {
+		g.cond.Broadcast()
+	}
+	return extra
 }
 
 // atCapacityError is what spawn_agent and resume_agent return when another

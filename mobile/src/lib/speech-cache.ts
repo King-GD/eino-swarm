@@ -35,10 +35,18 @@ export function safeSpeechSnapshot(raw: unknown): SpeechSnapshot | undefined {
   if (!count(input.max_duration_seconds, 3600) || !count(input.timeout_seconds, 3600) || !count(output.timeout_seconds, 3600)) return
   if (typeof output.speed !== "number" || !Number.isFinite(output.speed) || output.speed < 0.25 || output.speed > 4) return
   if (!count(limits.input_bytes, 256 * 1024 * 1024) || !count(limits.output_bytes, 256 * 1024 * 1024) || !count(limits.chunk_chars, 4096) || !count(limits.staging_ttl_seconds, 3600)) return
+  let outputRoute: Pick<SpeechSnapshot["output"], "execution" | "gateway_origin"> = {}
+  if (output.execution !== undefined || output.gateway_origin !== undefined) {
+    if (output.execution === "gateway") {
+      if (typeof output.gateway_origin !== "string") return
+      try { outputRoute = { execution: "gateway", gateway_origin: normalizeGatewayOrigin(output.gateway_origin) } } catch { return }
+    } else if (output.execution === "pc_local" && output.gateway_origin === undefined) outputRoute = { execution: "pc_local" }
+    else return
+  }
   let origin: string | undefined
   if (source.execution === "gateway") {
     if (source.gateway_origin) { try { origin = normalizeGatewayOrigin(String(source.gateway_origin)) } catch { return } }
-    else if ((input.enabled && input.ready) || (output.enabled && output.ready)) return
+    else if ((input.enabled && input.ready) || (output.execution === undefined && output.enabled && output.ready)) return
   }
   return {
     execution: source.execution, ...(origin ? { gateway_origin: origin } : {}),
@@ -49,6 +57,7 @@ export function safeSpeechSnapshot(raw: unknown): SpeechSnapshot | undefined {
       recording_format: input.recording_format as "auto" | "wav", max_duration_seconds: input.max_duration_seconds, timeout_seconds: input.timeout_seconds,
     },
     output: {
+      ...outputRoute,
       enabled: output.enabled as boolean, ready: output.ready as boolean,
       ...(text(output.reason, 256) ? { reason: text(output.reason, 256) } : {}),
       model: output.model as string, label: output.label as string, voice: output.voice as string,

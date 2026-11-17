@@ -8,35 +8,100 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
-- Mobile avatar debug switching now waits for the connected PC to acknowledge
-  its execution-mode change. LOCAL PC conversations expose original and
-  third-party interface groups without merging duplicate model names. Refused
-  or unconfirmed switches retain the phone mode and show retry guidance.
-  (`F-173`, `F-220`, `C-013`)
-
-- Mobile selected-text actions use an opaque, high-contrast panel with 44px
-  controls in light and dark themes. The panel adds Read aloud using the PC’s
-  speech settings, and English-to-Chinese translation through the PC without
-  creating a conversation turn or quote. (`F-181`, `F-221`, `C-049`)
-
-- PCM streaming read aloud on desktop/Web and direct phone speech requests:
-  playback starts as audio arrives, with raw PCM and OpenAI speech SSE support.
-  Select PCM in Voice settings; MP3/WAV and PC-local phone RPC retain complete
-  segment playback. Stop cancels the stream and queued audio. (`F-148`, `C-048`)
-
-- File search reuses one completed scan of the listed workspace instead of
-  walking the tree on every query. Opening or refreshing the workspace root,
-  uploading, and deleting start a new scan. A query waits for that scan and
-  does not return a partial result. (`F-140`)
-- Mobile User center no longer offers another server address. LOCAL Web-tool preferences appear only after the account is authorized.
-- An available Android update stays pinned at the top of User center, including the signed-out account page.
+- Mobile avatar debug switching waits for the selected PC to acknowledge its mode,
+  with separate original and third-party interface groups. Refusal retains the
+  previous phone mode. (`F-173`, `F-220`, `C-013`)
+- File search reuses a completed workspace scan until the root is refreshed,
+  uploaded to or deleted from. (`F-140`)
+- Mobile selected-text actions add Read aloud and English-to-Chinese translation
+  without creating a conversation turn. (`F-181`, `C-049`)
+- Automatic microphone capture normalizes iPhone MP4/AAC to WAV. Paired-PC speech
+  survives unrelated phone model-catalog refreshes. (`F-148`, `C-048`)
 
 ### Fixed
 
-- Mobile: deduplicate synthesized clicks after portrait touches, including zero-detail clicks, and close User center after the three-tap debug mode switch. LOCAL does not depend on the Gateway model directory, including intentionally hidden third-party catalogs.
-- The decisions role stays a background call. The composer no longer shows its button, Settings does not list it, and the account card omits its count and role row. A result stays in Trace and is not a conversation notice.
-- Desktop: the account-portrait debug source switch no longer waits for a running conversation or its workers. The model that conversation already opened keeps its endpoint; the next lookup uses the new source. A model call that has started, and backup, restore or restart, still refuse the switch. That refusal stays a short wait notice instead of the engine's backup sentence.
-- Desktop LOCAL keeps a signed-in account. The composer lists that account's authorized third-party preset and original gateway catalogs, so a conversation can switch among them; an unauthorized or empty catalog is omitted without asking for another sign-in. Gateway mode still uses the managed preset.
+- Mobile PC switching retains established connections and reuses them on return.
+  The selected PC stays visible while connecting instead of flashing User center.
+
+- Running turns and workers retain their already-opened model after a debug source
+  switch. An active model call, backup, restore or restart still refuses it.
+- A live worker collection pause remains actionable when transcript folding is
+  idle; a decline remains closing until the turn is idle.
+
+## [0.1.81] - 2026-11-17
+
+### Changed
+
+- PCM streaming read aloud on desktop/Web and direct phone speech requests:
+  playback starts as audio arrives, with raw PCM and OpenAI speech SSE support.
+  Select PCM as the audio format in speech settings; MP3/WAV and PC-local phone
+  RPC retain complete-segment playback. Stop cancels the stream and queued audio.
+  Gateway PCM requests select SSE, including editable account model bindings;
+  phones route spoken output independently of recognition using their own login.
+  (`F-148`, `C-048`)
+
+### Fixed
+
+- Validate private Windows gateway credentials by owner and DACL, preserving
+  account model access without weakening rejection of broadly accessible files.
+
+## [0.1.80] - 2026-11-16
+
+### Changed
+
+- Separate LOCAL from gateway model policy. Ordinary gateway accounts follow live
+  functional model defaults while keeping explicit scoped overrides and a restore
+  default action. Managed third-party accounts use their preset and hide model
+  configuration. The existing avatar debug switch preserves login and local data.
+- Phone Account mode requires a same-account ready PC and shows setup guidance
+  while unavailable. LOCAL can use personal services and separately authorized
+  third-party and Gateway catalogs, grouped by source with independent routing.
+- Desktop LOCAL also retains authorized third-party and Gateway catalogs beside personal providers.
+- Third-party preset and extra Gateway model authorization remain server-owned;
+  an empty or denied source is hidden without expiring the account login.
+
+### Added
+
+- Read aloud and English selection translation in the PC selection menu, using
+  the configured speech and translation roles without creating a conversation turn.
+
+### Fixed
+
+- Revoke each LOCAL server catalog independently even while another catalog is temporarily unavailable.
+- Enabled account `title` uses the dedicated `/naming` route; legacy `naming` is ignored.
+- Preserve account model configuration policy when API/model access is unavailable; keep managed presets locked and reject account calls before model construction.
+
+- Count each portrait touch once, including synthesized zero-detail clicks, and
+  close User center after a successful three-tap debug mode switch.
+- Keep decisions as a background call in Trace rather than a conversation notice.
+
+## [0.1.79] - 2026-11-15
+
+### Fixed
+
+- Headless Gateway account sign-in exposes only its validated public verification
+  link and continues polling without a host browser. (#171, `F-210`, `C-006`)
+
+This unified source batch includes the current speech settings integration and
+the earlier desktop, Linux and phone fixes. Client installers share this source
+version; publication and native acceptance are recorded separately by platform.
+
+## [0.1.78] - 2026-11-15
+
+### Fixed
+
+- Headless Web owns an acknowledged presence hold, stays alive without browser
+  tabs, and releases the hold on shutdown. (#170, `C-001`)
+
+### Added
+
+- Linux amd64 and arm64 Web/CLI archives with matching ELF architecture and
+  per-archive runtime acceptance before upload. (#172, `F-430`, `C-010`)
+
+This source batch also contains the integrated phone account/goal presentation,
+sub-agent concurrency cap and Mac flat-window recovery changes. Platform
+publication and native acceptance remain independent; a Linux archive does not
+accept or publish the desktop or phone installers.
 
 ## [0.1.77] - 2026-11-14
 
@@ -62,16 +127,16 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
 
 ## [Unreleased]
 
-- 手机 LOCAL 调试模式保留登录时，分别获取服务端授权的第三方预置与网关模型，按 group 与个人接口区分；同名模型保持来源路由。空目录／无权限不报登录错误，单来源撤权不隐藏其余分组，凭据不写入个人配置。
-
-### Added
-
-- The PC selection menu can read the selected text aloud when spoken output is
-  enabled and ready. A Chinese interface also offers translation for an English
-  selection. The translation stays in the menu and does not start a turn.
-  (`F-181`, `F-148`, `C-049`, `C-048`)
-
 ### Fixed
+
+- Reuse accepted Windows archives for first/partial uploads, publish other required
+  installers before iOS waits, and avoid re-querying confirmed TestFlight history.
+  Add GET-only current-build `--ios-status` with strict live availability checks.
+
+- Linux release builds and validates amd64 and arm64 archives, with per-architecture
+  runtime receipts and immutable partial-publication retries. (#172, `C-010`)
+- Headless Web keeps the engine alive without a browser, reports exhausted
+  presence recovery to supervisors, and releases its hold on signal. (#170, `C-001`)
 
 - A Mac window that stays one flat colour fails the renderer probe
   (`presentation_blank`) and uses the existing single reload, then a
@@ -80,21 +145,18 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
   checks that decision, including the v0.1.77 fault that accepted a flat
   body after a matching WebKit snapshot. (`F-115`, `C-034`)
 
-- Phone conversations explicitly label the active Goal mode and retain the
-  objective strip while browsing Agents, worker logs and Outputs. Completed
-  goals still leave the strip hidden. (`F-150`, `C-009`)
-
 ### Changed
 
-- Separate LOCAL from gateway model policy. Editable gateway accounts receive
-  live functional defaults with scoped overrides and restore-default support;
-  managed third-party presets hide model configuration and reject alternate
-  selections at model, HTTP and phone RPC boundaries. Existing triple-click
-  debug switching requires idle model work and preserves local settings.
-- Phone Account mode waits for a same-account, online, ready PC with setup
-  guidance and no direct gateway Chat fallback. LOCAL personal Chat has its own
-  voice bindings. (`F-173`, `F-220`, `C-040`, `C-013`, `C-048`)
+- Document release handoff, valid evidence reuse, phase timing, native fixture pitfalls,
+  and TestFlight timeout recovery; distinguish current publisher gaps from implemented automation.
+- Mobile User center no longer offers another server address. LOCAL Web-tool
+  preferences appear only after the account is authorized. (`F-211`)
+- An available Android update stays pinned at the top of User center, including
+  the signed-out account page. (`F-240`)
 
+- Voice input, read aloud and audio resource settings now live in Settings →
+  Models. Models is available in Gateway mode with managed models and voice
+  controls; local model editing remains restricted to local mode. (`F-148`, `C-048`)
 
 - Phone defaults to Account mode with required sign-in and avatar entry. Hide
   Local model/pairing/unlink menus and model selection in Account mode; three
@@ -103,14 +165,19 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
 
 ### Fixed
 
-- A live collection pause stays actionable when the folded transcript is idle,
-  and a refusal stays a closing notice until the turn itself is idle. The
-  idle sentence no longer appears while the composer still says the turn is
-  working. `models/lifecycle/WorkerCollectionView.tla` checks both gates.
+- Settings → Swarm → sub-agents at once is the number of sub-agents one task
+  may run at the same time. Lowering it stops the workers that took a slot
+  last and leaves the earlier ones running. A stopped worker needs a free
+  slot before it can resume. `models/swarm/ConcurrencyCap.tla` checks that
+  the running set stays within the cap. (`C-009`)
 
 - Native offline smoke explicitly selects LOCAL in its private configuration
   before launching. It no longer waits for a composer behind the default FOFA
   sign-in welcome page; FOFA login still needs separate acceptance.
+
+- Phone conversations explicitly label the active Goal mode and retain the
+  objective strip while browsing Agents, worker logs and Outputs. Completed
+  goals still leave the strip hidden. (`F-150`, `C-009`)
 
 - A default FOFA install that is not signed in covers the conversation and
   composer with the sign-in prompt. The account button stays available.
@@ -126,17 +193,13 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
 
 ### Added
 
-- FOFA reads up to eleven fixed server model roles when the account bootstrap
+- FOFA reads up to nine fixed server model roles when the account bootstrap
   includes them. The account details show each switch and name, and those
-  controls cannot be edited. Conversation requests use `conversation`.
-  Conversation naming uses `title` and compact uses `compact`; each follows
-  `conversation` while its own role is off. Embedding, OCR and decisions run
-  only while those roles are on. Voice settings use the speech recognition and
-  synthesis roles; image generation remains read-only. An enabled `translation`
-  role posts selection translation to `/translations`, and an enabled `naming`
-  role posts conversation and schedule naming to `/naming`. While either role
-  is off, the previous model is used.
-  An older server that returns the first six, eight or nine roles
+  controls cannot be edited. Conversation requests use `conversation`. Naming
+  and compact follow `conversation` while their own roles are off. Embedding,
+  OCR and decisions run only while those roles are on. Voice settings use the
+  speech recognition and synthesis roles; image generation remains read-only.
+  An older server that returns the first six or eight roles
   still works. LOCAL keeps the ordinary catalog. (`F-173`)
 
 - PC-owned Voice settings with separate, initially disabled dictation and read
@@ -148,9 +211,9 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
   order with code blocks omitted. (`F-148`, `C-048`)
 
 - The install mode is `product.mode`. A missing key means FOFA: sign in before
-  work, no Settings → Models section, and no composer model menu. Custom
-  provider edits and discovery are refused. `local` is written only when set,
-  from the config file or by clicking the portrait in the desktop account
+  work, managed models and voice controls in Settings → Models, and no composer
+  model menu. Custom provider edits and discovery are refused. `local` is written
+  only when set, from the config file or by clicking the portrait in the desktop account
   details three times. Another three clicks writes `fofa` again and drops the
   key. There is no Settings control for the mode. (`F-173`, `C-047`)
 
@@ -179,9 +242,9 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
 
 - A signed-in server can publish an official model profile. The composer shows
   the server's name, requests use the alias `account`, and that source can
-  append guidance and narrow workspace tools. Settings → Models can switch
-  between Official model and All models. A direct phone chat uses the same
-  name and switch; a paired phone follows the PC's filtered catalog.
+  append guidance and narrow workspace tools. In local mode, Settings → Models
+  can switch between Official model and All models. A direct phone chat uses the
+  same name and switch; a paired phone follows the PC's filtered catalog.
   (`F-172`, `F-171`, `C-046`, `C-040`)
 
 - The composer has a Tools menu. Built-in tools are one group, and each

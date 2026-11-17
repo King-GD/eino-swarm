@@ -164,6 +164,17 @@ func TestManagerMidturnRecoveryClaimSurvivesColdEngineAndStoreReopenOverHTTP(t *
 	case <-time.After(5 * time.Second):
 		t.Fatal("first actual recovered HTTP request did not begin")
 	}
+	committedEffect, committedErr := os.ReadFile(filepath.Join(e.WorkspaceDir(thread.ID), "persisted-effects"))
+	if committedErr != nil || string(committedEffect) != "once\n" {
+		for _, request := range wire.snapshot() {
+			for _, message := range request.Messages {
+				if message != nil && message.Role == schema.Tool && message.ToolCallID == "persistent-original-effect" {
+					t.Logf("original exec result for persistent-original-effect: %s", message.Content)
+				}
+			}
+		}
+		t.Fatalf("original exec did not commit before shutdown: %q %v", committedEffect, committedErr)
+	}
 	events, err := e.store.ListTurnEvents(turn.ID)
 	if err != nil {
 		t.Fatal(err)

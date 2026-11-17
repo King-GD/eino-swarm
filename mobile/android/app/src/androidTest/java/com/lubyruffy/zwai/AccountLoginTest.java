@@ -82,6 +82,46 @@ public class AccountLoginTest {
     }
 
     @Test
+    public void accountWaitsForPCAndDebugLocalRetainsLogin() throws Exception {
+        beginCase("native-account-mode");
+        control("review=approved&pc=hide&api=on&start=normal&catalog=normal&model=normal");
+        launch();
+        waitFor("Sign in");
+        if (present("Menu")) { click("Menu"); click("User center"); }
+        if (present("Other ways") || present("Close")) {
+            click("User center"); click("User center"); click("User center");
+        }
+        waitFor("Sign in");
+        click("Other server"); fill("Server address", origin); click("Use this server");
+        click("Sign in");
+        waitBrowser("Sign in to test gateway"); click("Sign in to test gateway");
+        waitBrowser("Authorize test device"); click("Authorize test device");
+        waitFor("Device authorized. Return to zwai."); foreground();
+        waitFor("Waiting for a computer");
+        assertFalse("Account requires a computer before chat", present("Message"));
+        assertEquals("Account cannot discover phone-direct models", 0, count("models"));
+        assertEquals(0, count("model_calls"));
+        save("01-signed-in-account-waits-for-computer");
+        click("Native test account"); click("Native test account"); click("Native test account");
+        waitFor("Message");
+        assertFalse("LOCAL keeps the same login", present("Sign in"));
+        assertEquals("Gateway · Native gateway", chooseChatModel("native-fixture-model", "Gateway · Native gateway"));
+        assertEquals(0, count("connect"));
+        save("02-local-retains-authorized-source");
+        click("User center");
+        click("Native test account"); click("Native test account"); click("Native test account");
+        waitFor("Waiting for a computer");
+        assertFalse(present("Message"));
+        assertEquals(0, count("model_calls"));
+        control("pc=show"); click("Refresh account");
+        waitFor("Connect Native PC"); click("Connect Native PC");
+        waitContaining("Native PC conversation");
+        assertTrue(count("peer_messages") > 0);
+        save("03-account-requires-owned-ready-pc");
+        write("fixture-state.json", state().toString(2));
+    }
+
+    @Test
     public void accountLoginReviewModelsPCAndAnonymousPairing() throws Exception {
         beginCase("native-account");
         try {
@@ -174,7 +214,7 @@ public class AccountLoginTest {
             control("catalog=normal");
             click("Refresh account");
             waitFor("native-fixture-model");
-            click("Chat history");
+            click("Close");
             waitFor("Message");
             control("model=redirect");
             fill("Message", "Native redirect acceptance");
@@ -289,9 +329,9 @@ public class AccountLoginTest {
         choose("Phone chat Web tools", "Automatic: cloud when signed in", "auto");
         choose("PC conversation Web tools", "Follow this PC's settings", "inherit");
         save("01-independent-web-settings");
-        click("Chat history");
+        click("Close");
         assertNoInlineWebRouting();
-        String gatewaySource = chooseChatModel("native-fixture-model", "Server · Native gateway");
+        String gatewaySource = chooseChatModel("native-fixture-model", "Gateway · Native gateway");
         int gatewayCalls = count("gateway_model_calls");
         int gatewayPersonalBefore = count("personal_model_calls");
         assertEquals("No personal inference precedes the Gateway stage", 0, gatewayPersonalBefore);

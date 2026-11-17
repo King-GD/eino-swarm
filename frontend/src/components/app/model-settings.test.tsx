@@ -1,10 +1,11 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ModelsTab } from "./model-settings"
 import { ToastStack } from "./toast-stack"
-import type { Settings } from "@/lib/types"
+import type { Meta, Settings } from "@/lib/types"
+import { useApp } from "@/store/app"
 import { api } from "@/lib/api"
 import { resetToasts } from "@/store/toasts"
 
@@ -65,9 +66,15 @@ function openDetails(heading: string) {
   fireEvent.click(screen.getByRole("button", { name: `${heading} details` }))
 }
 
+function ownServices() {
+  return within(screen.getByRole("heading", { name: "Your own model services" }).closest("section")!)
+}
+
+beforeEach(() => useApp.setState({ meta: { product_mode: "local" } as Meta }))
+
 async function clickDiscover() {
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Discover models" }))
+    fireEvent.click(ownServices().getByRole("button", { name: "Discover models" }))
     await Promise.resolve()
   })
 }
@@ -207,7 +214,7 @@ describe("ModelsTab", () => {
       "aria-expanded",
       "true",
     )
-    expect(screen.getByLabelText("Request timeout (seconds)")).toBeTruthy()
+    expect(ownServices().getByLabelText("Request timeout (seconds)")).toBeTruthy()
     expect(screen.queryByLabelText("Base URL")).toBeNull()
   })
 
@@ -243,7 +250,7 @@ describe("ModelsTab", () => {
     expect(screen.getByLabelText("Provider")).toBeTruthy()
     expect(screen.getByRole("button", { name: "Add a provider" })).toBeTruthy()
     expect(screen.getByLabelText("Default model")).toBeTruthy()
-    fireEvent.click(screen.getByRole("button", { name: "Discover models" }))
+    fireEvent.click(ownServices().getByRole("button", { name: "Discover models" }))
     await waitFor(() => expect(onChange).toHaveBeenCalled())
     const next = onChange.mock.calls[0][0] as Settings
     expect(next.models.providers[0].catalog).toEqual(["alpha", "beta"])

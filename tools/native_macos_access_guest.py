@@ -173,8 +173,12 @@ def descendant_pids(processes, parent):
     return sorted(children)
 
 
-def dead_peer_is_quiet(root, processes, controller_pid):
-    if controller_pid and descendant_pids(processes, controller_pid):
+def dead_peer_is_quiet(root, processes, controller_pid, expected_uid):
+    # A different kernel UID proves this numeric PID is no longer the ci
+    # controller. Never attribute that unrelated process's children to it.
+    process = processes.get(controller_pid)
+    foreign_uid = process is not None and process["uid"] != expected_uid
+    if controller_pid and not foreign_uid and descendant_pids(processes, controller_pid):
         return False
     for path in (root / "claims").glob("*.json"):
         claim = json.loads(path.read_text())
@@ -228,7 +232,7 @@ def current_peers(queue_roots, expected_uid):
                     raise RuntimeError("peer controller identity differs")
                 roots.append(str(root))
                 controllers.append({"root": str(root), "pid": pid, "child_pids": descendant_pids(processes, pid)})
-            elif not dead_peer_is_quiet(root, processes, pid):
+            elif not dead_peer_is_quiet(root, processes, pid, expected_uid):
                 raise RuntimeError("historical peer effects remain unverified")
         known_pids = {row["pid"] for row in controllers}
         if any(pid not in known_pids and row["argv"].split(" --root ", 1)[0].endswith("/ci-queue-agent")

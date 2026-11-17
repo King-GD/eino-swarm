@@ -66,3 +66,11 @@ func fetchPreset(boot accountBootstrap, token string, who AccountModelsState) ac
 	who.Kinds = &kinds
 	return accountOutcome{state: who, source: src}
 }
+
+// A private authorized account whose policy is still unknown stays closed. The
+// projection is not an executable catalog and never invents a source identity.
+func unavailableAccountPolicy(id accountIdentity, sourceID, label string, configurable bool) *provider.AccountSource {
+	source := provider.NewUnavailableAccountSource(sourceID, label, id.origin+strings.TrimSuffix(desktopModelsPrefix, "/"), id.token, configurable)
+	source.SetAccountOwner(id.userID)
+	return source
+}

@@ -257,7 +257,7 @@ func TestSelectionTranslationUsesAnEnabledTranslationRole(t *testing.T) {
 	}
 }
 
-func TestEnabledNamingRoleReplacesConversationTitleModel(t *testing.T) {
+func TestEnabledTitleRoleUsesTheExclusiveNamingRoute(t *testing.T) {
 	requests := make(chan sideChatWireRequest, 2)
 	paths := make(chan string, 2)
 	e := newSideChatHTTPEngine(t, config.APIModeChatCompletions, func(w http.ResponseWriter, r *http.Request, req sideChatWireRequest) {
@@ -268,8 +268,7 @@ func TestEnabledNamingRoleReplacesConversationTitleModel(t *testing.T) {
 	src := accountCatalog(t, e.cfg.Models.Providers[0].BaseURL, "conversation")
 	src.SetRoles([]provider.AccountRole{
 		{ID: "conversation", Enabled: true},
-		{ID: "title", Enabled: true, Label: "对话命名"},
-		{ID: "naming", Enabled: false, Label: "命名"},
+		{ID: "title", Enabled: false, Label: "对话命名"},
 	})
 	e.pool.SetAccountSource(src)
 	thread, err := e.CreateThread("naming", "", "")
@@ -281,22 +280,21 @@ func TestEnabledNamingRoleReplacesConversationTitleModel(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.runTitle(thread.ID, turn, "迁移这批主机", "迁移已经完成。")
-	if got := (<-requests).Model; got != "title" {
-		t.Fatalf("disabled naming role model = %q", got)
+	if got := (<-requests).Model; got != "conversation" {
+		t.Fatalf("disabled title role model = %q", got)
 	}
 	if got := <-paths; got != "/chat/completions" {
-		t.Fatalf("disabled naming role path = %q", got)
+		t.Fatalf("disabled title role path = %q", got)
 	}
 	src.SetRoles([]provider.AccountRole{
 		{ID: "conversation", Enabled: true},
 		{ID: "title", Enabled: true, Label: "对话命名"},
-		{ID: "naming", Enabled: true, Label: "命名"},
 	})
 	e.runTitle(thread.ID, turn, "迁移这批主机", "迁移已经完成。")
-	if got := (<-requests).Model; got != "naming" {
-		t.Fatalf("enabled naming role model = %q", got)
+	if got := (<-requests).Model; got != "title" {
+		t.Fatalf("enabled title role model = %q", got)
 	}
 	if got := <-paths; got != "/naming" {
-		t.Fatalf("enabled naming role path = %q", got)
+		t.Fatalf("enabled title role path = %q", got)
 	}
 }

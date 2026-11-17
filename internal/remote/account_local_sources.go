@@ -10,11 +10,11 @@ import (
 	"github.com/LubyRuffy/eino-swarm/internal/provider"
 )
 
-// accountCatalogRef is one server catalog LOCAL can list beside personal
-// providers. The credential stays on the signed-in account; this is not a
-// personal provider.
+// accountCatalogRef is one server catalog LOCAL can list beside the desktop
+// catalog. The credential stays on the signed-in account.
 type accountCatalogRef struct {
 	sourceID, label, apiBaseURL, catalogURL string
+	sameAsPreset                            bool
 	group                                   string
 }
 
@@ -24,64 +24,95 @@ const (
 	catalogKeep
 )
 
-// withSwitchableCatalogs attaches the server catalogs a signed-in LOCAL
-// session switches among. A denied or empty catalog is omitted. A transient
-// failure keeps the catalogs already published and does not sign the account out.
-func (a *AccountModels) withSwitchableCatalogs(ctx context.Context, boot accountBootstrap, token string, o accountOutcome) accountOutcome {
-	if o.source == nil {
+// attachSwitchableCatalogs adds the authorized third-party preset and original
+// gateway catalogs while LOCAL is signed in. A denied or empty catalog is
+// omitted. A transient failure retains only that still-authorized source.
+func (a *AccountModels) attachSwitchableCatalogs(ctx context.Context, boot accountBootstrap, token string, o accountOutcome) accountOutcome {
+	if o.state.State != AccountReady && o.state.State != AccountNoAccess && !o.transient {
 		return o
 	}
-	sources, keep := a.switchableCatalogs(ctx, boot, token)
-	o.local, o.keepLocal = sources, keep
+	sources := a.switchableCatalogs(ctx, boot, token)
+	o.localUpdated = true
+	var extra []*provider.AccountSource
+	for _, item := range sources {
+		if item.src == nil {
+			continue
+		}
+		if o.source == nil && item.preset && !o.transient {
+			kinds := item.src.Kinds()
+			o.source = item.src
+			o.state.State = AccountReady
+			o.state.Reason = ""
+			o.state.Label = boot.label
+			o.state.Models = item.models
+			o.state.SourceID = item.src.ID()
+			o.state.Kinds = &kinds
+		}
+		extra = append(extra, item.src)
+	}
+	o.local = extra
+	if len(extra) > 0 && o.state.State == AccountNoAccess {
+		o.state.State = AccountReady
+		o.state.Reason = ""
+	}
 	return o
 }
 
-func (a *AccountModels) switchableCatalogs(ctx context.Context, boot accountBootstrap, token string) ([]*provider.AccountSource, bool) {
-	refs := make([]accountCatalogRef, 0, 2)
-	if boot.clientCatalogURL != "" {
-		refs = append(refs, accountCatalogRef{sourceID: boot.sourceID, label: boot.label, apiBaseURL: boot.apiBaseURL, catalogURL: boot.clientCatalogURL, group: "third_party"})
+func (a *AccountModels) switchableCatalogs(ctx context.Context, boot accountBootstrap, token string) []switchableSource {
+	var refs []accountCatalogRef
+	if boot.access && boot.clientCatalogURL != "" {
+		refs = append(refs, accountCatalogRef{sourceID: boot.sourceID, label: boot.label, apiBaseURL: boot.apiBaseURL, catalogURL: boot.clientCatalogURL, sameAsPreset: true, group: "third_party"})
 	}
 	if boot.gatewayCatalog != nil {
 		refs = append(refs, *boot.gatewayCatalog)
 	}
-	var sources []*provider.AccountSource
+	var sources []switchableSource
 	for _, ref := range refs {
-		src, status := a.oneCatalog(ctx, token, ref)
+		item, status := a.oneCatalog(ctx, token, ref)
 		switch status {
 		case catalogReady:
-			sources = append(sources, src)
+			sources = append(sources, item)
 		case catalogKeep:
-			return nil, true
+			a.log.Warn("account catalog refresh failed; retaining only its authorized cached source")
+			for _, cached := range a.pool.LocalAccountSources() {
+				if cached := cached.CopyForCatalogConnection(ref.sourceID, ref.apiBaseURL, token); cached != nil {
+					sources = append(sources, switchableSource{src: cached, models: cached.ModelCount(), preset: ref.sameAsPreset})
+					break
+				}
+			}
 		}
 	}
-	return sources, false
+	return sources
 }
 
-func (a *AccountModels) oneCatalog(ctx context.Context, token string, ref accountCatalogRef) (*provider.AccountSource, int) {
+type switchableSource struct {
+	src    *provider.AccountSource
+	models int
+	preset bool
+}
+
+func (a *AccountModels) oneCatalog(ctx context.Context, token string, ref accountCatalogRef) (switchableSource, int) {
 	raw, err := a.get(ctx, ref.catalogURL, token)
 	if err != nil {
-		if catalogStatus(err) == catalogKeep {
-			a.log.Warn("account catalog refresh failed; keeping the last switchable models")
-		}
-		return nil, catalogStatus(err)
+		return switchableSource{}, catalogStatus(err)
 	}
 	cat, err := provider.ParseCatalog(raw)
 	if err != nil {
 		a.log.Warn("account catalog was not published", "reason", AccountReasonUnsafe)
-		return nil, catalogOmit
+		return switchableSource{}, catalogOmit
 	}
 	cat = boundCatalog(cat)
 	if len(cat.Names) == 0 {
-		return nil, catalogOmit
+		return switchableSource{}, catalogOmit
 	}
 	src, err := provider.NewAccountSource(ref.sourceID, ref.label, ref.apiBaseURL, token, cat)
 	if err != nil {
 		a.log.Warn("account catalog was not published", "reason", AccountReasonUnsafe)
-		return nil, catalogOmit
+		return switchableSource{}, catalogOmit
 	}
 	src.SetModelPolicy(true, nil)
 	src.SetCatalogGroup(ref.group)
-	return src, catalogReady
+	return switchableSource{src: src, models: len(cat.Names), preset: ref.sameAsPreset}, catalogReady
 }
 
 func catalogStatus(err error) int {
@@ -135,8 +166,7 @@ func (b *accountBootstrap) parseSwitchableCatalogs(clientCatalogURL string, gate
 		return nil
 	}
 	b.gatewayCatalog = &accountCatalogRef{
-		sourceID: body.SourceID, label: label,
-		group:      "original",
+		sourceID: body.SourceID, label: label, group: "original",
 		apiBaseURL: strings.TrimRight(body.APIBaseURL, "/"), catalogURL: body.CatalogURL,
 	}
 	return nil

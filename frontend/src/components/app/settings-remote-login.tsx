@@ -6,6 +6,7 @@ import type { MessageKey } from "@/lib/i18n"
 import { remoteAccountName } from "@/lib/remote-account-name"
 import type { RemoteLoginStatus, RemoteStatus } from "@/lib/types"
 import { useT } from "@/lib/use-t"
+import { LoginVerificationLink } from "./login-verification-link"
 import { ConfirmDeleteDialog } from "./confirm-delete-dialog"
 import { Field, SettingsSection, settingsHintClass, settingsLabelClass } from "./settings-field"
 
@@ -104,6 +105,7 @@ export function RemoteLoginSection({
             <code className="select-all font-mono text-sm">{details.user_code}</code>
           </div>
         ) : null}
+        <LoginVerificationLink login={details} />
         {details?.host_fp ? (
           <div>
             <p className={settingsHintClass}>{t("settings.remote.login.fingerprint")}</p>

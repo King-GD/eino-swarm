@@ -63,7 +63,7 @@ func (p *Pool) ModelPolicy() ModelPolicy {
 	}
 	sum := sha256.Sum256([]byte(origin.Scheme + "://" + origin.Host + "\x00" + src.id + "\x00" + src.owner))
 	view.Scope = "gateway:" + hex.EncodeToString(sum[:])
-	view.Configurable, view.Ready = !src.managed, true
+	view.Configurable, view.Ready = !src.managed, src.id != ""
 	if view.Configurable {
 		view.Bindings = p.cfg.ModelsSnapshot().Bindings[view.Scope]
 	}
@@ -173,17 +173,26 @@ func (p *Pool) validateModelSelection(id, name string) error {
 	if p.mock {
 		return nil
 	}
-	if strings.HasPrefix(id, config.AccountSourcePrefix) {
-		src := p.accountForExecution(id)
-		if src == nil {
+	if p.localExecution() && strings.HasPrefix(id, config.AccountSourcePrefix) {
+		source := p.accountForExecution(id)
+		if source == nil {
 			return ErrAccountLoginRequired
 		}
-		if name != "" && !src.permits(name) {
+		if source.unavailable {
+			return ErrAccountModelsUnavailable
+		}
+		if name != "" && !source.permits(name) {
 			return ErrModelPolicy
 		}
 		return nil
 	}
 	src := p.activeAccount()
+	if src != nil && src.unavailable && id == src.id {
+		return ErrAccountModelsUnavailable
+	}
+	if strings.HasPrefix(id, config.AccountSourcePrefix) && (src == nil || src.id != id) {
+		return ErrAccountLoginRequired
+	}
 	if src != nil && src.managed && (id != src.id || (name != "" && !src.permits(name))) {
 		return ErrModelPolicy
 	}

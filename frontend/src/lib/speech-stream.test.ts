@@ -137,6 +137,13 @@ describe("incremental speech responses", () => {
     expect(await collect(pcm)).toEqual([0, 1])
   })
 
+  it.each(["audio/wav", "audio/mpeg"])("refuses buffered %s when PCM streaming was explicitly requested", async (mime) => {
+    const response = new Response(new Uint8Array([0, 1]), { headers: { "Content-Type": mime } })
+    const cancel = vi.spyOn(response.body!, "cancel")
+    await expect(speechAudioResponse(response, new AbortController().signal, 10, true)).rejects.toMatchObject({ code: "invalid_audio" })
+    expect(cancel).toHaveBeenCalledOnce()
+  })
+
   it.each(["audio/pcm;endianness=big", "audio/pcm;encoding=mp3", "audio/pcm;rate=24000;channels=2", "application/octet-stream;endianness=big"])("refuses contradictory or unknown raw PCM parameters: %s", async (type) => {
     const live = fixture(type)
     await expect(speechAudioResponse(live.response, new AbortController().signal, 10, true)).rejects.toMatchObject({ code: "invalid_audio" })

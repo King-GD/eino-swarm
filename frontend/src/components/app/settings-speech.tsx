@@ -11,15 +11,18 @@ import { speechPlayback, speechRecordingSupported, startSpeechRecording, type Sp
 import { synthesizeSpeech, transcribeSpeech } from "@/lib/speech-api"
 import type { Settings } from "@/lib/types"
 import { useT } from "@/lib/use-t"
-import { Field, SettingsChoice, SettingsPage, SettingsRow, SettingsSection } from "./settings-field"
+import { Field, SettingsChoice, SettingsRow, SettingsSection, settingsMatch } from "./settings-field"
 
 type Kind = "input" | "output"
 type Connection = SpeechInputSettings | SpeechOutputSettings
 
-export function SpeechTab({ settings, onChange, onFlush, query = "" }: {
+export const speechSettingsSearch = "speech voice microphone audio asr tts transcription read aloud 语音 麦克风 录音 识别 朗读 音色"
+
+export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery = "" }: {
   settings: Settings; onChange: (settings: Settings) => void; onFlush: () => Promise<void>; query?: string
 }) {
   const t = useT()
+  const query = settingsMatch(searchQuery, t("speech.title"), speechSettingsSearch) ? "" : searchQuery
   const local = useApp((store) => store.meta?.model_policy ? store.meta.model_policy.configurable : store.meta?.product_mode === "local")
   const snapshot = useApp((store) => store.meta?.speech)
   const raw = defaultSpeechSettings(settings.speech)
@@ -80,8 +83,8 @@ export function SpeechTab({ settings, onChange, onFlush, query = "" }: {
       <span className="text-sm text-muted-foreground">{snapshot?.[kind].label || t("speech.gateway")}</span>
     </SettingsRow>}
   </>
-  return <SettingsPage title={t("speech.title")} description={t("speech.description")}>
-    <SettingsSection title={t("speech.input")}>
+  return <>
+    <SettingsSection title={t("speech.input")} description={t("speech.description")}>
       <Field label={t("speech.enabled")} query={query}><Switch checked={speech.input.enabled} onCheckedChange={(enabled) => update("input", { enabled })} /></Field>
       {connection("input", speech.input)}
       <Field label={t("speech.language")} query={query}><Input value={speech.input.language} placeholder={t("speech.autoLanguage")} onChange={(event) => update("input", { language: event.target.value })} /></Field>
@@ -110,7 +113,7 @@ export function SpeechTab({ settings, onChange, onFlush, query = "" }: {
       ] as const).map(([key, label, unit]) => <Field key={key} label={t(label)} query={query}><Input type="number" min={1} value={speech.limits[key] / unit} onChange={(event) => onChange({ ...settings, speech: { ...speech, limits: { ...speech.limits, [key]: Number(event.target.value) * unit } } })} /></Field>)}
     </SettingsSection>
     {!query ? <SpeechSettingsTest settings={{ ...settings, speech }} onFlush={onFlush} /> : null}
-  </SettingsPage>
+  </>
 }
 
 function SpeechSettingsTest({ settings, onFlush }: { settings: Settings; onFlush: () => Promise<void> }) {
@@ -164,6 +167,7 @@ function SpeechSettingsTest({ settings, onFlush }: { settings: Settings; onFlush
           await onFlush(); return synthesizeSpeech(part, signal, speech.limits.output_bytes)
         } }).catch((error) => toastError(error instanceof Error ? error.message : t("speech.failed")))
       }}>{playback.key === "settings:speech" ? t("speech.stopReading") : t("speech.testReading")}</Button>
+      {playback.key === "settings:speech" ? <span role="status" aria-live="polite" className="text-xs text-muted-foreground">{t(playback.state === "loading" ? "speech.generating" : "speech.playing")}</span> : null}
     </SettingsRow>
   </SettingsSection>
 }

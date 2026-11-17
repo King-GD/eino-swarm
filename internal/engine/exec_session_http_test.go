@@ -344,6 +344,13 @@ func assertManagedExecHTTPStatus(t *testing.T, request scheduleCompletionRequest
 	}
 	if calls != 1 || results != 1 || result.Status != status || result.SessionID == "" {
 		t.Errorf("expected one %s result for call %s: calls=%d results=%d result=%+v", status, id, calls, results, result)
+		// Retain refusal/start errors and numeric exit codes that the status-only
+		// receipt omits, without adding timing-sensitive logging on success.
+		for _, message := range request.Messages {
+			if message.Role == schema.Tool && message.ToolCallID == id {
+				t.Logf("original exec result for %s: %s", id, message.Content)
+			}
+		}
 	}
 	return result
 }

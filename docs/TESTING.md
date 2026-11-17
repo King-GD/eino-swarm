@@ -71,6 +71,13 @@ microphones, pronunciation or an unbounded conversation. Removing each of the
 eight corresponding source guards in an isolated copy has also been checked
 to make its real recorder/hook/HTTP/player regression fail.
 
+Settings regressions keep voice input, read aloud and resource limits inside
+Models for LOCAL and configurable ordinary Gateway accounts. Managed third-party
+accounts have only the Speech parameter page and no Models navigation or model,
+provider, endpoint or credential controls. Voice search and autosave retain the
+active permission boundary; delayed metadata cannot reopen a managed model editor.
+
+
 Headless and fixture checks do not accept physical microphone capture or native
 playback. Mac acceptance runs only in the identified `ci-macOS` guest through
 the existing case lifecycle. iOS/Android packaged tests must reach Voice status,
@@ -78,6 +85,47 @@ recording controls, permission refusal/recovery and playback. Report physical
 device capture separately from simulator-generated media. Preserve first
 failures, audio MIME/byte evidence, target identity and cleanup receipts outside
 the checkout; never invoke a real model from an automated test.
+
+The phone streaming case also runs in the iPhone WebKit project. Its real HTTP
+fixture answers real CORS preflights and asserts that WebKit made one before
+testing playback through the streaming POST.
+Settings tests distinguish generating speech from actual scheduled playback.
+Expiry after HTTP EOF must still stop queued sources until playback releases
+the stream; a retired stream must not stop a replacement playback owner.
+
+The packaged PCM/SSE cases are `ios-speech-stream.swift` and Android
+`SpeechStreamingTest`. Their synthetic account fixture retains real native
+start/stop/disconnect/context-close observations and complete-sample natural
+completion. Preparation is separate from execution and exact-package acceptance;
+see [the native speech fixture guide](../mobile/e2e/account-fixture/speech-stream.md).
+
+## Headless Web presence (`C-001`)
+
+`cmd/zwai/web_presence_test.go` drives `serveWeb` through real loopback HTTP
+handshakes: a web PID owns the hold, readiness waits for acknowledgement,
+startup refusal never becomes ready, signal cancellation releases and joins
+the stream, and four short streams exhaust the initial hold plus three
+recovery attempts. A real engine watcher advances past its idle grace while
+the waiter holds it, then exits after that hold is released. The CLI regression
+keeps an active turn unaffected by stopping only the waiter.
+`frontend/e2e/presence.spec.ts` distinguishes the headless launcher from its
+browser tab and checks that closing the tab leaves the launcher alive.
+
+`EngineLifecycle.tla` maps a ready headless waiter to the existing reserved /
+attached / opened shell states and signal release to `WindowCloses`. Idle exit
+is the unchanged `IdleCommit` / `IdleExit` pair. `headless-web-unheld` restores
+the reported missing hold and must violate `WindowHasEngine`; the current
+model checks that invariant together with the other lifecycle safety properties.
+The existing reachability cases cover attachment and idle exit after closing.
+This bounded model (two engines, one conversation, up to two turns) assumes
+atomic protocol transitions; it does not prove Go atomicity, network uptime or
+unbounded reconnect liveness. HTTP and process regressions cover those actual
+boundaries separately.
+
+```bash
+go test -race -count=1 ./cmd/zwai -run 'Presence|Web|Hold|Handshake'
+make model-check
+```
 
 PC chat omits whitespace-only assistant answers before creating layout rows.
 Recorded events remain available for replay and diagnostics. The work-fold
@@ -4878,7 +4926,11 @@ before the second RPC; `mobile/e2e/walkthrough.spec.ts` exercises the button
 through the phone screen against a scripted PC.
 The same walkthrough selects answer text and checks that Add to chat stays near
 the highlight: below the native menu's reserved space when there is room, or
-in its own row below a selection at the transcript bottom. On the old fixed-corner layout
+in its own row below a selection at the transcript bottom. The docked-row
+check measures the action against the transcript viewport's bottom, including
+its copy controls and durable completion timestamp, and still requires it to
+follow the selection without overlapping the transcript. A fixed text-to-button
+maximum would incorrectly count that metadata as blank space. On the old fixed-corner layout
 the gap was 300.5 CSS px on a 375px phone; the position regression failed
 before the fix. Android's isolated debug package was long-pressed in the real
 WebView: Copy/Share/Select all and Add to chat were visible without overlap
@@ -5086,6 +5138,23 @@ project is deleted, then checks the response and the removed directory.
 ```bash
 make model-check
 python3 tools/model_check.py --fetch installed-skills-current --out /tmp/installed-skills-model
+```
+
+## Sub-agent concurrency cap (opt-in, `C-009`)
+
+`models/swarm/ConcurrencyCap.tla` checks one task. Holders are the sub-agents
+inside a model call, oldest first. A programmatic spawn waits until
+`Len(holders) < cap`. Lowering the cap keeps that oldest prefix and stops the
+rest. `ShrinkKeepsHolders` is the v0.1.77 gate, which left those holders
+running and must break `HoldersWithinCap`. `NeverPreempted` is a witness that
+a lower cap can stop a holder. The model does not prove Go locking, or that a
+tool which ignores cancel releases its slot before it returns.
+`TestLoweringMaxConcurrentStopsNewestHoldersAndKeepsTheEarliest` covers a
+model call that honors cancellation: the newest holder stops, the earliest
+keeps the slot, and a queued worker stays out until that slot is released.
+
+```bash
+python3 tools/model_check.py --fetch concurrency-cap-current concurrency-cap-shrink-keeps-holders concurrency-cap-reach-preempt
 ```
 
 ## Renderer recovery decision (C-034)
@@ -6532,11 +6601,11 @@ sees in-flight sub-agents after the manager yields.
 `finished` after the manager `RunWith` returns, instead of freezing
 Agents on starting with an empty pane.
 `TestRaisingMaxConcurrentUnblocksQueuedWorkers` /
-`TestLoweringMaxConcurrentKeepsWaitersQueuedUntilASlotFrees` /
+`TestLoweringMaxConcurrentStopsNewestHoldersAndKeepsTheEarliest` /
 `TestApplyLiveSwarmLimitsResizesParkedAndRunningRegistries` are why
 Settings → Swarm → sub-agents at once takes effect on the live and
-parked registry: a higher cap starts waiters immediately, a lower cap
-does not kill in-flight workers.
+parked registry: a higher cap starts waiters immediately, and a lower cap
+stops the newest holders until the task is back within the number.
 `TestSpawnToolRefusesPastTheConcurrencyCap` /
 `TestParallelSpawnsAdmitOnlyTheCap` /
 `TestSameRoleSteerDoesNotNeedAFreeSlot` /
@@ -9008,6 +9077,15 @@ Native acceptance and gateway producer deployment are separate from these checks
 手机 LOCAL 登录后的双目录授权回归：`mobile/src/lib/use-local-model-sources.test.tsx` 覆盖分组聚合、同名模型 HTTP 选路、单来源撤权、短暂故障缓存和模式／账号隔离；`mobile/src/lib/gateway-account.test.ts` 拒绝非同源目录与畸形元数据。`mobile/e2e/local-model-sources.spec.ts` 在 Chromium 与 WebKit 上验证三个分组、真实发送对应接口、刷新撤权及凭据不写入个人设置。Account 等待 PC 的回归仍由 `phone-account-mode.spec.ts` 负责。
 
 
+### Phone PC connection retention
+
+`mobile/src/lib/use-phone-link-lifecycle.test.tsx` covers switching between two
+PCs without closing either live transport, returning without a new open, full
+cleanup, credential replacement and account revocation. The connection-gate
+regression keeps User center absent while a selected PC connects or awaits its
+engine and restores PC guidance after it is offline. The existing phone Account
+E2E checks readiness and draft retention with this connection notice.
+
 ### Phone debug mode switches the selected PC
 
 `internal/remote/product_mode_test.go` exercises real Pairlink dispatch, PC
@@ -9023,3 +9101,76 @@ ACKs, and prove no phone credential is sent. Browser cases in
 picker, selection, refresh, return to Account and explicit retry on Android-size
 Chromium and iPhone-size WebKit. Browser observations do not accept a packaged
 native installer or claim that an already-running phone/PC was updated.
+### Headless Gateway device sign-in
+
+`internal/remote/login_manual_test.go` exercises actual HTTP start/poll with
+missing, failed and working host launchers, pending network/review states and
+credential activation only after approval. `internal/server/remote_manual_login_test.go`
+crosses the real local HTTP adapter: explicit enable, validated public URL,
+unsafe-response refusal, cancellation and manual-token refusal.
+`frontend/e2e/headless-login.spec.ts` runs an offline loopback Gateway and opens
+its confirmation page in the user's browser; no native host browser is available.
+It does not establish physical NAS support or live Gateway availability.
+
+`models/account/DeviceLogin.tla` maps Start to `startAccountLogin`/`startLogin`,
+Response to `verifyLoginResponse` then `publishLogin`, HumanApproves/Activate to
+the Gateway's authorized poll plus private receipt activation, and CancelOrExpire
+to replacement of local terminal status. One attempt ranges over safe/unsafe
+responses and missing/failed/working launchers. TLC checks manual admission,
+validated-only URL publication, terminal link clearing and approval before
+activation; the original browser gate and three seeded missing guards must fail.
+Manual authorization, unsafe refusal and cancellation witnesses establish
+reachability. No fairness or eventual remote approval is assumed. This bounded
+protocol does not prove URL parser correctness, Go/storage atomicity, cross-attempt
+ownership or unbounded network liveness; the HTTP/race regressions cover those
+implementation boundaries. Run the `device-login-*` cases through `tools/model_check.py`.
+
+### Linux archive architecture and publication
+
+`tools/test_release_linux.py` checks both named ELF machines, class/endian,
+archive entry/mode/link boundaries, requested GOARCH and failed-build preservation.
+`tools/test_release_linux_publication.py` exercises `github_platform` itself with
+both accepted archives, partial/full public retries, downloads and missing/wrong
+architecture, source, version, hash, file and receipt. It asserts no rebuild or
+upload on refusal. `internal/release/linux_test.go` requires both archives at the
+actual Go publisher boundary; `internal/update/linux_asset_test.go` checks names.
+
+`models/release/LinuxRelease.tla` maps Prepare to artifact selection/public-byte
+reuse, Validate to ELF name/machine validation plus per-arch runtime receipts,
+and Upload to the subsequent source preflight and Go publisher. One selected
+artifact ranges over two architectures, matching/missing/wrong arch/source/hash
+receipts and public/new state. TLC checks support for both, name/machine agreement,
+receipt equality for new uploads and immutable public bytes. The original
+arm64-only behavior and three seeded missing guards fail the corresponding
+invariants; both new architectures and public retry are reachable. No eventual
+network/upload success is assumed. This finite equality model does not prove
+ELF parsing, Go/Python filesystem atomicity, real execution or GitHub behavior;
+real package/runtime and publisher regression evidence remains required.
+
+### Native access inventory and test configuration ownership
+
+`test_native_macos_access_guest.py` crosses `current_peers` with a historical
+controller PID now owned by a different kernel UID and with that unrelated
+process's children. Completed matching claims can be quiet without rewriting
+any queue receipt. Missing receipts, live interrupted effects, active controllers
+and same-UID ambiguous children still refuse. The actual guest observation bound
+two October queue PIDs to November root login processes; numeric PID reuse alone
+must not assign those login shells to the old CI queue.
+
+`models/native/PeerInventory.tla` maps one finite inventory observation to
+`current_peers`/`dead_peer_is_quiet`. It checks foreign-UID separation, mandatory
+terminal claims and refusal of same-UID children and active controllers. The old
+numeric-PID guard and missing-claim/owned-child guard variants must fail; quiet
+and unresolved witnesses remain reachable. No fairness or later-process claim is
+made; OS snapshot completeness, UID authenticity and process lifetime atomicity
+remain outside this model and require fresh real guest observations.
+
+`TestZeroDirectLoadDoesNotConnectBeforeTheModel` changes its post-turn MCP
+configuration through `Config.Update`: a terminal turn does not join background
+review, which may still take a locked configuration snapshot. The original direct
+field write was observed racing that snapshot and is retained in private red-run
+evidence, not accepted by a later green retry.
+
+0.1.80 的原生 Account／LOCAL 验收：iOS `testNativeSignedInAccountWaitsForPCThenLocalKeepsLogin` 和 Android `accountWaitsForPCAndDebugLocalRetainsLogin` 从真实合成 CAS／PKCE 登录进入 Account 等待页，确认不会发现直连目录；通过实际头像三击进入 LOCAL 保留登录和授权来源，再切回 Account 并连接同账号 PC，检查真实加密 RPC。直接模型的重定向、取消及分块流用例显式在 LOCAL 执行；用户中心关闭后进入聊天，不依赖已移除的 Chat history 按钮。
+
+桌面 LOCAL 的授权双目录由 `internal/remote/account_local_sources_test.go` 覆盖：个人、预置和额外网关模型可并列，实际模型请求保持来源身份；撤权、空列表和退出不改用其他接口。

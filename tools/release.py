@@ -291,13 +291,84 @@ def validate_windows_zip(path):
         raise ValueError(f'Windows installer is not a {match.group(1)} executable')
 
 
+def prepare_linux_publication(root, version, source_sha, files, remote_assets):
+    """Reuse public bytes, and require per-architecture runtime evidence for new ones."""
+    from release_linux import validate_archive
+    delivery = read_json(Path(os.environ.get('DELIVERY_STATE', home() / 'issue-automation/delivery-state.json')), {})
+    batch, _ = delivery_batch(delivery, version, source_sha)
+    accepted = (batch or {}).get('release_linux_validation')
+    for asset in files:
+        remote = remote_assets.get(asset.name)
+        if remote is not None:
+            digest = remote.get('digest')
+            if not isinstance(digest, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', digest):
+                raise ValueError('Published Linux archive has no verified remote digest')
+            if not asset.exists():
+                run(['gh', 'release', 'download', 'v' + version, '--pattern', asset.name,
+                     '--dir', str(asset.parent)], cwd=root)
+            if not asset.is_file() or digest != 'sha256:' + sha256(asset):
+                raise ValueError('Retained Linux archive differs from published bytes; refusing rebuild/overwrite')
+        else:
+            arch = asset.name.removesuffix('.tar.gz').rsplit('-', 1)[1]
+            entries = accepted.get('assets') if isinstance(accepted, dict) else None
+            receipt = entries.get(arch) if isinstance(entries, dict) else None
+            if (not isinstance(accepted, dict) or accepted.get('status') != 'passed'
+                    or accepted.get('version') != version or accepted.get('source_sha') != source_sha
+                    or not isinstance(receipt, dict) or receipt.get('status') != 'passed'
+                    or receipt.get('arch') != arch or receipt.get('asset_name') != asset.name
+                    or not asset.is_file() or sha256(asset) != receipt.get('asset_sha256')):
+                raise ValueError('The accepted Linux archive is missing or differs from architecture/runtime evidence')
+        validate_archive(asset)
+
+
+def prepare_windows_publication(root, version, source_sha, files, remote_assets):
+    """Validate retained native bytes per architecture, including partial uploads."""
+    delivery = read_json(Path(os.environ.get('DELIVERY_STATE', home() / 'issue-automation/delivery-state.json')), {})
+    batch, _ = delivery_batch(delivery, version)
+    batch = batch or {}
+    has_receipt = 'release_windows_validation' in batch
+    if not (has_receipt or batch.get('windows') == 'ready_for_publication'
+            or any(p.name in remote_assets for p in files)):
+        return False  # Legacy unaccepted build path; native admission still applies.
+    accepted = batch.get('release_windows_validation')
+    if has_receipt and (not isinstance(accepted, dict) or batch.get('source_sha') != source_sha
+            or accepted.get('status') != 'passed' or accepted.get('version') != version
+            or accepted.get('source_sha') != source_sha):
+        raise ValueError('The accepted Windows receipt differs from this version/source')
+    for asset in files:
+        arch = asset.stem.rsplit('-', 1)[1]
+        entries = accepted.get('assets') if isinstance(accepted, dict) else None
+        receipt = entries.get(arch) if isinstance(entries, dict) else None
+        if has_receipt and (not isinstance(receipt, dict) or receipt.get('status') != 'passed'
+                or receipt.get('arch') != arch or receipt.get('asset_name') != asset.name):
+            raise ValueError('The accepted Windows architecture receipt is invalid')
+        remote = remote_assets.get(asset.name)
+        if remote is not None:
+            digest = remote.get('digest')
+            if not isinstance(digest, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', digest):
+                raise ValueError('Published Windows archive has no verified remote digest')
+            if not asset.exists():
+                run(['gh', 'release', 'download', 'v' + version, '--pattern', asset.name,
+                     '--dir', str(asset.parent)], cwd=root)
+            if (not asset.is_file() or digest != 'sha256:' + sha256(asset)
+                    or (has_receipt and sha256(asset) != receipt.get('asset_sha256'))):
+                raise ValueError('Retained Windows archive differs from published bytes')
+        else:
+            if (not isinstance(receipt, dict) or receipt.get('status') != 'passed'
+                    or receipt.get('arch') != arch or receipt.get('asset_name') != asset.name
+                    or not asset.is_file() or sha256(asset) != receipt.get('asset_sha256')):
+                raise ValueError('The accepted Windows archive is missing or differs from native evidence')
+        validate_windows_zip(asset)
+    return True
+
+
 def github_platform(root, version, source_sha, platform, state, *, urgent_reason=None):
     if platform == 'android':
         files = [root / 'bin' / f'zwai-{version}-android.apk']
     elif platform == 'windows':
         files = windows_release_files(root, version)
     elif platform == 'linux':
-        files = [root / 'bin' / f'zwai-{version}-linux-arm64.tar.gz']
+        files = [root / 'bin' / f'zwai-{version}-linux-{arch}.tar.gz' for arch in ('amd64', 'arm64')]
     else:
         machine = run(['uname', '-m'])
         arch = {'arm64': 'arm64', 'x86_64': 'amd64'}.get(machine)
@@ -307,7 +378,11 @@ def github_platform(root, version, source_sha, platform, state, *, urgent_reason
     remote = run(['gh', 'api', '--paginate', '--slurp', 'repos/{owner}/{repo}/releases'], cwd=root)
     matches = [r for page in json.loads(remote) for r in page if r['tag_name'] == 'v' + version]
     remote_assets = {a['name']: a for a in matches[0]['assets']} if matches else {}
-    if all(p.name in remote_assets for p in files):
+    if platform == 'windows' and prepare_windows_publication(root, version, source_sha, files, remote_assets):
+        pass
+    elif platform == 'linux':
+        prepare_linux_publication(root, version, source_sha, files, remote_assets)
+    elif all(p.name in remote_assets for p in files):
         for p in files:
             digest = remote_assets[p.name].get('digest')
             if not digest or not digest.startswith('sha256:'):
@@ -330,15 +405,6 @@ def github_platform(root, version, source_sha, platform, state, *, urgent_reason
                     or accepted.get('asset_name') != asset.name or not asset.is_file()
                     or sha256(asset) != accepted.get('asset_sha256')):
                 raise ValueError('The accepted Android package is missing or differs from native-device evidence')
-        elif platform == 'linux' and ('release_linux_validation' in (batch or {})
-                or (batch or {}).get('linux') == 'ready_for_publication'):
-            asset = files[0]
-            accepted = (batch or {}).get('release_linux_validation')
-            if (not isinstance(accepted, dict) or batch.get('source_sha') != source_sha
-                    or accepted.get('status') != 'passed' or accepted.get('version') != version
-                    or accepted.get('source_sha') != source_sha or accepted.get('asset_name') != asset.name
-                    or not asset.is_file() or sha256(asset) != accepted.get('asset_sha256')):
-                raise ValueError('The accepted Linux archive is missing or differs from runtime evidence')
         elif platform == 'macos' and (native or (batch or {}).get('macos') == 'ready_for_publication'):
             asset = files[0]
             if (native.get('status') != 'passed' or native.get('version') != version
@@ -350,8 +416,6 @@ def github_platform(root, version, source_sha, platform, state, *, urgent_reason
                 target = 'desktop-release'
             elif platform == 'windows':
                 target = 'windows-release'
-            elif platform == 'linux':
-                target = 'linux-release'
             else:
                 target = 'mobile-android-release'
             env = dict(os.environ, ANDROID_ARTIFACT='apk')
@@ -363,9 +427,6 @@ def github_platform(root, version, source_sha, platform, state, *, urgent_reason
         elif platform == 'windows':
             for path in files:
                 validate_windows_zip(path)
-    if platform == 'linux':
-        from release_linux import validate_archive
-        validate_archive(files[0])
     if source_preflight(root, version, (platform,), urgent_reason=urgent_reason) != source_sha:
         raise ValueError('Source changed during platform build')
     run(['go', 'run', './internal/release/cmd', '-version', version, '-dir', str(root / 'bin'),
@@ -436,7 +497,9 @@ def selected_platforms(version, selected):
     if selected != 'all':
         return [selected]
     pending = batch_platforms(version, pending_only=True)
-    return ['macos', 'android', 'ios'] if pending is None else pending
+    platforms = ['macos', 'android', 'ios'] if pending is None else pending
+    # Finish durable installer delivery before any Apple processing/review wait.
+    return [p for p in platforms if p != 'ios'] + (['ios'] if 'ios' in platforms else [])
 
 
 def platform_acceptance_gate(version, platform):
@@ -515,6 +578,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--version', required=True)
     parser.add_argument('--platform', choices=['all', 'macos', 'android', 'ios', 'windows', 'linux'], default='all')
+    parser.add_argument('--ios-status', action='store_true', help='GET-only current TestFlight status; no upload, history reconciliation or ledger writes')
     parser.add_argument('--check', action='store_true', help='read-only source, signing and remote checks')
     parser.add_argument('--verify', action='store_true', help='local resumable checks/package only; never publish')
     parser.add_argument('--plan', action='store_true', help='print the local verification plan without running it')
@@ -526,6 +590,19 @@ def main():
                         help='explicit user-authorized urgent release; bypass timing policy only')
     args = parser.parse_args()
     version_code(args.version)
+    if args.ios_status:
+        if (args.platform != 'ios' or args.verify or args.check or args.plan
+                or args.evidence is not None or args.e2e_port is not None or args.urgent_reason):
+            parser.error('--ios-status requires --platform ios and cannot publish or verify')
+        sys.dont_write_bytecode = True
+        state = read_json(home() / 'releases' / f'{args.version}.json', {})
+        source = run(['git', 'rev-parse', 'HEAD'], cwd=args.source_dir)
+        if state.get('version') != args.version or state.get('source_sha') != source:
+            raise ValueError('Current TestFlight observation requires the retained version/source checkout')
+        from release_ios import IOSRelease
+        result = IOSRelease(args.source_dir, args.version, source, state).current_status()
+        print(json.dumps(result))
+        return 0 if result['status'] == 'available' else 1
     if args.verify:
         if args.check or args.platform != 'macos' or (not args.plan and args.evidence is None):
             parser.error('--verify requires --platform macos and --evidence; it cannot be combined with --check')

@@ -1,6 +1,6 @@
 import { usePhoneAccount } from "@/components/gateway-account-shell"
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { PcReadyGate } from "@/components/pc-ready-gate"
+import { PcConnectionGate } from "@/components/pc-connection-gate"
 import { EngineStartupBanner } from "@/components/engine-startup"
 import { useEngineStartup } from "@/lib/use-engine-startup"
 import { rosterGenerationReset } from "@/lib/roster-generation"
@@ -261,7 +261,7 @@ export function PhoneApp() {
       void recoverRef.current()
     }
     void next.announceDevice().then((resp) => {
-      if (resp) takeHostName(resp)
+      if (resp && linkRef.current === next) takeHostName(resp)
     })
   }
 
@@ -294,7 +294,7 @@ export function PhoneApp() {
     if (await openThreadOn(target, id)) resumedRef.current = true
   }
 
-  const { boot, recover, close: closeLink } = usePhoneLinkLifecycle({
+  const { boot, recover, close: closeLink, detach: detachLink } = usePhoneLinkLifecycle({
     link: linkRef, authority: authorityRef, generation: bindGen, unlinking: unlinkingRef, retryTimer, recoverRef,
     allowsLink: account.allowsLink, install: setLink, attach: attachPush, firstList: consumeFirstList,
     restore: async (next) => { const id = viewRef.current.threadId; if (id) await openThreadOn(next, id); else await consumeFirstList(next) },
@@ -348,12 +348,7 @@ export function PhoneApp() {
       const gen = bindGen.current
       window.clearTimeout(retryTimer.current)
       saveLink(bound.saved)
-      const prev = linkRef.current
-      if (prev && prev !== next) {
-        prev.close()
-        linkRef.current = null
-      }
-      setLink(null)
+      detachLink()
       resumedRef.current = false
       loadGen.current += 1
       resetRoster()
@@ -665,7 +660,7 @@ export function PhoneApp() {
     if (!paused && fp === activeFpRef.current && sameLinkAuthority(saved, authorityRef.current) && (!linkRef.current || linkRef.current.alive())) return
     bindGen.current += 1
     window.clearTimeout(retryTimer.current)
-    closeLink()
+    detachLink()
     if (paused) { setBusy(false); setReconnecting(false); return }
     resumedRef.current = true
     loadGen.current += 1
@@ -754,8 +749,8 @@ export function PhoneApp() {
     />
   ) : null
 
-  const gate = (children: ReactNode) => account.mode !== "account" ? children : <PcReadyGate waiting={!link?.alive() || startup?.startup !== "ready"}
-    notice={<div className="flex h-full min-h-0 flex-col">{link?.alive() ? <p role="status" className="p-4 text-sm">{t("pcWait.restoring")}</p> : null}{error ? <p role="alert" className="px-4 text-sm text-destructive">{error}</p> : null}{account.empty}</div>}>{children}</PcReadyGate>
+  const gate = (children: ReactNode) => <PcConnectionGate hosts={hosts} activeFingerprint={activeFp} connecting={busy || reconnecting}
+    connected={Boolean(link?.alive())} ready={startup?.startup === "ready"} error={error} onRetry={() => void recover(true)}>{children}</PcConnectionGate>
 
   if (account.mode !== "account" && phoneShell(hosts.length, providers.length) === "scan" && !(surface === "chat" && account.gatewaySourceID)) {
     if (account.empty) return <>{account.empty}{sheet}{modelSheet}</>

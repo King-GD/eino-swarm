@@ -6,6 +6,50 @@ import XCTest
 final class BindFlowTests: XCTestCase {
   private let fixtureOrigin = "__ZWAI_GATEWAY_FIXTURE_ORIGIN__"
 
+  // This case starts in Account mode. The other direct-model transport cases
+  // explicitly select LOCAL through the existing private wrapper input.
+  func testNativeSignedInAccountWaitsForPCThenLocalKeepsLogin() throws {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    defer { app.terminate() }
+    try control("review=approved&pc=hide&api=on&start=normal&catalog=normal&model=normal")
+    app.launch()
+    let login = app.buttons["Sign in"].firstMatch
+    XCTAssertTrue(login.waitForExistence(timeout: 15))
+    login.tap()
+    try browserLogin(app, authorize: true)
+    let waiting = app.staticTexts["Waiting for a computer"]
+    XCTAssertTrue(waiting.waitForExistence(timeout: 15))
+    XCTAssertFalse(app.textViews["Message"].exists)
+    XCTAssertEqual(try count("models"), 0, "Account must not discover phone-direct models")
+    XCTAssertEqual(try count("model_calls"), 0)
+    record(app, "signed-in-account-waits-for-computer")
+
+    let portrait = app.buttons["Native test account"]
+    XCTAssertTrue(portrait.exists)
+    portrait.tap(withNumberOfTaps: 3, numberOfTouches: 1)
+    XCTAssertTrue(app.textViews["Message"].waitForExistence(timeout: 15))
+    XCTAssertFalse(app.buttons["Sign in"].exists, "Debug LOCAL keeps the current login")
+    XCTAssertGreaterThan(try count("models"), 0)
+    XCTAssertEqual(try count("connect"), 0)
+    record(app, "local-retains-authorized-models-without-pc")
+
+    app.buttons["User center"].tap()
+    XCTAssertTrue(portrait.waitForExistence(timeout: 5))
+    portrait.tap(withNumberOfTaps: 3, numberOfTouches: 1)
+    XCTAssertTrue(waiting.waitForExistence(timeout: 10))
+    XCTAssertFalse(app.textViews["Message"].exists)
+    XCTAssertEqual(try count("model_calls"), 0)
+    try control("pc=show")
+    app.buttons["Refresh account"].tap()
+    let connect = app.buttons["Connect Native PC"]
+    XCTAssertTrue(connect.waitForExistence(timeout: 10))
+    connect.tap()
+    XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Native PC conversation")).firstMatch.waitForExistence(timeout: 20))
+    XCTAssertGreaterThan(try count("peer_messages"), 0)
+    record(app, "account-connected-to-owned-ready-computer")
+  }
+
   func testNativeAccountReviewModelAndOwnedPCFlow() throws {
     continueAfterFailure = false
     let app = XCUIApplication()
@@ -86,10 +130,10 @@ final class BindFlowTests: XCTestCase {
     try control("catalog=normal")
     app.buttons["Refresh account"].tap()
     XCTAssertTrue(app.staticTexts["native-fixture-model"].waitForExistence(timeout: 15))
-    app.buttons["Chat history"].tap()
+    app.buttons["Close"].tap()
 
     let message = app.textViews["Message"]
-    XCTAssertTrue(message.waitForExistence(timeout: 20), "Approved account must reach phone model chat without a PC")
+    XCTAssertTrue(message.waitForExistence(timeout: 20), "LOCAL may use the approved account model without a PC")
     try control("model=redirect")
     try send(app, "native account redirect probe")
     try waitForCount("model_redirect_sent", atLeast: 1, timeout: 10)
@@ -131,7 +175,7 @@ final class BindFlowTests: XCTestCase {
     app.buttons["Refresh account"].tap()
     let connect = app.buttons["Connect Native PC"]
     XCTAssertTrue(connect.waitForExistence(timeout: 12))
-    XCTAssertTrue(app.staticTexts["API access is unavailable. Contact an administrator."].exists)
+    XCTAssertFalse(app.staticTexts["Could not load server models. Refresh to try again."].exists)
     XCTAssertTrue(connect.isEnabled, "Device authority is independent of model API authorization")
     record(app, "account-owned-pc-picker")
     connect.tap()
@@ -161,7 +205,7 @@ final class BindFlowTests: XCTestCase {
     app.buttons["Sign in"].tap()
     try browserLogin(app, authorize: true)
     XCTAssertTrue(app.staticTexts["native-fixture-model"].waitForExistence(timeout: 15))
-    app.buttons["Chat history"].tap()
+    app.buttons["Close"].tap()
     XCTAssertTrue(app.textViews["Message"].waitForExistence(timeout: 15))
 
     let answer = "Native streamed 中文🙂 complete"
@@ -207,9 +251,9 @@ final class BindFlowTests: XCTestCase {
     try choosePreference(app, label: "PC conversation Web tools", option: "Follow this PC's settings")
     record(app, "web-independent-direct-and-pc-preferences")
 
-    app.buttons["Chat history"].tap()
+    app.buttons["Close"].tap()
     XCTAssertFalse(app.buttons["Web settings"].exists)
-    try chooseModel(app, name: "native-fixture-model", source: "Server · Native gateway")
+    try chooseModel(app, name: "native-fixture-model", source: "Gateway · Native gateway")
     try send(app, "Native server Web proof")
     XCTAssertTrue(app.staticTexts["Native cloud evidence answer"].waitForExistence(timeout: 20))
     XCTAssertEqual(try count("gateway_model_calls"), 3)

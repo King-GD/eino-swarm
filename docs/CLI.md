@@ -212,7 +212,7 @@ make mobile-ios-release VERSION=x.y.z  # resume only TestFlight, same version/SH
 ```
 
 `make release` serially publishes only the batch's still-required platforms
-in macOS → Android → iOS → Windows order. Windows is in that list only when
+in macOS → Android → Windows → Linux → iOS order. Windows is in that list only when
 the batch workset includes it. If both desktop and mobile changed, macOS zip
 and sideload APK go to the same GitHub tag; iOS goes to the configured TestFlight
 internal/external groups. Each platform has an independent gate: failure or
@@ -223,7 +223,12 @@ marketing version and advance only the package-derived build number. `VERSION`
 identifies the source batch; optional `IOS_RELEASE_CONFIG.marketing_version` starts
 a new TestFlight version for new candidates. Existing receipts freeze the iOS
 version on recovery. Same-version builds may still require Apple review.
-See [release setup and recovery](RELEASE.md).
+Current-build GET-only TestFlight status uses
+`python3 -B tools/release.py --version x.y.z --platform ios --ios-status --source-dir /absolute/frozen-checkout`.
+It checks live strict availability, never uploads or records delivery, and does not
+scan historical build reviews. JSON `available` returns0; other states return1.
+The retained release source must match the selected checkout. See
+[release setup and recovery](RELEASE.md).
 
 The source must be clean and part of successfully fetched/pushed main. A mobile
 publication must also contain the committed mobile package version; a Mac-only
@@ -256,7 +261,15 @@ Serves the same app over HTTP and opens your browser.
 | flag | default | meaning |
 |---|---|---|
 | `--addr HOST:PORT` | the configured `server.addr` (`127.0.0.1:8787`) | listen address. `:0` or `127.0.0.1:0` picks a free port and prints it. |
-| `--no-open` | off | do not open a browser. Also honoured: `server.open_browser: false`. |
+| `--no-open` | off | do not open a browser; hold the engine while this process runs. Also honoured: `server.open_browser: false`. |
+
+With `--no-open` or `server.open_browser: false`, this process holds a confirmed
+`web` presence before printing readiness, so a browser tab is optional. A lost
+connection is recovered on the same engine with a bounded budget; exhaustion
+returns an error for a supervisor to detect. `SIGTERM`/`Ctrl-C` release that
+presence. An otherwise idle engine then exits after its existing idle grace;
+active turns and other clients continue. The engine child has its own session:
+this wrapper does not forward a stop signal or cancel work.
 
 The URL is printed on startup. `Ctrl-C` stops this waiter. It does not stop
 the engine while another shell, the phone, or a turn is still using it.

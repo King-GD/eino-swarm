@@ -35,7 +35,7 @@ empty value from the archive.
 
 ## Voice settings
 
-The PC's **Settings → Voice** controls input/output switches, recording and
+The PC's **Settings → Models** controls input/output switches, recording and
 playback parameters and limits. Both directions default off. **Models → Functional
 models** selects recognition and spoken-answer models independently of conversation.
 LOCAL and an editable gateway allow personal providers. A managed third-party
@@ -50,8 +50,12 @@ converts other containers. The input byte limit applies after conversion too.
 `speech.output.format` accepts `mp3` (the existing default), `wav` and `pcm`.
 Select **PCM (streaming playback)** to play a response while it is generated.
 The service must return mono 24 kHz signed 16-bit little-endian PCM, either as
-audio bytes or OpenAI `speech.audio.delta` / `speech.audio.done` SSE events.
-MP3/WAV remain complete-segment playback. Phone PC-local RPC remains buffered.
+audio chunks or OpenAI speech SSE events. MP3/WAV remain complete-segment
+playback. Phone PC-local RPC remains buffered.
+Gateway account PCM streaming requests use SSE; personal services retain the
+audio streaming request. The resolved spoken-output source controls this choice,
+including editable gateway model bindings. Paired phones route that output independently
+of recognition, with their own same-origin gateway login.
 
 Paired phones use the selected PC's safe projection only while that PC is online
 and its engine is ready. Gateway audio uses the phone's own same-origin account
@@ -382,7 +386,11 @@ computer control, shell execution, hosted MCP approvals or arbitrary tool types.
 
 Gateway catalogs, profiles and credentials remain in memory; they are never
 saved as `models.providers`. Provider IDs beginning with `gateway:` are reserved.
-LOCAL lists only personal providers. An ordinary gateway lists its catalog and
+LOCAL lists personal providers and separately authorized signed-in account catalogs.
+Each account catalog refreshes independently: a temporary outage retains only
+that same connection's previously authorized catalog. Fresh bootstrap revocations,
+denied responses and empty catalogs remove their own source even during a sibling outage.
+An ordinary gateway lists its catalog and
 personal providers. A managed gateway exposes only its own conversation preset;
 legacy `account_presentation: full` cannot unlock other models.
 
@@ -434,7 +442,7 @@ Runtime limits and model-call defaults for the swarm.
 
 | key | default | meaning |
 |---|---|---|
-| `max_concurrent` | `6` | sub-agents running at the same time. The manager prompt and the `spawn_agent` / `resume_agent` descriptions state this number as a hard limit. Those tools refuse past it and do not park the extra worker; the manager waits, then resumes a finished id or spawns the next piece. Saving Settings applies it to the live and parked swarm immediately. Workers already queued by a programmatic `Spawn` start as soon as a slot opens under a higher cap. Lowering it does not kill in-flight workers. Raise it for wide fan-out; every one of them is a model call in flight. |
+| `max_concurrent` | `6` | sub-agents running at the same time for one task. The manager prompt and the `spawn_agent` / `resume_agent` descriptions state this number as a hard limit. Those tools refuse past it and do not park the extra worker; the manager waits, then resumes a finished id or spawns the next piece. Saving Settings applies it to the live and parked swarm immediately. Workers already queued by a programmatic `Spawn` start as soon as a slot opens under a higher cap. Lowering it stops the workers that took a slot last until the task is back within the number; the earlier ones keep running. A stopped worker needs a free slot before `resume_agent` can continue it. Raise it for wide fan-out; every one of them is a model call in flight. |
 | `agent_timeout_seconds` | `3600` | watchdog per sub-agent lifetime, including time queued for a slot. Existing positive saved values, including an old `600` or `1800`, remain unchanged. Saving updates later spawn/resume/restore lifetimes without extending an already created deadline or clearing failure counts. A failed worker's View failure reason opens its recorded error; an exact watchdog error for that worker links to Settings → Swarm → Sub-agent timeout and focuses this field. Provider idle errors, generic deadlines and cancellation do not identify this watchdog and do not offer that link. Saving does not resume the stopped worker. Three consecutive watchdog failures of the same worker stop automatic resume, error the manager and pause its recurring schedule. Provider idle errors and cancellation do not count. Success or explicit human retry resets the budget; increasing this lifetime alone is not a recovery strategy. |
 | `max_turns` | `200` | ReAct iterations per sub-agent. A model stuck in a loop ends here instead of spinning. A failed worker's recorded iteration-limit error links from its failure details to Settings → Swarm → Sub-agent tool rounds and focuses this field. Changing it does not resume that worker. |
 | `manager_max_iterations` | `200` | iterations for the manager. Lower it and complex plans get truncated mid-way; the manager also spends turns waiting for workers. Reaching the cap **pauses** the turn and asks whether to add another slice of this size, rather than failing with eino's iteration error. |
@@ -911,6 +919,18 @@ $ZWAI_HOME/remote/host_token   0600
 $ZWAI_HOME/remote/identity     0600
 ```
 
+On Unix, remote credential directories/files reject group/other permission bits;
+new directories/files use `0700`/`0600`. On Windows, where Go reports `0777`/`0666`
+even for private ACLs, the client instead checks the actual owner and DACL. Only the current
+user, SYSTEM and built-in Administrators may own the object or receive a
+nonzero allow grant. Missing/NULL DACLs, unknown owners or ACE formats, and
+grants to other principals (including inherited grants) are refused. An empty
+DACL grants nothing; actual file access may still fail. Newly created credential
+files are checked before secret bytes are written. The client does not change
+existing ACLs automatically. Regular-file, symlink and size checks still apply.
+Credential updates flush their record and parent directory; Windows uses a
+writable directory handle with `FlushFileBuffers` and reports failures.
+
 `GET /api/settings` never echoes the token. In `independent` mode, enabling pairing
 with a hub URL mints `host_token` if missing; `PUT /api/remote/token` can replace
 it. In `account` mode, enabling pairing does not register anonymously. Use
@@ -1034,3 +1054,5 @@ original marketing version even after this configuration changes. Build numbers
 remain package-derived and must increase beyond all remote builds/uploads.
 This signing configuration is managed outside the application Settings; see
 [release setup and recovery](RELEASE.md#testflight-version-and-build-number).
+
+语音设置入口随模型配置权限显示：LOCAL 和可配置的普通网关账号在 Settings → Models 编辑功能模型及语音参数；托管第三方账号隐藏 Models，只在 Speech 入口显示语音开关、音色和资源参数，不显示模型、Provider 或凭据配置。

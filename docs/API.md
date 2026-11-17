@@ -30,31 +30,40 @@ apply. All responses are `no-store`.
 | endpoint | behavior |
 |---|---|
 | `POST /api/audio/transcriptions` | multipart `file`; returns `{ "text": "…" }` for insertion into an editable draft |
-| `POST /api/audio/speech` | JSON `{ "text": "…" }`, one bounded prose segment; returns audio bytes with their MIME. Finished answers and the PC selection menu both use this endpoint |
+| `POST /api/audio/speech` | JSON `{ "text": "…" }`, one bounded prose segment; returns audio bytes or PCM speech SSE with their MIME. Finished answers and the PC selection menu both use this endpoint |
 | `POST /api/audio/models` | JSON `{ "kind": "input" }` or `output`; discovers the configured voice service's models by capability |
 
 With `speech.output.format: pcm`, `/api/audio/speech` flushes audio as it arrives
 instead of buffering the segment. The upstream request uses
-`response_format: "pcm"` and `stream_format: "audio"`. Responses are `audio/pcm` (mono 24 kHz,
-signed 16-bit little-endian) or an upstream `text/event-stream` containing
-OpenAI `speech.audio.delta` base64 audio and `speech.audio.done`. A failure after
-headers terminates the HTTP stream; it is not a successful partial audio file.
-Limits, configuration checks and cancellation remain active until the response
-is closed. MP3/WAV and the PC-local phone RPC retain complete-segment semantics.
+`response_format: "pcm"` and `stream_format: "sse"` for a resolved gateway
+account source; personal provider/custom services use `stream_format: "audio"`.
+Responses are `audio/pcm`
+(mono 24 kHz, signed 16-bit little-endian) or an upstream `text/event-stream`
+containing OpenAI `speech.audio.delta` base64 audio and `speech.audio.done`.
+A failure after headers terminates the HTTP stream; it is not a successful
+partial audio file. Limits, configuration checks and cancellation remain active
+until the response is closed. MP3/WAV and the PC-local phone RPC retain
+complete-segment semantics.
 
 `GET /api/settings` and `PUT /api/settings` include `speech.input`,
 `speech.output` and `speech.limits`. Each direction has `enabled`, `source`
 (`account`, `provider`, `custom`), `provider_id`, `base_url`, `model` and
 direction-specific parameters. `api_key` is write-only: omitted keeps the saved
 key, an explicit empty string clears it; reads report `has_api_key`.
-Gateway mode resolves fixed voice roles with the PC's private account source.
-Local mode requires a provider/custom selection. The request cannot supply a
-replacement upstream URL, key or model.
+Functional bindings resolve each direction's model. Managed gateways supply
+their enabled roles; editable accounts and LOCAL can select personal providers.
+The request cannot supply a replacement upstream URL, key or model.
 
 PC metadata and phone `speech_config`/catalog replies publish only a safe voice
 snapshot: `execution` (`gateway`/`pc_local`), verified `gateway_origin` when
 applicable, input/output `enabled`, `ready`, reason, model/label, parameters and
-limits. No local endpoint, API key or Host token is included.
+limits. Output additionally publishes its own `execution` and, only for an
+account source, `gateway_origin`. New phones prefer these output fields for
+spoken audio, so an editable gateway's selected speech model goes directly to
+that gateway even when recognition uses the PC. Older snapshots without output
+routing fall back to the global fields; global routing and recognition routing are
+unchanged. A personal output explicitly publishes `execution:"pc_local"` without
+an origin. No endpoint path, API key or Host token is included.
 If a valid parameter set expands beyond the sealed-frame budget, `speech_config`
 returns `audio_config_limit`; ordinary metadata/catalog remain available with
 `speech_error` and no voice snapshot. A live refusal or invalid new snapshot
@@ -329,7 +338,7 @@ endpoint:
 |---|---|
 | `signed_out` | no device login on this machine |
 | `pending` | signed in; the model catalog has not been read yet |
-| `ready` | the catalog was read (`models` is the total count). `kinds` counts `chat`, `unclassified`, `embedding`, `ocr`, `decisions`, `transcription`, `speech` and `other`; `embedding_models`, `transcription_models` and `speech_models` list their respective model names. `source_id` is the runtime `gateway:<32 hex>` id. Conversation rows in `GET /api/models` are the `chat` and unclassified names. When the server publishes fixed roles, `roles` is the read-only list `{id,enabled,label}` and a FOFA install uses those names instead of the catalog. The list may include `transcription`, `speech`, `image`, `translation` and `naming`. Voice uses `transcription` and `speech` when separately enabled in Settings → Voice; see `F-148` / `C-048`. Image generation remains display-only. An enabled `translation` role posts Chat Completions JSON to the account base `/translations`; an enabled `naming` role posts conversation and schedule naming to `/naming`. While those roles are off, selection translation keeps the conversation model and naming keeps `title`. An old server omits `roles` or returns only the first six, eight or nine roles. LOCAL ignores the field. The account card omits the `decisions` count and role |
+| `ready` | the catalog was read (`models` is the total count). `kinds` counts `chat`, `unclassified`, `embedding`, `ocr`, `decisions`, `transcription`, `speech` and `other`; `embedding_models`, `transcription_models` and `speech_models` list their respective model names. `source_id` is the runtime `gateway:<32 hex>` id. Conversation rows in `GET /api/models` are the `chat` and unclassified names. When the server publishes fixed roles, `roles` is the read-only list `{id,enabled,label}` and a FOFA install uses those names instead of the catalog. The list may include `transcription`, `speech`, `image` and `translation`. Voice uses `transcription` and `speech` when separately enabled in Settings → Models; see `F-148` / `C-048`. Image generation remains display-only. An enabled `translation` role posts Chat Completions JSON to the account base `/translations`; an enabled `title` role posts conversation and schedule naming to `/naming`. While those roles are off, selection translation keeps the conversation model and naming follows `conversation`; retired `naming` is ignored. An old server omits `roles` or returns only the first six, eight or nine roles. LOCAL ignores the field. The account card omits the `decisions` count and role |
 | `no_access` | signed in but the account may not use the model API |
 | `unavailable` | signed in but the catalog could not be used; `reason` is one of `rejected`, `unsupported`, `network`, `gateway`, `unsafe_response`, `no_models` |
 
@@ -771,16 +780,13 @@ conversation can still select it, and a turn already on it keeps running.
 ```
 
 `source` is `account` for the signed-in server's models and `provider` for the
-user's own endpoints. Gateway mode with an editable account returns account and
-personal rows. A managed preset returns only its own conversation row,
-irrespective of legacy `account_presentation`; a profile uses its label and the
-alias `account`, never the broader catalog. LOCAL keeps a signed-in account and
-returns the personal rows plus each authorized server catalog: the third-party
-preset and the original gateway catalog, as separate `gateway:` providers. An
-unauthorized or empty catalog is absent. A gateway with no ready source returns
-no account rows. Runtime account rows carry no credential or endpoint. A
-`gateway:` id with no signed-in source produces `account_login_required`
-instead of choosing a same-named personal model.
+user's own endpoints. LOCAL returns personal rows plus separately authorized signed-in third-party and gateway catalogs, with distinct provider IDs. An editable gateway
+returns account and personal rows. A managed preset returns only its own
+conversation row, irrespective of legacy `account_presentation`; a profile uses
+its label and the alias `account`, never the broader catalog. A gateway with no
+ready source returns no model choices. Runtime account rows carry a `gateway:`
+provider ID and no credential or endpoint. Missing account sources produce
+`account_login_required` instead of choosing a same-named personal model.
 
 A catalog row may carry `model_type`. `chat` and a missing type stay in this
 list. `embedding`, `ocr` and `decisions` are omitted, and so is any other
@@ -1081,8 +1087,8 @@ another verified login provides a name. Ordinary usernames remain readable.
 `state` is `signed_out`, `signing_out`, `starting`, `authorization_pending`,
 `account_pending`, `account_rejected`, `authorized`, `access_denied`, `expired`, `error` or
 `cancelled`. `authorized` alone does not prove the WebSocket is online.
-`login_available` means this local server can open the system browser; a web
-server without that capability cannot begin login. The rail account entry and
+`login_available` means this local server has a remote host that supports device
+sign-in. A headless Web/server build can begin login without a browser launcher. The rail account entry and
 Phone page share one local status watch, once a second while visible, and one
 mutation fence. The last subscriber leaving cancels reads. Phone actions require
 enabled/Hub/mode to match the saved status. Network read failure reports unknown
@@ -1098,11 +1104,17 @@ details until recovery.
 
 ### `POST /api/remote/login`
 
-Body `{}` starts or retries a Gateway account login. Go stages a private candidate, opens
-the Gateway-returned same-origin verification URL in the system browser, and owns polling
-with S256 proof. It returns `202` with the same safe status; a later status read
-shows the public confirmation code and PC fingerprint. No verification URL,
-Host Token, secret device code or verifier is returned to the renderer.
+Body `{}` starts or retries a Gateway account login. Go stages a private candidate,
+validates the Gateway-returned verification URL and owns polling with S256 proof.
+It returns `202` with the same safe status. Pending status includes the public
+`user_code`, PC fingerprint and `verification_uri`. The URL must pass the existing
+same-origin path/query allowlist before either publication or optional system-browser
+launch: only the single matching public `desktop_code` parameter is permitted.
+The UI offers a link that can be opened or copied on the user's own device.
+A missing host browser or failed launch does not end polling; `browser_unavailable`
+is an advisory on pending status. No Host Token, secret device code or verifier
+is returned to the renderer. Authorized, cancelled, expired, denied and error
+states clear the link; an unreadable status hides cached links.
 
 The explicit sidebar and Phone-page account actions send
 `{"enable_account":true}`. Phone presents sign-in and a switch for this PC's
@@ -1143,8 +1155,7 @@ Go respects Gateway `429 Retry-After`, with a ten-minute/120-poll bound. Safe
 login error codes are `network_unavailable`, `gateway_unavailable`,
 `device_conflict`, `access_denied`, `unsafe_response`, `browser_unavailable`
 and `credential_unavailable`. They do not carry remote response bodies.
-Missing system-browser support returns `501 remote_login_unavailable`;
-incompatible config or unavailable local credentials returns
+Incompatible config or unavailable local credentials returns
 `409 remote_login_unavailable`; malformed/extra request fields return `400`.
 
 Body `{"new_device":true,"confirmed":true}` is the explicitly confirmed recovery

@@ -202,6 +202,9 @@ func (c *Config) StageRemoteToken(token, origin, publicKey string) (string, erro
 			_ = os.Remove(path)
 		}
 	}()
+	if !privateRemoteCreatedFile(file) {
+		return "", errors.New("remote: unsafe private credential file")
+	}
 	raw, err := json.Marshal(PendingRemoteCredential{Token: token, Origin: origin, PublicKey: publicKey, CreatedAt: time.Now().UTC()})
 	if err != nil {
 		return "", err
@@ -257,7 +260,7 @@ func (c *Config) privateRemoteDirectory() error {
 		return err
 	}
 	info, err := os.Lstat(c.RemoteDir())
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+	if err != nil || !info.IsDir() || !privateRemotePermissions(c.RemoteDir(), info) {
 		return errors.New("remote: unsafe credential directory")
 	}
 	return nil
@@ -268,7 +271,7 @@ func privateRemoteRead(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > 16<<10 {
+	if !info.Mode().IsRegular() || info.Size() > 16<<10 || !privateRemotePermissions(path, info) {
 		return nil, errors.New("remote: unsafe private credential file")
 	}
 	file, err := os.Open(path)
@@ -277,6 +280,16 @@ func privateRemoteRead(path string) ([]byte, error) {
 	}
 	defer file.Close()
 	return io.ReadAll(io.LimitReader(file, 16<<10))
+}
+
+// CreateTemp's mode does not establish Windows ACL privacy. Check the actual
+// new file before writing any credential bytes; an unsafe empty file is removed.
+func privateRemoteCreatedFile(file *os.File) bool {
+	if file == nil {
+		return false
+	}
+	info, err := file.Stat()
+	return err == nil && info.Mode().IsRegular() && privateRemotePermissions(file.Name(), info)
 }
 
 func (c *Config) writeRemoteCredential(credential RemoteCredential) error {
@@ -295,6 +308,10 @@ func (c *Config) writeRemoteRecord(path string, raw []byte) error {
 		return err
 	}
 	defer os.Remove(file.Name())
+	if !privateRemoteCreatedFile(file) {
+		_ = file.Close()
+		return errors.New("remote: unsafe private credential file")
+	}
 	if _, err = file.Write(raw); err == nil {
 		err = file.Sync()
 	}
@@ -346,15 +363,6 @@ func (c *Config) RemoveRejectedRemoteScope(origin, publicKey string) error {
 		}
 	}
 	return syncRemoteDirectory(c.RemoteDir())
-}
-
-func syncRemoteDirectory(path string) error {
-	directory, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer directory.Close()
-	return directory.Sync()
 }
 
 func (c *Config) validateRemoteAuth() error {

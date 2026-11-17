@@ -29,6 +29,12 @@ func WindowsAssetName(version, arch string) string {
 	return "zwai-" + Canonical(version) + "-windows-" + arch + ".zip"
 }
 
+// LinuxAssetName is the server tar.gz attached to a release for one Linux arch.
+// The archive's only file is the executable zwai.
+func LinuxAssetName(version, arch string) string {
+	return "zwai-" + Canonical(version) + "-linux-" + arch + ".tar.gz"
+}
+
 // Canonical strips a leading v and keeps the numeric triple, or "" when
 // the string is not a release version. A dirty git describe is not one.
 func Canonical(raw string) string {

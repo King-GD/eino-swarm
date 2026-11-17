@@ -6,12 +6,14 @@ import (
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 )
 
-// localAccountList is the signed-in catalogs LOCAL can switch among. It is
-// not the managed role projection: gateway mode keeps that projection, and
-// functional roles do not read this list.
+// localAccountList is the extra server catalogs a signed-in LOCAL session can
+// switch among. Gateway mode keeps the managed projection and does not list them.
 type localAccountList struct {
 	sources []*AccountSource
 }
+
+// LocalAccountSources returns the extra catalogs published for LOCAL.
+func (p *Pool) LocalAccountSources() []*AccountSource { return p.localAccountSources() }
 
 func (p *Pool) localAccountSources() []*AccountSource {
 	if p == nil {
@@ -24,9 +26,8 @@ func (p *Pool) localAccountSources() []*AccountSource {
 	return list.sources
 }
 
-// SetLocalAccountSources publishes the server catalogs a signed-in LOCAL
-// session can switch among. Nil clears them. Sign-out also clears them
-// through SetAccountSource(nil). A scripted pool ignores them.
+// SetLocalAccountSources publishes the extra catalogs LOCAL can switch among.
+// Nil clears them. Sign-out also clears them through SetAccountSource(nil).
 func (p *Pool) SetLocalAccountSources(sources []*AccountSource) {
 	if p == nil || p.mock {
 		return
@@ -55,10 +56,9 @@ func (p *Pool) sameLocalAccounts(sources []*AccountSource) bool {
 	return true
 }
 
-// accountForExecution resolves a stored gateway id while the account is still
-// signed in. LOCAL prefers the switchable server catalogs, then the retained
-// projection, and does not treat that id as signed out. Gateway mode uses
-// only the active projection, so a managed preset still hides other models.
+// accountForExecution resolves a stored gateway id while the account is signed
+// in. LOCAL also searches the extra server catalogs. A missing source stays
+// account_login_required and is not replaced by a personal provider.
 func (p *Pool) accountForExecution(id string) *AccountSource {
 	if p == nil {
 		return nil
@@ -73,12 +73,8 @@ func (p *Pool) accountForExecution(id string) *AccountSource {
 				return src
 			}
 		}
-		if src := p.account.Load(); src != nil && src.ID() == id {
-			return src
-		}
-		return nil
 	}
-	if src := p.activeAccount(); src != nil && src.ID() == id {
+	if src := p.account.Load(); src != nil && src.ID() == id {
 		return src
 	}
 	return nil
