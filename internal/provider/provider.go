@@ -52,14 +52,15 @@ type Recorder func(CallRecord)
 // of N names produces N rows so the composer can switch without a Settings
 // row per name.
 type Info struct {
-	CatalogGroup  string `json:"catalog_group,omitempty"`
-	ID            string `json:"id"`
-	ProviderID    string `json:"provider_id"`
-	ProviderLabel string `json:"provider_label"`
-	Label         string `json:"label"`
-	Model         string `json:"model"`
-	Ready         bool   `json:"ready"`
-	Default       bool   `json:"default"`
+	Capabilities  *SourceCapabilities `json:"capabilities,omitempty"`
+	CatalogGroup  string              `json:"catalog_group,omitempty"`
+	ID            string              `json:"id"`
+	ProviderID    string              `json:"provider_id"`
+	ProviderLabel string              `json:"provider_label"`
+	Label         string              `json:"label"`
+	Model         string              `json:"model"`
+	Ready         bool                `json:"ready"`
+	Default       bool                `json:"default"`
 	// DefaultFollowsSetting is true when this default is a name the user set
 	// (the account default, or a provider's configured model). A default that
 	// is only the catalog's current first name is not one: remembering it on
@@ -104,10 +105,12 @@ type Pool struct {
 	// Gateway mode does not list them. Signing out clears them.
 	localAccounts atomic.Pointer[localAccountList]
 
-	mu             sync.Mutex
-	cache          map[string]model.BaseChatModel
-	backoffs       map[string]*backoffGate
-	requestBudgets map[modelRequestBudgetKey]*modelRequestBudget
+	capabilitiesRefresh func(context.Context) error
+	capabilitiesTrigger func()
+	mu                  sync.Mutex
+	cache               map[string]model.BaseChatModel
+	backoffs            map[string]*backoffGate
+	requestBudgets      map[modelRequestBudgetKey]*modelRequestBudget
 	// discover is swapped in tests so listing models does not need a network.
 	discover func(ctx context.Context, p config.Provider) (Catalog, error)
 }
@@ -301,7 +304,7 @@ func (p *Pool) accountModel() string {
 	if p == nil || p.cfg == nil {
 		return ""
 	}
-	if src := p.activeAccount(); src != nil && src.managed {
+	if src := p.activeAccount(); src != nil && (src.managed || src.negotiated && src.capabilities != nil && !src.capabilities.Capabilities["conversation"].Configurable) {
 		return src.defaults["conversation"]
 	}
 	m := p.cfg.ModelsSnapshot()
@@ -426,12 +429,22 @@ func (p *Pool) modelBuilder(ctx context.Context, id, modelName, effort string, r
 		return nil, fmt.Errorf("provider: %q has no base_url or model configured; open Settings and finish setting it up", prov.ID)
 	}
 
-	shared, err := p.Get(ctx, prov.ID, prov.Model)
+	var shared model.BaseChatModel
+	role, _ := ctx.Value(capabilityRoleKey{}).(string)
+	if source := p.accountForExecution(prov.ID); source != nil && source.negotiated && role != "" && source.chatAPI(role) != prov.APIMode {
+		prov.APIMode = source.chatAPI(role)
+		shared, err = p.build(ctx, prov)
+		if err == nil {
+			shared = p.trackedModel(shared, prov)
+		}
+	} else {
+		shared, err = p.Get(ctx, prov.ID, prov.Model)
+	}
 	if err != nil {
 		return nil, err
 	}
 	return func(role, agentID string) model.BaseChatModel {
-		return wrap(shared, agentID, prov, effort, limit, rec)
+		return wrap(p.guardCapability(shared, prov.ID, role), agentID, prov, effort, limit, rec)
 	}, nil
 }
 
@@ -480,6 +493,7 @@ func wrap(m model.BaseChatModel, agentID string, p config.Provider, effort strin
 		// Admission and telemetry must surround the same request. Wrapping the
 		// gate again would count a cancelled wait as a completed model call.
 		r.inner, r.gate, r.policyUse = shared.inner, shared.gate, shared.policyUse
+		r.onResult = shared.onResult
 	}
 	return r
 }
@@ -491,6 +505,7 @@ func wrap(m model.BaseChatModel, agentID string, p config.Provider, effort strin
 // client cached instead of one instance per thinking level.
 type recordingModel struct {
 	policyUse  func() (func(), error)
+	onResult   func(error)
 	inner      model.BaseChatModel
 	gate       *backoffGate
 	agentID    string

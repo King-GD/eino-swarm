@@ -46,7 +46,7 @@ export function useLocalModelSources(mode: PhoneMode, status: GatewayStatus, ses
             if (!refused) {
               failed = true
               const retained = previous.authority === authority ? previous.providers.find(row => row.id === result.source.provider.id && row.baseURL === result.source.provider.baseURL) : undefined
-              if (retained) providers.push(retained)
+              if (retained) providers.push({ ...retained, capabilities: result.source.provider.capabilities, locked: result.source.provider.locked })
             }
           } else if (result.provider) providers.push(result.provider)
         }
@@ -56,9 +56,12 @@ export function useLocalModelSources(mode: PhoneMode, status: GatewayStatus, ses
     return () => { current = false }
   }, [authority, sources, revision])
   return {
-    providers: state.authority === authority && enabled ? state.providers.filter(row => sources.some(source => source.provider.id === row.id && source.provider.baseURL === row.baseURL && source.provider.catalogURL === row.catalogURL)) : [],
+    providers: state.authority === authority && enabled ? state.providers.filter(row => sources.some(source => source.provider.id === row.id && source.provider.baseURL === row.baseURL && source.provider.catalogURL === row.catalogURL)).map(row => {
+      const source = sources.find(source => source.provider.id === row.id)!.provider
+      return { ...row, capabilities: source.capabilities, api: source.api, locked: source.locked }
+    }) : [],
     busy: enabled && state.authority === authority && state.busy,
-    error: enabled && state.authority === authority && state.error,
+    error: enabled && (bootstrap?.capability_status !== "ready" || state.authority === authority && state.error),
     refresh: () => setRevision(value => value + 1),
   }
 }

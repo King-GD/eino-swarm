@@ -22,17 +22,13 @@ editable draft and never sends it; read aloud skips code blocks. LOCAL direct
 Chat can configure recognition and spoken-answer models independently under its
 personal model services, using only this phone's provider credentials.
 
-Voice input and read aloud are configured only on the PC in **Settings → Models**.
-This phone reuses the explicitly selected PC's safe settings in both PC
-conversations and direct Chat; **User center** shows read-only status and sync
-time. Both directions default off. Tap the microphone beside Send, finish or
-cancel in the recording panel, then edit the recognized draft before sending.
-Read aloud beside Copy plays completed prose and skips code blocks.
-Gateway voice uses this phone's own login and calls that same Gateway directly;
-synced settings permit execution only while that exact PC link is live and its
-engine is ready. Local voice runs through
-the selected PC only while it is online and its local model is configured.
-No PC key/token reaches the phone and no failure silently changes source.
+Paired voice parameters come from the PC. Recognition and playback are enabled
+only when the PC advertises readiness and this phone's independently negotiated
+source permits the corresponding role. Each direction includes its source ID;
+the phone uses that source's own bootstrap API base and its own Bearer. Unknown
+or failed discovery closes Gateway features and keeps saved preferences; use
+**User center → Retry** to negotiate again. API access disabled does not sign out
+or disconnect account PCs. Personal LOCAL phone services remain independent.
 
 Choose **PCM (streaming playback)** in Voice settings to start direct Gateway or
 personal-service playback as audio arrives. MP3/WAV retain complete-segment
@@ -776,3 +772,12 @@ the thread running. Stop and saved-history reads remain available. Internal
 `engine_restore` events advance replay cursors without rendering diagnostic JSON.
 
 Gateway bootstrap 请求带 `X-AIGateway-Model-Roles: 2`，声明支持十一角色列表；原有九角色响应仍兼容，模型配置权限继续由网关策略决定。
+
+Gateway discovery uses bootstrap `capabilities_url` (same origin, private device
+Bearer), capability schema 1 and `X-AIGateway-Model-Roles: 3`. Preset and native
+Gateway sources have separate grants. Features need an available supported role
+and an implemented endpoint; model selectors additionally need role
+`configurable`. Legacy bootstrap booleans cannot authorize a missing manifest.
+Title, compact and translation are Chat roles; OCR gates image input. The image
+generation role is parsed but has no phone adapter. Paired capability refresh
+runs without blocking Stop; the desktop projects no endpoint or credential.

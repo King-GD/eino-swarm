@@ -55,6 +55,13 @@ func dispatch(eng *engine.Engine, cfg config.RemoteConfig, stage *Staging, req R
 		return boundSpeechResponse(resp, false)
 	case OpTranslateSelection:
 		return handleSelectionTranslation(context.Background(), eng, req, path, sessionID)
+	case OpRefreshCapabilities:
+		ctx, cancel := context.WithTimeout(context.Background(), config.DefaultDiscoverTimeout)
+		defer cancel()
+		if err := eng.Providers().RefreshCapabilities(ctx); err != nil {
+			return mapErr(req.ID, path, sessionID, err)
+		}
+		return handleCatalog(eng, req, path, sessionID)
 	case OpSpeechConfig:
 		resp := okBase(req.ID, path, sessionID)
 		resp.Speech = speechSnapshot(eng)

@@ -1,3 +1,5 @@
+import { parseCapabilities, type ClientCapabilities } from "../../../frontend/src/lib/capabilities"
+import { publishGatewayCapabilities } from "./gateway-capabilities"
 import { Browser } from "@capacitor/browser"
 import { AppLauncher } from "@capacitor/app-launcher"
 import { Capacitor } from "@capacitor/core"
@@ -41,8 +43,11 @@ export type GatewaySession = { origin: string; token: string; user: GatewayUser;
 export type GatewayHost = { id: string; name: string; hostname: string; display_name?: string; version: string; online: boolean; enabled: boolean; owner_user_id?: string; host_pub?: string; host_fp?: string }
 export type GatewayModelProfile = { label: string; tools?: string[]; context_window?: number }
 export type GatewayModelRole = { id: string; enabled: boolean; label: string }
-export type GatewayModelSourceDescriptor = { source_id: string; source_kind: "gateway"; label: string; execution: "phone"; api_base_url: string; catalog_url: string; api_access_enabled: boolean }
+export type GatewayModelSourceDescriptor = { source_id: string; source_kind: "gateway"; label: string; execution: "phone"; api_base_url: string; catalog_url: string; api_access_enabled: boolean; configurable?: boolean; defaults?: Record<string, string> }
 export type GatewayBootstrap = {
+  capabilities_url?: string
+  capabilities?: ClientCapabilities
+  capability_status?: "ready" | "unavailable"
   gateway_models?: GatewayModelSourceDescriptor
   user: GatewayUser
   device: GatewayDevice
@@ -133,17 +138,17 @@ export function loadGatewayPending(): GatewayPending | null {
 
 export function clearGatewayPending() { localStorage.removeItem(PENDING_KEY) }
 
-async function request<T>(origin: string, path: string, fetcher: typeof fetch, token = "", body?: unknown, signal?: AbortSignal): Promise<{ data: T; meta?: { total?: number } }> {
+async function request<T>(origin: string, path: string, fetcher: typeof fetch, token = "", body?: unknown, signal?: AbortSignal, absoluteURL?: string): Promise<{ data: T; meta?: { total?: number } }> {
   const headers: Record<string, string> = { "Content-Type": "application/json" }
   if (token) headers.Authorization = "Bearer " + token
-  if (path === "/bootstrap") headers["X-AIGateway-Model-Roles"] = "2"
+  if (path === "/bootstrap") headers["X-AIGateway-Model-Roles"] = "3"
   const controller = new AbortController()
   const aborted = () => controller.abort()
   signal?.addEventListener("abort", aborted, { once: true })
   if (signal?.aborted) controller.abort()
   const timer = window.setTimeout(() => controller.abort(), 15_000)
   try {
-    const response = await fetcher(normalizeGatewayOrigin(origin) + CLIENT_PATH + path, {
+    const response = await fetcher(absoluteURL ?? normalizeGatewayOrigin(origin) + CLIENT_PATH + path, {
       method: body === undefined ? "GET" : "POST", headers,
       body: body === undefined ? undefined : JSON.stringify(body),
       credentials: "omit", cache: "no-store", redirect: "error", signal: controller.signal,
@@ -267,6 +272,20 @@ export async function refreshGatewaySession(session: GatewaySession, fetcher: ty
   if (current.user.approval_status !== "approved") return { status: current.user.approval_status === "rejected" ? "account_rejected" : "account_pending", session: current, hosts: [] }
   const { data: bootstrap } = await request<GatewayBootstrap>(session.origin, "/bootstrap", fetcher, session.token, undefined, signal)
   validateBootstrap(session.origin, bootstrap, current)
+  bootstrap.capability_status = "unavailable"
+  delete bootstrap.capabilities
+  try {
+    const url = bootstrap.capabilities_url && new URL(bootstrap.capabilities_url)
+    if (url && url.origin === session.origin && !url.username && !url.password && !url.search && !url.hash) {
+      const { data } = await request<unknown>(session.origin, "", fetcher, session.token, undefined, signal, url.href)
+      bootstrap.capabilities = parseCapabilities(data)
+      if (bootstrap.capabilities) bootstrap.capability_status = "ready"
+    }
+  } catch (error) {
+    if (signal?.aborted || error instanceof GatewayError && (error.status === 401 || error.status === 403)) throw error
+    // Discovery failure closes gateway features without discarding account PCs.
+  }
+  publishGatewayCapabilities(current, bootstrap)
   if (bootstrap.user?.id === current.user.id) current.user = gatewayUser({ ...current.user, avatar_url: bootstrap.user.avatar_url }, current.user)
   const hosts: GatewayHost[] = []
   if (bootstrap.pairlink.enabled) {
@@ -308,8 +327,8 @@ function validateBootstrap(origin: string, bootstrap: GatewayBootstrap, session:
   }
   if (bootstrap.gateway_models !== undefined) {
     const source = bootstrap.gateway_models
-    if (!source || typeof source.source_id !== "string" || !source.source_id.startsWith("gateway:") || source.source_id.length > 128 || source.source_id === models.source_id || source.source_kind !== "gateway" || source.execution !== "phone" || typeof source.label !== "string" || source.label.length > 255 || typeof source.api_access_enabled !== "boolean" || source.api_base_url !== origin + "/client/models/v1/gateway" || source.catalog_url !== origin + "/client/models/v1/gateway/models") invalid()
-    bootstrap.gateway_models = { source_id: source.source_id, source_kind: "gateway", execution: "phone", label: source.label, api_access_enabled: source.api_access_enabled, api_base_url: source.api_base_url, catalog_url: source.catalog_url }
+    if (!source || source.configurable !== undefined && typeof source.configurable !== "boolean" || source.defaults !== undefined && (!source.defaults || typeof source.defaults !== "object" || Array.isArray(source.defaults) || Object.entries(source.defaults).some(([role, name]) => !roleIDs.has(role) || role === "naming" || typeof name !== "string" || !name || name.length > 255)) || typeof source.source_id !== "string" || !source.source_id.startsWith("gateway:") || source.source_id.length > 128 || source.source_id === models.source_id || source.source_kind !== "gateway" || source.execution !== "phone" || typeof source.label !== "string" || source.label.length > 255 || typeof source.api_access_enabled !== "boolean" || source.api_base_url !== origin + "/client/models/v1/gateway" || source.catalog_url !== origin + "/client/models/v1/gateway/models") invalid()
+    bootstrap.gateway_models = { source_id: source.source_id, source_kind: "gateway", execution: "phone", label: source.label, api_access_enabled: source.api_access_enabled, api_base_url: source.api_base_url, catalog_url: source.catalog_url, configurable: source.configurable, defaults: source.defaults }
   }
   const profile = acceptAccountProfile(bootstrap.models.profile)
   if (profile) bootstrap.models.profile = profile

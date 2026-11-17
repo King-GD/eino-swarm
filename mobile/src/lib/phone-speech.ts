@@ -1,3 +1,4 @@
+import { gatewayCapabilityAllows, GATEWAY_CAPABILITIES_EVENT } from "./gateway-capabilities"
 import { useEffect, useSyncExternalStore } from "react"
 import { speechRoute, type SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
 import { speechPlayback } from "../../../frontend/src/lib/speech-media"
@@ -51,6 +52,7 @@ function publish(changed: boolean) {
     const route = speech && speechRoute(speech, kind)
     return connected && (route?.execution === "pc_local" || Boolean(route?.execution === "gateway" && session &&
     route.gateway_origin === session.origin && gatewayAuthorityCurrent(session) &&
+    gatewayCapabilityAllows(session, route.source_id, kind === "input" ? "transcription" : "speech") &&
     (!source?.pc.gatewayOrigin || source.pc.gatewayOrigin === route.gateway_origin) &&
     (!source?.pc.gatewayOwnerID || source.pc.gatewayOwnerID === session.user.id) &&
     (!source?.pc.gatewayMobileID || source.pc.gatewayMobileID === session.device.id)))
@@ -148,6 +150,7 @@ export function usePhoneSpeechSync(link: RemoteLink | null, pc: SavedLink | unde
     document.addEventListener("visibilitychange", visibility)
     window.addEventListener(GATEWAY_ACCOUNT_EVENT, authorityChanged)
     window.addEventListener(GATEWAY_REFUSAL_EVENT, authorityRefused)
+    window.addEventListener(GATEWAY_CAPABILITIES_EVENT, authorityRefused)
     void refresh()
     return () => {
       alive = false; clearInterval(timer)
@@ -155,6 +158,7 @@ export function usePhoneSpeechSync(link: RemoteLink | null, pc: SavedLink | unde
       document.removeEventListener("visibilitychange", visibility)
       window.removeEventListener(GATEWAY_ACCOUNT_EVENT, authorityChanged)
       window.removeEventListener(GATEWAY_REFUSAL_EVENT, authorityRefused)
+      window.removeEventListener(GATEWAY_CAPABILITIES_EVENT, authorityRefused)
     }
     // The complete binding captures every pairing authority field. Host labels
     // are presentation only, and the cached snapshot owns its own timestamp.

@@ -1,3 +1,4 @@
+import { capabilityAllows, type SourceCapabilities } from "../../../frontend/src/lib/capabilities"
 import type { ModelChoice } from "./rpc"
 import { httpBaseURL, normalizeApiStyle, type ApiStyle } from "./openai-wire"
 
@@ -10,6 +11,7 @@ export const defaultTimeoutSeconds = 300
 export type DirectProvider = {
   id: string
   /** Gateway sources are ephemeral and cannot enter personal settings. */
+  capabilities?: SourceCapabilities
   sourceKind?: "gateway" | "phone"
   gatewayScope?: "gateway"
   catalogURL?: string
@@ -75,10 +77,12 @@ export function saveProviders(rows: DirectProvider[]): DirectProvider[] {
 export function providerChoices(rows: DirectProvider[]): ModelChoice[] {
   const out: ModelChoice[] = []
   for (const row of rows) {
-    if (row.enabled === false) continue
+    if (row.enabled === false || row.sourceKind === "gateway" && !capabilityAllows(row.capabilities, "conversation")) continue
     const label = row.label.trim() || row.id
     if (row.displayLabel) {
       out.push({
+        capabilities: row.capabilities,
+        locked: row.locked,
         provider_id: row.id,
         provider_label: label,
         label: row.displayLabel,
@@ -86,13 +90,14 @@ export function providerChoices(rows: DirectProvider[]): ModelChoice[] {
         default: true,
         default_follows_setting: true,
         ready: true,
-        locked: row.locked,
       })
       continue
     }
     const names = unique([row.model, ...row.catalog])
     for (const name of names) {
       out.push({
+        capabilities: row.capabilities,
+        locked: row.locked,
         provider_id: row.id,
         provider_label: label,
         model: name,

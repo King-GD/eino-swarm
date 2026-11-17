@@ -65,7 +65,7 @@ func (e *Engine) runScheduleTitle(id, origin, prompt, providerID, model string) 
 	if accountID, _, ok := e.enabledAccountRole("title"); ok {
 		raw, err = e.pool.CompleteFixedChat(ctx, accountID, "title", scheduleTitlePrompt(), titleInput(prompt, ""), e.cfg.SwarmSnapshot().CompletionTokenLimit())
 	} else {
-		builder, buildErr := e.pool.ModelBuilder(ctx, providerID, model, "", e.callRecorder(origin, turnID))
+		builder, buildErr := e.pool.RoleModelBuilder(ctx, providerID, model, "", e.callRecorder(origin, turnID), "title")
 		err = buildErr
 		if err == nil {
 			var out *schema.Message

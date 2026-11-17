@@ -1,10 +1,12 @@
 package server
 
 import (
+	"net/http"
 	"reflect"
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/provider"
+	"github.com/gin-gonic/gin"
 )
 
 func (s *Server) currentSettingsView() settingsView {
@@ -31,6 +33,17 @@ func (s *Server) currentSettingsView() settingsView {
 // A sanitized hidden row can round-trip during an unrelated autosave. Preserve
 // its private selection; a new concrete model must never change a managed preset.
 func validatePresetSettings(old, next *config.Config, policy provider.ModelPolicy) error {
+	if next.Product.Resolved() != config.ProductModeLocal && policy.CapabilityStatus != "" {
+		previous, incoming := old.Models.Bindings[policy.Scope], next.Models.Bindings[policy.Scope]
+		for _, role := range config.ModelRoles() {
+			if reflect.DeepEqual(previous[role], incoming[role]) {
+				continue
+			}
+			if policy.Capabilities == nil || !policy.Capabilities.Allows(role) || !policy.Capabilities.Capabilities[role].Configurable {
+				return errCustomModelsDisabled
+			}
+		}
+	}
 	if next.Product.Resolved() == config.ProductModeLocal || policy.Configurable {
 		return nil
 	}
@@ -52,4 +65,12 @@ func validatePresetSettings(old, next *config.Config, policy provider.ModelPolic
 		return errCustomModelsDisabled
 	}
 	return nil
+}
+
+func (s *Server) refreshCapabilities(c *gin.Context) {
+	if err := s.engine.Providers().RefreshCapabilities(c.Request.Context()); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "capability_discovery_unavailable"})
+		return
+	}
+	c.JSON(http.StatusOK, s.engine.Providers().ModelPolicy())
 }

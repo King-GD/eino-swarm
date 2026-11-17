@@ -1,3 +1,4 @@
+import { refreshCapabilities } from "./refresh-capabilities"
 import { useEffect } from "react"
 
 import { refreshMetaAndModels } from "@/store/app-models"
@@ -19,6 +20,14 @@ export function useAccountModelsSync(): void {
   const account = useApp((s) => s.meta?.account_models)
   const login = unavailable ? undefined : status?.login?.state
   const stale = accountModelsStale(login, account)
+  useEffect(() => {
+    if (login !== "authorized") return
+    const refresh = () => { void refreshCapabilities().catch(() => undefined) }
+    refresh()
+    window.addEventListener("focus", refresh)
+    window.addEventListener("zwai.capabilities.rejected", refresh)
+    return () => { window.removeEventListener("focus", refresh); window.removeEventListener("zwai.capabilities.rejected", refresh) }
+  }, [login])
   useEffect(() => {
     if (!stale) return
     let attempts = 0

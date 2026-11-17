@@ -27,6 +27,9 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- A conversation kept from LOCAL runs on the managed third-party preset after
+  switching to gateway mode. The stored provider and model stay in place for a
+  later LOCAL session. Choosing a different model is still refused.
 - Mobile PC switching retains established connections and reuses them on return.
   The selected PC stays visible while connecting instead of flashing User center.
 
@@ -68,6 +71,11 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
   an empty or denied source is hidden without expiring the account login.
 
 ### Added
+
+- Desktop and phone negotiate independent preset/Gateway capabilities with
+  schema 1 and ten-role defaults. Features and selectors follow actual grants,
+  retain preferences while unavailable, and offer discovery retry. Voice direct
+  calls use the phone's own device grant and the selected source's API base.
 
 - Read aloud and English selection translation in the PC selection menu, using
   the configured speech and translation roles without creating a conversation turn.

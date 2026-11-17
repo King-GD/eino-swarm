@@ -4,6 +4,7 @@ import { speechAudioResponse, type SpeechAudio } from "./speech-stream"
 async function speechResponse(path: string, init: RequestInit): Promise<Response> {
   const response = await fetch(path, { ...init, cache: "no-store", redirect: "error" })
   if (response.ok) return response
+  if ([401, 403].includes(response.status)) window.dispatchEvent(new Event("zwai.capabilities.rejected"))
   let message = `Speech request failed (${response.status}).`
   let code: string | undefined
   try {

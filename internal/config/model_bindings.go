@@ -14,7 +14,7 @@ type ModelRef struct {
 
 // ModelRoles is the existing functional model surface, in settings order.
 func ModelRoles() []string {
-	return []string{"conversation", "title", "compact", "embedding", "transcription", "speech", "ocr", "decisions"}
+	return []string{"conversation", "title", "compact", "translation", "embedding", "ocr", "decisions", "transcription", "speech", "image"}
 }
 
 // KnownModelRole validates a functional binding without accepting arbitrary keys.

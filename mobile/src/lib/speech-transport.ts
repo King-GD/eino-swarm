@@ -1,3 +1,4 @@
+import { gatewayCapabilityAllows, gatewayCapabilityTarget } from "./gateway-capabilities"
 import { speechRoute, type SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
 import { speechAudioResponse, type SpeechAudio, type SpeechAudioStream } from "../../../frontend/src/lib/speech-stream"
 import { gatewayAuthorityCurrent, notifyGatewayRefusal, watchGatewayAuthority } from "./gateway-authority"
@@ -85,8 +86,10 @@ async function boundedBody(response: Response, maximum: number, signal: AbortSig
  * the ordinary Mobile data-plane endpoint from the phone's own live session. */
 export async function gatewaySpeechCall(snapshot: SpeechSnapshot, session: GatewaySession, operation: "transcribe" | "speak", input: Blob | string, signal: AbortSignal, fetcher: typeof fetch = gatewayFetch): Promise<string | SpeechAudio> {
   const route = speechRoute(snapshot, operation === "transcribe" ? "input" : "output")
-  if (route?.execution !== "gateway" || route.gateway_origin !== session.origin || !gatewayAuthorityCurrent(session)) throw new SpeechCallError("unavailable")
-  return endpointSpeechCall(snapshot, session.origin + "/v1", session.token, operation, input, signal, fetcher, session)
+  if (route?.execution !== "gateway" || route.gateway_origin !== session.origin || !gatewayAuthorityCurrent(session) || !gatewayCapabilityAllows(session, route.source_id, operation === "transcribe" ? "transcription" : "speech")) throw new SpeechCallError("unavailable")
+  const target = gatewayCapabilityTarget(session, route.source_id, operation === "transcribe" ? "transcription" : "speech")
+  if (!target) throw new SpeechCallError("unavailable")
+  return endpointSpeechCall(snapshot, target, session.token, operation, input, signal, fetcher, session)
 }
 
 /** Also used by LOCAL phone bindings. The endpoint and credential are supplied

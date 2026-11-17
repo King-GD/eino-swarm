@@ -118,7 +118,10 @@ export type ThreadGroup = {
   next?: string
 }
 
+export const OpRefreshCapabilities = "refresh_capabilities"
+
 export type ModelChoice = {
+  capabilities?: import("../../../frontend/src/lib/capabilities").SourceCapabilities
   catalog_group?: "original" | "third_party"
   provider_id: string
   provider_label?: string

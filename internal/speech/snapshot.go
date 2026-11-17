@@ -13,6 +13,7 @@ import (
 
 // InputView is safe to send to a paired phone; it carries no endpoint credential.
 type InputView struct {
+	SourceID           string `json:"source_id,omitempty"`
 	Execution          string `json:"execution"`
 	GatewayOrigin      string `json:"gateway_origin,omitempty"`
 	Enabled            bool   `json:"enabled"`
@@ -29,6 +30,7 @@ type InputView struct {
 
 // OutputView describes on-demand playback using the PC's selected service.
 type OutputView struct {
+	SourceID       string  `json:"source_id,omitempty"`
 	Execution      string  `json:"execution"`
 	GatewayOrigin  string  `json:"gateway_origin,omitempty"`
 	Enabled        bool    `json:"enabled"`
@@ -82,12 +84,14 @@ func (s *Service) Snapshot() SnapshotView {
 			reason = errorCode(err)
 		}
 		if isInput {
+			v.Input.SourceID = selection.target.ID
 			v.Input.Model = selection.target.Model
 			v.Input.Ready, v.Input.Reason, v.Input.Label = ready, reason, selection.target.Label
 			if gatewayOrigin := origin(selection.target.BaseURL); strings.HasPrefix(selection.target.ID, config.AccountSourcePrefix) && gatewayOrigin != "" {
 				v.Input.Execution, v.Input.GatewayOrigin = "gateway", gatewayOrigin
 			}
 		} else {
+			v.Output.SourceID = selection.target.ID
 			v.Output.Model = selection.target.Model
 			v.Output.Ready, v.Output.Reason, v.Output.Label = ready, reason, selection.target.Label
 			if gatewayOrigin := origin(selection.target.BaseURL); strings.HasPrefix(selection.target.ID, config.AccountSourcePrefix) && gatewayOrigin != "" {

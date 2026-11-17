@@ -108,6 +108,7 @@ func New(opts Options) (*Server, error) {
 	api.Use(s.rejectForeignOrigin(), s.requireStartupReady())
 	{
 		api.GET("/meta", s.getMeta)
+		api.POST("/account/capabilities/refresh", s.refreshCapabilities)
 		api.POST("/desktop/recovery", s.postDesktopRecovery)
 		api.GET("/composer/drafts/:key", s.getComposerDraft)
 		api.PUT("/composer/drafts/:key", s.putComposerDraft)

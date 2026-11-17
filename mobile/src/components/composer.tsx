@@ -1,3 +1,4 @@
+import { capabilityAllows } from "../../../frontend/src/lib/capabilities"
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import { ArrowUp, Loader2, Paperclip, Square, X, Zap } from "lucide-react"
 
@@ -97,6 +98,7 @@ export function Composer({
   const modelTextId = useId()
   const box = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const imageAllowed = !pick.providerId.startsWith("gateway:") || capabilityAllows(models.find(row => row.provider_id === pick.providerId)?.capabilities, "ocr")
   const images = attached.filter((file) => isVisionFile(file))
   const files = attached.filter((file) => !isVisionFile(file))
   const hasDraft = text.trim().length > 0 || attached.length > 0 || quotes.some((quote) => quote.trim().length > 0)
@@ -145,6 +147,7 @@ export function Composer({
   }
 
   const fire = async (send: Send) => {
+    if (images.length > 0 && !imageAllowed) return
     // The quote envelope hides the command from the PC. Refuse before clearing
     // or uploading any part of this draft, as the desktop composer does.
     if (quotedCommand) {
@@ -170,6 +173,7 @@ export function Composer({
   }
 
   const addFiles = (list: File[]) => {
+    list = list.filter(file => imageAllowed || !isVisionFile(file))
     if (list.length === 0) return
     setAttached((prev) => [...prev, ...list])
   }

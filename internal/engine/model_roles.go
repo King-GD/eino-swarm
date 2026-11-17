@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/LubyRuffy/eino-swarm/internal/provider"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 )
@@ -45,6 +46,9 @@ func (e *Engine) enabledAccountRole(role string) (providerID, modelName string, 
 // the conversation. used is false when the role is off, so the images stay on
 // the original message.
 func (e *Engine) readRoleImages(providerID, text string, images []ImageInput) (string, []ImageInput, bool, error) {
+	if len(images) > 0 && !e.pool.FeatureAvailable(providerID, "ocr") {
+		return "", nil, true, provider.ErrModelPolicy
+	}
 	ref, ok := e.pool.RoleSelection("ocr", providerID, "")
 	modelName := ref.Model
 	if !ok || modelName == "" || len(images) == 0 {
@@ -52,7 +56,7 @@ func (e *Engine) readRoleImages(providerID, text string, images []ImageInput) (s
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
-	builder, err := e.pool.ModelBuilder(ctx, ref.ProviderID, modelName, "", nil)
+	builder, err := e.pool.RoleModelBuilder(ctx, ref.ProviderID, modelName, "", nil, "ocr")
 	if err != nil {
 		return "", nil, true, err
 	}

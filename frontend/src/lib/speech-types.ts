@@ -39,6 +39,7 @@ export interface SpeechSettings {
 }
 
 export interface SpeechRoute {
+  source_id?: string
   execution: "gateway" | "pc_local"
   gateway_origin?: string
 }
@@ -59,7 +60,7 @@ export function speechRoute(snapshot: SpeechSnapshot, kind: "input" | "output"):
   const direction = snapshot[kind]
   const route = direction.execution !== undefined || direction.gateway_origin !== undefined ? direction : snapshot
   if (route.execution === "pc_local" && (route === snapshot || route.gateway_origin === undefined)) return { execution: "pc_local" }
-  if (route.execution === "gateway" && typeof route.gateway_origin === "string") return { execution: "gateway", gateway_origin: route.gateway_origin }
+  if (route.execution === "gateway" && typeof route.gateway_origin === "string") return { execution: "gateway", gateway_origin: route.gateway_origin, source_id: direction.source_id }
 }
 
 export function defaultSpeechSettings(value?: Partial<SpeechSettings>): SpeechSettings {

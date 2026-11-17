@@ -1,7 +1,11 @@
+import { capabilityAllows, capabilityConfigurable, type SourceCapabilities } from "./capabilities"
 /** The gateway supplies permission and presets; clients never infer a login channel. */
 export type ModelRef = { provider_id: string; model: string }
-export type ModelRole = "conversation" | "title" | "compact" | "embedding" | "transcription" | "speech" | "ocr" | "decisions"
+export type ModelRole = "conversation" | "title" | "compact" | "translation" | "image" | "embedding" | "transcription" | "speech" | "ocr" | "decisions"
 export type ModelPolicy = {
+  account_sources?: Record<string, SourceCapabilities | undefined>
+  capabilities?: SourceCapabilities
+  capability_status?: "ready" | "unavailable"
   mode: "local" | "gateway"
   configurable: boolean
   ready: boolean
@@ -11,7 +15,21 @@ export type ModelPolicy = {
   roles?: { id: string; enabled: boolean; label: string }[]
 }
 
-export const modelRoles: ModelRole[] = ["conversation", "title", "compact", "embedding", "transcription", "speech", "ocr", "decisions"]
+export const modelRoles: ModelRole[] = ["conversation", "title", "compact", "translation", "image", "embedding", "transcription", "speech", "ocr", "decisions"]
 
 /** Roles a person can assign. Decisions stays a background call. */
 export const configurableModelRoles = modelRoles.filter((role): role is Exclude<ModelRole, "decisions"> => role !== "decisions")
+
+/** An absent gateway manifest is unresolved, including with an older host. */
+export function policyAllows(policy: ModelPolicy | undefined, role: ModelRole): boolean {
+  return policy?.mode === "local" || capabilityAllows(policy?.capabilities, role)
+}
+export function policyConfigurable(policy: ModelPolicy | undefined, role: ModelRole): boolean {
+  return policy?.mode === "local" || Boolean(policy?.configurable && capabilityConfigurable(policy.capabilities, role))
+}
+
+export function selectedFeatureAllows(policy: ModelPolicy | undefined, providerId: string | undefined, role: ModelRole): boolean {
+  if (policy?.mode === "gateway") return policyAllows(policy, role)
+  if (providerId?.startsWith("gateway:")) return capabilityAllows(policy?.account_sources?.[providerId], role)
+  return policy?.mode === "local"
+}

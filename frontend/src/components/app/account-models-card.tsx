@@ -1,3 +1,4 @@
+import { policyAllows, type ModelRole } from "@/lib/model-policy"
 
 import { SelectItem } from "@/components/ui/select"
 import { accountKindTally, accountModelsProblem, officialModelLock, type AccountKindKey } from "@/lib/account-models"
@@ -27,7 +28,7 @@ export function AccountModelsCard({
   const problem = accountModelsProblem(account)
   const ready = account?.state === "ready"
   const tally = accountKindTally(account?.kinds)
-  const visibleRoles = (account?.roles ?? []).filter((role) => role.id !== "decisions")
+  const visibleRoles = (account?.roles ?? []).filter((role) => policyAllows(settings.model_policy, role.id as ModelRole) && role.id !== "decisions")
   const ownReady = settings.models.providers.some((p) => p.ready && p.enabled !== false)
   const source = settings.models.default_source ?? "account"
   const mode = useApp((s) => s.meta?.product_mode)

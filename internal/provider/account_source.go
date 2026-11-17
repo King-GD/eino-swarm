@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"reflect"
 	"strings"
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
@@ -27,6 +28,8 @@ var ErrAccountModelsUnavailable = errors.New("server models are unavailable for 
 // carries exists only so this package can call the server: no accessor hands
 // it out, and every printable form hides it.
 type AccountSource struct {
+	negotiated   bool
+	capabilities *SourceCapabilities
 	catalogGroup string
 	id           string
 	label        string
@@ -171,6 +174,9 @@ func (s *AccountSource) Roles() []AccountRole {
 
 // Role reports whether this source is in role mode and whether that role is on.
 func (s *AccountSource) Role(id string) (enabled, configured bool) {
+	if s != nil && s.negotiated && !s.allowsRole(id) {
+		return false, true
+	}
 	if s == nil || len(s.roles) == 0 {
 		return false, false
 	}
@@ -256,7 +262,7 @@ func (s *AccountSource) provider(preferred string) config.Provider {
 			windows[config.OfficialModelAlias] = s.profile.window
 		}
 		return config.Provider{
-			ID: s.id, Label: s.profile.label, BaseURL: s.baseURL, APIKey: s.token,
+			APIMode: s.chatAPI("conversation"), ID: s.id, Label: s.profile.label, BaseURL: s.baseURL, APIKey: s.token,
 			Model: config.OfficialModelAlias, Catalog: []string{config.OfficialModelAlias},
 			ContextWindow: s.profile.window, ModelContext: windows,
 		}
@@ -268,12 +274,18 @@ func (s *AccountSource) provider(preferred string) config.Provider {
 			windows[name] = n
 		}
 	}
+	if s.negotiated && !s.capabilities.Allows("conversation") {
+		preferred = ""
+	}
+	if s.negotiated && s.capabilities != nil && !s.capabilities.Capabilities["conversation"].Configurable {
+		preferred = ""
+	}
 	model := strings.TrimSpace(preferred)
 	if model == "" {
 		model = chooseName(names, s.defaults["conversation"])
 	}
 	return config.Provider{
-		ID: s.id, Label: s.label, BaseURL: s.baseURL, APIKey: s.token,
+		APIMode: s.chatAPI("conversation"), ID: s.id, Label: s.label, BaseURL: s.baseURL, APIKey: s.token,
 		Model: model, Catalog: names, ModelContext: windows,
 	}
 }
@@ -317,8 +329,13 @@ func ParseCatalog(raw []byte) (Catalog, error) { return parseModelCatalog(raw) }
 // paint a different model as selected. An empty preferred marks the current
 // first conversation name, and that mark does not follow a setting.
 func (s *AccountSource) rows(isDefault bool, preferred string) []Info {
+	if !s.allowsRole("conversation") {
+		return nil
+	}
 	if s.profiled {
-		return []Info{s.profileRow(isDefault)}
+		row := s.profileRow(isDefault)
+		row.Capabilities = cloneCapabilities(s.capabilities)
+		return []Info{row}
 	}
 	names := s.conversationalNames()
 	preferred = strings.TrimSpace(preferred)
@@ -339,7 +356,7 @@ func (s *AccountSource) rows(isDefault bool, preferred string) []Info {
 	out := make([]Info, 0, len(names)+1)
 	for _, name := range names {
 		out = append(out, Info{
-			ID: ChoiceID(s.id, name), ProviderID: s.id, ProviderLabel: s.label,
+			Capabilities: cloneCapabilities(s.capabilities), ID: ChoiceID(s.id, name), ProviderID: s.id, ProviderLabel: s.label,
 			Label: name, Model: name, Ready: true,
 			Default:               isDefault && name == chosen,
 			DefaultFollowsSetting: isDefault && follows && name == chosen,
@@ -348,7 +365,7 @@ func (s *AccountSource) rows(isDefault bool, preferred string) []Info {
 	}
 	if isDefault && follows && chosen != "" && !chosenReady {
 		out = append(out, Info{
-			ID: ChoiceID(s.id, chosen), ProviderID: s.id, ProviderLabel: s.label,
+			Capabilities: cloneCapabilities(s.capabilities), ID: ChoiceID(s.id, chosen), ProviderID: s.id, ProviderLabel: s.label,
 			Label: chosen, Model: chosen, Ready: false, Default: true, DefaultFollowsSetting: true,
 			Source: SourceAccount, CatalogGroup: s.catalogGroup,
 		})
@@ -435,6 +452,9 @@ func (s *AccountSource) equal(o *AccountSource) bool {
 		return s == o
 	}
 	if s.catalogGroup != o.catalogGroup {
+		return false
+	}
+	if s.negotiated != o.negotiated || !reflect.DeepEqual(s.capabilities, o.capabilities) {
 		return false
 	}
 	if s.unavailable != o.unavailable || s.managed != o.managed || !maps.Equal(s.defaults, o.defaults) || s.owner != o.owner || s.id != o.id || s.label != o.label || s.baseURL != o.baseURL || s.token != o.token || len(s.names) != len(o.names) || len(s.windows) != len(o.windows) || len(s.types) != len(o.types) || !s.sameProfile(o) {

@@ -61,6 +61,20 @@ func (e *Engine) TranslateSelection(ctx context.Context, threadID, text string) 
 	if snapshot.Latest.Status == store.TurnRunning && snapshot.Latest.ProviderID != "" && snapshot.Latest.Model != "" {
 		providerID, modelName, effort = snapshot.Latest.ProviderID, snapshot.Latest.Model, snapshot.Latest.ReasoningEffort
 	}
+	resolved, err := e.pool.StoredConversationModel(providerID, modelName)
+	if err != nil {
+		return "", err
+	}
+	providerID, modelName = resolved.ID, resolved.Model
+	if !e.pool.FeatureAvailable(providerID, "translation") {
+		return "", provider.ErrModelPolicy
+	}
+	if ref, configured := e.pool.RoleSelection("translation", providerID, modelName); configured {
+		if ref.ProviderID == "" || ref.Model == "" {
+			return "", provider.ErrModelPolicy
+		}
+		providerID, modelName = ref.ProviderID, ref.Model
+	}
 	ctx, cancel := context.WithTimeout(ctx, selectionTranslationTimeout)
 	defer cancel()
 	if id, _, ok := e.enabledAccountRole("translation"); ok {
@@ -79,14 +93,14 @@ func (e *Engine) TranslateSelection(ctx context.Context, threadID, text string) 
 		return translated, nil
 	}
 	ctx = provider.WithIsolatedRecovery(ctx)
-	build, err := e.pool.ModelBuilder(ctx, providerID, modelName, effort, nil)
+	build, err := e.pool.RoleModelBuilder(ctx, providerID, modelName, effort, nil, "translation")
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", context.Cause(ctx)
 		}
 		return "", err
 	}
-	chatModel := provider.WithoutBuiltinTools(build(selectionTranslatorAgentID, selectionTranslatorAgentID))
+	chatModel := provider.WithoutBuiltinTools(build("translation", selectionTranslatorAgentID))
 	limit := min(selectionTranslationMaxTokens, e.cfg.SwarmSnapshot().CompletionTokenLimit())
 	out, err := selectionTranslateGenerate(ctx, chatModel, []*schema.Message{
 		schema.SystemMessage(selectionTranslationPrompt()),

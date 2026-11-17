@@ -1,3 +1,6 @@
+import { refreshCapabilities } from "@/lib/refresh-capabilities"
+import { capabilityConfigurable } from "@/lib/capabilities"
+import { policyConfigurable } from "@/lib/model-policy"
 import { FocusScope } from "@radix-ui/react-focus-scope"
 import { Check, ChevronDown, Loader2, Pencil, RefreshCw } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
@@ -47,7 +50,8 @@ export function ModelPicker({
   const t = useT()
   const account = useApp((s) => s.meta?.account_models)
   const policy = useApp((s) => s.meta?.model_policy)
-  const locked = officialModelLock(account, policy)
+  const selectedRow = models.find(row => row.provider_id === providerId && (!model || row.model === model)) ?? models.find(row => row.default)
+  const locked = officialModelLock(account, policy) || (policy?.mode === "gateway" && !policyConfigurable(policy, "conversation")) || (selectedRow?.source === "account" && !capabilityConfigurable(selectedRow.capabilities, "conversation"))
   const [open, setOpen] = useState(false)
   const [dialogMenu, setDialogMenu] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -80,6 +84,7 @@ export function ModelPicker({
 
   useEffect(() => {
     if (!open) return
+    void refreshCapabilities().catch(() => undefined)
     const onDown = (event: PointerEvent) => {
       const t = event.target as Node
       if (wrapRef.current?.contains(t) || menuRef.current?.contains(t)) return

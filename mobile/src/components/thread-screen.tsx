@@ -470,7 +470,7 @@ export function ThreadScreen({
               if ((event.target as Element).closest("button")) event.preventDefault()
             }}
           >
-            <SelectionActions key={`${detail.id}:${selectedText}`} text={selectedText} threadId={detail.id} link={fileLink}
+            <SelectionActions key={`${detail.id}:${selectedText}`} text={selectedText} threadId={detail.id} link={fileLink} providerID={detail.provider_id}
               onExpand={() => { setQuoteActionDocked(true); setQuoteActionPosition(null) }}
               onDismiss={() => { setSelectedText(""); setQuoteActionPosition(null); setQuoteActionDocked(false); window.getSelection()?.removeAllRanges() }}
               onAdd={() => {

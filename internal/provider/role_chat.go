@@ -8,6 +8,9 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/schema"
 )
 
 const (
@@ -32,6 +35,34 @@ type fixedChatRequest struct {
 // desktop translation or naming route. title uses /naming. The role id is the model. The response
 // body stays out of the error.
 func (p *Pool) CompleteFixedChat(ctx context.Context, providerID, role, system, user string, maxTokens int) (string, error) {
+	if source := p.accountForExecution(providerID); source != nil && source.negotiated {
+		prov, _, err := p.RoleProvider(role)
+		if err != nil {
+			return "", err
+		}
+		release, err := p.BeginModelUse()
+		if err != nil {
+			return "", err
+		}
+		defer release()
+		chat, err := p.build(ctx, prov)
+		if err != nil {
+			return "", err
+		}
+		options := []model.Option{}
+		if maxTokens > 0 {
+			options = append(options, model.WithMaxTokens(maxTokens))
+		}
+		chat = p.guardCapability(p.trackedModel(chat, prov), prov.ID, role)
+		out, err := chat.Generate(ctx, []*schema.Message{schema.SystemMessage(system), schema.UserMessage(user)}, options...)
+		if err != nil {
+			return "", err
+		}
+		if out == nil {
+			return "", fmt.Errorf("provider: role returned no text")
+		}
+		return strings.TrimSpace(out.Content), nil
+	}
 	path, ok := fixedChatPath(role)
 	if !ok {
 		return "", fmt.Errorf("provider: unsupported fixed chat role")

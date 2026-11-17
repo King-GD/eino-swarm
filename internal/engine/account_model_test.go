@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -247,6 +248,139 @@ func TestLocalModeKeepsASignedInGatewayConversation(t *testing.T) {
 	if again.ProviderID != accountCatalogID || again.Model != "conversation" {
 		t.Fatalf("gateway return used %+v", again)
 	}
+}
+
+func TestManagedPresetRunsHistoricalConversationsOnItsModel(t *testing.T) {
+	var mu sync.Mutex
+	var requested []string
+	srv := httptest.NewServer(recordCompletion(&mu, &requested))
+	defer srv.Close()
+
+	e := newAccountEngine(t, srv.URL+"/v1", "catalog-model", "preset-model")
+	personal := e.cfg.Models.Default
+	if err := e.cfg.Update(func(c *config.Config) error {
+		for i := range c.Models.Providers {
+			if c.Models.Providers[i].ID != personal {
+				continue
+			}
+			c.Models.Providers[i].BaseURL = srv.URL + "/v1"
+			c.Models.Providers[i].APIKey = "personal-secret"
+			c.Models.Providers[i].Model = "personal-model"
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	catalogThread, err := e.CreateThread("catalog", accountCatalogID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.store.UpdateThread(catalogThread.ID, map[string]any{"model": "catalog-model"}); err != nil {
+		t.Fatal(err)
+	}
+	personalThread, err := e.CreateThread("personal", personal, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.store.UpdateThread(personalThread.ID, map[string]any{"model": "kept-personal"}); err != nil {
+		t.Fatal(err)
+	}
+
+	managed, err := provider.NewAccountSource(accountCatalogID, "Partner", srv.URL+"/v1", "token", provider.Catalog{
+		Names: []string{"preset-model"},
+		Types: map[string]string{"preset-model": "chat"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	managed.SetModelPolicy(false, map[string]string{"conversation": "preset-model"})
+	e.pool.SetAccountSource(managed)
+	if err := e.SetThreadProvider(catalogThread.ID, accountCatalogID, "catalog-model"); !errors.Is(err, provider.ErrModelPolicy) {
+		t.Fatalf("explicit historical selection was accepted: %v", err)
+	}
+
+	for _, id := range []string{catalogThread.ID, personalThread.ID} {
+		turn, err := e.StartTurn(id, "Continue the current task.")
+		if err != nil {
+			t.Fatal(err)
+		}
+		waitTurn(t, e, turn.ID)
+		if turn.ProviderID != accountCatalogID || turn.Model != "preset-model" {
+			t.Fatalf("turn used %+v", turn)
+		}
+	}
+	got := snapshotModels(&mu, &requested)
+	if len(got) < 2 || !onlyModels(got, "preset-model") {
+		t.Fatalf("requests %v, want the preset model", got)
+	}
+	storedCatalog, err := e.store.GetThread(catalogThread.ID)
+	if err != nil || storedCatalog.ProviderID != accountCatalogID || storedCatalog.Model != "catalog-model" {
+		t.Fatalf("catalog binding rewritten: %+v %v", storedCatalog, err)
+	}
+	storedPersonal, err := e.store.GetThread(personalThread.ID)
+	if err != nil || storedPersonal.ProviderID != personal || storedPersonal.Model != "kept-personal" {
+		t.Fatalf("personal binding rewritten: %+v %v", storedPersonal, err)
+	}
+
+	localCatalog := accountCatalog(t, srv.URL+"/v1", "catalog-model", "preset-model")
+	e.pool.SetLocalAccountSources([]*provider.AccountSource{localCatalog})
+	if err := e.cfg.Update(func(c *config.Config) error {
+		c.Product.Mode = config.ProductModeLocal
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	before := len(snapshotModels(&mu, &requested))
+	restored, err := e.StartTurn(catalogThread.ID, "Continue the current task.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitTurn(t, e, restored.ID)
+	personalAgain, err := e.StartTurn(personalThread.ID, "Continue the current task.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitTurn(t, e, personalAgain.ID)
+	after := snapshotModels(&mu, &requested)
+	if !restoredModels(after[before:], "catalog-model", "kept-personal") {
+		t.Fatalf("LOCAL did not restore the stored models: %v", after[before:])
+	}
+}
+
+// onlyModels reports whether every recorded completion used name.
+func onlyModels(got []string, name string) bool {
+	if len(got) == 0 {
+		return false
+	}
+	for _, item := range got {
+		if item != name {
+			return false
+		}
+	}
+	return true
+}
+
+// restoredModels reports whether completions use each stored model in order.
+// One turn can record more than one completion; a later turn must not reuse
+// the previous model.
+func restoredModels(got []string, names ...string) bool {
+	if len(got) < len(names) || len(names) == 0 {
+		return false
+	}
+	at, seen := 0, 0
+	for _, item := range got {
+		if item == names[at] {
+			seen++
+			continue
+		}
+		if at+1 < len(names) && seen > 0 && item == names[at+1] {
+			at++
+			seen = 1
+			continue
+		}
+		return false
+	}
+	return at == len(names)-1 && seen > 0
 }
 
 func newAccountEngine(t *testing.T, base string, names ...string) *Engine {

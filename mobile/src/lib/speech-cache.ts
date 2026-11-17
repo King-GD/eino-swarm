@@ -60,6 +60,7 @@ export function safeSpeechSnapshot(raw: unknown): SpeechSnapshot | undefined {
     execution: source.execution, ...(origin ? { gateway_origin: origin } : {}),
     input: {
       ...inputRoute,
+      ...(text(input.source_id, 128) ? { source_id: text(input.source_id, 128) } : {}),
       enabled: input.enabled as boolean, ready: input.ready as boolean,
       ...(text(input.reason, 256) ? { reason: text(input.reason, 256) } : {}),
       model: input.model as string, label: input.label as string, language: input.language as string, prompt: input.prompt as string,
@@ -67,6 +68,7 @@ export function safeSpeechSnapshot(raw: unknown): SpeechSnapshot | undefined {
     },
     output: {
       ...outputRoute,
+      ...(text(output.source_id, 128) ? { source_id: text(output.source_id, 128) } : {}),
       enabled: output.enabled as boolean, ready: output.ready as boolean,
       ...(text(output.reason, 256) ? { reason: text(output.reason, 256) } : {}),
       model: output.model as string, label: output.label as string, voice: output.voice as string,

@@ -11,6 +11,10 @@ export const modelPolicyEn = {
  "modelPolicy.transcription": "Speech recognition",
  "modelPolicy.speech": "Spoken answers",
  "modelPolicy.ocr": "Image text recognition",
+ "modelPolicy.translation": "Translation",
+ "modelPolicy.image": "Image generation",
+ "modelPolicy.unresolved": "Gateway capabilities could not be verified. Your saved choices are retained.",
+ "modelPolicy.retry": "Retry discovery",
 } as const
 export const modelPolicyZh: Record<keyof typeof modelPolicyEn,string> = {
  "modelPolicy.title": "功能模型",
@@ -25,4 +29,8 @@ export const modelPolicyZh: Record<keyof typeof modelPolicyEn,string> = {
  "modelPolicy.transcription": "语音识别",
  "modelPolicy.speech": "语音朗读",
  "modelPolicy.ocr": "图片文字识别",
+ "modelPolicy.translation": "翻译",
+ "modelPolicy.image": "图片生成",
+ "modelPolicy.unresolved": "暂时无法确认网关可用功能，已保留你的设置。",
+ "modelPolicy.retry": "重新获取",
 }

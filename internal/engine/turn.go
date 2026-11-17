@@ -373,7 +373,7 @@ func (e *Engine) startTurnInput(threadID string, in UserInput) (*store.Turn, err
 		return nil, err
 	}
 
-	prov, err := e.pool.ResolveModel(th.ProviderID, th.Model)
+	prov, err := e.pool.StoredConversationModel(th.ProviderID, th.Model)
 	if err != nil {
 		return nil, err
 	}

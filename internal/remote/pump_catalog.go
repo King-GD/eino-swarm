@@ -35,7 +35,16 @@ func (p *LinkPump) startCatalogRefresh(req Request) {
 			p.catalogCancel = nil
 			p.catalogMu.Unlock()
 		}()
-		resp := handleCatalogRefresh(ctx, p.eng, req, p.path, p.sessionID)
+		var resp Response
+		if req.Op == OpRefreshCapabilities {
+			if err := p.eng.Providers().RefreshCapabilities(ctx); err != nil {
+				resp = mapErr(req.ID, p.path, p.sessionID, err)
+			} else {
+				resp = handleCatalog(p.eng, req, p.path, p.sessionID)
+			}
+		} else {
+			resp = handleCatalogRefresh(ctx, p.eng, req, p.path, p.sessionID)
+		}
 		p.catalogMu.Lock()
 		closed := p.catalogClosed
 		p.catalogMu.Unlock()

@@ -5,6 +5,7 @@ import { speechEn } from "./messages-speech"
 export const en = {
   ...pcWaitEn,
   ...speechEn,
+  "account.capabilitiesUnknown": "Gateway capabilities could not be verified. Your saved settings are retained; retry below.",
   "selection.actions": "Selected text actions",
   "selection.translate": "Translate",
   "selection.close": "Close selected text actions",

@@ -212,8 +212,12 @@ func (m *threadWakePolicyMiddleware) BeforeModelRewriteState(ctx context.Context
 // Only the blank default may be dropped by an endpoint that rejects it.
 func (e *Engine) policyModelBuilder(ctx context.Context, th *store.Thread, rec provider.Recorder) (func(role, agentID string) model.BaseChatModel, error) {
 	effort, optional := e.cfg.SwarmSnapshot().PolicyEffort(th.ReasoningEffort)
-	if optional {
-		return e.pool.AuxiliaryModelBuilder(ctx, th.ProviderID, th.Model, effort, rec)
+	resolved, err := e.pool.StoredConversationModel(th.ProviderID, th.Model)
+	if err != nil {
+		return nil, err
 	}
-	return e.pool.ModelBuilder(ctx, th.ProviderID, th.Model, effort, rec)
+	if optional {
+		return e.pool.AuxiliaryModelBuilder(ctx, resolved.ID, resolved.Model, effort, rec)
+	}
+	return e.pool.ModelBuilder(ctx, resolved.ID, resolved.Model, effort, rec)
 }

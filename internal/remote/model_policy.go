@@ -34,7 +34,7 @@ func (b accountBootstrap) configurable() bool {
 // A managed preset is built exclusively from server-published role bindings.
 // It must never discover a broader gateway catalog.
 func fetchPreset(boot accountBootstrap, token string, who AccountModelsState) accountOutcome {
-	if boot.defaults["conversation"] == "" {
+	if boot.defaults["conversation"] == "" && (boot.sourceCapabilities("preset") == nil || !boot.sourceCapabilities("preset").Available) {
 		who.State, who.Reason = AccountUnavailable, AccountReasonUnsafe
 		return accountOutcome{state: who}
 	}
@@ -50,7 +50,7 @@ func fetchPreset(boot accountBootstrap, token string, who AccountModelsState) ac
 			seen[name] = true
 		}
 		kind := role
-		if role == "conversation" || role == "title" || role == "compact" {
+		if role == "conversation" || role == "title" || role == "compact" || role == "translation" {
 			kind = "chat"
 		}
 		cat.Types[name] = kind
@@ -71,6 +71,7 @@ func fetchPreset(boot accountBootstrap, token string, who AccountModelsState) ac
 // projection is not an executable catalog and never invents a source identity.
 func unavailableAccountPolicy(id accountIdentity, sourceID, label string, configurable bool) *provider.AccountSource {
 	source := provider.NewUnavailableAccountSource(sourceID, label, id.origin+strings.TrimSuffix(desktopModelsPrefix, "/"), id.token, configurable)
+	source.SetCapabilities(nil)
 	source.SetAccountOwner(id.userID)
 	return source
 }

@@ -7,6 +7,7 @@ import type { MessageKey } from "./messages-en"
 export const zh: Record<MessageKey, string> = {
   ...pcWaitZh,
   ...speechZh,
+  "account.capabilitiesUnknown": "暂时无法确认网关可用功能，已保留设置，请点击下方重试。",
   "selection.actions": "选中文字操作",
   "selection.translate": "翻译",
   "selection.close": "关闭选中文字操作",

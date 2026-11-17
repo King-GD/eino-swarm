@@ -95,6 +95,7 @@ export function GatewayAccountShell({ children }: { children: ReactNode }) {
     setDialog(undefined)
     window.dispatchEvent(new CustomEvent("zwai.gateway.connect", { detail: saved.fingerprint }))
   }
+  useEffect(() => { if (open && !restricted) void account.refresh() }, [open, restricted])
   const openChat = mode === "local" ? () => { setDialog(undefined); window.dispatchEvent(new Event("zwai.gateway.chat")) } : undefined
   const otherWays = {
     scan: () => window.dispatchEvent(new Event("zwai.gateway.scan")),

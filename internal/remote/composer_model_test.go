@@ -1,6 +1,7 @@
 package remote
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
@@ -117,6 +118,38 @@ func TestPhoneCatalogLocksTheOfficialName(t *testing.T) {
 		t.Fatal("LOCAL hid the signed-in model or the personal model")
 	}
 
+}
+
+func TestManagedPhoneSendKeepsTheHistoricalModel(t *testing.T) {
+	e := accountPhoneEngine(t, "catalog-model", "preset-model")
+	th, err := e.CreateThread("kept", accountModelsSourceID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Store().UpdateThread(th.ID, map[string]any{"model": "catalog-model"}); err != nil {
+		t.Fatal(err)
+	}
+	managed, err := provider.NewAccountSource(accountModelsSourceID, "Partner", "https://account.invalid/v1", "token", provider.Catalog{
+		Names: []string{"preset-model"},
+		Types: map[string]string{"preset-model": "chat"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	managed.SetModelPolicy(false, map[string]string{"conversation": "preset-model"})
+	e.Providers().SetAccountSource(managed)
+
+	req := Request{ThreadID: th.ID, ProviderID: accountModelsSourceID, Model: "catalog-model"}
+	if err := prepareTurn(e, req); err != nil {
+		t.Fatal(err)
+	}
+	got, err := e.Store().GetThread(th.ID)
+	if err != nil || got.ProviderID != accountModelsSourceID || got.Model != "catalog-model" {
+		t.Fatalf("historical binding rewritten: %+v %v", got, err)
+	}
+	if err := prepareTurn(e, Request{ThreadID: th.ID, ProviderID: accountModelsSourceID, Model: "other-model"}); !errors.Is(err, provider.ErrModelPolicy) {
+		t.Fatalf("explicit other model was accepted: %v", err)
+	}
 }
 
 func TestPhonePinsTheShownCatalogFallback(t *testing.T) {

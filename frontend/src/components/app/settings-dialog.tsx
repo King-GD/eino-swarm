@@ -1,3 +1,6 @@
+import { CapabilityNotice } from "./capability-notice"
+import { policyAllows } from "@/lib/model-policy"
+import { refreshCapabilities } from "@/lib/refresh-capabilities"
 import {
   Archive,
   ArrowLeft,
@@ -243,6 +246,7 @@ export function SettingsDialog({
     // from a previous open must not replace the new draft or its baseline.
     void Promise.resolve(accountOperation.current).catch(() => undefined)
       .then(() => persistRef.current!.flush().catch(() => undefined))
+      .then(() => cancelled ? undefined : refreshCapabilities().catch(() => undefined))
       .then(() => cancelled ? undefined : Promise.all([api.settings(), api.tools()]))
       .then((loaded) => {
         if (cancelled || !loaded) return
@@ -377,7 +381,7 @@ export function SettingsDialog({
   const modelPolicy = useApp((s) => s.meta?.model_policy)
   const managedModels = modelPolicy ? !modelPolicy.configurable : productMode === "fofa"
   const visibleNav = nav.filter((s) =>
-    settingsMatch(query, s.label, s.keys) && (s.id === "models" ? !managedModels : s.id === "speech" ? managedModels : true),
+    settingsMatch(query, s.label, s.keys) && (s.id === "models" ? !managedModels : s.id === "speech" ? managedModels && (policyAllows(modelPolicy, "transcription") || policyAllows(modelPolicy, "speech")) : true),
   )
   // Radix used to fire an empty value when the panes were not TabsContent.
   // An unknown id paints a blank sheet with no rail highlight.
@@ -531,6 +535,7 @@ export function SettingsDialog({
                   data-state="active"
                   className={settingsScrollTab}
                 >
+                  <CapabilityNotice />
                   {page === "general" ? (
                     <GeneralTab
                       theme={theme}
@@ -554,7 +559,7 @@ export function SettingsDialog({
                   ) : null}
                   {page === "models" ? (
                     <ModelsTab
-                      settings={settings}
+                      settings={{ ...settings, model_policy: modelPolicy ?? settings.model_policy }}
                       onChange={apply}
                       onFlush={() => persistRef.current!.flush()}
                       query={query}
@@ -568,7 +573,7 @@ export function SettingsDialog({
                       focusKey={focusKey}
                     />
                   ) : null}
-                  {page === "speech" ? <SpeechTab settings={settings} onChange={apply} query={query} onFlush={() => persistRef.current!.flush()} /> : null}
+                  {page === "speech" ? <SpeechTab settings={{ ...settings, model_policy: modelPolicy ?? settings.model_policy }} onChange={apply} query={query} onFlush={() => persistRef.current!.flush()} /> : null}
                   {page === "swarm" ? (
                     <SwarmTab
                       settings={settings}

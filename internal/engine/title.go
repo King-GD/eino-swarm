@@ -166,7 +166,7 @@ func (e *Engine) runTitle(threadID string, turn *store.Turn, userText, final str
 	} else {
 		fallbackProvider, fallbackModel := e.cfg.SwarmSnapshot().ResolveTitle(turn.ProviderID, turn.Model)
 		providerID, modelName := e.applyRoleModel(turn.ProviderID, "title", fallbackProvider, fallbackModel)
-		builder, buildErr := e.pool.ModelBuilder(ctx, providerID, modelName, "", e.callRecorder(threadID, turn.ID))
+		builder, buildErr := e.pool.RoleModelBuilder(ctx, providerID, modelName, "", e.callRecorder(threadID, turn.ID), "title")
 		err = buildErr
 		if err == nil {
 			var out *schema.Message

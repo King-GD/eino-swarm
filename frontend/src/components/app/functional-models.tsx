@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { SelectItem } from "@/components/ui/select"
 import type { MessageKey } from "@/lib/i18n"
-import { configurableModelRoles, type ModelRef, type ModelRole } from "@/lib/model-policy"
+import { configurableModelRoles, policyConfigurable, type ModelRef, type ModelRole } from "@/lib/model-policy"
 import type { Settings } from "@/lib/types"
 import { useT } from "@/lib/use-t"
 import { useApp } from "@/store/app"
@@ -17,6 +17,8 @@ const labels: Record<Exclude<ModelRole, "decisions">, MessageKey> = {
   transcription: "modelPolicy.transcription",
   speech: "modelPolicy.speech",
   ocr: "modelPolicy.ocr",
+  translation: "modelPolicy.translation",
+  image: "modelPolicy.image",
 }
 
 export function FunctionalModels({ settings, onChange, query = "" }: {
@@ -45,29 +47,33 @@ export function FunctionalModels({ settings, onChange, query = "" }: {
     })
   }
   const update = (role: Exclude<ModelRole, "decisions">, ref?: ModelRef) => {
-    const bindings = { ...settings.models.bindings }
+    const bindings = { ...settings.model_policy?.bindings, ...settings.models.bindings }
     if (ref) bindings[role] = ref
     else delete bindings[role]
     onChange({ ...settings, models: { ...settings.models, bindings } })
   }
   return <SettingsSection title={t("modelPolicy.title")} description={t("modelPolicy.description")}>
-    {configurableModelRoles.map(role => {
-      const ref = settings.models.bindings?.[role]
+    {configurableModelRoles.filter(role => role !== "image" && policyConfigurable(settings.model_policy, role)).map(role => {
+      const ref = settings.models.bindings?.[role] ?? settings.model_policy?.bindings?.[role]
       const fallback = settings.model_policy?.defaults?.[role]
       const selection = ref ?? fallback
-      const provider = providers.find(p => p.id === selection?.provider_id)
+      const roleProviders = providers.map(p => p.id === account?.source_id ? { ...p, names: [...new Set([
+        ...(["conversation", "title", "compact", "translation"].includes(role) ? accountRows.map(row => row.model) : role === "embedding" ? account.kinds?.embedding_models ?? [] : role === "transcription" ? account.kinds?.transcription_models ?? [] : role === "speech" ? account.kinds?.speech_models ?? [] : []),
+        ...(fallback ? [fallback.model] : []),
+      ])] } : p)
+      const provider = roleProviders.find(p => p.id === selection?.provider_id)
       return <div key={role} data-settings-key={`model-${role}`}>
         <SettingsChoice label={t(labels[role])} query={query} value={ref?.provider_id ?? "__default"}
           ariaLabel={`${t(labels[role])} ${t("modelPolicy.provider")}`}
           onValueChange={provider_id => {
             if (provider_id === "__default") update(role)
             else {
-              const p = providers.find(row => row.id === provider_id)
+              const p = roleProviders.find(row => row.id === provider_id)
               update(role, { provider_id, model: p?.names[0] ?? selection?.model ?? "" })
             }
           }}>
           <SelectItem value="__default">{t("modelPolicy.default")}{fallback ? ` · ${fallback.model}` : ""}</SelectItem>
-          {providers.map(p => <SelectItem key={p.id} value={p.id} disabled={!p.names.length}>{p.label}</SelectItem>)}
+          {roleProviders.map(p => <SelectItem key={p.id} value={p.id} disabled={!p.names.length}>{p.label}</SelectItem>)}
         </SettingsChoice>
         {ref ? <SettingsRow label={t("modelPolicy.model")} query={query} search={[t(labels[role])]}>
           <Input aria-label={`${t(labels[role])} ${t("modelPolicy.model")}`} key={`${ref.provider_id}:${ref.model}`}

@@ -16,6 +16,8 @@ type accountCatalogRef struct {
 	sourceID, label, apiBaseURL, catalogURL string
 	sameAsPreset                            bool
 	group                                   string
+	defaults                                map[string]string
+	configurable                            bool
 }
 
 const (
@@ -61,21 +63,38 @@ func (a *AccountModels) attachSwitchableCatalogs(ctx context.Context, boot accou
 func (a *AccountModels) switchableCatalogs(ctx context.Context, boot accountBootstrap, token string) []switchableSource {
 	var refs []accountCatalogRef
 	if boot.access && boot.clientCatalogURL != "" {
-		refs = append(refs, accountCatalogRef{sourceID: boot.sourceID, label: boot.label, apiBaseURL: boot.apiBaseURL, catalogURL: boot.clientCatalogURL, sameAsPreset: true, group: "third_party"})
+		refs = append(refs, accountCatalogRef{sourceID: boot.sourceID, label: boot.label, apiBaseURL: boot.apiBaseURL, catalogURL: boot.clientCatalogURL, sameAsPreset: true, group: "third_party", defaults: boot.defaults, configurable: boot.configurable()})
 	}
 	if boot.gatewayCatalog != nil {
 		refs = append(refs, *boot.gatewayCatalog)
 	}
 	var sources []switchableSource
 	for _, ref := range refs {
+		kind := "gateway"
+		if ref.sameAsPreset {
+			kind = "preset"
+		}
+		capability := boot.sourceCapabilities(kind)
+		if capability == nil || !capability.Authorized || !capability.Available {
+			continue
+		}
 		item, status := a.oneCatalog(ctx, token, ref)
 		switch status {
 		case catalogReady:
+			item.src.SetCapabilities(capability)
+			if ref.sameAsPreset && len(boot.roles) > 0 {
+				item.src.SetRoles(boot.roles)
+			}
 			sources = append(sources, item)
 		case catalogKeep:
 			a.log.Warn("account catalog refresh failed; retaining only its authorized cached source")
 			for _, cached := range a.pool.LocalAccountSources() {
 				if cached := cached.CopyForCatalogConnection(ref.sourceID, ref.apiBaseURL, token); cached != nil {
+					cached.SetCapabilities(capability)
+					cached.SetModelPolicy(ref.configurable, ref.defaults)
+					if ref.sameAsPreset && len(boot.roles) > 0 {
+						cached.SetRoles(boot.roles)
+					}
 					sources = append(sources, switchableSource{src: cached, models: cached.ModelCount(), preset: ref.sameAsPreset})
 					break
 				}
@@ -110,7 +129,7 @@ func (a *AccountModels) oneCatalog(ctx context.Context, token string, ref accoun
 		a.log.Warn("account catalog was not published", "reason", AccountReasonUnsafe)
 		return switchableSource{}, catalogOmit
 	}
-	src.SetModelPolicy(true, nil)
+	src.SetModelPolicy(ref.configurable, ref.defaults)
 	src.SetCatalogGroup(ref.group)
 	return switchableSource{src: src, models: len(cat.Names), preset: ref.sameAsPreset}, catalogReady
 }
@@ -144,13 +163,15 @@ func (b *accountBootstrap) parseSwitchableCatalogs(clientCatalogURL string, gate
 		return nil
 	}
 	var body struct {
-		SourceID         string `json:"source_id"`
-		SourceKind       string `json:"source_kind"`
-		Label            string `json:"label"`
-		Execution        string `json:"execution"`
-		APIBaseURL       string `json:"api_base_url"`
-		CatalogURL       string `json:"catalog_url"`
-		APIAccessEnabled bool   `json:"api_access_enabled"`
+		SourceID         string          `json:"source_id"`
+		SourceKind       string          `json:"source_kind"`
+		Label            string          `json:"label"`
+		Execution        string          `json:"execution"`
+		APIBaseURL       string          `json:"api_base_url"`
+		CatalogURL       string          `json:"catalog_url"`
+		APIAccessEnabled bool            `json:"api_access_enabled"`
+		Configurable     bool            `json:"configurable"`
+		Defaults         json.RawMessage `json:"defaults"`
 	}
 	if json.Unmarshal(gatewayRaw, &body) != nil || !accountSourceID.MatchString(body.SourceID) || body.SourceID == b.sourceID || body.SourceKind != "gateway" || body.Execution != "desktop" {
 		return errAccountResponse
@@ -165,7 +186,11 @@ func (b *accountBootstrap) parseSwitchableCatalogs(clientCatalogURL string, gate
 	if !body.APIAccessEnabled {
 		return nil
 	}
-	b.gatewayCatalog = &accountCatalogRef{
+	defaults, err := parseModelDefaults(body.Defaults)
+	if err != nil {
+		return err
+	}
+	b.gatewayCatalog = &accountCatalogRef{defaults: defaults, configurable: body.Configurable,
 		sourceID: body.SourceID, label: label, group: "original",
 		apiBaseURL: strings.TrimRight(body.APIBaseURL, "/"), catalogURL: body.CatalogURL,
 	}

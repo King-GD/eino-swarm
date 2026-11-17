@@ -160,6 +160,7 @@ async function streamTidyAt(
     } catch {
       // a non-JSON refusal is still a refusal
     }
+    if ([401, 403].includes(res.status) || code === "model_selection_disabled") window.dispatchEvent(new Event("zwai.capabilities.rejected"))
     notifyEngineRestoring(code)
     throw new ApiError(message, res.status, code, details)
   }
@@ -261,6 +262,7 @@ async function requestResponse(path: string, init?: RequestInit): Promise<Respon
         message = t(locale, "api.recordNotFound", { method: init?.method ?? "GET", route })
       }
     }
+    if ([401, 403].includes(res.status) || code === "model_selection_disabled") window.dispatchEvent(new Event("zwai.capabilities.rejected"))
     notifyEngineRestoring(code)
     throw new ApiError(message, res.status, code, details)
   }

@@ -1,3 +1,4 @@
+import { policyAllows, policyConfigurable } from "@/lib/model-policy"
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -40,6 +41,7 @@ export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery
     discovery.current?.abort(); discovery.current = undefined; setDiscovering(undefined); setModels({})
   }, [connectionIdentity])
   useEffect(() => () => discovery.current?.abort(), [])
+  if (!policyAllows(settings.model_policy, "transcription") && !policyAllows(settings.model_policy, "speech")) return null
   const update = <K extends Kind>(kind: K, patch: Partial<(typeof speech)[K]>) => onChange({
     ...settings, speech: { ...speech, [kind]: { ...speech[kind], ...patch } },
   })
@@ -59,7 +61,7 @@ export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery
     finally { if (discovery.current === owner) { discovery.current = undefined; setDiscovering(undefined) } }
   }
   const connection = (kind: Kind, value: Connection) => settings.model_policy ? (
-    settings.model_policy.configurable ? <SettingsRow label={t("speech.model")} hint={snapshot?.[kind].label || t("modelPolicy.default")} query={query} /> : null
+    policyConfigurable(settings.model_policy, kind === "input" ? "transcription" : "speech") ? <SettingsRow label={t("speech.model")} hint={snapshot?.[kind].label || t("modelPolicy.default")} query={query} /> : null
   ) : <>
     {local ? <>
       <SettingsChoice label={t("speech.source")} query={query} value={value.source} onValueChange={(source) => update(kind, { source: source as Connection["source"] })}>
@@ -84,7 +86,7 @@ export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery
     </SettingsRow>}
   </>
   return <>
-    <SettingsSection title={t("speech.input")} description={t("speech.description")}>
+    {policyAllows(settings.model_policy, "transcription") ? <SettingsSection title={t("speech.input")} description={t("speech.description")}>
       <Field label={t("speech.enabled")} query={query}><Switch checked={speech.input.enabled} onCheckedChange={(enabled) => update("input", { enabled })} /></Field>
       {connection("input", speech.input)}
       <Field label={t("speech.language")} query={query}><Input value={speech.input.language} placeholder={t("speech.autoLanguage")} onChange={(event) => update("input", { language: event.target.value })} /></Field>
@@ -94,8 +96,8 @@ export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery
       </SettingsChoice>
       <Field label={t("speech.duration")} query={query}><Input type="number" min={1} value={speech.input.max_duration_seconds} onChange={(event) => update("input", { max_duration_seconds: Number(event.target.value) })} /></Field>
       <Field label={t("speech.timeout")} query={query}><Input type="number" min={1} value={speech.input.timeout_seconds} onChange={(event) => update("input", { timeout_seconds: Number(event.target.value) })} /></Field>
-    </SettingsSection>
-    <SettingsSection title={t("speech.output")}>
+    </SettingsSection> : null}
+    {policyAllows(settings.model_policy, "speech") ? <SettingsSection title={t("speech.output")}>
       <Field label={t("speech.enabled")} query={query}><Switch checked={speech.output.enabled} onCheckedChange={(enabled) => update("output", { enabled })} /></Field>
       {connection("output", speech.output)}
       <Field label={t("speech.voice")} query={query}><Input value={speech.output.voice} placeholder={t("speech.modelDefault")} onChange={(event) => update("output", { voice: event.target.value })} /></Field>
@@ -105,7 +107,7 @@ export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery
       </SettingsChoice>
       <Field label={t("speech.instructions")} query={query} wide><Input value={speech.output.instructions} onChange={(event) => update("output", { instructions: event.target.value })} /></Field>
       <Field label={t("speech.timeout")} query={query}><Input type="number" min={1} value={speech.output.timeout_seconds} onChange={(event) => update("output", { timeout_seconds: Number(event.target.value) })} /></Field>
-    </SettingsSection>
+    </SettingsSection> : null}
     <SettingsSection title={t("speech.limits")}>
       {([
         ["input_bytes", "speech.inputLimit", 1 << 20], ["output_bytes", "speech.outputLimit", 1 << 20],

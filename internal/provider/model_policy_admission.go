@@ -92,5 +92,13 @@ func (r *recordingModel) admit(ctx context.Context) (context.Context, func(error
 		return ctx, nil, err
 	}
 	var once sync.Once
-	return ctx, func(err error) { finish(err); once.Do(release) }, nil
+	return ctx, func(err error) {
+		finish(err)
+		once.Do(func() {
+			release()
+			if r.onResult != nil {
+				r.onResult(err)
+			}
+		})
+	}, nil
 }

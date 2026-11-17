@@ -1,3 +1,5 @@
+import { GATEWAY_CAPABILITY_REFRESH_EVENT } from "@/lib/gateway-capabilities"
+import { usePairedFeature } from "@/lib/paired-capabilities"
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { Languages, Loader2, MessageSquarePlus, Square, Volume2, X } from "lucide-react"
 import { englishSelection } from "../../../frontend/src/lib/selection-language"
@@ -10,21 +12,24 @@ import { cancelPhoneSpeech, synthesizePhoneSpeech, usePhoneSpeech } from "@/lib/
 import { nextRPCId, OpCancelTranslation, OpTranslateSelection } from "@/lib/rpc"
 import { speechFailureMessage } from "./speech-capture"
 
-export function SelectionActions({ text, threadId, link, onAdd, onDismiss, onExpand }: {
+export function SelectionActions({ text, threadId, link, providerID, onAdd, onDismiss, onExpand }: {
   text: string
   threadId: string
+  providerID?: string
   link?: RemoteLink
   onAdd: () => void
   onDismiss: () => void
   onExpand: () => void
 }) {
   const speech = usePhoneSpeech()
+  useEffect(() => { window.dispatchEvent(new Event(GATEWAY_CAPABILITY_REFRESH_EVENT)) }, [])
   const playback = useSyncExternalStore(speechPlayback.subscribe, speechPlayback.getSnapshot, speechPlayback.getSnapshot)
   const speechKey = `phone-selection:${threadId}`
   const reading = playback.key === speechKey && playback.state !== "idle"
   const prose = useMemo(() => Boolean(speechText(text)), [text])
   const canRead = speech.outputReady && prose
-  const canTranslate = getLocale() === "zh" && Boolean(link) && englishSelection(text)
+  const translationAllowed = usePairedFeature(link, providerID, "translation")
+  const canTranslate = translationAllowed && getLocale() === "zh" && Boolean(link) && englishSelection(text)
   const [translation, setTranslation] = useState<{ status: "loading" | "done" | "error"; text: string } | null>(null)
   const [readError, setReadError] = useState("")
   const request = useRef<AbortController | null>(null)

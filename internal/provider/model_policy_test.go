@@ -166,6 +166,26 @@ func TestModelPolicySeparatesOwnersAndValidatesExplicitClientChoices(t *testing.
 	}
 }
 
+func TestStoredConversationUsesThePresetWhenItsModelLeft(t *testing.T) {
+	cfg := config.Default()
+	p := New(cfg)
+	src := accountSourceFor(t, "https://gateway.invalid/v1", "private", "preset-model")
+	src.SetModelPolicy(false, map[string]string{"conversation": "preset-model"})
+	p.SetAccountSource(src)
+	for _, saved := range []config.ModelRef{{ProviderID: src.id, Model: "catalog-model"}, {ProviderID: cfg.Models.Default, Model: "own-model"}} {
+		prov, err := p.StoredConversationModel(saved.ProviderID, saved.Model)
+		if err != nil || prov.ID != src.id || prov.Model != "preset-model" {
+			t.Fatalf("saved %+v executed as %+v %v", saved, prov, err)
+		}
+	}
+	if _, err := p.ResolveModel(src.id, "catalog-model"); !errors.Is(err, ErrModelPolicy) {
+		t.Fatal("explicit name outside the preset resolved")
+	}
+	if err := p.ValidateConversationSelection(cfg.Models.Default, "own-model"); !errors.Is(err, ErrModelPolicy) {
+		t.Fatal("explicit personal selection was accepted")
+	}
+}
+
 func TestManagedPresetCannotBeUnlockedByPresentation(t *testing.T) {
 	cfg := config.Default()
 	cfg.Models.AccountPresentation = config.AccountPresentationFull

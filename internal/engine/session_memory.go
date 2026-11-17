@@ -333,7 +333,13 @@ func (e *Engine) refreshSessionMemory(ctx context.Context, threadID, turnID stri
 	if turnID == "" {
 		turnID = e.lastTurnID(threadID)
 	}
-	builder, err := e.pool.ModelBuilder(ctx, th.ProviderID, th.Model, "",
+	resolved, err := e.pool.StoredConversationModel(th.ProviderID, th.Model)
+	if err != nil {
+		e.recordSessionMemory(threadID, turnID, "", 0, err.Error())
+		e.markSessionMemoryAttempt(threadID, tokens)
+		return err
+	}
+	builder, err := e.pool.ModelBuilder(ctx, resolved.ID, resolved.Model, "",
 		e.callRecorder(threadID, turnID))
 	if err != nil {
 		e.recordSessionMemory(threadID, turnID, "", 0, err.Error())

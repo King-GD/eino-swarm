@@ -85,6 +85,7 @@ export function GatewayAccountScreen({ account, providers, modelBusy, modelError
         </> : null}
         {authorized && !pcRequired ? <WebExecutionSettings pcWeb={pcWeb} /> : null}
         {!waiting && !pcRequired ? <SpeechStatus /> : null}
+        {authorized && account.bootstrap?.capability_status !== "ready" ? <p role="status" className="text-sm text-muted-foreground">{t("account.capabilitiesUnknown")}</p> : null}
         {authorized ? <>
           {!pcRequired && (providers.length > 0 || modelBusy || modelError) ? <section className="flex flex-col gap-2">
             <h2 className="text-sm font-semibold">{t("account.models")}</h2>

@@ -83,6 +83,11 @@ func (e *Engine) askSideChat(ctx context.Context, threadID string, input SideCha
 		}
 		providerID, modelName, effort = input.ProviderID, input.Model, ""
 	}
+	resolved, err := e.pool.StoredConversationModel(providerID, modelName)
+	if err != nil {
+		return "", err
+	}
+	providerID, modelName = resolved.ID, resolved.Model
 	ctx = provider.WithIsolatedRecovery(ctx)
 	build, err := e.pool.ModelBuilder(ctx, providerID, modelName, effort, nil)
 	if err != nil {

@@ -83,6 +83,7 @@ type AccountModels struct {
 	client   *http.Client
 	interval time.Duration
 	trigger  chan struct{}
+	requests chan chan struct{}
 
 	refreshMu sync.Mutex // serializes Refresh; never held while reading State
 	mu        sync.RWMutex
@@ -112,7 +113,7 @@ func NewAccountModels(cfg *config.Config, pool *provider.Pool, log *slog.Logger)
 		log = slog.Default()
 	}
 	a := &AccountModels{
-		cfg: cfg, pool: pool, log: log, interval: defaultAccountRefresh, trigger: make(chan struct{}, 1),
+		cfg: cfg, pool: pool, log: log, interval: defaultAccountRefresh, trigger: make(chan struct{}, 1), requests: make(chan chan struct{}),
 		lastKey: "\x00never refreshed",
 		client: &http.Client{Timeout: accountRequestTimeout, CheckRedirect: func(*http.Request, []*http.Request) error {
 			// A redirect would carry the credential to wherever it points.
@@ -125,6 +126,8 @@ func NewAccountModels(cfg *config.Config, pool *provider.Pool, log *slog.Logger)
 	} else {
 		a.state = AccountModelsState{State: AccountSignedOut}
 	}
+	a.pool.SetCapabilitiesRefresher(a.refreshOwned)
+	a.pool.SetCapabilitiesTrigger(a.Trigger)
 	return a
 }
 
@@ -197,13 +200,18 @@ func (a *AccountModels) Start() {
 	a.cancel, a.done = cancel, done
 	go func() {
 		defer close(done)
+		a.Refresh(ctx)
 		for {
-			a.Refresh(ctx)
 			select {
 			case <-ctx.Done():
 				return
+			case reply := <-a.requests:
+				a.Refresh(ctx)
+				close(reply)
 			case <-a.trigger:
+				a.Refresh(ctx)
 			case <-time.After(a.interval):
+				a.Refresh(ctx)
 			}
 		}
 	}()
@@ -329,6 +337,7 @@ func (a *AccountModels) publish(fetched accountIdentity, o accountOutcome) Accou
 		// alone; the refresh triggered for it publishes its own models.
 		return a.state
 	case o.transient && a.published:
+		a.pool.InvalidateCapabilities()
 		// A brief outage must not take working models away mid-conversation.
 		// A fresh bootstrap can nevertheless revoke independent LOCAL sources.
 		if o.localUpdated {
@@ -401,7 +410,15 @@ func (a *AccountModels) fetch(ctx context.Context, id accountIdentity) (outcome 
 	if err != nil {
 		return fail(AccountUnavailable, AccountReasonUnsafe, false)
 	}
+	if boot.capabilitiesURL != "" {
+		if data, err := a.get(ctx, boot.capabilitiesURL, id.token); err == nil {
+			boot.capabilities, _ = provider.ParseCapabilities(data)
+		}
+	}
 	defer func() {
+		if outcome.source != nil {
+			outcome.source.SetCapabilities(boot.sourceCapabilities("preset"))
+		}
 		if a.cfg != nil && a.cfg.ProductSnapshot().Resolved() == config.ProductModeLocal {
 			outcome = a.attachSwitchableCatalogs(ctx, boot, id.token, outcome)
 		}
@@ -474,7 +491,7 @@ func fetchRoles(boot accountBootstrap, token string, who AccountModelsState) acc
 		}
 	}
 	roles := append([]provider.AccountRole(nil), boot.roles...)
-	if !conversation {
+	if !conversation && (boot.sourceCapabilities("preset") == nil || !boot.sourceCapabilities("preset").Available) {
 		s := who
 		s.State, s.Reason, s.Label = AccountNoAccess, AccountReasonNoModels, boot.label
 		s.Roles = roles
@@ -553,6 +570,8 @@ type accountBootstrap struct {
 	editable                                *bool
 	defaults                                map[string]string
 	sourceID, label, apiBaseURL, catalogURL string
+	capabilitiesURL                         string
+	capabilities                            *provider.ClientCapabilities
 	access                                  bool
 	userID, avatarURL                       string
 	profile                                 *provider.AccountProfile
@@ -600,7 +619,8 @@ func parseAccountBootstrap(raw []byte, origin string) (accountBootstrap, error) 
 				Profile          json.RawMessage `json:"profile"`
 				Roles            json.RawMessage `json:"roles"`
 			} `json:"models"`
-			GatewayModels json.RawMessage `json:"gateway_models"`
+			CapabilitiesURL string          `json:"capabilities_url"`
+			GatewayModels   json.RawMessage `json:"gateway_models"`
 		} `json:"data"`
 	}
 	if json.Unmarshal(raw, &envelope) != nil {
@@ -616,6 +636,9 @@ func parseAccountBootstrap(raw []byte, origin string) (accountBootstrap, error) 
 	}
 	out := accountBootstrap{sourceID: m.SourceID, label: label, access: m.APIAccessEnabled, userID: envelope.Data.User.ID, avatarURL: envelope.Data.User.AvatarURL}
 	out.editable = m.Configurable
+	if sameOriginURL(envelope.Data.CapabilitiesURL, origin) {
+		out.capabilitiesURL = envelope.Data.CapabilitiesURL
+	}
 	if err := out.parseSwitchableCatalogs(m.ClientCatalogURL, envelope.Data.GatewayModels, origin); err != nil {
 		return accountBootstrap{}, err
 	}
@@ -708,7 +731,7 @@ func (a *AccountModels) get(ctx context.Context, target, token string) ([]byte, 
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 	if req.URL.Path == desktopModelsPrefix+"bootstrap" {
-		req.Header.Set("X-AIGateway-Model-Roles", "2")
+		req.Header.Set("X-AIGateway-Model-Roles", "3")
 	}
 	resp, err := a.client.Do(req)
 	if err != nil {

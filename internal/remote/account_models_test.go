@@ -47,11 +47,36 @@ func newAccountGateway(t *testing.T) *accountGateway {
 		g.mu.Unlock()
 		switch r.URL.Path {
 		case "/client/desktop/v1/bootstrap":
-			bootstrap(w, r)
+			recorded := httptest.NewRecorder()
+			bootstrap(recorded, r)
+			var body map[string]any
+			if recorded.Code == http.StatusOK && json.Unmarshal(recorded.Body.Bytes(), &body) == nil {
+				if data, ok := body["data"].(map[string]any); ok {
+					if _, present := data["capabilities_url"]; !present {
+						data["capabilities_url"] = g.server.URL + "/client/models/v1/capabilities"
+					}
+					recorded.Body.Reset()
+					_ = json.NewEncoder(recorded.Body).Encode(body)
+				}
+			}
+			for key, values := range recorded.Header() {
+				w.Header()[key] = values
+			}
+			w.WriteHeader(recorded.Code)
+			_, _ = w.Write(recorded.Body.Bytes())
 		case "/client/desktop/v1/models":
 			catalog(w, r)
 		default:
 			if extra != nil && extra(w, r) {
+				return
+			}
+			if r.URL.Path == "/client/models/v1/capabilities" {
+				capabilities := map[string]provider.RoleCapability{}
+				for _, role := range config.ModelRoles() {
+					capabilities[role] = provider.RoleCapability{Supported: true, Available: true, Configurable: true, Endpoints: provider.ImplementedEndpoints(role)}
+				}
+				source := &provider.SourceCapabilities{Authorized: true, Available: true, Configurable: true, Capabilities: capabilities}
+				_ = json.NewEncoder(w).Encode(map[string]any{"data": provider.ClientCapabilities{Version: 1, ModelRolesVersion: 3, Sources: map[string]*provider.SourceCapabilities{"preset": source, "gateway": source}}})
 				return
 			}
 			http.NotFound(w, r)
@@ -87,7 +112,7 @@ func TestAccountBootstrapRequestsExpandedRolesWithoutChangingCatalogRequests(t *
 	g := newAccountGateway(t)
 	var bootstraps, catalogs atomic.Int32
 	g.bootstrap = func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("X-AIGateway-Model-Roles") != "2" {
+		if r.Header.Get("X-AIGateway-Model-Roles") != "3" {
 			t.Error("bootstrap did not negotiate the expanded role set")
 		}
 		bootstraps.Add(1)
@@ -357,8 +382,8 @@ func TestTransientFailureKeepsWorkingModelsOnlyWhenThereAreSome(t *testing.T) {
 	}
 	g.bootstrap = func(w http.ResponseWriter, r *http.Request) { http.Error(w, "down", http.StatusBadGateway) }
 	st := am.Refresh(context.Background())
-	if st.State != AccountReady || pool.AccountSourceID() != accountModelsSourceID {
-		t.Fatalf("an outage removed working models: %+v", st)
+	if st.State != AccountReady || pool.AccountSourceID() != accountModelsSourceID || pool.ModelPolicy().Ready {
+		t.Fatalf("outage lost identity or retained permission: %+v", st)
 	}
 }
 

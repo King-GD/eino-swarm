@@ -132,7 +132,7 @@ func (p *LinkPump) Dispatch(msg []byte) {
 		p.startSelectionTranslation(req)
 	case OpCancelTranslation:
 		p.cancelSelectionTranslation(req)
-	case OpRefreshCatalog:
+	case OpRefreshCatalog, OpRefreshCapabilities:
 		p.startCatalogRefresh(req)
 	case OpAudioTranscribe, OpAudioSpeech, OpAudioChunk, OpAudioCancel:
 		p.dispatchAudio(req)

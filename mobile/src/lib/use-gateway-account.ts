@@ -1,3 +1,5 @@
+import { GATEWAY_MODEL_REFRESH_EVENT } from "./gateway-models"
+import { invalidateGatewayCapabilities, GATEWAY_CAPABILITY_REFRESH_EVENT } from "./gateway-capabilities"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { App } from "@capacitor/app"
 import {
@@ -131,7 +133,11 @@ export function useGatewayAccount() {
         }
       }
     } catch (err) {
-      if (round === generation.current && !controller.signal.aborted && sameGatewaySession(current)) await failure(err)
+      if (round === generation.current && !controller.signal.aborted && sameGatewaySession(current)) {
+        invalidateGatewayCapabilities(current)
+        putBootstrap(previous => previous ? { ...previous, capabilities: undefined, capability_status: "unavailable" } : previous)
+        await failure(err)
+      }
     } finally { if (refreshing.current === round) refreshing.current = null }
   }, [failure])
 
@@ -159,6 +165,13 @@ export function useGatewayAccount() {
       })
     }
   }), [cancel, clearResources, refresh])
+
+  useEffect(() => {
+    const request = () => { void refresh() }
+    window.addEventListener(GATEWAY_MODEL_REFRESH_EVENT, request)
+    window.addEventListener(GATEWAY_CAPABILITY_REFRESH_EVENT, request)
+    return () => { window.removeEventListener(GATEWAY_MODEL_REFRESH_EVENT, request); window.removeEventListener(GATEWAY_CAPABILITY_REFRESH_EVENT, request) }
+  }, [refresh])
 
   const poll = useCallback(async () => {
     const flow = pending.current

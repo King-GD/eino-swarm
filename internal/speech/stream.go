@@ -155,6 +155,9 @@ func (s *Service) performStream(ctx context.Context, selected selection, path, c
 	}
 	stream.body = resp.Body
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if s.pool != nil && strings.HasPrefix(selected.target.ID, config.AccountSourcePrefix) {
+			s.pool.NotifyCapabilityRejection(resp.StatusCode)
+		}
 		status, code := 502, "speech_upstream_error"
 		switch resp.StatusCode {
 		case 401:

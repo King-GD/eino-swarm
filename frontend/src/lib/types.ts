@@ -448,6 +448,7 @@ export interface Attachment {
 }
 
 export interface ModelInfo {
+  capabilities?: import("./capabilities").SourceCapabilities
   id: string
   provider_id: string
   provider_label: string

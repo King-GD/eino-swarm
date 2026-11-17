@@ -73,7 +73,7 @@ func modelViews(eng *engine.Engine) []ModelView {
 			Default:               info.Default,
 			DefaultFollowsSetting: info.DefaultFollowsSetting,
 			Ready:                 info.Ready,
-			Locked:                eng.Providers().OfficialOnly(),
+			Locked:                eng.Providers().OfficialOnly() || (info.Capabilities != nil && !info.Capabilities.Capabilities["conversation"].Configurable),
 		})
 	}
 	if len(out) == 0 {
@@ -211,8 +211,12 @@ func validateSelection(eng *engine.Engine, req Request) error {
 		if eng == nil || eng.Providers() == nil {
 			return fmt.Errorf("provider: unknown provider %q", req.ProviderID)
 		}
-		if err := eng.Providers().ValidateConversationSelection(req.ProviderID, req.Model); err != nil {
-			return err
+		// Repeating the conversation's stored pair is not a new choice. A
+		// managed preset still executes its own model and keeps the binding.
+		if !(eng.Providers().OfficialOnly() && repeatsStoredConversation(eng, req.ThreadID, req)) {
+			if err := eng.Providers().ValidateConversationSelection(req.ProviderID, req.Model); err != nil {
+				return err
+			}
 		}
 	}
 	if req.Reasoning != nil {
@@ -227,6 +231,26 @@ func checkReasoning(effort string) error {
 		return fmt.Errorf("engine: unknown thinking level %q", effort)
 	}
 	return nil
+}
+
+func repeatsStoredConversation(eng *engine.Engine, threadID string, req Request) bool {
+	if eng == nil || eng.Store() == nil || strings.TrimSpace(threadID) == "" {
+		return false
+	}
+	th, err := eng.Store().GetThread(threadID)
+	if err != nil {
+		return false
+	}
+	id := strings.TrimSpace(req.ProviderID)
+	if id == "" {
+		id = th.ProviderID
+	}
+	name := strings.TrimSpace(req.Model)
+	stored := strings.TrimSpace(th.Model)
+	if name == "" {
+		name = stored
+	}
+	return id == th.ProviderID && name == stored
 }
 
 func keepsSettingsDefault(eng *engine.Engine, threadID string, req Request) bool {
@@ -257,7 +281,9 @@ func applySelection(eng *engine.Engine, threadID string, req Request) error {
 	if strings.TrimSpace(req.ProviderID) != "" || strings.TrimSpace(req.Model) != "" {
 		// Repeating the user-configured default must not freeze it onto the
 		// conversation, or a later settings change would stop applying.
-		if !keepsSettingsDefault(eng, threadID, req) {
+		// A managed preset also leaves a historical binding untouched.
+		historical := eng.Providers() != nil && eng.Providers().OfficialOnly() && repeatsStoredConversation(eng, threadID, req)
+		if !historical && !keepsSettingsDefault(eng, threadID, req) {
 			if err := eng.SetThreadProvider(threadID, req.ProviderID, req.Model); err != nil {
 				return err
 			}

@@ -123,7 +123,7 @@ describe("Gateway account authority", () => {
       const url = String(input)
       seen.push(url)
       expect(init?.credentials).toBe("omit")
-      expect(init?.headers).toEqual({ "Content-Type": "application/json", Authorization: "Bearer " + session.token, ...(url.endsWith("/bootstrap") ? { "X-AIGateway-Model-Roles": "2" } : {}) })
+      expect(init?.headers).toEqual({ "Content-Type": "application/json", Authorization: "Bearer " + session.token, ...(url.endsWith("/bootstrap") ? { "X-AIGateway-Model-Roles": "3" } : {}) })
       if (url.endsWith("/auth/me")) return ok({ user: bootstrap.user, device: session.device })
       if (url.endsWith("/bootstrap")) return ok(bootstrap)
       if (url.includes("/link-hosts")) return new Response(JSON.stringify({ data: [{ id: "pc-1", name: "workstation", enabled: true, online: true }], meta: { total: 1 } }))

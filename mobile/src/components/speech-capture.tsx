@@ -1,3 +1,4 @@
+import { GATEWAY_CAPABILITY_REFRESH_EVENT } from "@/lib/gateway-capabilities"
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { Check, Loader2, Mic, RotateCcw, X } from "lucide-react"
@@ -96,6 +97,7 @@ export function SpeechCapture({ disabled, onStart, onText, onBusyChange }: {
   const finishRef = useRef(finish)
   finishRef.current = finish
   const start = async () => {
+    window.dispatchEvent(new Event(GATEWAY_CAPABILITY_REFRESH_EVENT))
     const input = speech.snapshot?.input
     if (!input || !speech.inputReady || disabled) return
     cancelPhoneSpeech()

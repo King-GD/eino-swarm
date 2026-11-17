@@ -16,13 +16,16 @@ var ErrModelPolicy = errors.New("model_selection_disabled: model is outside the 
 
 // ModelPolicy is the safe, account-scoped projection consumed by PC and phone.
 type ModelPolicy struct {
-	Mode         string                     `json:"mode"`
-	Configurable bool                       `json:"configurable"`
-	Ready        bool                       `json:"ready"`
-	Scope        string                     `json:"scope"`
-	Defaults     map[string]config.ModelRef `json:"defaults,omitempty"`
-	Bindings     map[string]config.ModelRef `json:"bindings,omitempty"`
-	Roles        []AccountRole              `json:"roles,omitempty"`
+	AccountSources   map[string]*SourceCapabilities `json:"account_sources,omitempty"`
+	Capabilities     *SourceCapabilities            `json:"capabilities,omitempty"`
+	CapabilityStatus string                         `json:"capability_status,omitempty"`
+	Mode             string                         `json:"mode"`
+	Configurable     bool                           `json:"configurable"`
+	Ready            bool                           `json:"ready"`
+	Scope            string                         `json:"scope"`
+	Defaults         map[string]config.ModelRef     `json:"defaults,omitempty"`
+	Bindings         map[string]config.ModelRef     `json:"bindings,omitempty"`
+	Roles            []AccountRole                  `json:"roles,omitempty"`
 }
 
 // SetModelPolicy installs the server's edit permission and role defaults.
@@ -50,7 +53,21 @@ func (p *Pool) localExecution() bool {
 // ModelPolicy separates debug source selection from server-owned model policy.
 func (p *Pool) ModelPolicy() ModelPolicy {
 	if p.cfg.ProductSnapshot().Resolved() == config.ProductModeLocal {
-		return ModelPolicy{Mode: "local", Configurable: true, Ready: true, Scope: config.ProductModeLocal, Bindings: p.cfg.ModelsSnapshot().Bindings[config.ProductModeLocal]}
+		sources := map[string]*SourceCapabilities{}
+		for _, source := range p.localAccountSources() {
+			if source == nil {
+				continue
+			}
+			sources[source.id] = cloneCapabilities(source.capabilities)
+		}
+		status := ""
+		if primary := p.account.Load(); primary != nil && primary.negotiated {
+			status = "unavailable"
+			if primary.capabilities != nil {
+				status = "ready"
+			}
+		}
+		return ModelPolicy{CapabilityStatus: status, AccountSources: sources, Mode: "local", Configurable: true, Ready: true, Scope: config.ProductModeLocal, Bindings: p.cfg.ModelsSnapshot().Bindings[config.ProductModeLocal]}
 	}
 	view := ModelPolicy{Mode: "gateway"}
 	src := p.account.Load()
@@ -64,6 +81,16 @@ func (p *Pool) ModelPolicy() ModelPolicy {
 	sum := sha256.Sum256([]byte(origin.Scheme + "://" + origin.Host + "\x00" + src.id + "\x00" + src.owner))
 	view.Scope = "gateway:" + hex.EncodeToString(sum[:])
 	view.Configurable, view.Ready = !src.managed, src.id != ""
+	view.Capabilities = cloneCapabilities(src.capabilities)
+	view.AccountSources = map[string]*SourceCapabilities{src.id: view.Capabilities}
+	if src.negotiated {
+		view.CapabilityStatus = "unavailable"
+		view.Configurable = view.Configurable && src.capabilities != nil && src.capabilities.Authorized && src.capabilities.Configurable
+		view.Ready = view.Ready && src.allowsRole("conversation")
+		if src.capabilities != nil {
+			view.CapabilityStatus = "ready"
+		}
+	}
 	if view.Configurable {
 		view.Bindings = p.cfg.ModelsSnapshot().Bindings[view.Scope]
 	}
@@ -75,10 +102,28 @@ func (p *Pool) ModelPolicy() ModelPolicy {
 	return view
 }
 
+// StoredConversationModel resolves the model a stored conversation runs.
+// A managed preset keeps that binding for a later LOCAL session and executes
+// its conversation model. Explicit choices still go through
+// ValidateConversationSelection.
+func (p *Pool) StoredConversationModel(id, model string) (config.Provider, error) {
+	if p.OfficialOnly() {
+		src := p.activeAccount()
+		if src.unavailable {
+			return config.Provider{}, ErrAccountModelsUnavailable
+		}
+		return src.provider(""), nil
+	}
+	return p.ResolveModel(id, model)
+}
+
 // ValidateConversationSelection checks explicit client choices. Historical
 // conversation bindings are resolved separately so a managed login can retain
 // them for a later LOCAL session without executing them.
 func (p *Pool) ValidateConversationSelection(id, name string) error {
+	if !p.FeatureAvailable(id, "conversation") && !p.mock {
+		return ErrModelPolicy
+	}
 	if src := p.activeAccount(); src != nil && src.managed {
 		if (id != "" && id != src.id) || (name != "" && name != src.provider("").Model) {
 			return ErrModelPolicy
@@ -93,7 +138,13 @@ func (p *Pool) ValidateConversationSelection(id, name string) error {
 func (p *Pool) RoleSelection(role, fallbackProvider, fallbackModel string) (config.ModelRef, bool) {
 	policy := p.ModelPolicy()
 	src := p.activeAccount()
-	if src != nil && src.managed {
+	if src == nil && strings.HasPrefix(fallbackProvider, config.AccountSourcePrefix) {
+		src = p.accountForExecution(fallbackProvider)
+	}
+	if src != nil && !src.allowsRole(role) {
+		return config.ModelRef{}, true
+	}
+	if src != nil && (src.managed || src.negotiated && !src.capabilities.Capabilities[role].Configurable) {
 		if on, configured := src.Role(role); configured {
 			if on {
 				if name := src.defaults[role]; name != "" {
@@ -159,6 +210,12 @@ func (p *Pool) RoleProvider(role string) (config.Provider, bool, error) {
 	}
 	prov, err := p.Resolve(ref.ProviderID)
 	prov.Model = ref.Model
+	if src := p.accountForExecution(ref.ProviderID); src != nil && src.negotiated {
+		if !src.allowsRole(role) {
+			return config.Provider{}, true, ErrModelPolicy
+		}
+		prov.APIMode = src.chatAPI(role)
+	}
 	if src := p.activeAccount(); src != nil && src.id == ref.ProviderID {
 		for _, r := range src.roles {
 			if r.ID == role {
@@ -172,6 +229,9 @@ func (p *Pool) RoleProvider(role string) (config.Provider, bool, error) {
 func (p *Pool) validateModelSelection(id, name string) error {
 	if p.mock {
 		return nil
+	}
+	if source := p.accountForExecution(id); source != nil && source.negotiated && (source.capabilities == nil || !source.capabilities.Authorized || !source.capabilities.Available) {
+		return ErrAccountModelsUnavailable
 	}
 	if p.localExecution() && strings.HasPrefix(id, config.AccountSourcePrefix) {
 		source := p.accountForExecution(id)

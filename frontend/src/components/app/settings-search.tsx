@@ -1,3 +1,4 @@
+import { policyAllows, policyConfigurable } from "@/lib/model-policy"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import {
@@ -41,6 +42,7 @@ export function SearchSettingsPanel({
 }) {
   const t = useT()
   const account = useApp((s) => s.meta?.account_models)
+  if (!policyAllows(settings.model_policy, "embedding")) return null
   const search = defaultSearchSettings(settings.search)
   const update = (patch: Partial<SearchSettings>) =>
     onChange({
@@ -90,7 +92,7 @@ export function SearchSettingsPanel({
           hint={pinned ? pinned.label : search.embedding_model || t("settings.searchEmbed.modelHint")}
           badge={<Badge variant="default">{t("settings.searchEmbed.badge")}</Badge>}
         >
-          {choices.length > 0 ? (
+          {choices.length > 0 && policyConfigurable(settings.model_policy, "embedding") ? (
             <Select
               value={
                 pinned
