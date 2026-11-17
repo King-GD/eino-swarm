@@ -27,6 +27,7 @@ import { errorMessage, toastError, useToasts } from "@/store/toasts"
 
 import { AccountModelsCard } from "./account-models-card"
 import { AuxiliaryModels } from "./auxiliary-models"
+import { FunctionalModels } from "./functional-models"
 import { SearchSettingsPanel } from "./settings-search"
 import { ConfirmDeleteDialog } from "./confirm-delete-dialog"
 import { ProviderWindows } from "./provider-windows"
@@ -65,7 +66,7 @@ export function ModelsTab({
   const account = useApp((s) => s.meta?.account_models)
   const listed = useApp((s) => s.models)
   const accountReady = account?.state === "ready" && account.models > 0
-  const officialOnly = officialModelLock(account)
+  const officialOnly = officialModelLock(account, settings.model_policy)
   const serverStarts = serverStartsConversations(settings.models.default_source, accountReady) && !officialOnly
   const [busy, setBusy] = useState<string>()
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set([
@@ -168,14 +169,14 @@ export function ModelsTab({
       description={t("settings.models.desc")}
     >
       <AccountModelsCard settings={settings} onChange={onChange} query={query} />
-      {officialOnly ? null : <AuxiliaryModels settings={settings} onChange={onChange} query={query} />}
+      {officialOnly ? null : settings.model_policy ? <FunctionalModels settings={settings} onChange={onChange} query={query} /> : <AuxiliaryModels settings={settings} onChange={onChange} query={query} />}
       {officialOnly ? null : <SearchSettingsPanel settings={settings} onChange={onChange} query={query} />}
 
       {officialOnly ? null : <SettingsSection
         title={t("accountModels.ownTitle")}
         description={noOwnProvider(settings) ? t("accountModels.ownEmpty") : t("accountModels.ownDesc")}
       >
-        {accountReady ? (
+        {accountReady && !settings.model_policy ? (
           <ServerDefaultRow
             query={query}
             models={listed}

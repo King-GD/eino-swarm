@@ -71,6 +71,12 @@ func newMockModelWithStreamDelay(role string, delay time.Duration) model.BaseCha
 		return &mockModel{script: func(_ int, msgs []*schema.Message) *schema.Message {
 			return schema.AssistantMessage("Side chat: "+lastUserText(msgs), nil)
 		}, instant: true, role: role}
+	case "selection-translator":
+		// The offline provider cannot translate. Echoing the source keeps the
+		// call distinguishable from a worker without inventing a translation.
+		return &mockModel{script: func(_ int, msgs []*schema.Message) *schema.Message {
+			return schema.AssistantMessage(lastUserText(msgs), nil)
+		}, instant: true, role: role}
 	case predictionRole:
 		return &mockModel{script: composerPredictionScript, instant: true, role: predictionRole}
 	case compactRole, sessionMemoryRole:
@@ -602,7 +608,7 @@ func mockFailCounted() bool {
 
 func mockAuxiliaryRole(role string) bool {
 	switch role {
-	case titleRole, compactRole, sessionMemoryRole, reviewerRole, predictionRole:
+	case titleRole, compactRole, sessionMemoryRole, reviewerRole, predictionRole, "selection-translator":
 		return true
 	default:
 		return false

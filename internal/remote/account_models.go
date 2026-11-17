@@ -137,7 +137,7 @@ func (a *AccountModels) State() AccountModelsState {
 	a.mu.RUnlock()
 	if state.Profile != nil && a.cfg != nil {
 		copied := *state.Profile
-		copied.Presentation = a.cfg.ModelsSnapshot().Presentation()
+		copied.Presentation = config.AccountPresentationOfficial
 		if copied.Tools != nil {
 			copied.Tools = append([]string(nil), copied.Tools...)
 		}
@@ -253,6 +253,8 @@ func (a *AccountModels) identity() (accountIdentity, bool) {
 type accountOutcome struct {
 	state     AccountModelsState
 	source    *provider.AccountSource
+	local     []*provider.AccountSource
+	keepLocal bool
 	transient bool
 }
 
@@ -335,7 +337,18 @@ func (a *AccountModels) publish(fetched accountIdentity, o accountOutcome) Accou
 // apply writes the outcome. The caller holds a.mu and has decided that the
 // outcome belongs to the current credential.
 func (a *AccountModels) apply(fetched accountIdentity, o accountOutcome) AccountModelsState {
+	if o.source != nil {
+		o.source.SetAccountOwner(fetched.userID)
+	}
+	for _, src := range o.local {
+		if src != nil {
+			src.SetAccountOwner(fetched.userID)
+		}
+	}
 	a.pool.SetAccountSource(o.source)
+	if o.source == nil || !o.keepLocal {
+		a.pool.SetLocalAccountSources(o.local)
+	}
 	a.published = o.source != nil
 	if o.source != nil {
 		a.publishedToken, a.publishedOrigin = fetched.token, fetched.origin
@@ -386,22 +399,26 @@ func (a *AccountModels) fetch(ctx context.Context, id accountIdentity) accountOu
 		s.State, s.Label = AccountNoAccess, boot.label
 		return accountOutcome{state: s}
 	}
-	if a.cfg != nil && a.cfg.Product.FOFA() && len(boot.roles) > 0 {
-		return fetchRoles(boot, id.token, who)
+	if !boot.configurable() && len(boot.roles) > 0 {
+		return a.withSwitchableCatalogs(ctx, boot, id.token, fetchRoles(boot, id.token, who))
 	}
-	if boot.profile != nil {
+	if !boot.configurable() && boot.profile != nil {
 		source, err := provider.NewAccountProfile(boot.sourceID, boot.apiBaseURL, id.token, *boot.profile)
 		if err != nil {
 			return fail(AccountUnavailable, AccountReasonUnsafe, false)
 		}
+		source.SetModelPolicy(false, boot.defaults)
 		s := who
 		s.State, s.Label, s.Models = AccountReady, boot.profile.Label, 1
 		s.SourceID = source.ID()
 		kinds := source.Kinds()
 		s.Kinds = &kinds
-		view := profileState(*boot.profile, a.cfg.ModelsSnapshot().Presentation())
+		view := profileState(*boot.profile, config.AccountPresentationOfficial)
 		s.Profile = &view
-		return accountOutcome{state: s, source: source}
+		return a.withSwitchableCatalogs(ctx, boot, id.token, accountOutcome{state: s, source: source})
+	}
+	if !boot.configurable() {
+		return a.withSwitchableCatalogs(ctx, boot, id.token, fetchPreset(boot, id.token, who))
 	}
 	raw, err = a.get(ctx, boot.catalogURL, id.token)
 	if err != nil {
@@ -422,11 +439,12 @@ func (a *AccountModels) fetch(ctx context.Context, id accountIdentity) accountOu
 		return fail(AccountUnavailable, AccountReasonUnsafe, false)
 	}
 	s := who
+	source.SetModelPolicy(true, boot.defaults)
 	s.State, s.Label, s.Models = AccountReady, boot.label, len(cat.Names)
 	s.SourceID = source.ID()
 	kinds := source.Kinds()
 	s.Kinds = &kinds
-	return accountOutcome{state: s, source: source}
+	return a.withSwitchableCatalogs(ctx, boot, id.token, accountOutcome{state: s, source: source})
 }
 
 func fetchRoles(boot accountBootstrap, token string, who AccountModelsState) accountOutcome {
@@ -456,6 +474,7 @@ func fetchRoles(boot accountBootstrap, token string, who AccountModelsState) acc
 		return fail(AccountUnavailable, AccountReasonUnsafe)
 	}
 	source.SetRoles(roles)
+	source.SetModelPolicy(false, boot.defaults)
 	s := who
 	s.State, s.Label, s.Models = AccountReady, boot.label, 1
 	s.SourceID = source.ID()
@@ -517,11 +536,15 @@ func boundCatalog(cat provider.Catalog) provider.Catalog {
 }
 
 type accountBootstrap struct {
+	editable                                *bool
+	defaults                                map[string]string
 	sourceID, label, apiBaseURL, catalogURL string
 	access                                  bool
 	userID, avatarURL                       string
 	profile                                 *provider.AccountProfile
 	roles                                   []provider.AccountRole
+	clientCatalogURL                        string
+	gatewayCatalog                          *accountCatalogRef
 }
 
 // withPicture adopts a bootstrap avatar only for this same account. A missing
@@ -550,16 +573,20 @@ func parseAccountBootstrap(raw []byte, origin string) (accountBootstrap, error) 
 				AvatarURL string `json:"avatar_url"`
 			} `json:"user"`
 			Models struct {
+				Configurable     *bool           `json:"configurable"`
+				Defaults         json.RawMessage `json:"defaults"`
 				SourceID         string          `json:"source_id"`
 				SourceKind       string          `json:"source_kind"`
 				Label            string          `json:"label"`
 				Execution        string          `json:"execution"`
 				APIBaseURL       string          `json:"api_base_url"`
 				CatalogURL       string          `json:"catalog_url"`
+				ClientCatalogURL string          `json:"client_catalog_url"`
 				APIAccessEnabled bool            `json:"api_access_enabled"`
 				Profile          json.RawMessage `json:"profile"`
 				Roles            json.RawMessage `json:"roles"`
 			} `json:"models"`
+			GatewayModels json.RawMessage `json:"gateway_models"`
 		} `json:"data"`
 	}
 	if json.Unmarshal(raw, &envelope) != nil {
@@ -589,7 +616,15 @@ func parseAccountBootstrap(raw []byte, origin string) (accountBootstrap, error) 
 	if err != nil {
 		return accountBootstrap{}, err
 	}
+	defaults, err := parseModelDefaults(m.Defaults)
+	if err != nil {
+		return accountBootstrap{}, err
+	}
+	out.editable, out.defaults = m.Configurable, defaults
 	out.profile, out.roles = profile, roles
+	if err := out.parseSwitchableCatalogs(m.ClientCatalogURL, envelope.Data.GatewayModels, origin); err != nil {
+		return accountBootstrap{}, err
+	}
 	return out, nil
 }
 
@@ -598,7 +633,7 @@ func parseAccountRoles(raw json.RawMessage) ([]provider.AccountRole, error) {
 		return nil, nil
 	}
 	var rows []provider.AccountRole
-	if json.Unmarshal(raw, &rows) != nil || len(rows) > 9 {
+	if json.Unmarshal(raw, &rows) != nil || len(rows) > 11 {
 		return nil, errAccountResponse
 	}
 	if len(rows) == 0 {
@@ -609,7 +644,7 @@ func parseAccountRoles(raw json.RawMessage) ([]provider.AccountRole, error) {
 		role := &rows[i]
 		role.ID = strings.TrimSpace(role.ID)
 		switch role.ID {
-		case "conversation", "title", "compact", "embedding", "ocr", "decisions", "transcription", "speech", "image":
+		case "conversation", "title", "compact", "translation", "naming", "embedding", "ocr", "decisions", "transcription", "speech", "image":
 		default:
 			return nil, errAccountResponse
 		}
@@ -653,6 +688,9 @@ func (a *AccountModels) get(ctx context.Context, target, token string) ([]byte, 
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
+	if req.URL.Path == desktopModelsPrefix+"bootstrap" {
+		req.Header.Set("X-AIGateway-Model-Roles", "2")
+	}
 	resp, err := a.client.Do(req)
 	if err != nil {
 		// Transport errors can quote the URL; the caller reports only a class.

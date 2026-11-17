@@ -13,7 +13,7 @@ const block: Block = { id: "pause", kind: "confirm", agentId: "manager", turnId:
 
 it("explains automatic collection waiting and preserves explicit Continue and Stop", () => {
   const extend = vi.fn()
-  useApp.setState({ transcript: { ...emptyTranscript(), running: true }, extendTurn: extend })
+  useApp.setState({ status: { running: true }, transcript: { ...emptyTranscript(), running: true }, extendTurn: extend })
   const { rerender } = render(<IterationLimitCard block={block} />)
   expect(screen.getByTestId("iteration-limit")).toHaveTextContent("resume once")
   expect(screen.getByTestId("iteration-limit")).not.toHaveTextContent(/80|2000|tool-round limit/)
@@ -28,10 +28,30 @@ it("explains automatic collection waiting and preserves explicit Continue and St
 })
 
 it("does not promise automatic resumption for an exhausted collection allowance", () => {
-  useApp.setState({ transcript: { ...emptyTranscript(), running: true } })
+  useApp.setState({ status: { running: true }, transcript: { ...emptyTranscript(), running: true } })
   render(<IterationLimitCard block={{ ...block, confirm: { ...block.confirm!, automaticResume: false } }} />)
   expect(screen.getByTestId("iteration-limit")).toHaveTextContent("Continue to collect them, or Stop")
   expect(screen.queryByText(/resume once/)).not.toBeInTheDocument()
-  act(() => useApp.setState({ transcript: emptyTranscript() }))
+  act(() => useApp.setState({ status: { running: false }, transcript: emptyTranscript() }))
+  expect(screen.getByTestId("iteration-limit")).toHaveTextContent("Stopped before collecting")
+})
+
+it("keeps a live collection pause actionable when the transcript flag is idle", () => {
+  useApp.setState({ status: { running: true }, transcript: emptyTranscript() })
+  render(<IterationLimitCard block={{ ...block, confirm: { ...block.confirm!, automaticResume: false } }} />)
+  expect(screen.getByTestId("iteration-limit")).toHaveTextContent("Continue to collect them, or Stop")
+  expect(screen.getByRole("button", { name: "Continue to collect delegated results" })).toBeEnabled()
+  expect(screen.getByRole("button", { name: "Stop waiting for delegated results" })).toBeEnabled()
+  expect(screen.getByTestId("iteration-limit")).not.toHaveTextContent("Stopped before collecting")
+})
+
+it("does not call a refused collection idle while the turn is still running", () => {
+  useApp.setState({ status: { running: true }, transcript: { ...emptyTranscript(), running: true } })
+  const { rerender } = render(<IterationLimitCard block={{ ...block, confirm: { ...block.confirm!, pending: false, continued: false } }} />)
+  expect(screen.getByTestId("iteration-limit")).toHaveTextContent("still closing")
+  expect(screen.queryByRole("button")).not.toBeInTheDocument()
+  expect(screen.getByTestId("iteration-limit")).not.toHaveTextContent("Stopped before collecting")
+  act(() => useApp.setState({ status: { running: false } }))
+  rerender(<IterationLimitCard block={{ ...block, confirm: { ...block.confirm!, pending: false, continued: false } }} />)
   expect(screen.getByTestId("iteration-limit")).toHaveTextContent("Stopped before collecting")
 })

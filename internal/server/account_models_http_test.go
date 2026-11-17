@@ -74,7 +74,7 @@ func newAccountHarness(t *testing.T, signedIn bool) *accountHarness {
 	if err := a.Config.Update(func(c *config.Config) error {
 		c.Remote.AuthMode = config.RemoteAuthAccount
 		c.Remote.HubURL = origin
-		c.Product.Mode = config.ProductModeLocal
+		c.Product.Mode = ""
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -348,6 +348,9 @@ func TestOfficialProfileHidesTheCatalogAcrossTheAPI(t *testing.T) {
 		"label": "Partner model", "instruction": "profile guidance marker 1842",
 		"tools": []string{"read", "exec"}, "context_window": 32000,
 	}
+	if err := ah.app.Config.Update(func(c *config.Config) error { c.Product.Mode = ""; return nil }); err != nil {
+		t.Fatal(err)
+	}
 	ah.signIn()
 	ah.app.Remote.Reload()
 	ah.waitAccount(remote.AccountReady)
@@ -381,16 +384,12 @@ func TestOfficialProfileHidesTheCatalogAcrossTheAPI(t *testing.T) {
 	}
 
 	provider := map[string]any{"id": "default", "label": "Main", "base_url": "http://endpoint.invalid/v1", "model": "own-model", "api_key": "k", "timeout_seconds": 60}
-	ah.json(http.MethodPut, "/api/settings", map[string]any{"models": map[string]any{
-		"default": "default", "account_presentation": "full", "providers": []map[string]any{provider},
-	}}, http.StatusOK)
-	full := ah.raw("/api/models")
-	if strings.Contains(full, "vendor-secret-model") || !strings.Contains(full, "own-model") || !strings.Contains(full, config.OfficialModelAlias) {
-		t.Fatalf("full list = %s", full)
+	ah.json(http.MethodPut, "/api/settings", map[string]any{"models": map[string]any{"default": "default", "account_presentation": "full", "providers": []map[string]any{provider}}}, http.StatusForbidden)
+	if body := ah.raw("/api/settings"); strings.Contains(body, "own-model") || strings.Contains(body, "endpoint.invalid") {
+		t.Fatal("private settings exposed in managed mode")
 	}
-	account = ah.json(http.MethodGet, "/api/meta", nil, http.StatusOK)["account_models"].(map[string]any)
-	if account["profile"].(map[string]any)["presentation"] != "full" {
-		t.Fatalf("presentation did not follow settings: %v", account["profile"])
+	if rows := ah.json(http.MethodGet, "/api/models", nil, http.StatusOK)["models"].([]any); len(rows) != 1 {
+		t.Fatal("presentation unlocked models")
 	}
 
 	if err := os.Remove(filepath.Join(ah.app.Config.RemoteDir(), "host_token")); err != nil {

@@ -312,7 +312,12 @@ export function catalogNames(body: unknown): string[] {
   const out: string[] = []
   const seen = new Set<string>()
   for (const row of data) {
-    const id = stringOf(asRecord(row)?.id).trim()
+    const model = asRecord(row)
+    const kind = stringOf(model?.model_type).trim().toLowerCase()
+    // Voice and other explicitly classified non-chat models belong to their
+    // dedicated controls, while legacy unclassified chat catalogs still work.
+    if (kind && kind !== "chat") continue
+    const id = stringOf(model?.id).trim()
     if (!id || seen.has(id)) continue
     seen.add(id)
     out.push(id)

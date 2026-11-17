@@ -6,19 +6,25 @@ import { useApp } from "@/store/app"
 export function IterationLimitCard({ block }: { block: Block }) {
   const t = useT()
   const extendTurn = useApp((s) => s.extendTurn)
-  const running = useApp((s) => s.transcript.running)
+  // The composer follows this server flag. The folded transcript can be idle
+  // while the turn is still owned, and a decline is stored before that flag
+  // clears. Either one used to paint the idle sentence over a live turn.
+  const live = useApp((s) => s.status.running)
   const { limit = 0, extendBy = 0, continued, reason, automaticResume } = block.confirm ?? {}
   const collection = reason === "workers_uncollected"
-  const pending = Boolean(block.confirm?.pending && running)
+  const open = Boolean(block.confirm?.pending && live)
+  const closing = collection && live && block.confirm?.pending === false && !continued
   return (
     <div data-testid="iteration-limit" className="my-2 rounded-lg border border-border bg-muted/50 px-3 py-3 text-sm">
       <p className="text-foreground">
         {collection
-          ? t(pending ? automaticResume ? "transcript.collectionWaiting" : "transcript.collectionPaused"
-            : continued ? "transcript.collectionContinued" : "transcript.collectionStopped")
+          ? t(open ? automaticResume ? "transcript.collectionWaiting" : "transcript.collectionPaused"
+            : continued ? "transcript.collectionContinued"
+            : closing ? "transcript.collectionClosing"
+            : "transcript.collectionStopped")
           : t("transcript.limitAsk", { limit, extendBy })}
       </p>
-      {pending ? (
+      {open ? (
         <div className="mt-3 flex gap-2">
           <Button size="sm" aria-label={t(collection ? "transcript.collectionContinue" : "transcript.continueAria")}
             onClick={() => void extendTurn(true)}>{t("transcript.continue")}</Button>

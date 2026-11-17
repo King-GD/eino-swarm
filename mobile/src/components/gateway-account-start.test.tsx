@@ -42,7 +42,7 @@ describe("opening the computer right after sign-in", () => {
     // The flag is consumed by the hook; a re-render that still shows it (as
     // this fixture does) must not connect a second time.
     rerender(<App />)
-    await screen.findByRole("tab", { name: "Chat" })
+    await screen.findByTestId("pc-wait")
     expect(mocks.account.connectHost).toHaveBeenCalledOnce()
   })
 
@@ -54,7 +54,7 @@ describe("opening the computer right after sign-in", () => {
   ])("does not connect on %s", async (_name, patch, consumed) => {
     signedIn({ ...patch, connectHost: vi.fn(async () => ({ fingerprint: "fp" })) as never })
     render(<App />)
-    await screen.findByRole("tab", { name: "Chat" })
+    await screen.findByTestId("pc-wait")
     expect(mocks.account.connectHost).not.toHaveBeenCalled()
     expect(opened).toEqual([])
     expect(vi.mocked(mocks.account.consumeFreshLogin).mock.calls.length > 0).toBe(consumed)
@@ -92,13 +92,11 @@ describe("the signed-in start page", () => {
     expect(screen.getByLabelText(t("scan.uri"))).toBeVisible()
   })
 
-  it("offers other ways only on the signed-in start page, not inside the account dialog", async () => {
+  it("keeps alternate configuration out of the gateway waiting page", async () => {
     signedIn({ hosts: [pc("pc-online", "Work PC")], freshLogin: false })
     render(<App />)
-    await screen.findByRole("tab", { name: "Chat" })
-    await waitFor(() => expect(screen.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true"))
-    fireEvent.click(screen.getByRole("button", { name: "Menu" }))
-    fireEvent.click(screen.getByRole("menuitem", { name: "User center" }))
+    await screen.findByTestId("pc-wait")
+    expect(screen.queryByRole("tab", {name:"Chat"})).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Connect Work PC" })).toBeVisible()
     expect(screen.queryByRole("button", { name: t("welcome.other") })).not.toBeInTheDocument()
   })

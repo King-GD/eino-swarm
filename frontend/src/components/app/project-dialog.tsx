@@ -20,6 +20,7 @@ import { defaultNuwaModelPair } from "@/lib/nuwa-models"
 import type { ModelInfo, Project } from "@/lib/types"
 import { useT } from "@/lib/use-t"
 import { errorMessage, toastError, useToasts } from "@/store/toasts"
+import { useApp } from "@/store/app"
 
 /** Create or edit one project: its instruction, its working directory and
  *  whether it remembers anything. */
@@ -85,6 +86,7 @@ export function ProjectDialog({
   const [workdir, setWorkdir] = useState("")
   const [memory, setMemory] = useState(true)
   const [nuwa, setNuwa] = useState(false)
+  const configurable=useApp(s=>s.meta?.model_policy?.configurable ?? s.meta?.product_mode!=="fofa")
   const [pair, setPair] = useState<ModelPair>(emptyPair)
   const [saving, setSaving] = useState(false)
   const [choosingWorkdir, setChoosingWorkdir] = useState(false)
@@ -122,7 +124,7 @@ export function ProjectDialog({
       const changed = !saved ||
         saved.plannerId !== pair.plannerId || saved.plannerModel !== pair.plannerModel ||
         saved.executorId !== pair.executorId || saved.executorModel !== pair.executorModel
-      if (completePair(pair) && (nuwa || changed)) {
+      if (configurable && completePair(pair) && (nuwa || changed)) {
         patch.nuwa_planner_provider_id = pair.plannerId
         patch.nuwa_planner_model = pair.plannerModel
         patch.nuwa_executor_provider_id = pair.executorId
@@ -216,7 +218,7 @@ export function ProjectDialog({
               }}
             />
           </div>
-          {nuwa && models ? (
+          {configurable && nuwa && models ? (
             <div className="grid gap-3 rounded-md border border-border p-3">
               <div className="grid gap-1.5">
                 <Label htmlFor="project-nuwa-planner">{t("project.nuwaPlanner")}</Label>

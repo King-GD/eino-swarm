@@ -33,6 +33,36 @@ saved here. A machine that has never saved a config has nothing to copy back.
 An empty key that was only filled from the environment is not saved over by an
 empty value from the archive.
 
+## Voice settings
+
+The PC's **Settings → Voice** controls input/output switches, recording and
+playback parameters and limits. Both directions default off. **Models → Functional
+models** selects recognition and spoken-answer models independently of conversation.
+LOCAL and an editable gateway allow personal providers. A managed third-party
+gateway supplies the models and hides model/endpoint controls; ordinary voice
+parameters remain editable.
+
+`speech.input.recording_format` accepts `auto` and `wav`. Automatic recording
+normalizes WebKit's MP4/AAC container to 16 kHz mono PCM WAV for ASR
+interoperability; other browser containers remain unchanged. Explicit WAV also
+converts other containers. The input byte limit applies after conversion too.
+
+`speech.output.format` accepts `mp3` (the existing default), `wav` and `pcm`.
+Select **PCM (streaming playback)** to play a response while it is generated.
+The service must return mono 24 kHz signed 16-bit little-endian PCM, either as
+audio bytes or OpenAI `speech.audio.delta` / `speech.audio.done` SSE events.
+MP3/WAV remain complete-segment playback. Phone PC-local RPC remains buffered.
+
+Paired phones use the selected PC's safe projection only while that PC is online
+and its engine is ready. Gateway audio uses the phone's own same-origin account
+credential. A cached projection is status information and cannot authorize an
+offline request. LOCAL direct Chat can configure voice independently under its
+personal model services; credentials stay in the phone's existing provider store.
+Refreshing this phone's unrelated model catalog does not interrupt paired-PC
+dictation or playback; changes to its speech authority still cancel them.
+API reads omit voice credentials; `config show` redacts them. Credential-free
+backups remove voice keys and restore preserves a custom key only for the same endpoint.
+
 ## A complete file
 
 ```yaml
@@ -152,13 +182,24 @@ default on load, so a partially hand-edited file always starts.
 |---|---|---|
 | `mode` | absent, which means `fofa` | `fofa` or `local`. Absent and `fofa` are the same and are not written. `local` is written. Any other value is rejected on load and on save. |
 
-`fofa` is the install people get. Work waits until an account is signed in
-(`--mock` does not), Settings has no Models section, and the composer has no
-model menu. Custom provider edits and model discovery are refused. `local`
-shows those controls and accepts provider edits. There is no Settings row for
-this key. Set `product.mode: local` in the file, or click the portrait in the
-desktop account-details dialog three times in a row. Another three clicks
-writes `fofa` and the key is omitted again. A hand edit is read on the next load.
+`fofa` is the legacy name for gateway mode, the default. Work requires a ready
+signed-in account (`--mock` skips login). The gateway decides whether its model
+preset is editable. An ordinary account can select personal providers and override
+functional defaults; a managed third-party account cannot open model settings or
+select other models. `local` does not require a gateway login to use personal
+providers. When an account is already signed in, LOCAL keeps that login and
+lists the server catalogs it authorizes: the third-party preset and the original
+gateway catalog. The same model name can appear in both. An unauthorized or
+empty catalog is omitted and does not ask for another sign-in. Functional roles
+do not inherit the gateway preset. Switching back to gateway restores the
+managed preset.
+
+No normal Settings row switches modes. The account portrait's existing triple-click
+debug entry switches LOCAL/gateway without waiting for a running turn or worker.
+That turn keeps the model it already opened; the next model lookup uses the new
+source. A model request that has started, and backup, restore or restart, refuse
+the switch with the existing busy error. The portrait says to wait. A config-file
+edit is read on the next load.
 
 ## `server`
 
@@ -337,26 +378,41 @@ See the [official OpenAI web search guide](https://developers.openai.com/api/doc
 for supported search parameters. This integration does not implement client-side
 computer control, shell execution, hosted MCP approvals or arbitrary tool types.
 
-### Official-server models and `default_source`
+### Gateway presets and functional bindings
 
-Signing in to the official server (Settings → Models, the first-run welcome, or
-Settings → Phone) gives this app the account's models without any provider row.
-They are a runtime projection: fetched from the server after sign-in, kept in
-memory, and **never written to `config.yaml`**. The account credential stays in
-Go (the private remote credential); the UI sees counts, classification and state.
+Gateway catalogs, profiles and credentials remain in memory; they are never
+saved as `models.providers`. Provider IDs beginning with `gateway:` are reserved.
+LOCAL lists only personal providers. An ordinary gateway lists its catalog and
+personal providers. A managed gateway exposes only its own conversation preset;
+legacy `account_presentation: full` cannot unlock other models.
 
-| key | default | meaning |
-|---|---|---|
-| `default_source` | `account` for a new setup, `provider` for an existing one | `account` or `provider`: whose models a new conversation starts on when both exist. `account` falls back to `models.default` while the account has no conversation model. A file or first run (`OPENAI_*`) that already has a working default provider migrates to `provider`, so an upgrade changes nothing for its owner. Absent from a settings save keeps the stored value; junk is rejected. |
-| `account_model` | empty | the server conversation model a new chat follows when the source is `account`. A saved name is used even after it leaves the catalog: the composer shows it as unavailable and the request still uses that name. Empty is not a live "first name": a new conversation stores the first `chat` or unclassified name at creation, and a catalog refresh does not retarget it. A conversation that still has an empty model stores the name on the composer the next time it sends. The name is not the `gateway:` id and is not inferred from the catalog. Absent from a settings save keeps the stored value; longer than 256 bytes is rejected. While an official profile is active this stored name is kept but not shown or sent. |
-| `account_presentation` | `official` when absent | `official` or `full`, and only meaningful while the server published an official profile. `official` shows that one server-supplied name and sends the alias `account`. `full` brings back this machine's own providers; the official row stays one name. Absent from a settings save keeps the stored value. An empty stored value means `official` and is not written into an old file until an explicit save. Any other value is rejected. The profile itself, including its guidance and tool allowlist, is not a config key. |
+`models.bindings` stores explicit functional overrides by scope. The `local` scope
+belongs to LOCAL. A gateway scope is a hash of gateway origin, source ID and account
+owner; credential renewal keeps that scope, changing accounts does not reuse it.
+Each scope maps `conversation`, `title`, `compact`, `embedding`, `transcription`,
+`speech`, `ocr` and `decisions` to `{provider_id, model}`. Settings does not
+list `decisions`; that role is a background call. Missing roles follow the
+latest gateway default. **Use default** removes the override; server defaults are
+never copied into the saved map. Existing conversation-specific selections remain
+explicit selections. LOCAL retains the existing title/compression/voice defaults
+when no functional override is set.
 
-Provider ids starting with `gateway:` are reserved for the projection and are
-rejected in `models.providers`. A conversation that stored such an id keeps it:
-after sign-out or loss of access it asks to sign in again and never falls back to
-a private provider that has a model with the same name. Third-party providers
-keep working exactly as before; the composer lists the account group first,
-then each provider group.
+The Settings API projects only the current scope as `models.bindings`; its PUT
+replaces that scope's map and accepts a bindings-only body. Other scopes survive.
+An ordinary gateway's first binding save retires legacy global `account_model`
+and `default_source` pins in favour of scoped selection. Legacy `account_model`
+and `default_source` remain readable for existing configurations until that save.
+`account_presentation` remains a validated compatibility field (`official`/`full`),
+with no model-unlocking UI or authority over a managed policy. Managed settings
+reads hide personal providers, auxiliary pins and speech endpoints; unrelated saves
+preserve the hidden values for later LOCAL use. Managed writes selecting other
+models or discovering a catalog are refused.
+
+Bootstrap can publish `models.configurable` and `models.defaults`, a map from
+functional role to model name. Without the permission flag, legacy `profile` or
+fixed `roles` means managed; a normal catalog means editable. A managed defaults-only
+preset requires a conversation model and never discovers the broader catalog.
+Gateway-side publication of these optional fields is a separate deployment.
 
 ### First-run seeding
 

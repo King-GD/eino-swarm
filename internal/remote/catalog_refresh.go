@@ -13,6 +13,9 @@ import (
 )
 
 func handleCatalogRefresh(ctx context.Context, eng *engine.Engine, req Request, path, sessionID string) Response {
+	if eng != nil && !eng.Providers().ModelPolicy().Configurable {
+		return fail(req.ID, path, sessionID, "custom_models_disabled", "model discovery is disabled by the gateway preset")
+	}
 	models, err := discoverModelViews(ctx, eng)
 	if err != nil {
 		// Transport errors can contain the PC's endpoint and query credentials.
@@ -92,7 +95,8 @@ func accountModelViews(eng *engine.Engine) []ModelView {
 			continue
 		}
 		out = append(out, ModelView{
-			ProviderID: info.ProviderID, ProviderLabel: info.ProviderLabel, Model: info.Model,
+			CatalogGroup: info.CatalogGroup,
+			ProviderID:   info.ProviderID, ProviderLabel: info.ProviderLabel, Model: info.Model,
 			Default: info.Default, DefaultFollowsSetting: info.DefaultFollowsSetting, Ready: info.Ready,
 		})
 	}

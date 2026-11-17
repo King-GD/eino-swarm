@@ -1,4 +1,4 @@
-/** Phone-only product preference; it never changes the connected PC's mode. */
+/** Phone preference; an explicit avatar gesture also switches the live selected PC. */
 export type PhoneMode = "account" | "local"
 const KEY = "zwai.phone.mode"
 

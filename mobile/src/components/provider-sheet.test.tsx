@@ -156,7 +156,7 @@ describe("ProviderSheet", () => {
       />,
     )
     expect(screen.getByText("Server")).toBeInTheDocument()
-    expect(screen.getByText("Keep")).toBeInTheDocument()
+    expect(screen.getByRole("button",{name:/^Keep /})).toBeInTheDocument()
     expect(screen.queryByText("Drop")).not.toBeInTheDocument()
   })
 

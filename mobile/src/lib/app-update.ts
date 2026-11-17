@@ -243,10 +243,19 @@ function safeStorage(): UpdateStore {
   }
 }
 
+const dismissalWatchers = new Set<() => void>()
+
 export function dismissUpdate(version: string, store: UpdateStore = safeStorage()) {
   const v = version.trim()
   if (!v) return
   store.setItem(DISMISS_KEY, v)
+  for (const watcher of dismissalWatchers) watcher()
+}
+
+/** Same-page copies of the offer hide together. Storage events do not fire in this window. */
+export function watchUpdateDismissal(watcher: () => void) {
+  dismissalWatchers.add(watcher)
+  return () => { dismissalWatchers.delete(watcher) }
 }
 
 /** Native binary version, or the web shell package version. The hub stores this string as-is. */

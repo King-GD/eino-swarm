@@ -15,41 +15,43 @@ import (
 // switch is off, using conversation. Other roles return an empty model so the
 // caller does not make the call.
 func (e *Engine) roleModel(providerID, role string) (modelName string, ok bool) {
-	if e == nil || e.cfg == nil || e.pool == nil || !e.cfg.Product.FOFA() {
+	if e == nil || e.cfg == nil || e.pool == nil {
 		return "", false
 	}
-	enabled, configured := e.pool.AccountRole(providerID, role)
-	if !configured {
-		return "", false
-	}
-	if enabled {
-		return role, true
-	}
-	if role == "title" || role == "compact" {
-		return "conversation", true
-	}
-	return "", true
+	ref, configured := e.pool.RoleSelection(role, providerID, "")
+	return ref.Model, configured
 }
 
 func (e *Engine) applyRoleModel(providerID, role, fallbackProvider, fallbackModel string) (string, string) {
-	modelName, ok := e.roleModel(providerID, role)
-	if !ok {
-		return fallbackProvider, fallbackModel
+	ref, _ := e.pool.RoleSelection(role, fallbackProvider, fallbackModel)
+	return ref.ProviderID, ref.Model
+}
+
+// enabledAccountRole returns a FOFA role only while that role is switched on.
+// A missing or disabled role leaves the caller on its existing model.
+func (e *Engine) enabledAccountRole(role string) (providerID, modelName string, ok bool) {
+	if e == nil || e.pool == nil {
+		return "", "", false
 	}
-	return providerID, modelName
+	ref, configured := e.pool.RoleSelection(role, "", "")
+	if !configured || ref.ProviderID == "" || ref.Model == "" {
+		return "", "", false
+	}
+	return ref.ProviderID, ref.Model, true
 }
 
 // readRoleImages sends user images through the ocr role and returns text for
 // the conversation. used is false when the role is off, so the images stay on
 // the original message.
 func (e *Engine) readRoleImages(providerID, text string, images []ImageInput) (string, []ImageInput, bool, error) {
-	modelName, ok := e.roleModel(providerID, "ocr")
+	ref, ok := e.pool.RoleSelection("ocr", providerID, "")
+	modelName := ref.Model
 	if !ok || modelName == "" || len(images) == 0 {
 		return text, images, false, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
-	builder, err := e.pool.ModelBuilder(ctx, providerID, modelName, "", nil)
+	builder, err := e.pool.ModelBuilder(ctx, ref.ProviderID, modelName, "", nil)
 	if err != nil {
 		return "", nil, true, err
 	}

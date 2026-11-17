@@ -1,8 +1,21 @@
 import { accountZh } from "./messages-account"
+import { pcWaitZh } from "./messages-pc-wait"
 import { generationZh } from "./messages-generation"
+import { speechZh } from "./messages-speech"
 import type { MessageKey } from "./messages-en"
 
 export const zh: Record<MessageKey, string> = {
+  ...pcWaitZh,
+  ...speechZh,
+  "selection.actions": "选中文字操作",
+  "selection.translate": "翻译",
+  "selection.close": "关闭选中文字操作",
+  "selection.translation": "译文",
+  "selection.translating": "正在翻译…",
+  "selection.failed": "翻译失败，请重试。",
+  "selection.tooLong": "选中文字过长，请缩短后重试。",
+  "selection.updatePC": "请更新电脑端以使用选区翻译。",
+
   ...accountZh,
   "startup.failed": "有 {failed} 个会话恢复失败，请查看 Trace 或日志。",
   "startup.restoring": "正在恢复未完成任务 {completed}/{total}",
@@ -282,6 +295,7 @@ export const zh: Record<MessageKey, string> = {
 
   "notice.goalCompleted": "目标已完成。",
 
+  "goal.mode": "目标模式",
   "goal.pursuing": "进行中",
   "goal.paused": "已暂停",
   "goal.blocked": "已卡住",

@@ -50,3 +50,37 @@ func TestNativeSnapshotCancellationDropsLateCallbacksWithoutRetainingRequests(t 
 		t.Fatal("invalid empty pixels became healthy")
 	}
 }
+
+// The framework is loaded by name at runtime. A missed lookup would leave a
+// flat window marked healthy, and the compiler cannot see that.
+func TestCurrentProcessWindowCaptureIsAvailable(t *testing.T) {
+	if !presentedCaptureAvailable() {
+		t.Fatal("current-process window capture is not available")
+	}
+}
+
+func TestPresentedFrameExportMatchesTheSampleDecision(t *testing.T) {
+	const width, height = 80, 60
+	flat := solidFrame(width, height, 249, 250, 251, 255)
+	if presentedFrameStatusFromSample(nil, width, height) != 0 || presentedFrameStatusFromSample(flat, width, height) != recoveryPresentationBlank {
+		t.Fatal("export did not preserve the blank decision")
+	}
+	content := append([]byte(nil), flat...)
+	x0, y0, x1, y1 := presentationCellBounds(width, height, 3, 2)
+	paintRect(content, width, x0, y0, x1, y1, 32, 36, 48, 255)
+	if presentedFrameStatusFromSample(content, width, height) != 0 {
+		t.Fatal("export reported readable content as blank")
+	}
+}
+
+func TestBlankPresentationIsNotAGenericSnapshotFailure(t *testing.T) {
+	previous := requestRecoverySnapshot
+	defer func() { requestRecoverySnapshot = previous }()
+	requestRecoverySnapshot = func(_ context.Context, _ application.Window, id uint64) {
+		deliverRecoverySnapshot(id, recoveryPresentationBlank, nil)
+	}
+	_, err := captureRecoveryPixels(context.Background(), nil)
+	if !errors.Is(err, errPresentedFrameBlank) {
+		t.Fatalf("blank frame became %v", err)
+	}
+}

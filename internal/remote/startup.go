@@ -7,7 +7,7 @@ import (
 
 func requireStartupReady(eng *engine.Engine, op string) error {
 	switch strings.TrimSpace(op) {
-	case OpProjectCreate, OpProjectUpdate, OpStart, OpSend, OpSteer, OpPreempt, OpAnswer, OpContinue, OpRunNow, OpCancelWait, OpResumeGoal, OpFollowupSteer, OpTune, OpSetTimeouts:
+	case OpSetProductMode, OpTranslateSelection, OpProjectCreate, OpProjectUpdate, OpStart, OpSend, OpSteer, OpPreempt, OpAnswer, OpContinue, OpRunNow, OpCancelWait, OpResumeGoal, OpFollowupSteer, OpTune, OpSetTimeouts:
 		if err := eng.RequireReady(); err != nil {
 			return err
 		}

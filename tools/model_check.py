@@ -25,6 +25,9 @@ is a selectable row, and that official presentation starts on the server
 without listing own providers (C-040, C-046).
 models/provider/RouteRecovery.tla checks that confirmed route refusals stop
 after a consecutive cap instead of waiting forever or buying model retries (C-029).
+models/desktop/RendererRecovery.tla checks that a flat visible body is not
+healthy paint, an unknown capture does not become a blank frame, and the one
+reload precedes a bounded successor only in the foreground (C-034).
 models/skills/InstalledSkills.tla checks project-scoped skill publication,
 lookup, removal and separation from learned memory.
 models/sidechat/SideChat.tla checks that temporary replies stay within their
@@ -36,6 +39,14 @@ another project's identity (C-044).
 models/mobile/IOSStartupPrompt.tla checks that iOS binds static cookie and HTTP
 flags before the page starts, and that the old synchronous startup prompt can
 stay unanswered (C-045).
+models/mobile/SpeechCapture.tla checks final capture bytes, compatible ASR
+containers, converted byte limits and cancellation (C-048).
+models/mobile/SpeechPlayback.tla checks paired ownership across catalog refresh,
+ordered segment draining, complete playback and real authority revocation (C-048).
+Both speech models check eventual settlement under explicitly fair progress.
+models/lifecycle/WorkerCollectionView.tla checks that a live collection pause
+stays actionable when the transcript flag is idle, and that a decline is
+closing rather than the idle stopped sentence while the turn is still running.
 Every case sets its model's switch constants and states
 the expected outcome: the current design must pass every safety invariant;
 each historical or seeded behaviour must break the named invariant (checked
@@ -81,11 +92,26 @@ class Model:
     safety: tuple[str, ...]
     # Bounds that keep the state space finite.
     constants: tuple[tuple[str, int | str], ...]
+    properties: tuple[str, ...] = ()
 
 
 MODELS = {
     m.name: m
     for m in (
+        Model(
+            "speech-capture", ROOT / "models" / "mobile" / "SpeechCapture.tla",
+            ("AutoMP4Unchanged", "SnapshotBeforeTail", "SkipConvertedLimit", "IgnoreCancelledConversion"),
+            ("TypeOK", "ASRCompatible", "FinalChunkRetained", "ConvertedBytesBounded", "CancelledNeverPublished"),
+            (), ("CaptureEventuallySettles",),
+        ),
+        Model(
+            "speech-playback", ROOT / "models" / "mobile" / "SpeechPlayback.tla",
+            ("RefreshCancelsPaired", "AdvanceBeforeDrain", "DropLastSegment", "IgnoreAuthorityLoss"),
+            ("TypeOK", "PairedRefreshKeepsOwner", "NextPartWaitsForDrain", "SuccessIncludesAllAudio", "AuthorityLossStopsAudio"),
+            (("Segments", 3), ("Samples", 2), ("RefreshBudget", 2)), ("PlaybackEventuallySettles",),
+        ),
+        Model("model-mode", ROOT / "models" / "lifecycle" / "ModelModeAdmission.tla",
+              ("SampleThenCommit",), ("TypeOK", "SwitchIsIdle"), ()),
         Model(
             "generation-recovery", ROOT / "models" / "generation" / "ModelGenerationRecovery.tla",
             ("NoJoin",),
@@ -99,6 +125,14 @@ MODELS = {
             ("UnboundedRouteRecovery", "ExhaustionStartsModelRetry"),
             ("TypeOK", "RouteRefusalStops", "NoRetryAfterExhaustion"),
             (("Cap", 3), ("MaxProbes", 9)),
+        ),
+        Model(
+            "renderer-recovery", ROOT / "models" / "desktop" / "RendererRecovery.tla",
+            ("IgnorePresentedFrame", "UnknownCountsAsFlat", "BlankSkipsReload",
+             "BackgroundSpendsRecovery"),
+            ("TypeOK", "VisibleFlatIsNotHealthy", "UnknownMatchStaysHealthy",
+             "ReplacementFollowsReload", "RecoveryStaysInForeground"),
+            (("MaxProbes", 3), ("MaxReplacements", 2)),
         ),
         Model(
             "installed-skills", ROOT / "models" / "skills" / "InstalledSkills.tla",
@@ -139,6 +173,13 @@ MODELS = {
             "default-source", ROOT / "models" / "account" / "DefaultSourceChoice.tla",
             ("BadgeIgnoresSource", "ServerChoiceHidden", "OfficialKeepsOwnProviders", "OfficialListsOwnProviders"),
             ("TypeOK", "BadgeMatchesStart", "ServerChoiceVisible", "OfficialStartsOnServer", "OfficialHidesOwnProviders"),
+            (),
+        ),
+        Model(
+            "collection-view", ROOT / "models" / "lifecycle" / "WorkerCollectionView.tla",
+            ("GateOnTranscriptRunning", "DeclineShownAsIdle"),
+            ("TypeOK", "RunningPauseStaysActionable", "StoppedViewIsIdle",
+             "DeclineWhileRunningIsClosing"),
             (),
         ),
         Model(
@@ -287,6 +328,51 @@ def _askpub(name: str, source: str, switches: tuple[str, ...] = (), violates: st
 
 
 CASES: tuple[Case, ...] = (
+    _case("speech-capture-current", "auto MP4 normalizes after the final chunk; cancellation and limits remain active",
+          model="speech-capture"),
+    *(_case(name, source, (switch,), invariant, model="speech-capture")
+      for name, source, switch, invariant in (
+        ("speech-capture-known-mp4", "observed 2026-11-17 iPhone MP4 rejected by ASR; real capture regression fails without normalization",
+         "AutoMP4Unchanged", "ASRCompatible"),
+        ("speech-capture-missing-tail", "seeded: snapshot before the final dataavailable event",
+         "SnapshotBeforeTail", "FinalChunkRetained"),
+        ("speech-capture-oversize-wav", "seeded: converted WAV bypasses the input byte limit",
+         "SkipConvertedLimit", "ConvertedBytesBounded"),
+        ("speech-capture-late-cancelled", "seeded: publish a conversion after its owner was cancelled",
+         "IgnoreCancelledConversion", "CancelledNeverPublished"),
+    )),
+    *(_case(name, "witness", witness=witness, model="speech-capture") for name, witness in (
+        ("speech-capture-reach-wav", "NeverWAVReady"),
+        ("speech-capture-reach-native", "NeverNativeReady"),
+        ("speech-capture-reach-size-refusal", "NeverConvertedLimitRefusal"),
+        ("speech-capture-reach-cancel-conversion", "NeverCancelledConversion"),
+        ("speech-capture-reach-decode-failure", "NeverDecodeFailure"),
+    )),
+    _case("speech-playback-current", "all segments and samples drain across unrelated paired-phone catalog refreshes",
+          model="speech-playback"),
+    *(_case(name, source, (switch,), invariant, model="speech-playback")
+      for name, source, switch, invariant in (
+        ("speech-playback-known-refresh", "observed 2026-11-17 provider revision cancels paired playback; real HTTP/player regression reproduces it",
+         "RefreshCancelsPaired", "PairedRefreshKeepsOwner"),
+        ("speech-playback-skip-drain", "seeded: advance the segment loop before queued sources end",
+         "AdvanceBeforeDrain", "NextPartWaitsForDrain"),
+        ("speech-playback-drop-tail", "seeded: normal completion before the last text segment",
+         "DropLastSegment", "SuccessIncludesAllAudio"),
+        ("speech-playback-ignore-revocation", "seeded: preserve queued audio after actual authority loss",
+         "IgnoreAuthorityLoss", "AuthorityLossStopsAudio"),
+    )),
+    *(_case(name, "witness", witness=witness, model="speech-playback") for name, witness in (
+        ("speech-playback-reach-complete", "NeverCompleteAfterRefresh"),
+        ("speech-playback-reach-queued-refresh", "NeverRefreshWithQueuedAudio"),
+        ("speech-playback-reach-between-refresh", "NeverRefreshBetweenParts"),
+        ("speech-playback-reach-pending-refresh", "NeverRefreshWhileWaiting"),
+        ("speech-playback-reach-local-refresh-cancel", "NeverStandaloneCatalogCancel"),
+        ("speech-playback-reach-cancel-queued", "NeverCancelQueuedAudio"),
+    )),
+    _case("model-mode-current", "mode changes hold exclusive idle admission", model="model-mode"),
+    _case("model-mode-sampled", "seeded idle sample races a new task",
+          ("SampleThenCommit",), "SwitchIsIdle", model="model-mode"),
+    _case("model-mode-reach", "witness", witness="NeverSwitch", model="model-mode"),
     _case("ios-startup-current", "iOS binds static cookie and HTTP flags before the page starts",
           model="ios-startup"),
     _case("ios-startup-sync-prompt",
@@ -322,6 +408,23 @@ CASES: tuple[Case, ...] = (
         ("side-chat-reach-late-reply", "NeverLateReplyWithNewRequest"),
         ("side-chat-reach-error-recovery", "NeverRecoverAfterSideFailure"),
     )),
+    _case("collection-view-current",
+          "a live collection pause stays actionable, and a decline closes until the turn is idle",
+          model="collection-view"),
+    _case("collection-view-transcript-gate",
+          "seeded: the card required the transcript running flag, so a live pause with an idle transcript was stopped",
+          ("GateOnTranscriptRunning",), "RunningPauseStaysActionable", model="collection-view"),
+    _case("collection-view-decline-idle",
+          "seeded: a stored decline used the idle stopped sentence while the turn was still running",
+          ("DeclineShownAsIdle",), "StoppedViewIsIdle", model="collection-view"),
+    _case("collection-view-decline-closing",
+          "seeded: a stored decline did not stay in the closing view while the turn was still running",
+          ("DeclineShownAsIdle",), "DeclineWhileRunningIsClosing", model="collection-view"),
+    *(_case(name, "witness", witness=witness, model="collection-view") for name, witness in (
+        ("collection-view-reach-divergent", "NeverDivergentPause"),
+        ("collection-view-reach-closing", "NeverClosing"),
+        ("collection-view-reach-idle", "NeverIdleStop"),
+    )),
     _case("route-current", "three confirmed route refusals fail the call without a model retry",
           model="route"),
     _case("route-unbounded", "historical, shipped through v0.1.69: a confirmed route refusal kept the same call waiting",
@@ -333,6 +436,28 @@ CASES: tuple[Case, ...] = (
         ("route-reach-recovered", "NeverRecovered"),
         ("route-reach-cancelled", "NeverCancelled"),
         ("route-reach-other", "NeverOtherError"),
+    )),
+    _case("renderer-recovery-current",
+          "a flat visible body fails paint; an unknown capture does not; one foreground reload precedes a successor",
+          model="renderer-recovery"),
+    _case("renderer-recovery-ignore-presented",
+          "historical, shipped through v0.1.77: a matching WebKit snapshot counted as healthy paint while the visible body stayed flat",
+          ("IgnorePresentedFrame",), "VisibleFlatIsNotHealthy", model="renderer-recovery"),
+    _case("renderer-recovery-unknown-as-flat",
+          "seeded: a missed, hidden or refused capture counts as a blank body",
+          ("UnknownCountsAsFlat",), "UnknownMatchStaysHealthy", model="renderer-recovery"),
+    _case("renderer-recovery-skip-reload",
+          "seeded: a flat body opens a successor without the one reload",
+          ("BlankSkipsReload",), "ReplacementFollowsReload", model="renderer-recovery"),
+    _case("renderer-recovery-background-spends",
+          "seeded: a failure spends the recovery budget while the window is away",
+          ("BackgroundSpendsRecovery",), "RecoveryStaysInForeground", model="renderer-recovery"),
+    *(_case(name, "witness", witness=witness, model="renderer-recovery") for name, witness in (
+        ("renderer-recovery-reach-content", "NeverHealthyContent"),
+        ("renderer-recovery-reach-blank", "NeverBlank"),
+        ("renderer-recovery-reach-reload", "NeverReloaded"),
+        ("renderer-recovery-reach-replace", "NeverReplaced"),
+        ("renderer-recovery-reach-unknown", "NeverUnknownHealthy"),
     )),
     _case("installed-skills-current", "validate, publish and detach whole project skill bundles",
           model="installed-skills"),
@@ -625,6 +750,8 @@ def render_config(case: Case) -> str:
     for name, value in model.constants:
         lines.append(f"  {name} = {value}")
     lines.append("INVARIANTS " + " ".join(case.invariants()))
+    if model.properties and not case.switches and case.expected() is None:
+        lines.append("PROPERTIES " + " ".join(model.properties))
     return "\n".join(lines) + "\n"
 
 

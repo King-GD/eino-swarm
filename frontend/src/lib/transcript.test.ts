@@ -803,6 +803,16 @@ describe("the progress pulse", () => {
   })
 })
 
+describe("background decisions", () => {
+  it("keeps a decisions result out of the conversation", () => {
+    const state = reduceEvent(emptyTranscript(), ev({ kind: "decision", text: "proceed 0.90" }))
+    const blocks = state.agents[MANAGER_ID].blocks
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0]).toMatchObject({ kind: "trace", quiet: true, traceKind: "decision", text: "proceed 0.90" })
+    expect(blocks.some((block) => block.kind === "notice")).toBe(false)
+  })
+})
+
 describe("collapseLiveEvents", () => {
   // Deltas carry the accumulated string, so a burst is losslessly the last
   // snapshot. Keeping the earlier ones would be fifty React renders for the

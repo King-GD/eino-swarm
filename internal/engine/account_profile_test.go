@@ -83,7 +83,7 @@ func TestOfficialProfileSendsTheAliasAndLeavesTheStoredProvider(t *testing.T) {
 	assertProfileEvent(t, e, th.ID, first.ID, marker)
 
 	if err := e.cfg.Update(func(c *config.Config) error {
-		c.Models.AccountPresentation = config.AccountPresentationFull
+		c.Product.Mode = config.ProductModeLocal
 		return nil
 	}); err != nil {
 		t.Fatal(err)

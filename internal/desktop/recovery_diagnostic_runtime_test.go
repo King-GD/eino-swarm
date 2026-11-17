@@ -65,6 +65,25 @@ func TestSnapshotFailureKeepsItsCategoryWithoutLoggingNativeErrorContent(t *test
 	}
 }
 
+func TestFlatPresentedWindowReloadsThroughTheExistingRecoveryPath(t *testing.T) {
+	h := newRecoveryHarness(t, 0, func(h *recoveryHarness) {
+		h.c.capture = func(context.Context) ([]byte, error) {
+			return nil, errPresentedFrameBlank
+		}
+	})
+	h.advance(1)
+	failure := h.phase(t, "probe_failed")
+	if failure.Reason != "presentation_blank" || failure.SessionID != "session" || failure.Generation != 2 {
+		t.Fatalf("flat window lost its category or lineage: %+v", failure)
+	}
+	h.advance(30)
+	reload := h.phase(t, "reloading")
+	if reload.Reason != "renderer_unresponsive" || reload.At.Before(failure.At) {
+		t.Fatalf("flat window left the bounded reload path: failure=%+v reload=%+v", failure, reload)
+	}
+	h.action(t, "reload")
+}
+
 func TestRecoveryPendingSuccessorReportsItsProbeBeforeTheParentDeadline(t *testing.T) {
 	for _, boundary := range []string{"callback_missing", "location_pending", "snapshot_pending"} {
 		t.Run(boundary, func(t *testing.T) {

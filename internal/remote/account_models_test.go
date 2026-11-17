@@ -34,6 +34,7 @@ type accountGateway struct {
 	catalog   func(w http.ResponseWriter, r *http.Request)
 	requests  []string
 	auths     []string
+	extra     func(w http.ResponseWriter, r *http.Request) bool
 }
 
 func newAccountGateway(t *testing.T) *accountGateway {
@@ -42,7 +43,7 @@ func newAccountGateway(t *testing.T) *accountGateway {
 		g.mu.Lock()
 		g.requests = append(g.requests, r.URL.RequestURI())
 		g.auths = append(g.auths, r.Header.Get("Authorization"))
-		bootstrap, catalog := g.bootstrap, g.catalog
+		bootstrap, catalog, extra := g.bootstrap, g.catalog, g.extra
 		g.mu.Unlock()
 		switch r.URL.Path {
 		case "/client/desktop/v1/bootstrap":
@@ -50,6 +51,9 @@ func newAccountGateway(t *testing.T) *accountGateway {
 		case "/client/desktop/v1/models":
 			catalog(w, r)
 		default:
+			if extra != nil && extra(w, r) {
+				return
+			}
 			http.NotFound(w, r)
 		}
 	}))
@@ -77,6 +81,30 @@ func (g *accountGateway) seen() []string {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return append([]string(nil), g.requests...)
+}
+
+func TestAccountBootstrapRequestsExpandedRolesWithoutChangingCatalogRequests(t *testing.T) {
+	g := newAccountGateway(t)
+	var bootstraps, catalogs atomic.Int32
+	g.bootstrap = func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-AIGateway-Model-Roles") != "2" {
+			t.Error("bootstrap did not negotiate the expanded role set")
+		}
+		bootstraps.Add(1)
+		g.writeBootstrap(w, g.server.URL, true)
+	}
+	original := g.catalog
+	g.catalog = func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-AIGateway-Model-Roles") != "" {
+			t.Error("bootstrap negotiation leaked to the model catalog")
+		}
+		catalogs.Add(1)
+		original(w, r)
+	}
+	am, _, _ := accountModelsFixture(t, g)
+	if state := am.Refresh(t.Context()); state.State != AccountReady || bootstraps.Load() != 1 || catalogs.Load() != 1 {
+		t.Fatalf("refresh did not cross both HTTP adapters: %+v", state)
+	}
 }
 
 func accountModelsFixture(t *testing.T, g *accountGateway) (*AccountModels, *provider.Pool, *config.Config) {
@@ -662,9 +690,11 @@ func TestFOFARolesUseFixedNamesAndStayReadOnly(t *testing.T) {
 		map[string]any{"id": "transcription", "enabled": false, "label": "语音识别"},
 		map[string]any{"id": "speech", "enabled": true, "label": "语音合成"},
 		map[string]any{"id": "image", "enabled": true, "label": "图片生成"},
+		map[string]any{"id": "translation", "enabled": true, "label": "翻译"},
+		map[string]any{"id": "naming", "enabled": false, "label": "命名"},
 	)
 	st = am.Refresh(context.Background())
-	if st.State != AccountReady || len(st.Roles) != 9 || st.Roles[6].ID != "transcription" || st.Roles[6].Enabled || st.Roles[7].ID != "speech" || !st.Roles[7].Enabled || st.Roles[7].Label != "语音合成" || st.Roles[8].ID != "image" || !st.Roles[8].Enabled || st.Roles[8].Label != "图片生成" {
+	if st.State != AccountReady || len(st.Roles) != 11 || st.Roles[6].ID != "transcription" || st.Roles[6].Enabled || st.Roles[7].ID != "speech" || !st.Roles[7].Enabled || st.Roles[7].Label != "语音合成" || st.Roles[8].ID != "image" || !st.Roles[8].Enabled || st.Roles[8].Label != "图片生成" || st.Roles[9].ID != "translation" || !st.Roles[9].Enabled || st.Roles[9].Label != "翻译" || st.Roles[10].ID != "naming" || st.Roles[10].Enabled || st.Roles[10].Label != "命名" {
 		t.Fatalf("speech and image roles = %+v", st.Roles)
 	}
 	if name, _, ok := pool.ConversationDefault(accountModelsSourceID); !ok || name != "conversation" {
@@ -675,16 +705,29 @@ func TestFOFARolesUseFixedNamesAndStayReadOnly(t *testing.T) {
 	}
 	if err := cfg.Update(func(next *config.Config) error {
 		next.Product.Mode = config.ProductModeLocal
+		if len(next.Models.Providers) == 0 {
+			t.Fatal("fixture has no personal provider")
+		}
+		next.Models.Providers[0].Model = "personal-model"
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	local := am.Refresh(context.Background())
-	if len(local.Roles) != 0 || local.Models != 2 {
-		t.Fatalf("local mode consumed server roles: %+v", local)
+	am.Refresh(context.Background())
+	if pool.AccountSourceID() != "" || pool.OfficialOnly() {
+		t.Fatal("LOCAL treated the managed projection as the only model")
 	}
-	name, _, ok = pool.ConversationDefault(accountModelsSourceID)
-	if !ok || name != "server-model" {
-		t.Fatalf("local catalog = %q", name)
+	var accountModel string
+	personal := 0
+	for _, row := range pool.List() {
+		if row.Source == provider.SourceAccount {
+			accountModel = row.Model
+			continue
+		}
+		personal++
 	}
+	if accountModel != "conversation" || personal == 0 {
+		t.Fatalf("LOCAL list account=%q personal=%d", accountModel, personal)
+	}
+
 }

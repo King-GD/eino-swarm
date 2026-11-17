@@ -113,6 +113,47 @@ test("the Android menu skips a newer desktop-only Release", async ({ page }) => 
   await expect(dialog.getByRole("button", { name: "更新" })).toBeVisible()
 })
 
+test("an Android update stays above the signed-out user center", async ({ page }) => {
+  const next = bump(shell.version)
+  await page.addInitScript((version) => {
+    localStorage.removeItem("zwai.phone.mode")
+    Object.assign(window, {
+      CapacitorCustomPlatform: { name: "android" },
+      Capacitor: {
+        PluginHeaders: [{ name: "App", methods: [{ name: "getInfo", rtype: "promise" }] }],
+        nativePromise: async (plugin: string, method: string) => {
+          if (plugin === "App" && method === "getInfo") return { version }
+          throw new Error("unsupported test bridge call")
+        },
+      },
+    })
+  }, shell.version)
+  await page.route(RELEASES_LATEST_URL, async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(release(next)) })
+  })
+  await page.goto("/")
+  const banner = page.getByTestId("app-update")
+  const heading = page.getByRole("heading", { name: "用户中心", exact: true })
+  await expect(banner).toBeVisible()
+  await expect(banner.getByRole("status")).toHaveText(`有新版本 ${next}`)
+  const placed = await page.evaluate(() => {
+    const offer = document.querySelector("[data-testid=app-update]")
+    const account = document.querySelector("[data-testid=gateway-account]")
+    const title = document.querySelector("h1")
+    if (!offer || !account || !title) return null
+    const offerBox = offer.getBoundingClientRect()
+    const titleBox = title.getBoundingClientRect()
+    return {
+      outside: !account.contains(offer),
+      above: offerBox.bottom <= titleBox.top + 1,
+    }
+  })
+  expect(placed).toEqual({ outside: true, above: true })
+  await heading.evaluate((title) => title.parentElement?.parentElement?.scrollTo(0, 400))
+  await expect(banner).toBeVisible()
+  expect(await banner.boundingBox()).not.toBeNull()
+})
+
 test("the iOS menu has no GitHub installer check", async ({ page }) => {
   await page.addInitScript((version) => {
     Object.assign(window, {

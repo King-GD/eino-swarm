@@ -67,7 +67,10 @@ type Engine struct {
 	// fires and another transfer wait until it finishes; the data directory
 	// is being snapshotted or replaced. backupGen drops a progress report
 	// that arrives after this transfer has finished.
-	backupRunning   bool
+	backupRunning bool
+	// sourceSwitching is the debug source write. Backup and restore wait,
+	// and it does not stop a turn or appear as backup progress.
+	sourceSwitching bool
 	backupGen       uint64
 	backupPhase     backup.Phase
 	backupDone      int64
@@ -117,6 +120,11 @@ type Engine struct {
 	fireMu    sync.Mutex
 
 	index ThreadIndex
+
+	// fileScans is the Files panel's completed workspace listing. scanWorkspace
+	// replaces the walk in tests. Production leaves it nil.
+	fileScans     workspaceScans
+	scanWorkspace func(context.Context, string) ([]workspaceEntry, error)
 
 	// Frozen while the ticker is live so fireDueSchedules, inbox
 	// create/resume/patch, and schedule-claim default-provider reads
@@ -250,6 +258,11 @@ func (e *Engine) Providers() *provider.Pool { return e.pool }
 // CreateThread opens a new conversation. A conversation in a project works in
 // the project's directory; one in no project gets a workspace of its own.
 func (e *Engine) CreateThread(title, providerID, projectID string) (*store.Thread, error) {
+	if providerID != "" && e.pool.OfficialOnly() {
+		if err := e.pool.ValidateConversationSelection(providerID, ""); err != nil {
+			return nil, err
+		}
+	}
 	if strings.TrimSpace(providerID) == "" {
 		providerID = e.newConversationProvider()
 	}
@@ -386,11 +399,11 @@ func (e *Engine) rememberShownModel(th *store.Thread, composerModel string) erro
 // turn on. An empty model follows that provider's user-configured default; a
 // set model is the name the composer picked.
 func (e *Engine) SetThreadProvider(id, providerID, model string) error {
-	// Official presentation sends the alias without rewriting the conversation's
-	// stored provider, so switching back to the full list restores it.
+	// Managed execution retains the historical binding for a later LOCAL session.
 	if e.pool.OfficialOnly() {
-		return nil
+		return e.pool.ValidateConversationSelection(providerID, model)
 	}
+
 	prov, err := e.pool.ResolveModel(providerID, model)
 	if err != nil {
 		return err
@@ -554,6 +567,7 @@ func (e *Engine) Waiting() []string {
 // a review that is cut off mid-write would leave a note half stored, and a
 // review that never finishes must not keep the app open.
 func (e *Engine) Shutdown() {
+	e.fileScans.stop()
 	if e.mcp != nil {
 		defer e.mcp.Close()
 	}

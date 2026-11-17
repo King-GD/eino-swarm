@@ -15,6 +15,7 @@ import { cn } from "@/lib/cn"
 import { t } from "@/lib/i18n"
 import { discoverModels } from "@/lib/openai-client"
 import { httpBaseURL, ModelCallError, normalizeApiStyle, redact } from "@/lib/openai-wire"
+import { LocalSpeechSettings } from "./local-speech-settings"
 
 const levels = ["chat", "responses"] as const
 
@@ -325,6 +326,7 @@ export function ProviderSheet({
                 </div>
               </div>
             ) : null}
+            {!hasProfile ? <LocalSpeechSettings providers={providers} /> : null}
             <ul className="flex flex-col gap-2">
               {listed.map((row) => {
                 const personal = isPersonalProvider(row)

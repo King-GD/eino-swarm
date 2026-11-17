@@ -27,7 +27,8 @@ import { assertCloudWebToolsCurrent, CloudWebToolFailure, cloudToolTraceText, cu
 import { ToolContinuation, ToolRoundCollector } from "./openai-tool-wire"
 import { watchWebAuthority } from "./web-execution"
 import { loadGatewaySession, type GatewaySession } from "./gateway-account"
-import { gatewayAuthorityCurrent, notifyGatewayRefusal, watchGatewayAuthority } from "./gateway-authority"
+import { GATEWAY_MODEL_REFRESH_EVENT } from "./gateway-models"
+import { gatewayAuthorityCurrent, notifyGatewayRefusal, sameGatewayAuthority, watchGatewayAuthority } from "./gateway-authority"
 
 /** Discover is a button. It must not sit on the provider's five-minute idle clock. */
 const discoverCapMs = 30_000
@@ -41,8 +42,18 @@ export class ModelHttpError extends ModelCallError {
 function modelGatewayAuthority(provider: DirectProvider): GatewaySession | null {
   if (provider.sourceKind !== "gateway") return null
   const session = loadGatewaySession()
-  if (!session || !gatewayAuthorityCurrent(session) || provider.apiKey !== session.token || httpBaseURL(provider.baseURL) !== session.origin + "/v1") throw new ModelCallError("gateway_login_required", "http")
+  if (!session || !gatewayAuthorityCurrent(session) || provider.apiKey !== session.token) throw new ModelCallError("gateway_login_required", "http")
+  const global = provider.gatewayScope === "gateway"
+  const expectedBase = session.origin + (global ? "/client/models/v1/gateway" : "/v1")
+  const expectedCatalog = session.origin + (global ? "/client/models/v1/gateway/models" : "/client/models/v1/preset/models")
+  if (httpBaseURL(provider.baseURL) !== expectedBase || provider.catalogURL && provider.catalogURL !== expectedCatalog && (global || provider.catalogURL !== session.origin + "/v1/models")) throw new ModelCallError("gateway_login_required", "http")
   return session
+}
+
+function modelSourceRefusal(authority: GatewaySession, status: number, refresh = true) {
+  if (status === 403) {
+    if (refresh && sameGatewayAuthority(authority, loadGatewaySession())) window.dispatchEvent(new Event(GATEWAY_MODEL_REFRESH_EVENT))
+  } else notifyGatewayRefusal(authority, status)
 }
 
 export async function discoverModels(
@@ -58,7 +69,7 @@ export async function discoverModels(
   try {
     const managed = row.sourceKind === "gateway"
     const transport = fetchImpl ?? (managed ? gatewayFetch : fetch)
-    const res = await transport(modelsURL(base), {
+    const res = await transport(managed && row.catalogURL ? row.catalogURL : modelsURL(base), {
       method: "GET",
       headers: authHeaders(row, false),
       signal: ctrl.signal,
@@ -66,13 +77,13 @@ export async function discoverModels(
     })
     if (ctrl.signal.aborted) throw stopError(ctrl)
     if (authority && (res.status === 401 || res.status === 403)) {
-      notifyGatewayRefusal(authority, res.status)
+      modelSourceRefusal(authority, res.status, false)
       await res.body?.cancel().catch(() => undefined)
       throw new ModelHttpError(res.status === 401 ? "gateway_login_required" : "gateway_access_denied", res.status)
     }
     const raw = await res.text()
     if (!res.ok) {
-      if (authority) notifyGatewayRefusal(authority, res.status)
+      if (authority) modelSourceRefusal(authority, res.status, false)
       throw new ModelHttpError(redact(errorText(raw, res.status), row.apiKey), res.status)
     }
     if (ctrl.signal.aborted) throw stopError(ctrl)
@@ -83,7 +94,7 @@ export async function discoverModels(
       throw new ModelCallError(redact(errorText(raw, res.status), row.apiKey), "parse")
     }
     const names = catalogNames(parsed)
-    if (names.length === 0) throw new ModelCallError("empty", "parse")
+    if (names.length === 0 && row.sourceKind !== "gateway") throw new ModelCallError("empty", "parse")
     return names
   } catch (err) {
     if (err instanceof ModelCallError) throw err
@@ -166,7 +177,7 @@ export async function streamCompletion(input: {
     clearTimeout(idleTimer)
     const iterator = opened.chunks[Symbol.asyncIterator]()
     if (authority && (opened.status === 401 || opened.status === 403)) {
-      notifyGatewayRefusal(authority, opened.status)
+      modelSourceRefusal(authority, opened.status)
       await opened.cancel()
       throw new ModelHttpError(opened.status === 401 ? "gateway_login_required" : "gateway_access_denied", opened.status)
     }
@@ -175,7 +186,7 @@ export async function streamCompletion(input: {
       await readBody(iterator, async (chunk) => {
         raw += chunk
       }, ctrl, idleMs)
-      if (authority) notifyGatewayRefusal(authority, opened.status)
+      if (authority) modelSourceRefusal(authority, opened.status)
       const message = tools && toolUnsupported(raw, opened.status) ? "cloud_tools_model_unsupported" : redact(errorText(raw, opened.status), input.provider.apiKey)
       throw new ModelHttpError(message, opened.status)
     }

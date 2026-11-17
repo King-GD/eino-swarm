@@ -2,12 +2,15 @@ package server
 
 import (
 	"errors"
+	"maps"
 	"net/http"
 	"strings"
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/engine"
+	"github.com/LubyRuffy/eino-swarm/internal/provider"
 	"github.com/LubyRuffy/eino-swarm/internal/remote"
+	"github.com/LubyRuffy/eino-swarm/internal/speech"
 	"github.com/LubyRuffy/eino-swarm/internal/tools"
 	"github.com/gin-gonic/gin"
 )
@@ -20,6 +23,7 @@ type fileEntryAlias = engine.FileEntry
 // whether setup is still needed, which shell it is in, and what this build can
 // do.
 type metaView struct {
+	ModelPolicy     provider.ModelPolicy   `json:"model_policy"`
 	Startup         string                 `json:"startup"`
 	Restore         engine.RestoreProgress `json:"restore"`
 	Version         string                 `json:"version"`
@@ -40,6 +44,7 @@ type metaView struct {
 	UI              config.UIConfig           `json:"ui"`
 	Clients         []PresenceClient          `json:"clients"`
 	DataGeneration  int64                     `json:"data_generation"`
+	Speech          speech.SnapshotView       `json:"speech"`
 }
 
 func (s *Server) getMeta(c *gin.Context) {
@@ -57,7 +62,8 @@ func (s *Server) getMeta(c *gin.Context) {
 		clients = []PresenceClient{}
 	}
 	c.JSON(http.StatusOK, metaView{
-		Startup: startup, Restore: progress,
+		ModelPolicy: pool.ModelPolicy(),
+		Startup:     startup, Restore: progress,
 		Version:         s.opts.Version,
 		Mode:            s.opts.Mode,
 		Mock:            pool.IsMock(),
@@ -83,6 +89,7 @@ func (s *Server) getMeta(c *gin.Context) {
 		UI:             cfg.UI,
 		Clients:        clients,
 		DataGeneration: generation,
+		Speech:         s.speechService().Snapshot(),
 	})
 }
 
@@ -90,13 +97,15 @@ func (s *Server) getMeta(c *gin.Context) {
 // returned as a "set / not set" flag so the settings dialog can show that one
 // exists without handing it back out to anything that can read the endpoint.
 type settingsView struct {
-	Server config.ServerConfig `json:"server"`
-	Models struct {
-		Default             string         `json:"default"`
-		DefaultSource       string         `json:"default_source"`
-		AccountModel        string         `json:"account_model,omitempty"`
-		AccountPresentation string         `json:"account_presentation,omitempty"`
-		Providers           []providerView `json:"providers"`
+	ModelPolicy provider.ModelPolicy `json:"model_policy"`
+	Server      config.ServerConfig  `json:"server"`
+	Models      struct {
+		Bindings            map[string]config.ModelRef `json:"bindings,omitempty"`
+		Default             string                     `json:"default"`
+		DefaultSource       string                     `json:"default_source"`
+		AccountModel        string                     `json:"account_model,omitempty"`
+		AccountPresentation string                     `json:"account_presentation,omitempty"`
+		Providers           []providerView             `json:"providers"`
 	} `json:"models"`
 	Swarm       config.SwarmConfig       `json:"swarm"`
 	Tools       config.ToolsConfig       `json:"tools"`
@@ -107,6 +116,7 @@ type settingsView struct {
 	Remote      config.RemoteConfig      `json:"remote"`
 	Search      config.SearchConfig      `json:"search"`
 	Clients     config.ClientsConfig     `json:"clients"`
+	Speech      speechSettingsView       `json:"speech"`
 	Product     struct {
 		Mode string `json:"mode"`
 	} `json:"product"`
@@ -141,6 +151,7 @@ func toSettingsView(cfg *config.Config) settingsView {
 	v.Remote = cfg.Remote
 	v.Search = cfg.Search
 	v.Clients = cfg.Clients
+	v.Speech = toSpeechSettingsView(cfg.Speech)
 	v.Product.Mode = cfg.Product.Resolved()
 	v.Models.Default = cfg.Models.Default
 	v.Models.DefaultSource = cfg.Models.DefaultSource
@@ -190,7 +201,7 @@ func listedFlag(on bool) *bool {
 }
 
 func (s *Server) getSettings(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"settings": toSettingsView(s.engine.Config().Snapshot())})
+	c.JSON(http.StatusOK, gin.H{"settings": s.currentSettingsView()})
 }
 
 type putSwarmSettings struct {
@@ -214,7 +225,8 @@ type putSwarmSettings struct {
 type putSettingsRequest struct {
 	Server *config.ServerConfig `json:"server"`
 	Models *struct {
-		Default string `json:"default"`
+		Bindings *map[string]config.ModelRef `json:"bindings"`
+		Default  string                      `json:"default"`
 		// Absent keeps the stored source: the model list is saved from many
 		// places and most of them do not know the field.
 		DefaultSource *string `json:"default_source"`
@@ -250,6 +262,7 @@ type putSettingsRequest struct {
 	Search      *config.SearchConfig      `json:"search"`
 	Clients     *config.ClientsConfig     `json:"clients"`
 	Product     *config.ProductConfig     `json:"product"`
+	Speech      *putSpeechSettings        `json:"speech"`
 }
 
 // putMemorySettings preserves the verifier setting when older clients save
@@ -275,7 +288,8 @@ func (s *Server) putSettings(c *gin.Context) {
 		badRequest(c, "could not read the request body: %v", err)
 		return
 	}
-	err := s.engine.UpdateConfig(func(cfg *config.Config) error {
+	policy := s.engine.Providers().ModelPolicy()
+	err := s.engine.UpdateConfigForMode(req.Product, func(cfg *config.Config) error {
 		next := *cfg
 		if req.Server != nil {
 			next.Server = *req.Server
@@ -347,6 +361,9 @@ func (s *Server) putSettings(c *gin.Context) {
 		if req.Clients != nil {
 			next.Clients = *req.Clients
 		}
+		if req.Speech != nil {
+			next.Speech = mergeSpeechSettings(cfg.Speech, req.Speech)
+		}
 		if req.Product != nil {
 			next.Product.Mode = req.Product.Mode
 		}
@@ -355,7 +372,10 @@ func (s *Server) putSettings(c *gin.Context) {
 			for _, p := range cfg.Models.Providers {
 				existing[p.ID] = p
 			}
-			providers := make([]config.Provider, 0, len(req.Models.Providers))
+			providers := cfg.Models.Providers
+			if req.Models.Providers != nil {
+				providers = make([]config.Provider, 0, len(req.Models.Providers))
+			}
 			for _, p := range req.Models.Providers {
 				prev := existing[p.ID]
 				apiMode := prev.APIMode
@@ -425,10 +445,35 @@ func (s *Server) putSettings(c *gin.Context) {
 			if req.Models.AccountPresentation != nil {
 				presentation = *req.Models.AccountPresentation
 			}
-			next.Models = config.ModelsConfig{Default: req.Models.Default, DefaultSource: source, AccountModel: accountModel, AccountPresentation: presentation, Providers: providers}
-			if next.Product.FOFA() && !config.SameModelSettings(cfg.Models, next.Models) {
+			defaultProvider := req.Models.Default
+			if defaultProvider == "" {
+				defaultProvider = cfg.Models.Default
+			}
+			next.Models = config.ModelsConfig{Bindings: maps.Clone(cfg.Models.Bindings), Default: defaultProvider, DefaultSource: source, AccountModel: accountModel, AccountPresentation: presentation, Providers: providers}
+			if req.Models.Bindings != nil {
+				scope := policy.Scope
+				if next.Product.Resolved() == config.ProductModeLocal {
+					scope = config.ProductModeLocal
+				}
+				if scope == "" {
+					return errCustomModelsDisabled
+				}
+				if next.Models.Bindings == nil {
+					next.Models.Bindings = map[string]map[string]config.ModelRef{}
+				}
+				next.Models.Bindings[scope] = *req.Models.Bindings
+				if next.Product.FOFA() && policy.Configurable {
+					// Functional selections replace legacy global gateway pins.
+					next.Models.AccountModel = ""
+					next.Models.DefaultSource = config.DefaultSourceAccount
+				}
+			}
+			if next.Product.FOFA() && !policy.Configurable && !config.SameModelSettings(cfg.Models, next.Models) {
 				return errCustomModelsDisabled
 			}
+		}
+		if err := validatePresetSettings(cfg, &next, policy); err != nil {
+			return err
 		}
 
 		*cfg = next
@@ -448,10 +493,14 @@ func (s *Server) putSettings(c *gin.Context) {
 	if s.search != nil {
 		s.search.Reload()
 	}
-	c.JSON(http.StatusOK, gin.H{"settings": toSettingsView(s.engine.Config().Snapshot())})
+	c.JSON(http.StatusOK, gin.H{"settings": s.currentSettingsView()})
 }
 
 func (s *Server) getModels(c *gin.Context) {
+	if !s.engine.Providers().IsMock() && !s.engine.Providers().ModelPolicy().Ready {
+		c.JSON(http.StatusOK, gin.H{"models": []provider.Info{}, "default": "", "mock": false})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"models":  s.engine.Providers().List(),
 		"default": s.engine.Providers().DefaultProviderID(),

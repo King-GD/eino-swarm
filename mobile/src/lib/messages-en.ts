@@ -1,6 +1,19 @@
 import { accountEn } from "./messages-account"
+import { pcWaitEn } from "./messages-pc-wait"
 import { generationEn } from "./messages-generation"
+import { speechEn } from "./messages-speech"
 export const en = {
+  ...pcWaitEn,
+  ...speechEn,
+  "selection.actions": "Selected text actions",
+  "selection.translate": "Translate",
+  "selection.close": "Close selected text actions",
+  "selection.translation": "Translation",
+  "selection.translating": "Translating…",
+  "selection.failed": "Translation failed. Try again.",
+  "selection.tooLong": "The selected text is too long to translate.",
+  "selection.updatePC": "Update the PC app to translate selected text.",
+
   ...accountEn,
   "startup.failed": "{failed} conversations could not be restored. Check Trace or logs.",
   "startup.restoring": "Restoring unfinished tasks {completed}/{total}",
@@ -284,6 +297,7 @@ export const en = {
 
   "notice.goalCompleted": "Standing objective completed.",
 
+  "goal.mode": "Goal mode",
   "goal.pursuing": "Pursuing",
   "goal.paused": "Paused",
   "goal.blocked": "Blocked",

@@ -1,5 +1,84 @@
 # Testing
 
+## Voice input and spoken answers (F-148 / C-048)
+
+`internal/config/speech_test.go` and `internal/speech/service_test.go` cover
+independent switches, private settings, typed model discovery, Gateway role
+resolution, exact multipart/audio bytes, request limits and real HTTP
+cancellation. `internal/server/speech_http_test.go` crosses the actual same-origin
+HTTP/settings boundary. `internal/remote/speech_rpc_test.go` crosses LinkPump
+dispatch with real loopback upstreams: only local execution is admitted, Stop
+and ordinary RPC stay responsive, cancellation/Close join owned requests, sealed
+chunks preserve bytes, final chunks can be read again, oversized ASR fails
+without truncation and temporary buffers expire. Voice creates no conversation
+or ordinary attachment staging. `internal/backup/speech_secrets_test.go` uses
+actual archives/restoration to check voice-key redaction and endpoint identity.
+
+Frontend tests cover Markdown prose extraction, lossless draft insertion and
+recording/player ownership, including late permission/model responses. Phone
+regressions keep paired dictation and every playback segment alive through an
+unrelated phone model-catalog refresh, including the final queued sample.
+WebKit MP4/AAC recordings are normalized to 16 kHz mono PCM WAV even with the
+automatic recording setting; conversion retains the final recorder chunk and
+enforces the configured byte limit on the converted audio.
+`frontend/src/lib/speech-capture-boundaries.test.ts` also checks late cancelled
+conversion, conversion failure without a raw-container fallback, and expanded
+WAV byte limits through the real recorder. `mobile/src/lib/phone-speech.test.ts`
+checks both a complete multi-segment playback across refresh and cancellation
+of already queued sources after actual speech configuration loss/disconnect.
+Phone cache/transport tests cover complete pairing authority, no stored credentials,
+Gateway direct calls with the phone's own session and local PC chunk/cancel RPC.
+Run the corresponding browser E2E with isolated ports/data/output and do not
+rebuild a Vite dist while serving a case.
+
+Streaming regressions hold the upstream open while asserting the first audio
+has already reached the actual HTTP client and Web Audio player. Shared stream
+and media tests exercise raw PCM, split samples, SSE framing and completion,
+backpressure, size limits, stop and replacement ownership. Phone transport tests
+retain timeout, account authority and exact-PC cancellation through the entire
+stream. `frontend/e2e/speech-stream.spec.ts` drives the existing Read aloud action
+against held PCM/SSE upstreams and checks actual scheduled samples before EOF,
+then completion or cancellation. MP3/WAV and PC-local RPC remain compatibility
+regressions. These fixtures use no real model or credentials.
+
+The two C-048 protocols are also included in `make model-check`:
+
+| Model | Current obligations | Known fault reproduced |
+|---|---|---|
+| `models/mobile/SpeechCapture.tla` | final recorder chunk retained; MP4 normalized to WAV; converted bytes bounded; cancelled conversion never published | `speech-capture-known-mp4` restores automatic MP4 upload and violates `ASRCompatible` |
+| `models/mobile/SpeechPlayback.tla` | unrelated catalog refresh preserves paired ownership; next segment waits for its sources; successful completion contains all segments/samples; actual revocation cancels queued sound | `speech-playback-known-refresh` restores refresh cancellation and violates `PairedRefreshKeepsOwner` |
+
+The 21 speech cases include both current protocols, eight individually checked
+guard removals and eleven reachability witnesses. Capture enumerates automatic
+and explicit WAV settings, MP4 and a preserved non-MP4 container, conversion
+success/failure, both size outcomes, and cancellation around finalization.
+Playback explores three segments, two sample blocks per segment and two catalog
+refreshes, including pending synthesis, queued sound and between-segment gaps.
+`CaptureEventuallySettles` and `PlaybackEventuallySettles` are temporal properties
+checked on the current designs under weak fairness of progress: recording,
+decoding, model transport and scheduled sources must eventually return/end.
+Cancellation and failure remain distinct outcomes; fairness does not turn them
+into successful dictation or complete playback.
+
+`tools/test_model_check.py` checks registration and property configuration,
+replays all 21 speech cases with the installed TLC, and rejects a safety-correct
+but permanently stalled control protocol. Every removal must report its named
+invariant; every witness must produce its expected reachable state. A missing
+property, wrong invariant, parsing failure or timeout fails acceptance.
+The source regressions above must pass on the same candidate too: TLC checks
+the finite protocols, not JavaScript event-loop atomicity, codecs, physical
+microphones, pronunciation or an unbounded conversation. Removing each of the
+eight corresponding source guards in an isolated copy has also been checked
+to make its real recorder/hook/HTTP/player regression fail.
+
+Headless and fixture checks do not accept physical microphone capture or native
+playback. Mac acceptance runs only in the identified `ci-macOS` guest through
+the existing case lifecycle. iOS/Android packaged tests must reach Voice status,
+recording controls, permission refusal/recovery and playback. Report physical
+device capture separately from simulator-generated media. Preserve first
+failures, audio MIME/byte evidence, target identity and cleanup receipts outside
+the checkout; never invoke a real model from an automated test.
+
 PC chat omits whitespace-only assistant answers before creating layout rows.
 Recorded events remain available for replay and diagnostics. The work-fold
 unit test covers both display modes and streaming into visible content.
@@ -956,6 +1035,11 @@ request, objective, title or conversation ID is a positive prompt expectation.
 send/resume_goal for capped, blocked and idle. Desktop Playwright keeps the
 paused banner and Start after sending/reloading, then observes pursuit after
 Start. Phone tests retain the same projection through send until resume_goal.
+`mobile/src/components/goal-mode.test.tsx` checks the explicit localized Goal mode
+label and visibility across worker navigation, including completion/clear.
+`mobile/e2e/goal-mode.spec.ts` checks the strip in chat, Agents, worker logs and
+Outputs in Chinese/English on Chromium and iPhone WebKit, with viewport assertions
+and screenshots.
 `ordinary_worker_completion_test.go` uses the actual worker/manager boundary:
 the same-turn correction is consumed and collection completes, then the real
 next StartTurn excludes it and older GoalContinueText. `runtime_cues_test.go`
@@ -2625,6 +2709,11 @@ Incident evidence and the upstream-cause uncertainty are recorded in
 `internal/desktop/recovery*_test.go` exercises the actual controller with injected
 clock/probe/snapshot effects, including stale challenges, blank pixels, source
 origin, inactivity, sleep-sized tick gaps, retry exhaustion and cancellation.
+A flat presented frame is `presentation_blank` and still takes the one existing
+reload; a missing capture is not blank. The decision is the sampled image, not
+a downscaled average. `models/desktop/RendererRecovery.tla` checks that
+acknowledgement and its foreground budget; see "Renderer recovery decision"
+below.
 The retry regressions check that a timed-out successor leaves the second
 attempt available until a new foreground probe fails. Exercise both focus
 changes and ticks queued during the blocked launch, and require the next
@@ -4999,6 +5088,31 @@ make model-check
 python3 tools/model_check.py --fetch installed-skills-current --out /tmp/installed-skills-model
 ```
 
+## Renderer recovery decision (C-034)
+
+`models/desktop/RendererRecovery.tla` checks the paint acknowledgement, not
+pixel thresholds, ScreenCaptureKit or the wall-clock grace. A WebKit match is
+healthy only when the visible body is not flat. A missed, hidden or refused
+capture stays with the WebKit result. The first foreground failure reloads
+once; a later failure opens a successor on the same engine, and the second
+successor exhausts the budget. Leaving the foreground starts a new grace and
+does not spend it. The five-minute stable reset is outside this model.
+
+`renderer-recovery-ignore-presented` restores the decision shipped through
+v0.1.77 and must break `VisibleFlatIsNotHealthy`.
+`renderer-recovery-unknown-as-flat` counts an unknown capture as a blank body
+and must break `UnknownMatchStaysHealthy`. `renderer-recovery-skip-reload`
+opens a successor without the one reload and must break
+`ReplacementFollowsReload`. `renderer-recovery-background-spends` spends the
+budget while the window is away and must break `RecoveryStaysInForeground`.
+The reach witnesses keep a readable body, a flat body, the reload, the
+successor and a healthy unknown capture reachable. `make model-check` includes
+these cases. The Go tests still own the sampled image and the real controller.
+
+```bash
+python3 tools/model_check.py --fetch renderer-recovery-current renderer-recovery-ignore-presented renderer-recovery-unknown-as-flat renderer-recovery-skip-reload renderer-recovery-background-spends
+```
+
 ## iOS startup prompt model (opt-in, `C-045`)
 
 `models/mobile/IOSStartupPrompt.tla` checks the shell's document-start decision,
@@ -7325,7 +7439,10 @@ Several things are tested here, some as pure logic and some in jsdom:
   checks source-context formatting without inventing commands, exit status or
   a later working directory. `src/components/app/terminal-session.test.tsx`
   exercises xterm selections and ready metadata through the rendered component;
-  `selection-menu.test.tsx` covers the shared Add to chat menu. Terminal quotes
+  `selection-menu.test.tsx` covers the shared Add to chat menu, reading a
+  selection only when spoken output is ready, and translating an English
+  selection while the interface is Chinese. `src/lib/selection-language.test.ts`
+  separates that English check from other writing systems. Terminal quotes
   retain their client tab/source target and initial-directory/shell context
   inside the existing quote text, including across draft save and refresh.
   Browser E2E evidence does not establish native WebView acceptance.
@@ -8483,6 +8600,20 @@ establish recovery against a live gateway. Provider and engine tests cover the
 same three-refusal cap on Generate and Stream.
 The fixture disables composer predictions so auxiliary calls cannot change its
 attempt counts, and binds the terminal error assertion to the generation notice.
+`models/lifecycle/WorkerCollectionView.tla` (`make model-check`) checks the
+desktop collection card against the server running flag. A pending pause stays
+waiting or paused while that flag is set, even when the folded transcript flag
+is idle. A decline is closing until the turn is idle, and only then uses the
+stopped sentence. A peer notice does not settle either state.
+`collection-view-transcript-gate` restores gating the pause on the transcript
+flag and must break `RunningPauseStaysActionable`.
+`collection-view-decline-idle` and `collection-view-decline-closing` restore
+the idle sentence on a stored decline and must break `StoppedViewIsIdle` and
+`DeclineWhileRunningIsClosing`. The reach witnesses keep a divergent live
+pause, a closing decline with a later peer notice, and the idle stopped
+sentence reachable. The model does not check worker cancellation time or that
+the React card reads the same store field.
+
 `models/provider/RouteRecovery.tla` (`make model-check`) checks one logical
 call: three confirmed refusals end it, a success or Stop or a different error
 ends it earlier, and the capped refusal does not start a model retry.
@@ -8821,17 +8952,6 @@ resources. `mobile/e2e/composer-prediction.spec.ts` verifies tap/Tab insertion,
 explicit Send, dismissal and the PC setting. The quote selection case in
 `mobile/e2e/composer-layout.spec.ts` verifies dismissal and subsequent re-selection.
 
-### Windows lease replacement
-
-`internal/lease/record_file_windows_test.go` runs on Windows and holds the actual
-discovery handle while `Publish` replaces `engine.json`. It verifies complete old
-and new records, retains the legacy `os.Rename` counterexample, and checks file
-errors, failed replacement preserving the old bytes, handle release and long/UNC
-path identities. The publisher uses `FileRenameInfoEx` with POSIX replacement;
-deletion sharing alone does not make legacy `MoveFileEx` accept an open target. `record_file_test.go` verifies exact bytes and handle release on every
-platform. Cross-compilation does not replace these Windows kernel checks or the
-packaged desktop window acceptance.
-
 ### Phone Account admission and hidden Local controls
 
 `mobile/src/components/gateway-account-shell.test.tsx` covers default sign-in
@@ -8844,6 +8964,8 @@ and checks the real default gate and signed-in mode switch on both phone layouts
 Screenshots remain in each run's private `--output` directory. Browser checks do
 not establish installed iOS/Android acceptance.
 
+The phone account-mode regression in `mobile/e2e/phone-account-mode.spec.ts` also uses an intentionally hidden Gateway catalog: three portrait taps must enter LOCAL without model-discovery requests or a false loading error, retain the account, and permit personal model settings. `mobile/src/components/gateway-account-shell.test.tsx` covers touch release plus synthesized clicks with detail 0/1 and closing the open User center after switching modes.
+
 `mobile/e2e/ios-phone-account-mode.swift` supplies the packaged-app XCTest
 `BindFlowTests/testNativePhoneAccountGateAndPortraitModeSwitch`. Use
 `ios-layout-fixture.py` with `IOS_LAYOUT_PRESERVE_PUBLIC=1` and the candidate's
@@ -8852,3 +8974,52 @@ login gate, the actual portrait three-tap gesture, restored Local menus and
 return to Account across relaunch, retaining screenshots and AX trees. This
 case uses the offline PC fixture and does not accept a production account,
 Android installation or TestFlight distribution.
+
+### Windows lease replacement
+
+`internal/lease/record_file_windows_test.go` runs on Windows and holds the actual
+discovery handle while `Publish` replaces `engine.json`. It verifies complete old
+and new records, retains the legacy `os.Rename` counterexample, and checks file
+errors, failed replacement preserving the old bytes, handle release and long/UNC
+path identities. The publisher uses `FileRenameInfoEx` with POSIX replacement;
+deletion sharing alone does not make legacy `MoveFileEx` accept an open target. `record_file_test.go` verifies exact bytes and handle release on every
+platform. Cross-compilation does not replace these Windows kernel checks or the
+packaged desktop window acceptance.
+
+## Execution source and model policy regression
+
+`go test -race ./internal/config ./internal/provider ./internal/remote ./internal/server`
+covers scoped bindings, account renewal/isolation, managed catalog/settings
+projection and direct mutation refusal. `internal/engine/model_policy_test.go`
+covers a running turn leaving the source switch free, an in-flight model call
+still refusing it, backup and restart still refusing it, and managed project
+choices. `internal/provider/model_policy_admission_test.go` proves a stream holds
+the gate until upstream completion, and that an already opened client keeps its
+endpoint after the switch while a new lookup uses the new source.
+
+`make model-check` includes `ModelModeAdmission`: the current protocol is safe,
+`SampleThenCommit` must violate `SwitchIsIdle`, and a witness reaches an idle
+switch. This proves the abstract ordering, not Go concurrency or storage atomicity.
+Browser tests include `frontend/e2e/model-policy.spec.ts`, the dedicated FOFA
+`product-mode.spec.ts`, and phone account/waiting/voice regressions. Use separate
+source/build copies, ports, data directories and output directories concurrently.
+Native acceptance and gateway producer deployment are separate from these checks.
+
+手机 LOCAL 登录后的双目录授权回归：`mobile/src/lib/use-local-model-sources.test.tsx` 覆盖分组聚合、同名模型 HTTP 选路、单来源撤权、短暂故障缓存和模式／账号隔离；`mobile/src/lib/gateway-account.test.ts` 拒绝非同源目录与畸形元数据。`mobile/e2e/local-model-sources.spec.ts` 在 Chromium 与 WebKit 上验证三个分组、真实发送对应接口、刷新撤权及凭据不写入个人设置。Account 等待 PC 的回归仍由 `phone-account-mode.spec.ts` 负责。
+
+
+### Phone debug mode switches the selected PC
+
+`internal/remote/product_mode_test.go` exercises real Pairlink dispatch, PC
+persistence, idempotence, restoration/model-use refusal, malformed intent and
+sanitized save failure. `account_local_sources_test.go` reads both independent
+catalog endpoints with the PC token, verifies `catalog_group`, and tunes the
+conversation through the real pump while preserving duplicate names/routes.
+`internal/provider/account_catalog_group_test.go` checks metadata publication.
+Phone hook/shell tests require the exact ACK before committing the preference,
+reject duplicate pending gestures, unsupported/busy/failed responses and old-link
+ACKs, and prove no phone credential is sent. Browser cases in
+`mobile/e2e/phone-account-mode.spec.ts` cover the actual avatar gesture, grouped
+picker, selection, refresh, return to Account and explicit retry on Android-size
+Chromium and iPhone-size WebKit. Browser observations do not accept a packaged
+native installer or claim that an already-running phone/PC was updated.

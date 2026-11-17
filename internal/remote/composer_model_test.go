@@ -70,14 +70,14 @@ func TestPhoneCatalogLocksTheOfficialName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	th, err := e.CreateThread("named", "endpoint", "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	e.Providers().SetAccountSource(src)
 	rows := modelViews(e)
 	if len(rows) != 1 || rows[0].Model != config.OfficialModelAlias || rows[0].Label != "Partner model" || !rows[0].Locked {
 		t.Fatalf("phone catalog: %+v", rows)
-	}
-	th, err := e.CreateThread("", "endpoint", "")
-	if err != nil {
-		t.Fatal(err)
 	}
 	before, err := e.Store().GetThread(th.ID)
 	if err != nil {
@@ -96,21 +96,27 @@ func TestPhoneCatalogLocksTheOfficialName(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	var sawOwn, sawOfficial bool
+	if rows := modelViews(e); len(rows) != 1 || !rows[0].Locked {
+		t.Fatalf("presentation unlocked preset: %+v", rows)
+	}
+	if err := e.Config().Update(func(c *config.Config) error { c.Product.Mode = config.ProductModeLocal; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	var account, personal bool
 	for _, row := range modelViews(e) {
-		if row.Model == "vendor-secret-model" || row.Locked {
-			t.Fatalf("full catalog leaked or stayed locked: %+v", row)
+		if row.Locked {
+			t.Fatalf("LOCAL locked the model list: %+v", row)
 		}
-		if row.Model == "own-model" {
-			sawOwn = true
+		if row.ProviderID == accountModelsSourceID {
+			account = true
+			continue
 		}
-		if row.Model == config.OfficialModelAlias && row.Label == "Partner model" {
-			sawOfficial = true
-		}
+		personal = true
 	}
-	if !sawOwn || !sawOfficial {
-		t.Fatalf("full phone catalog = %+v", modelViews(e))
+	if !account || !personal {
+		t.Fatal("LOCAL hid the signed-in model or the personal model")
 	}
+
 }
 
 func TestPhonePinsTheShownCatalogFallback(t *testing.T) {
@@ -137,6 +143,7 @@ func accountPhoneEngine(t *testing.T, names ...string) *engine.Engine {
 		ID: "endpoint", Label: "Endpoint", BaseURL: "https://own.invalid/v1", Model: "own-model",
 	})
 	if err := e.Config().Update(func(c *config.Config) error {
+		c.Product.Mode = ""
 		c.Models.DefaultSource = config.DefaultSourceAccount
 		c.Models.AccountModel = ""
 		return nil

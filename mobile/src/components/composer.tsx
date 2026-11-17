@@ -9,6 +9,8 @@ import { parseSlashSubmit } from "../../../frontend/src/lib/slash-core"
 import { isVisionFile } from "@/lib/put-chunks"
 import type { ModelChoice } from "@/lib/rpc"
 import { ModelPicker } from "./model-picker"
+import { SpeechCapture } from "./speech-capture"
+import { insertSpeechText } from "../../../frontend/src/lib/speech-text"
 
 const noModels: ModelChoice[] = []
 const noLevels: string[] = []
@@ -82,6 +84,10 @@ export function Composer({
 }) {
   const [dismissedPrediction, setDismissedPrediction] = useState<string>()
   const [text, setText] = useState("")
+  const textRef = useRef(text)
+  textRef.current = text
+  const speechAnchor = useRef({ text: "", caret: 0 })
+  const [speechBusy, setSpeechBusy] = useState(false)
   const [commandRejected, setCommandRejected] = useState(false)
   const [attached, setAttached] = useState<File[]>([])
   const [pick, setPick] = useState(() => chosen(models, providerId, model))
@@ -98,7 +104,7 @@ export function Composer({
   const insertSuggestion = () => { if (suggestion) { setText(suggestion.text); box.current?.focus() } }
   const command = quotes.some((quote) => quote.trim()) ? parseSlashSubmit(text) : null
   const quotedCommand = command?.id === "goal" || command?.id === "plan"
-  const ready = hasDraft && !disabled && !pending
+  const ready = hasDraft && !disabled && !pending && !speechBusy
   const showStop = Boolean(onStop && stopLabel && (pending || !hasDraft))
   const showModel = !hideModel && (models.length > 0 || catalogBusy || Boolean(onRefreshModels))
   const showTools = showModel || reasoningLevels.length > 0
@@ -147,7 +153,7 @@ export function Composer({
     }
     setCommandRejected(false)
     const payload = formatQuotedMessage(quotes, text)
-    if ((!payload && attached.length === 0) || disabled || pending) return
+    if ((!payload && attached.length === 0) || disabled || pending || speechBusy) return
     const shot = attached
     const selected = quotes
     const more = extra()
@@ -281,6 +287,15 @@ export function Composer({
             "placeholder:text-muted-foreground focus-visible:outline-hidden disabled:opacity-60",
           )}
         />
+        <SpeechCapture disabled={disabled || pending}
+          onBusyChange={setSpeechBusy}
+          onStart={() => { speechAnchor.current = { text: textRef.current, caret: box.current?.selectionStart ?? textRef.current.length } }}
+          onText={(spoken) => {
+            const next = insertSpeechText(textRef.current, speechAnchor.current.text, speechAnchor.current.caret, spoken)
+            textRef.current = next.text
+            setText(next.text)
+            requestAnimationFrame(() => { box.current?.focus(); box.current?.setSelectionRange(next.caret, next.caret) })
+          }} />
         <button
           type={showStop ? "button" : "submit"}
           aria-label={showStop ? stopLabel : sendLabel}

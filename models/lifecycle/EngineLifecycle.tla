@@ -21,6 +21,12 @@
 (***************************************************************************)
 EXTENDS Naturals
 
+(* Model selection is changed only in an exclusive, idle admission section.
+   ModelModeAdmission below is the local refinement used by UpdateConfig;
+   sampledIdle is deliberately not a sufficient commit predicate. *)
+ModelModeAdmission(active, admissions, restoring, frozen) ==
+    active = 0 /\ admissions = 0 /\ ~restoring /\ ~frozen
+
 CONSTANTS
     DeadlineKillsChild,     \* the handoff deadline also bounds the replacement child
     RestoreBeforeListen,    \* the replacement restores before publishing its lease

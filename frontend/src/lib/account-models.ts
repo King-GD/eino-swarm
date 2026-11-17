@@ -40,22 +40,25 @@ export function accountModelRows(models: ModelInfo[]): ModelInfo[] {
   return models.filter((m) => m.source === "account" && m.ready && m.model)
 }
 
-const kindOrder = ["chat", "unclassified", "embedding", "ocr", "decisions", "other"] as const
+const kindOrder = ["chat", "unclassified", "embedding", "ocr", "decisions", "transcription", "speech", "other"] as const
 export type AccountKindKey = (typeof kindOrder)[number]
 
 /** Non-zero classification counts, in a stable order. Missing kinds means the
- *  server has not reported them yet. */
-export function accountKindTally(kinds?: AccountModels["kinds"]): Array<{ key: AccountKindKey; count: number }> {
+ *  server has not reported them yet. Decisions is a background role, so the
+ *  account card does not name it. */
+export function accountKindTally(kinds?: AccountModels["kinds"]): Array<{ key: Exclude<AccountKindKey, "decisions">; count: number }> {
   if (!kinds) return []
   return kindOrder.flatMap((key) => {
+    if (key === "decisions") return []
     const count = kinds[key] ?? 0
     return count > 0 ? [{ key, count }] : []
   })
 }
 
-/** Official presentation is the one-name lock. Full, or no profile, keeps the list. */
-export function officialModelLock(account?: AccountModels): boolean {
-  return Boolean(account?.profile && account.profile.presentation !== "full")
+/** Server permission owns the lock; a legacy profile/role response is managed. */
+export function officialModelLock(account?: AccountModels, policy?: Meta["model_policy"]): boolean {
+  if (policy) return policy.mode === "gateway" && !policy.configurable
+  return Boolean(account?.profile || account?.roles?.length)
 }
 
 /** The conversation model Settings shows for the server. A saved name stays

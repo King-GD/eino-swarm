@@ -27,6 +27,14 @@ type decisionRequest struct {
 // Decide calls the account decisions role. The question is fixed; the caller
 // supplies only the conversation text.
 func (p *Pool) Decide(ctx context.Context, providerID, modelName, input string) (string, error) {
+	release, err := p.BeginModelUse()
+	if err != nil {
+		return "", err
+	}
+	defer release()
+	if err := p.validateModelSelection(providerID, modelName); err != nil {
+		return "", err
+	}
 	prov, err := p.Resolve(providerID)
 	if err != nil {
 		return "", err

@@ -36,7 +36,8 @@ func (e *Engine) Decide(ctx context.Context, threadID string) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
-	text, err := e.pool.Decide(ctx, th.ProviderID, modelName, input)
+	ref, _ := e.pool.RoleSelection("decisions", th.ProviderID, modelName)
+	text, err := e.pool.Decide(ctx, ref.ProviderID, ref.Model, input)
 	if err != nil {
 		return "", err
 	}

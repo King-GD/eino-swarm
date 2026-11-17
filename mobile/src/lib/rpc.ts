@@ -1,3 +1,4 @@
+import type { ModelPolicy } from "../../../frontend/src/lib/model-policy"
 export const PROTOCOL_V = 1
 
 export const OpList = "list"
@@ -22,6 +23,7 @@ export const OpCancelWait = "cancel_wait"
 export const OpResumeGoal = "resume_goal"
 export const OpHello = "hello"
 export const OpMeta = "meta"
+export const OpSetProductMode = "set_product_mode"
 export const OpProjectGet = "project_get"
 export const OpProjectCreate = "project_create"
 export const OpProjectUpdate = "project_update"
@@ -38,9 +40,17 @@ export const OpClients = "clients"
 export const OpClientRead = "client_read"
 export const OpFiles = "files"
 export const OpFileChunk = "file_chunk"
+export const OpTranslateSelection = "translate_selection"
+export const OpCancelTranslation = "cancel_translation"
+export const OpSpeechConfig = "speech_config"
+export const OpAudioTranscribe = "audio_transcribe"
+export const OpAudioSpeech = "audio_speech"
+export const OpAudioChunk = "audio_chunk"
+export const OpAudioCancel = "audio_cancel"
 export const GROUP_RECENT = "recent"
 
 export type RemoteRequest = {
+  product_mode?: "local" | "fofa"
   v: number
   id: string
   op: string
@@ -61,6 +71,9 @@ export type RemoteRequest = {
   web_execution?: "" | "auto" | "local" | "cloud"
   puts?: string[]
   put_id?: string
+  purpose?: "audio"
+  audio_id?: string
+  offset?: number
   name?: string
   mime?: string
   part?: number
@@ -106,6 +119,7 @@ export type ThreadGroup = {
 }
 
 export type ModelChoice = {
+  catalog_group?: "original" | "third_party"
   provider_id: string
   provider_label?: string
   /** Shown instead of model when the server named the row. */
@@ -231,6 +245,7 @@ export type EngineStartup = {
   startup?: "restoring" | "ready"
   restore?: { completed: number; total: number; failed?: number }
   data_generation?: number
+  model_policy?: ModelPolicy
   product_mode?: "fofa" | "local"
 }
 
@@ -280,6 +295,9 @@ export type RemoteResponse = EngineStartup & {
   timeout_settings?: TimeoutSettings
   files?: WorkspaceFile[]
   file_chunk?: FileChunk
+  translation?: string
+  speech?: import("../../../frontend/src/lib/speech-types").SpeechSnapshot
+  audio?: { audio_id: string; text?: string; mime?: string; size?: number; offset?: number; next?: number; data?: string; more?: boolean }
 }
 
 export type WorkspaceFile = {

@@ -6,49 +6,59 @@ import (
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/engine"
+	"github.com/LubyRuffy/eino-swarm/internal/provider"
+	"github.com/LubyRuffy/eino-swarm/internal/speech"
 	"github.com/LubyRuffy/eino-swarm/internal/tools"
 )
 
 const (
-	ProtocolV = 1
+	OpSetProductMode = "set_product_mode"
+	ProtocolV        = 1
 
-	OpMeta           = "meta"
-	OpList           = "list"
-	OpMore           = "more"
-	OpOpen           = "open"
-	OpRead           = "read"
-	OpStart          = "start"
-	OpSend           = "send"
-	OpSteer          = "steer"
-	OpStop           = "stop"
-	OpContinue       = "continue"
-	OpAnswer         = "answer"
-	OpWatch          = "watch"
-	OpUnwatch        = "unwatch"
-	OpLog            = "log"
-	OpEvent          = "event"
-	OpReady          = "ready"
-	OpLagged         = "lagged"
-	OpRunNow         = "run_now"
-	OpCancelWait     = "cancel_wait"
-	OpResumeGoal     = "resume_goal"
-	OpHello          = "hello"
-	OpProjectGet     = "project_get"
-	OpProjectCreate  = "project_create"
-	OpProjectUpdate  = "project_update"
-	OpCatalog        = "catalog"
-	OpRefreshCatalog = "refresh_catalog"
-	OpGetTimeouts    = "get_timeouts"
-	OpSetTimeouts    = "set_timeouts"
-	OpTune           = "tune"
-	OpPut            = "put"
-	OpFollowupDrop   = "followup_drop"
-	OpFollowupSteer  = "followup_steer"
-	OpPreempt        = "preempt"
-	OpClients        = "clients"
-	OpClientRead     = "client_read"
-	OpFiles          = "files"
-	OpFileChunk      = "file_chunk"
+	OpMeta               = "meta"
+	OpList               = "list"
+	OpMore               = "more"
+	OpOpen               = "open"
+	OpRead               = "read"
+	OpStart              = "start"
+	OpSend               = "send"
+	OpSteer              = "steer"
+	OpStop               = "stop"
+	OpContinue           = "continue"
+	OpAnswer             = "answer"
+	OpWatch              = "watch"
+	OpUnwatch            = "unwatch"
+	OpLog                = "log"
+	OpEvent              = "event"
+	OpReady              = "ready"
+	OpLagged             = "lagged"
+	OpRunNow             = "run_now"
+	OpCancelWait         = "cancel_wait"
+	OpResumeGoal         = "resume_goal"
+	OpHello              = "hello"
+	OpProjectGet         = "project_get"
+	OpProjectCreate      = "project_create"
+	OpProjectUpdate      = "project_update"
+	OpCatalog            = "catalog"
+	OpRefreshCatalog     = "refresh_catalog"
+	OpGetTimeouts        = "get_timeouts"
+	OpSetTimeouts        = "set_timeouts"
+	OpTune               = "tune"
+	OpPut                = "put"
+	OpFollowupDrop       = "followup_drop"
+	OpFollowupSteer      = "followup_steer"
+	OpPreempt            = "preempt"
+	OpClients            = "clients"
+	OpClientRead         = "client_read"
+	OpFiles              = "files"
+	OpFileChunk          = "file_chunk"
+	OpTranslateSelection = "translate_selection"
+	OpCancelTranslation  = "cancel_translation"
+	OpSpeechConfig       = "speech_config"
+	OpAudioTranscribe    = "audio_transcribe"
+	OpAudioSpeech        = "audio_speech"
+	OpAudioChunk         = "audio_chunk"
+	OpAudioCancel        = "audio_cancel"
 )
 
 // GroupRecent is the inbox section for conversations with no project.
@@ -72,15 +82,17 @@ func plaintextBudget() int {
 
 // Request is the slim RPC the phone sends over a sealed pairlink frame.
 type Request struct {
-	V         int             `json:"v"`
-	ID        string          `json:"id"`
-	Op        string          `json:"op"`
-	Cursor    string          `json:"cursor,omitempty"`
-	ThreadID  string          `json:"thread_id,omitempty"`
-	ProjectID string          `json:"project_id,omitempty"`
-	Text      string          `json:"text,omitempty"`
-	CallID    string          `json:"call_id,omitempty"`
-	Answers   json.RawMessage `json:"answers,omitempty"`
+	// ProductMode is explicit install-wide debug intent, never phone credentials.
+	ProductMode string          `json:"product_mode,omitempty"`
+	V           int             `json:"v"`
+	ID          string          `json:"id"`
+	Op          string          `json:"op"`
+	Cursor      string          `json:"cursor,omitempty"`
+	ThreadID    string          `json:"thread_id,omitempty"`
+	ProjectID   string          `json:"project_id,omitempty"`
+	Text        string          `json:"text,omitempty"`
+	CallID      string          `json:"call_id,omitempty"`
+	Answers     json.RawMessage `json:"answers,omitempty"`
 	// Continue is explicit so a missing decision cannot decline a paused turn.
 	Continue *bool `json:"continue,omitempty"`
 	Since    int64 `json:"since,omitempty"`
@@ -102,12 +114,15 @@ type Request struct {
 	Puts []string `json:"puts,omitempty"`
 	// Put fields stream one file or image across frames. Pairlink's plaintext
 	// cap is 64KiB, so a photo cannot ride in a single request.
-	PutID string `json:"put_id,omitempty"`
-	Name  string `json:"name,omitempty"`
-	MIME  string `json:"mime,omitempty"`
-	Part  int    `json:"part,omitempty"`
-	Parts int    `json:"parts,omitempty"`
-	Data  string `json:"data,omitempty"`
+	PutID   string `json:"put_id,omitempty"`
+	Purpose string `json:"purpose,omitempty"`
+	AudioID string `json:"audio_id,omitempty"`
+	Offset  int64  `json:"offset,omitempty"`
+	Name    string `json:"name,omitempty"`
+	MIME    string `json:"mime,omitempty"`
+	Part    int    `json:"part,omitempty"`
+	Parts   int    `json:"parts,omitempty"`
+	Data    string `json:"data,omitempty"`
 	// Group pages one inbox section. "recent" is conversations with no
 	// project. A project id pages that folder. Empty is the global idle page.
 	Group string `json:"group,omitempty"`
@@ -130,6 +145,11 @@ type Request struct {
 // Response is what the PC replies. Path and SessionID are pairlink
 // metadata so zwai trace can join the remote hop.
 type Response struct {
+	Translation           string                  `json:"translation,omitempty"`
+	ModelPolicy           *provider.ModelPolicy   `json:"model_policy,omitempty"`
+	Speech                *speech.SnapshotView    `json:"speech,omitempty"`
+	SpeechError           string                  `json:"speech_error,omitempty"`
+	Audio                 *AudioView              `json:"audio,omitempty"`
 	Startup               string                  `json:"startup,omitempty"`
 	Restore               *engine.RestoreProgress `json:"restore,omitempty"`
 	DataGeneration        *int64                  `json:"data_generation,omitempty"`
@@ -263,6 +283,7 @@ type FollowupView struct {
 // ModelView is one composer row. No endpoint, key, or token window: the phone
 // only needs enough to pick a name the PC already knows.
 type ModelView struct {
+	CatalogGroup  string `json:"catalog_group,omitempty"`
 	ProviderID    string `json:"provider_id"`
 	ProviderLabel string `json:"provider_label,omitempty"`
 	// Label is the name to show when it differs from the model field. An

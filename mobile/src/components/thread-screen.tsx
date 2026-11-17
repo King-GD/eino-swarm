@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { ArrowDown, ChevronLeft, ChevronRight, FileText, Loader2, MessageSquarePlus } from "lucide-react"
+import { ArrowDown, ChevronLeft, ChevronRight, FileText, Loader2 } from "lucide-react"
 
 import type { ComposerPrediction } from "../../../frontend/src/lib/composer-prediction"
 import { AccountButton } from "@/components/account-button"
@@ -8,6 +8,7 @@ import { IterationLimitCard } from "@/components/iteration-limit-card"
 import { Composer, type ComposerExtra } from "@/components/composer"
 import { FileBrowser } from "@/components/file-browser"
 import { GoalBanner, ScheduleBanner } from "@/components/status-banners"
+import { SelectionActions } from "@/components/selection-actions"
 import { ThreadLog } from "@/components/thread-blocks"
 import { Button } from "@/components/ui/button"
 import { agentRosterText } from "@/lib/agent-label"
@@ -128,6 +129,9 @@ export function ThreadScreen({
 
   useEffect(() => {
     setAgentPage("chat")
+    setSelectedText("")
+    setQuoteActionPosition(null)
+    setQuoteActionDocked(false)
   }, [detail.id])
 
   const changePage = (page: string) => {
@@ -155,6 +159,9 @@ export function ThreadScreen({
       const selection = window.getSelection()
       if (!selection || selection.isCollapsed || selection.rangeCount === 0) return
       const range = selection.getRangeAt(0)
+      const inActions = (node: Node) => (node instanceof Element ? node : node.parentElement)?.closest("[data-phone-quote-action]")
+      // The translated result remains selectable for the system Copy action.
+      if (inActions(range.startContainer) && inActions(range.endContainer)) return
       const source = quoteSource.current
       if (!source?.contains(range.startContainer) || !source.contains(range.endContainer) ||
         !inMessage(range.startContainer) || !inMessage(range.endContainer)) {
@@ -168,18 +175,20 @@ export function ThreadScreen({
       const last = fragments?.item(fragments.length - 1)
       const rect = last ?? (typeof range.getBoundingClientRect === "function" ? range.getBoundingClientRect() : null)
       if (viewport && rect && viewport.width > 0 && viewport.height > 0) {
-        const below = rect.bottom - viewport.top + 64
-        if (below + 36 > viewport.height - 8) {
+        // The system menu can sit below a middle selection. Near the bottom
+        // it sits above; use that remaining space before reserving a new row.
+        const gap = viewport.bottom - rect.bottom >= 126 ? 64 : 8
+        const below = rect.bottom - viewport.top + gap
+        if (below + 54 > viewport.height - 8) {
           // A native menu can span the full width above a bottom selection.
           // Give the quote action its own row instead of guessing its width.
           setQuoteActionDocked(true)
           setQuoteActionPosition(null)
         } else {
           setQuoteActionDocked(false)
-          const inset = Math.min(72, viewport.width / 2)
           setQuoteActionPosition({
             top: below,
-            left: Math.max(inset, Math.min(rect.left + rect.width / 2 - viewport.left, viewport.width - inset)),
+            left: viewport.width / 2,
           })
         }
       }
@@ -267,7 +276,8 @@ export function ThreadScreen({
   }
 
   if (agentPage === "files" && fileLink) {
-    return <FileBrowser link={fileLink} threadId={detail.id} onClose={() => changePage("chat")} />
+    return <FileBrowser link={fileLink} threadId={detail.id} onClose={() => changePage("chat")}
+      status={<GoalBanner detail={detail} running={running} />} />
   }
 
   return (
@@ -321,13 +331,13 @@ export function ThreadScreen({
         ) : null}
         {agentPage === "chat" && onOpenAccount ? <AccountButton onClick={onOpenAccount} /> : null}
       </header>
-      {agentPage === "chat" ? <GoalBanner
+      <GoalBanner
         detail={detail}
         running={running}
-        waiting={waiting}
+        waiting={agentPage === "chat" && waiting}
         disabled={restoring}
-        onResume={onResumeGoal}
-      /> : null}
+        onResume={agentPage === "chat" ? onResumeGoal : undefined}
+      />
       {agentPage === "chat" ? <ScheduleBanner
         detail={detail}
         running={running}
@@ -447,27 +457,30 @@ export function ThreadScreen({
           </div>
         </div>
         {agentPage === "chat" && selectedText && !asking ? (
-          <Button
-            type="button"
-            variant="outline"
+          <div
             className={cn(
-              "z-10 h-9 gap-1.5 rounded-full border border-border px-3 shadow-md",
-              quoteActionDocked ? "mb-2 mr-3 shrink-0 self-end" : "absolute",
-              !quoteActionDocked && (quoteActionPosition ? "-translate-x-1/2" : "bottom-3 right-3"),
+              "z-20 w-[calc(100%-1.5rem)] max-w-sm rounded-xl border border-foreground/20 bg-card text-card-foreground shadow-xl",
+              quoteActionDocked ? "mx-3 mb-2 shrink-0 self-center" : "absolute -translate-x-1/2",
+              !quoteActionDocked && !quoteActionPosition && "bottom-3 left-1/2",
             )}
             data-phone-quote-action=""
             style={!quoteActionDocked ? quoteActionPosition ?? undefined : undefined}
-            onClick={() => {
-              setQuotes((current) => [...current, selectedText])
-              setSelectedText("")
-              setQuoteActionPosition(null)
-              setQuoteActionDocked(false)
-              window.getSelection()?.removeAllRanges()
+            onPointerDown={(event) => {
+              // Touching an action must not collapse the native text range.
+              if ((event.target as Element).closest("button")) event.preventDefault()
             }}
           >
-            <MessageSquarePlus className="size-4" aria-hidden />
-            {t("quote.add")}
-          </Button>
+            <SelectionActions key={`${detail.id}:${selectedText}`} text={selectedText} threadId={detail.id} link={fileLink}
+              onExpand={() => { setQuoteActionDocked(true); setQuoteActionPosition(null) }}
+              onDismiss={() => { setSelectedText(""); setQuoteActionPosition(null); setQuoteActionDocked(false); window.getSelection()?.removeAllRanges() }}
+              onAdd={() => {
+                setQuotes((current) => [...current, selectedText])
+                setSelectedText("")
+                setQuoteActionPosition(null)
+                setQuoteActionDocked(false)
+                window.getSelection()?.removeAllRanges()
+              }} />
+          </div>
         ) : null}
         {behind && atTail ? (
           <button

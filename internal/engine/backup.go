@@ -66,7 +66,7 @@ func (e *Engine) holdBackup(skipActive bool) (func(), []backup.OmittedThread, er
 		return nil, nil, &BackupBusy{}
 	}
 	e.mu.Lock()
-	held := e.backupRunning
+	held := e.backupRunning || e.sourceSwitching
 	e.mu.Unlock()
 	if held {
 		return nil, nil, &BackupBusy{}
@@ -75,7 +75,7 @@ func (e *Engine) holdBackup(skipActive bool) (func(), []backup.OmittedThread, er
 		return nil, nil, &BackupBusy{Active: active, Skippable: true}
 	}
 	e.mu.Lock()
-	if e.backupRunning || e.restart.freezing || e.startupRestoring || e.restart.status.Stage != "" {
+	if e.backupRunning || e.sourceSwitching || e.restart.freezing || e.startupRestoring || e.restart.status.Stage != "" {
 		e.mu.Unlock()
 		return nil, nil, &BackupBusy{}
 	}
@@ -112,6 +112,30 @@ func (e *Engine) holdBackup(skipActive bool) (func(), []backup.OmittedThread, er
 		omitted = active
 	}
 	return func() { e.finishBackup(wasRunning) }, omitted, nil
+}
+
+// holdSourceSwitch keeps backup and restore out of the data directory while a
+// debug source change is written. A running turn already has its model, so
+// this hold does not list conversations or pause the scheduler.
+func (e *Engine) holdSourceSwitch() (func(), error) {
+	if busy, err := e.backupTransferBusy(); busy || err != nil {
+		if err != nil {
+			return nil, err
+		}
+		return nil, ErrBackupBusy
+	}
+	e.mu.Lock()
+	if e.backupRunning || e.sourceSwitching || e.restart.freezing || e.startupRestoring || e.restart.status.Stage != "" {
+		e.mu.Unlock()
+		return nil, ErrBackupBusy
+	}
+	e.sourceSwitching = true
+	e.mu.Unlock()
+	return func() {
+		e.mu.Lock()
+		e.sourceSwitching = false
+		e.mu.Unlock()
+	}, nil
 }
 
 // backupTransferBusy is a restart, a restore, or startup recovery.
@@ -329,6 +353,7 @@ func (e *Engine) reloadAfterRestore(ctx context.Context, manifest backup.Manifes
 	e.configUpdateMu.Unlock()
 	e.ApplyLiveSwarmLimits()
 	e.forgetCachedMemory()
+	e.fileScans.dropAll()
 	e.closeAllRuntimes()
 	if e.store != nil {
 		e.store.ResetSequences()

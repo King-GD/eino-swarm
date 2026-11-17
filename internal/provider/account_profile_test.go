@@ -6,7 +6,7 @@ import (
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 )
 
-func TestOfficialProfileReplacesTheCatalogUntilFullPresentation(t *testing.T) {
+func TestOfficialProfileStaysLockedUntilLocalDebug(t *testing.T) {
 	cfg := config.Default()
 	cfg.Models.Default = "own"
 	cfg.Models.DefaultSource = config.DefaultSourceProvider
@@ -41,38 +41,29 @@ func TestOfficialProfileReplacesTheCatalogUntilFullPresentation(t *testing.T) {
 	}
 
 	cfg.Models.AccountPresentation = config.AccountPresentationFull
-	if pool.OfficialOnly() || pool.DefaultProviderID() != "own" {
-		t.Fatalf("full mode still hid own providers: default=%s only=%v", pool.DefaultProviderID(), pool.OfficialOnly())
+	if !pool.OfficialOnly() || len(pool.List()) != 1 {
+		t.Fatal("presentation unlocked the preset")
 	}
-	rows = pool.List()
-	if len(rows) != 2 || rows[0].Model != config.OfficialModelAlias || rows[1].Model != "own-model" {
-		t.Fatalf("full rows: %+v", rows)
+	cfg.Product.Mode = config.ProductModeLocal
+	if pool.OfficialOnly() || pool.DefaultProviderID() != "own" {
+		t.Fatal("LOCAL did not restore own providers")
 	}
 	own, err := pool.ResolveModel("own", "own-model")
-	if err != nil || own.ID != "own" || own.Model != "own-model" {
-		t.Fatalf("own resolve = %+v %v", own, err)
+	if err != nil || own.Model != "own-model" {
+		t.Fatalf("LOCAL=%+v %v", own, err)
 	}
-	if pool.AccountInstruction("own") != "" {
-		t.Fatal("a personal turn received the official instruction")
+	var account, personal bool
+	for _, row := range pool.List() {
+		if row.Source == SourceAccount {
+			account = true
+			continue
+		}
+		personal = true
 	}
-	account, err := pool.ResolveModel(src.ID(), "vendor-secret-model")
-	if err != nil || account.Model != config.OfficialModelAlias {
-		t.Fatalf("account resolve kept a concrete name: %+v %v", account, err)
+	if !account || !personal {
+		t.Fatal("LOCAL hid the signed-in model or the personal model")
 	}
-	if pool.AccountInstruction(src.ID()) != "added guidance" {
-		t.Fatal("the official source lost its instruction in full mode")
-	}
-	cfg.Models.DefaultSource = config.DefaultSourceAccount
-	if pool.AccountInstruction("") != "added guidance" || pool.AccountInstruction("other") != "" {
-		t.Fatal("an empty account selection did not follow the default source")
-	}
-	trace, ok := pool.AccountProfileTrace(src.ID())
-	if !ok || trace.Label != "Partner model" || trace.Alias != config.OfficialModelAlias || trace.InstructionBytes != len("added guidance") || len(trace.Tools) != 1 {
-		t.Fatalf("trace = %+v %v", trace, ok)
-	}
-	if _, ok := pool.AccountProfileTrace("own"); ok {
-		t.Fatal("a personal turn recorded the official profile")
-	}
+
 }
 
 func TestProfileRefreshNoticesAnInstructionChange(t *testing.T) {

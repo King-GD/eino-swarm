@@ -21,6 +21,8 @@ var maxCatalogFrame = MaxPushPayload - 512
 
 func handleCatalog(eng *engine.Engine, req Request, path, sessionID string) Response {
 	resp := okBase(req.ID, path, sessionID)
+	policy := eng.Providers().ModelPolicy()
+	resp.ModelPolicy = &policy
 	resp.ComposerPredictions = new(bool)
 	*resp.ComposerPredictions = eng.Config().SwarmSnapshot().ComposerPredictions
 	resp.MemoryAvailable = new(bool)
@@ -30,6 +32,8 @@ func handleCatalog(eng *engine.Engine, req Request, path, sessionID string) Resp
 	resp.WebExecutionSupported = true
 	webStatus := tools.DescribeWebExecution(eng.Config())
 	resp.WebExecutionStatus = &webStatus
+	resp.Speech = speechSnapshot(eng)
+	resp = boundSpeechResponse(resp, false)
 	raw, err := json.Marshal(resp)
 	if err != nil {
 		return fail(req.ID, path, sessionID, "", fmtErr(err))
@@ -42,6 +46,9 @@ func handleCatalog(eng *engine.Engine, req Request, path, sessionID string) Resp
 
 func modelViews(eng *engine.Engine) []ModelView {
 	if eng == nil || eng.Providers() == nil {
+		return nil
+	}
+	if !eng.Providers().IsMock() && !eng.Providers().ModelPolicy().Ready {
 		return nil
 	}
 	listed := eng.Providers().List()
@@ -58,6 +65,7 @@ func modelViews(eng *engine.Engine) []ModelView {
 			label = ""
 		}
 		out = append(out, ModelView{
+			CatalogGroup:          info.CatalogGroup,
 			ProviderID:            info.ProviderID,
 			ProviderLabel:         info.ProviderLabel,
 			Label:                 label,
@@ -203,7 +211,7 @@ func validateSelection(eng *engine.Engine, req Request) error {
 		if eng == nil || eng.Providers() == nil {
 			return fmt.Errorf("provider: unknown provider %q", req.ProviderID)
 		}
-		if _, err := eng.Providers().ResolveModel(req.ProviderID, req.Model); err != nil {
+		if err := eng.Providers().ValidateConversationSelection(req.ProviderID, req.Model); err != nil {
 			return err
 		}
 	}

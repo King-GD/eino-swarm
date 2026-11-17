@@ -167,6 +167,88 @@ func TestMissingAccountSettingIsRequestedByName(t *testing.T) {
 	}
 }
 
+func TestLocalModeKeepsASignedInGatewayConversation(t *testing.T) {
+	var mu sync.Mutex
+	var requested []string
+	var auth []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		mu.Lock()
+		auth = append(auth, authHeader)
+		mu.Unlock()
+		recordCompletion(&mu, &requested).ServeHTTP(w, r)
+	}))
+	defer srv.Close()
+
+	e := newAccountEngine(t, srv.URL+"/v1", "conversation")
+	personal := e.cfg.Models.Default
+	if err := e.cfg.Update(func(c *config.Config) error {
+		for i := range c.Models.Providers {
+			if c.Models.Providers[i].ID != personal {
+				continue
+			}
+			c.Models.Providers[i].BaseURL = srv.URL + "/v1"
+			c.Models.Providers[i].APIKey = "personal-secret"
+			c.Models.Providers[i].Model = "personal-model"
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	th, err := e.CreateThread("retained", accountCatalogID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.store.UpdateThread(th.ID, map[string]any{"model": "conversation"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.cfg.Update(func(c *config.Config) error {
+		c.Product.Mode = config.ProductModeLocal
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	turn, err := e.StartTurn(th.ID, "Continue the current task.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitTurn(t, e, turn.ID)
+	if turn.ProviderID != accountCatalogID || turn.Model != "conversation" {
+		t.Fatalf("turn used %+v", turn)
+	}
+	stored, err := e.store.GetThread(th.ID)
+	if err != nil || stored.ProviderID != accountCatalogID || stored.Model != "conversation" {
+		t.Fatalf("LOCAL rewrote the retained account choice: %+v %v", stored, err)
+	}
+	mu.Lock()
+	gotModel, gotAuth := append([]string(nil), requested...), append([]string(nil), auth...)
+	mu.Unlock()
+	if len(gotModel) == 0 || gotModel[0] != "conversation" || gotAuth[0] != "Bearer token" {
+		t.Fatalf("request model %v auth %v", gotModel, gotAuth)
+	}
+	for _, header := range gotAuth {
+		if header == "Bearer personal-secret" {
+			t.Fatal("LOCAL sent the personal credential")
+		}
+	}
+
+	if err := e.cfg.Update(func(c *config.Config) error {
+		c.Product.Mode = ""
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	again, err := e.StartTurn(th.ID, "Continue the current task.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitTurn(t, e, again.ID)
+	if again.ProviderID != accountCatalogID || again.Model != "conversation" {
+		t.Fatalf("gateway return used %+v", again)
+	}
+}
+
 func newAccountEngine(t *testing.T, base string, names ...string) *Engine {
 	t.Helper()
 	t.Setenv("OPENAI_BASE_URL", "")

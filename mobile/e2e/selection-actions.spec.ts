@@ -1,0 +1,60 @@
+import { expect, test } from "@playwright/test"
+
+for (const theme of ["light", "dark"] as const) {
+  test(`${theme} selected text actions stay readable and inside a narrow phone`, async ({ page }, info) => {
+    await page.emulateMedia({ colorScheme: theme })
+    await page.setViewportSize({ width: 320, height: 640 })
+    await page.goto("/?mock=1&tick=0&speech=local&speech_delay=800")
+    const input = page.getByLabel("消息", { exact: true })
+    await input.fill("show result")
+    await page.getByRole("button", { name: /跟进|发送/ }).click()
+    const source = page.getByTestId("transcript").getByText("Here is what changed:")
+    await expect(source).toBeVisible()
+    await source.evaluate((element) => {
+      const range = document.createRange()
+      range.selectNodeContents(element)
+      window.getSelection()?.removeAllRanges()
+      window.getSelection()?.addRange(range)
+      document.dispatchEvent(new Event("selectionchange"))
+    })
+    const menu = page.locator("[data-phone-quote-action]")
+    const toolbar = menu.getByRole("toolbar", { name: "选中文字操作" })
+    await expect(toolbar).toBeVisible()
+    await expect(toolbar.getByRole("button", { name: "朗读", exact: true })).toBeVisible()
+    await expect(toolbar.getByRole("button", { name: "翻译", exact: true })).toBeVisible()
+    expect((await toolbar.boundingBox())!.height).toBeLessThanOrEqual(54)
+    const colors = await menu.evaluate((element) => {
+      const style = getComputedStyle(element)
+      const rgb = (color: string) => color.match(/[\d.]+/g)!.slice(0, 3).map(Number).map((v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 })
+      const luminance = (color: string) => { const [r, g, b] = rgb(color); return 0.2126 * r + 0.7152 * g + 0.0722 * b }
+      const a = luminance(style.color), b = luminance(style.backgroundColor)
+      return { background: style.backgroundColor, contrast: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) }
+    })
+    expect(colors.background).not.toBe("rgba(0, 0, 0, 0)")
+    expect(colors.contrast).toBeGreaterThanOrEqual(4.5)
+    for (const button of await toolbar.getByRole("button").all()) {
+      const box = await button.boundingBox()
+      expect(box).not.toBeNull()
+      expect(box!.width).toBeGreaterThanOrEqual(44)
+      expect(box!.height).toBeGreaterThanOrEqual(44)
+      expect(box!.x).toBeGreaterThanOrEqual(0)
+      expect(box!.x + box!.width).toBeLessThanOrEqual(320)
+    }
+    await page.screenshot({ path: info.outputPath(`selection-${theme}.png`) })
+    await toolbar.getByRole("button", { name: "朗读", exact: true }).click()
+    await expect(toolbar.getByRole("button", { name: "停止朗读" })).toHaveAttribute("data-playback-state", "loading")
+    await expect(toolbar.getByRole("button", { name: "停止朗读" })).toHaveAttribute("data-playback-state", "playing")
+    await toolbar.getByRole("button", { name: "停止朗读" }).click()
+    await toolbar.getByRole("button", { name: "翻译", exact: true }).click()
+    await expect(menu.getByRole("region", { name: "译文" })).toContainText("离线选区翻译。")
+    await expect(page.getByTestId("quote-draft")).toHaveCount(0)
+    await expect(input).toHaveValue("")
+    const box = await menu.boundingBox()
+    expect(box!.y).toBeGreaterThanOrEqual(0)
+    expect(box!.y + box!.height).toBeLessThanOrEqual(640)
+    await page.screenshot({ path: info.outputPath(`translation-${theme}.png`) })
+    await toolbar.getByRole("button", { name: "加入对话" }).click()
+    await expect(menu).toHaveCount(0)
+    await expect(page.getByTestId("quote-draft")).toHaveValue("Here is what changed:")
+  })
+}

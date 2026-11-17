@@ -56,7 +56,7 @@ func (p *Pool) backoffFor(baseURL string) *backoffGate {
 	return p.backoffs[key]
 }
 
-func (r *recordingModel) admit(ctx context.Context) (context.Context, func(error), error) {
+func (r *recordingModel) admitBackoff(ctx context.Context) (context.Context, func(error), error) {
 	if ctx.Value(isolatedRecoveryKey{}) == true {
 		return ctx, func(error) {}, nil
 	}

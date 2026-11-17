@@ -51,10 +51,21 @@ type LinkPump struct {
 	// models is false when that install cannot change providers.
 	allow func() (work bool, models bool)
 
+	translationMu     sync.Mutex
+	translationID     string
+	translationCancel context.CancelFunc
+	translationClosed bool
+	translationWG     sync.WaitGroup
+
 	catalogMu     sync.Mutex
 	catalogCancel context.CancelFunc
 	catalogClosed bool
 	catalogWG     sync.WaitGroup
+	audioMu       sync.Mutex
+	audioClosed   bool
+	audioWG       sync.WaitGroup
+	audioJob      *audioJob
+	audioSeen     map[string]time.Time
 }
 
 func newLinkPump(eng *engine.Engine, cfg config.RemoteConfig, l *client.Link) *LinkPump {
@@ -77,6 +88,8 @@ func newLinkPump(eng *engine.Engine, cfg config.RemoteConfig, l *client.Link) *L
 }
 
 func (p *LinkPump) Close() {
+	p.stopSelectionTranslation()
+	p.stopAudio()
 	p.stopCatalogRefresh()
 	p.stopWatch()
 }
@@ -115,8 +128,22 @@ func (p *LinkPump) Dispatch(msg []byte) {
 	case OpHello:
 		p.touchDevice(req.Text)
 		p.reply(okBase(req.ID, p.path, p.sessionID))
+	case OpTranslateSelection:
+		p.startSelectionTranslation(req)
+	case OpCancelTranslation:
+		p.cancelSelectionTranslation(req)
 	case OpRefreshCatalog:
 		p.startCatalogRefresh(req)
+	case OpAudioTranscribe, OpAudioSpeech, OpAudioChunk, OpAudioCancel:
+		p.dispatchAudio(req)
+	case OpPut:
+		if req.Purpose == "audio" {
+			p.dispatchAudio(req)
+		} else if req.Purpose != "" {
+			p.reply(fail(req.ID, p.path, p.sessionID, "bad_request", "unknown upload purpose"))
+		} else {
+			p.reply(HandleWith(p.eng, p.cfg, p.stage, req, p.path, p.sessionID))
+		}
 	default:
 		p.reply(HandleWith(p.eng, p.cfg, p.stage, req, p.path, p.sessionID))
 	}
@@ -133,7 +160,7 @@ func (p *LinkPump) permit(req Request) bool {
 			p.reply(fail(req.ID, p.path, p.sessionID, "custom_models_disabled", "Model settings cannot be changed in this mode."))
 			return false
 		}
-	case OpStart, OpSend, OpSteer, OpContinue, OpRunNow, OpResumeGoal, OpPreempt, OpFollowupSteer:
+	case OpTranslateSelection, OpStart, OpSend, OpSteer, OpContinue, OpRunNow, OpResumeGoal, OpPreempt, OpFollowupSteer:
 		if !work {
 			p.reply(fail(req.ID, p.path, p.sessionID, "login_required", "Sign in before using this install."))
 			return false

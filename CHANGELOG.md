@@ -4,6 +4,40 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). GitHub Releases start
 at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
+## Unreleased
+
+### Changed
+
+- Mobile avatar debug switching now waits for the connected PC to acknowledge
+  its execution-mode change. LOCAL PC conversations expose original and
+  third-party interface groups without merging duplicate model names. Refused
+  or unconfirmed switches retain the phone mode and show retry guidance.
+  (`F-173`, `F-220`, `C-013`)
+
+- Mobile selected-text actions use an opaque, high-contrast panel with 44px
+  controls in light and dark themes. The panel adds Read aloud using the PC’s
+  speech settings, and English-to-Chinese translation through the PC without
+  creating a conversation turn or quote. (`F-181`, `F-221`, `C-049`)
+
+- PCM streaming read aloud on desktop/Web and direct phone speech requests:
+  playback starts as audio arrives, with raw PCM and OpenAI speech SSE support.
+  Select PCM in Voice settings; MP3/WAV and PC-local phone RPC retain complete
+  segment playback. Stop cancels the stream and queued audio. (`F-148`, `C-048`)
+
+- File search reuses one completed scan of the listed workspace instead of
+  walking the tree on every query. Opening or refreshing the workspace root,
+  uploading, and deleting start a new scan. A query waits for that scan and
+  does not return a partial result. (`F-140`)
+- Mobile User center no longer offers another server address. LOCAL Web-tool preferences appear only after the account is authorized.
+- An available Android update stays pinned at the top of User center, including the signed-out account page.
+
+### Fixed
+
+- Mobile: deduplicate synthesized clicks after portrait touches, including zero-detail clicks, and close User center after the three-tap debug mode switch. LOCAL does not depend on the Gateway model directory, including intentionally hidden third-party catalogs.
+- The decisions role stays a background call. The composer no longer shows its button, Settings does not list it, and the account card omits its count and role row. A result stays in Trace and is not a conversation notice.
+- Desktop: the account-portrait debug source switch no longer waits for a running conversation or its workers. The model that conversation already opened keeps its endpoint; the next lookup uses the new source. A model call that has started, and backup, restore or restart, still refuse the switch. That refusal stays a short wait notice instead of the engine's backup sentence.
+- Desktop LOCAL keeps a signed-in account. The composer lists that account's authorized third-party preset and original gateway catalogs, so a conversation can switch among them; an unauthorized or empty catalog is omitted without asking for another sign-in. Gateway mode still uses the managed preset.
+
 ## [0.1.77] - 2026-11-14
 
 ### Fixed
@@ -28,7 +62,39 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
 
 ## [Unreleased]
 
+- 手机 LOCAL 调试模式保留登录时，分别获取服务端授权的第三方预置与网关模型，按 group 与个人接口区分；同名模型保持来源路由。空目录／无权限不报登录错误，单来源撤权不隐藏其余分组，凭据不写入个人配置。
+
+### Added
+
+- The PC selection menu can read the selected text aloud when spoken output is
+  enabled and ready. A Chinese interface also offers translation for an English
+  selection. The translation stays in the menu and does not start a turn.
+  (`F-181`, `F-148`, `C-049`, `C-048`)
+
+### Fixed
+
+- A Mac window that stays one flat colour fails the renderer probe
+  (`presentation_blank`) and uses the existing single reload, then a
+  successor window on the same engine. A missed, hidden, or refused capture
+  is not treated as a blank frame. `models/desktop/RendererRecovery.tla`
+  checks that decision, including the v0.1.77 fault that accepted a flat
+  body after a matching WebKit snapshot. (`F-115`, `C-034`)
+
+- Phone conversations explicitly label the active Goal mode and retain the
+  objective strip while browsing Agents, worker logs and Outputs. Completed
+  goals still leave the strip hidden. (`F-150`, `C-009`)
+
 ### Changed
+
+- Separate LOCAL from gateway model policy. Editable gateway accounts receive
+  live functional defaults with scoped overrides and restore-default support;
+  managed third-party presets hide model configuration and reject alternate
+  selections at model, HTTP and phone RPC boundaries. Existing triple-click
+  debug switching requires idle model work and preserves local settings.
+- Phone Account mode waits for a same-account, online, ready PC with setup
+  guidance and no direct gateway Chat fallback. LOCAL personal Chat has its own
+  voice bindings. (`F-173`, `F-220`, `C-040`, `C-013`, `C-048`)
+
 
 - Phone defaults to Account mode with required sign-in and avatar entry. Hide
   Local model/pairing/unlink menus and model selection in Account mode; three
@@ -36,6 +102,11 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
 
 
 ### Fixed
+
+- A live collection pause stays actionable when the folded transcript is idle,
+  and a refusal stays a closing notice until the turn itself is idle. The
+  idle sentence no longer appears while the composer still says the turn is
+  working. `models/lifecycle/WorkerCollectionView.tla` checks both gates.
 
 - Native offline smoke explicitly selects LOCAL in its private configuration
   before launching. It no longer waits for a composer behind the default FOFA
@@ -55,14 +126,26 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
 
 ### Added
 
-- FOFA reads up to nine fixed server model roles when the account bootstrap
+- FOFA reads up to eleven fixed server model roles when the account bootstrap
   includes them. The account details show each switch and name, and those
-  controls cannot be edited. Conversation requests use `conversation`. Naming
-  and compact follow `conversation` while their own roles are off. Embedding,
-  OCR and decisions run only while those roles are on. Speech recognition,
-  speech synthesis and image generation are shown read-only and are not called
-  by this client. An older server that returns the first six or eight roles
+  controls cannot be edited. Conversation requests use `conversation`.
+  Conversation naming uses `title` and compact uses `compact`; each follows
+  `conversation` while its own role is off. Embedding, OCR and decisions run
+  only while those roles are on. Voice settings use the speech recognition and
+  synthesis roles; image generation remains read-only. An enabled `translation`
+  role posts selection translation to `/translations`, and an enabled `naming`
+  role posts conversation and schedule naming to `/naming`. While either role
+  is off, the previous model is used.
+  An older server that returns the first six, eight or nine roles
   still works. LOCAL keeps the ordinary catalog. (`F-173`)
+
+- PC-owned Voice settings with separate, initially disabled dictation and read
+  aloud controls on desktop, Web and phone. Gateway audio goes directly from
+  each client; phones reuse the selected PC's safe settings with their own
+  Mobile login and can keep using synchronized Gateway settings with the PC
+  offline. Only configured local speech uses encrypted PC audio RPC. Recordings
+  remain ephemeral, recognized text is editable, and long answers are spoken in
+  order with code blocks omitted. (`F-148`, `C-048`)
 
 - The install mode is `product.mode`. A missing key means FOFA: sign in before
   work, no Settings → Models section, and no composer model menu. Custom

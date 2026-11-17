@@ -49,6 +49,7 @@ class CaseTable(unittest.TestCase):
                 if variant.spec == model.spec:
                     self.assertEqual(variant.switches, model.switches, variant.name)
                     self.assertEqual(variant.safety, model.safety, variant.name)
+                    self.assertEqual(variant.properties, model.properties, variant.name)
         self.assertLessEqual(set(mc.SEEDED_GUARD_OBLIGATIONS), {m.spec for m in mc.MODELS.values()})
 
     def test_every_switch_and_invariant_exists_in_the_model(self):
@@ -56,6 +57,7 @@ class CaseTable(unittest.TestCase):
             self.assertEqual(declared_constants(model),
                              set(model.switches) | {name for name, _ in model.constants}, model.name)
             ops = defined_operators(model)
+            self.assertLessEqual(set(model.properties), ops, model.name)
             for case in cases_of(model):
                 for inv in case.invariants():
                     self.assertIn(inv, ops, case.name)
@@ -143,6 +145,24 @@ class RegistrationGuards(unittest.TestCase):
 
 
 class Config(unittest.TestCase):
+    def test_speech_progress_cannot_be_dropped_from_the_acceptance_config(self):
+        for name, property_name in (("speech-capture", "CaptureEventuallySettles"),
+                                    ("speech-playback", "PlaybackEventuallySettles")):
+            case = next(c for c in mc.CASES if c.name == name + "-current")
+            self.assertIn("PROPERTIES " + property_name + "\n", mc.render_config(case))
+
+    def test_progress_properties_are_checked_only_with_the_current_design(self):
+        # A passing safety-only run cannot prove that queued audio finishes.
+        # Fault and reachability checks still isolate their named invariant.
+        model = mc.Model("progress", Path("Progress.tla"), ("Fault",),
+                         ("TypeOK", "Complete"), (), properties=("EventuallySettles",))
+        with mock.patch.dict(mc.MODELS, {model.name: model}):
+            current = mc.Case("current", "current", model=model.name)
+            self.assertIn("PROPERTIES EventuallySettles\n", mc.render_config(current))
+            for case in (mc.Case("fault", "seeded", frozenset({"Fault"}), "Complete", model=model.name),
+                         mc.Case("reach", "witness", witness="NeverComplete", model=model.name)):
+                self.assertNotIn("PROPERTIES", mc.render_config(case))
+
     def test_config_sets_every_switch_and_only_the_case_invariants(self):
         model = mc.MODELS["lifecycle"]
         case = mc.Case("x", "s", frozenset({"FinishUngated"}), "WorkHasLiveOwner")
@@ -354,6 +374,37 @@ class RunningCase(unittest.TestCase):
 
 @unittest.skipUnless(available_jar(), "tla2tools.jar and java are not installed; run make model-check")
 class WithTLC(unittest.TestCase):
+    def test_speech_models_find_known_faults_guard_removals_and_reachable_scenarios(self):
+        jar = available_jar()
+        out = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, out)
+        for case in mc.CASES:
+            if not case.model.startswith("speech-"):
+                continue
+            outcome, log = mc.run_case(case, jar, out)
+            self.assertIsNone(mc.judge(case, outcome), log.read_text()[-3000:])
+
+    def test_a_stalled_protocol_cannot_pass_from_safety_alone(self):
+        out = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, out)
+        spec = out / "StalledProgress.tla"
+        spec.write_text('''---------------- MODULE StalledProgress ----------------
+VARIABLE phase
+Init == phase = "waiting"
+Next == UNCHANGED phase
+Spec == Init /\\ [][Next]_phase
+TypeOK == phase = "waiting"
+EventuallyDone == <>(phase = "done")
+========================================================
+''')
+        model = mc.Model("stalled", spec, (), ("TypeOK",), (), ("EventuallyDone",))
+        case = mc.Case("stalled-current", "safety-only counterexample", model=model.name)
+        with mock.patch.dict(mc.MODELS, {model.name: model}):
+            outcome, log = mc.run_case(case, available_jar(), out)
+            self.assertFalse(outcome.passed, log.read_text())
+            self.assertIn("Temporal properties were violated", log.read_text())
+            self.assertIsNotNone(mc.judge(case, outcome))
+
     def test_parallel_checks_extract_standard_modules_into_their_own_directories(self):
         from concurrent.futures import ThreadPoolExecutor
 

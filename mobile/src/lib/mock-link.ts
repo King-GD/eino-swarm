@@ -1,4 +1,6 @@
 import { MockProjects } from "./mock-projects"
+import { MockProductMode } from "./mock-product-mode"
+import { MockSpeech } from "./mock-speech"
 import { mockFileChunk, mockListedFiles, mockOutputFiles } from "./mock-files"
 import { iterationLimitHistory, iterationSnapshotOnly, mockAwaitingContinue, mockContinueIteration } from "./mock-iteration-limit"
 import { restartAskHistory } from "./mock-ask-restart"
@@ -175,6 +177,7 @@ function threadSeed(): MockThread[] {
 type Watcher = { threadID: string; deliver: (resp: RemoteResponse) => void }
 
 export class MockHost {
+  readonly productMode = new MockProductMode()
   readonly projects = new MockProjects()
   private createdAt = Date.now()
   private threads = threadSeed()
@@ -742,6 +745,7 @@ export function resetMockHost() {
 
 /** One socket onto the walkthrough host. */
 export class MockLink {
+  private speech = new MockSpeech()
   path = "direct"
   onPush?: (resp: RemoteResponse) => void
   onDisconnect?: (err: Error) => void
@@ -758,6 +762,7 @@ export class MockLink {
   }
 
   close() {
+    this.speech.close()
     this.closed = true
     if (this.watcher) this.host.unwatch(this.watcher)
     this.watcher = null
@@ -773,9 +778,16 @@ export class MockLink {
   ): Promise<RemoteResponse> {
     if (this.closed) throw new Error("offline")
     const id = req.id ?? ""
+    const mode = this.host.productMode.handle(req)
+    if (mode) return this.ok({ id, ...mode })
+    if (this.speech.accepts(req)) return this.ok({ id, ...await this.speech.handle(req) })
     const thread = () => this.host.find(req.thread_id ?? "")
     if (req.op.startsWith("project_")) return this.host.projects.handle(req)
     switch (req.op) {
+      case "translate_selection":
+        return this.ok({ id, translation: "离线选区翻译。" })
+      case "cancel_translation":
+        return this.ok({ id })
       case "continue":
         return mockContinueIteration(this.host, thread(), req, id)
       case OpMeta: {

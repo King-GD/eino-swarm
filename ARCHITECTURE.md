@@ -186,7 +186,13 @@ the server mode string, because that mode is `engine` for every client.
 The renderer health nonce remains painted inside the macOS WebView. A small
 opaque native sibling covers that corner on screen and stays outside
 `WKWebView.takeSnapshot`; only those underlying pixels can acknowledge a paint
-challenge. Background sampling precedes the first probe and follows theme and
+challenge. When that window is visible, the same check also samples the
+process's own presented frame. A flat body below the top control band fails
+the probe even though the covered nonce matched; a missed, hidden, or refused
+sample does not. Recovery then uses the existing one reload and successor
+window. That decision is `models/desktop/RendererRecovery.tla`: a flat body
+is not healthy paint, an unknown capture is not blank, and the one reload
+precedes a bounded successor only while the window is in front. Background sampling precedes the first probe and follows theme and
 dialog changes through a bounded same-origin message, independently of health
 and recovery budgets. A later decoration failure preserves the existing cover
 and continues real pixel checks.
@@ -549,6 +555,52 @@ Checkout re-exec bundles live under
 temporary construction and atomic publication prevent another `go run` from
 overwriting or re-signing an executable already used by an engine/window.
 
+## Voice input and spoken answers
+
+Voice is an independent request service (`internal/speech`), not a chat turn or
+tool. The PC alone persists `speech.input`, `speech.output` and bounded resource
+limits. Its Settings → Voice page publishes the safe readiness snapshot through
+HTTP metadata and Pairlink `speech_config`/catalog. Both directions default off.
+The pool resolves Gateway `transcription`/`speech` roles separately from the
+conversation profile alias; local voice selects its own provider/custom model.
+PC renderers use same-origin `/api/audio/*`, keeping credentials in Go.
+
+The phone reuses the explicitly selected PC's safe snapshot in PC conversations
+and direct Chat. Gateway execution uses the phone's own current Mobile session
+against the matching Gateway's ordinary `/v1/audio/*`; audio never goes through
+the PC in this mode. Its per-PC cache contains no key, token or local endpoint,
+is bound to the pairing authority, and permits execution only while that exact
+PC link is live and its engine is ready.
+Changes made on an unreachable PC apply after the next synchronization. Unlink
+removes that cache; another PC/account is never an implicit fallback.
+
+Only `pc_local` execution uses the current live LinkPump's private audio staging,
+asynchronous model request and bounded audio download chunks. It has one current
+upload/job/result, explicit cancellation, replay receipts and idle expiry. Close
+seals admission, cancels and joins owned work, then releases memory. Ordinary
+RPC and Stop keep receiving during voice calls. No audio enters workspace file
+handling, the store or the event bus. These requests do not alter turn/worker,
+presence, handoff or event-sequence ordering.
+
+The shared browser recorder owns acquired microphone tracks through cancellation,
+including late permission grants. PC dictation updates the existing durable draft;
+phone dictation edits its existing composer. Playback extracts Markdown prose,
+skips fenced code, and sequences bounded speech segments through one cancelable
+player. Selecting PCM enables incremental 24 kHz mono S16LE playback for PC/Web
+and direct phone HTTP calls. The Go service retains model ownership and
+configuration/timeout cancellation through the response reader's lifetime and
+flushes each chunk. The shared renderer consumes raw PCM or OpenAI speech SSE,
+preserves samples across byte boundaries and cancels every queued audio source
+with its request. MP3/WAV and PC-local RPC still buffer complete segments.
+`models/mobile/SpeechCapture.tla` models final capture/normalization and cancelled
+conversion publication; `models/mobile/SpeechPlayback.tla` models paired ownership
+across phone catalog refreshes, source draining, complete playback and revocation.
+Their safety and fair-progress temporal checks run through `make model-check`,
+with known-fault, guard-removal and reachability cases. Real recorder and
+HTTP/player regressions bind these finite protocols to the implementation.
+Native microphone declarations and packaged-app behavior remain separate
+acceptance gates. See `F-148` / `C-048` and [Testing](docs/TESTING.md).
+
 ## Official server account models
 
 The official server is the primary model source and the user's own providers are
@@ -572,23 +624,36 @@ published on `account_models.kinds` for the settings summary and the embedding
 picker. `models.account_model` selects which conversation name a new server
 chat starts on. The pool resolves a conversation's
 stored id against both, and returns `ErrAccountLoginRequired` instead of falling
-back when a stored `gateway:` id has no source. The projection exists only in
+back when a stored `gateway:` id has no source. LOCAL keeps a signed-in account
+and resolves that id against the authorized third-party preset or original
+gateway catalog; the stored id stays, and an unauthorized catalog is omitted.
+The projection exists only in
 memory: `internal/config` rejects the reserved prefix in `models.providers`, and
 `models.default_source` (`account`/`provider`, migrated from the old
 default-provider rule) picks which one a new conversation starts on.
-An optional bootstrap `models.profile` replaces that catalog with one alias,
-`account`. The profile's label, guidance, workspace-tool allowlist and optional
-context window stay on the in-memory source. `models.account_presentation`
-(`official` by default, or `full`) is the only persisted switch. Official
-presentation resolves every conversation send to the alias without rewriting a
-stored own provider. Full presentation leaves own providers alone and still
-resolves a turn whose provider is the account source to the alias. Guidance is
-appended after the fixed manager prompt and before personality and project
-instructions, only for that source. The allowlist intersects the local tool
-switches and, when present, leaves MCP unmounted; coordination tools stay.
-`/api/meta.account_models.profile` reports the presentation, whether guidance
-exists, and the allowlist names. The guidance text is recorded only as a length
-on the `account_profile` trace event.
+The client has LOCAL and gateway execution sources. The persisted default name
+`fofa` remains compatible. `provider.ModelPolicy` projects the active source,
+server edit permission and functional defaults. LOCAL ignores retained account
+state. Editable gateways combine their preset with scoped explicit overrides;
+managed third-party gateways expose and execute only their own preset. Legacy
+profile/role bootstrap responses imply managed unless the server explicitly grants
+configuration. `models.account_presentation` cannot unlock it.
+
+Explicit functional bindings live under `models.bindings[scope]`. Gateway scopes
+hash origin, source and owner, independently of credential renewal. Missing entries
+follow the latest server defaults; restoring defaults removes the override. All
+chat/worker/typed model calls validate the policy, including cached builders.
+Profile guidance and tool allowlists still apply to that account source only;
+the guidance text stays out of meta/settings and is traced only as a length.
+
+Debug mode switching persists while turns and workers keep the model client they
+already opened. It takes the model-use write lock, so a stream, embedding,
+decision or audio call that holds the read lock finishes on its original source
+first. Backup, restore and restart still refuse the switch because they own the
+data directory. `models/lifecycle/ModelModeAdmission.tla` checks this model-call
+ordering and rediscovers the sample-then-commit race. Phone Account mode requires
+a live same-account PC and
+ready engine, using the PC's model policy without its own gateway model projection.
 
 `/api/meta.configured` counts a ready account, so a signed-in person is not
 shown the setup banner. The desktop welcome (`welcome-gate.tsx`) is gated by
@@ -598,9 +663,16 @@ account state changes. The server side is aigateway's
 `/client/desktop/v1/{bootstrap,models,chat/completions,responses}`, which accept
 the host token on those routes only.
 
-The phone mirrors this without a PC: `gateway-account-shell.tsx` shows
-`GatewayAccountScreen` as the unbound root page (sign in first; scan, paste and
-own-model sit under Other ways) and `gateway-auto-connect.ts` is the pure rule
+The phone requires sign-in and a ready selected PC in Account mode:
+`gateway-account-shell.tsx` shows `GatewayAccountScreen` with PC guidance while
+unbound. Scan, paste and own-model under Other ways belong to the LOCAL debug
+mode. An explicit avatar gesture first switches the currently live selected PC
+through `set_product_mode`, reusing `Engine.UpdateConfigForMode` and its model-use
+admission. Only the exact acknowledged mode commits the phone preference;
+errors retain it, and reconnect/PC selection never replays the mutation. The PC
+keeps its own credentials and publishes `catalog_group` metadata for independent
+original/third-party model groups. No connected PC means a phone-only preference
+change. `gateway-auto-connect.ts` is the pure rule
 for the single post-sign-in auto-connect, armed by a memory-only flag in
 `use-gateway-account.ts`.
 
@@ -2222,7 +2294,12 @@ a count chip at rest; hover (or focus) to read, edit or drop, not a dump
 of the quote into the textarea —
 and tagged onto the next send as `<selected_text>` / `<user_request>` so the
 model can tell a highlight from the instruction (`frontend/src/lib/quote.ts`,
-`frontend/src/lib/selection.ts`). The highlight wraps and stops at three
+`frontend/src/lib/selection.ts`). When spoken output is enabled and ready, the
+same menu reads the settled selection through the shared player. On a Chinese
+interface, an English selection can also be translated with the open
+conversation's model. That call is tool-free and stays in the menu: it does
+not create a quote, turn, event, or follow-up (`POST /api/threads/:id/translation`).
+The highlight wraps and stops at three
 lines (the rest is an ellipsis) so a long selection cannot stretch the
 composer or the sent bubble.
 The phone's `mobile/src/components/composer.tsx` classifies the editable text

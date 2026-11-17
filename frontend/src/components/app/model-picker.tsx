@@ -46,7 +46,8 @@ export function ModelPicker({
 }) {
   const t = useT()
   const account = useApp((s) => s.meta?.account_models)
-  const locked = officialModelLock(account)
+  const policy = useApp((s) => s.meta?.model_policy)
+  const locked = officialModelLock(account, policy)
   const [open, setOpen] = useState(false)
   const [dialogMenu, setDialogMenu] = useState(false)
   const [busy, setBusy] = useState(false)

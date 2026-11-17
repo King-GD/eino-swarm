@@ -123,7 +123,7 @@ describe("Gateway account authority", () => {
       const url = String(input)
       seen.push(url)
       expect(init?.credentials).toBe("omit")
-      expect(init?.headers).toEqual({ "Content-Type": "application/json", Authorization: "Bearer " + session.token })
+      expect(init?.headers).toEqual({ "Content-Type": "application/json", Authorization: "Bearer " + session.token, ...(url.endsWith("/bootstrap") ? { "X-AIGateway-Model-Roles": "2" } : {}) })
       if (url.endsWith("/auth/me")) return ok({ user: bootstrap.user, device: session.device })
       if (url.endsWith("/bootstrap")) return ok(bootstrap)
       if (url.includes("/link-hosts")) return new Response(JSON.stringify({ data: [{ id: "pc-1", name: "workstation", enabled: true, online: true }], meta: { total: 1 } }))
@@ -290,5 +290,37 @@ describe("Gateway account authority", () => {
       return ok({ ok: true })
     }) as typeof fetch)
     expect(adopted.session.user.avatar_url).toBe(picture)
+  })
+})
+
+
+describe("private client model source metadata", () => {
+  const boot = () => ({
+    user: session.user, device: session.device,
+    models: { source_id: "gateway:preset", source_kind: "gateway", execution: "phone", label: "Partner", api_access_enabled: true, configurable: false, api_base_url: origin + "/v1", catalog_url: origin + "/v1/models", client_catalog_url: origin + "/client/models/v1/preset/models", roles: [{ id: "conversation", label: "Partner chat", enabled: true, secret: "strip-me" }] },
+    gateway_models: { source_id: "gateway:global", source_kind: "gateway", execution: "phone", label: "Main", api_access_enabled: true, api_base_url: origin + "/client/models/v1/gateway", catalog_url: origin + "/client/models/v1/gateway/models", secret: "strip-me" },
+    pairlink: { enabled: false, hub_url: origin, redeem_url: origin + "/pairlink/v1/pairings/redeem", websocket_url: origin.replace("https:", "wss:") + "/pairlink/v1/ws", info_url: origin + "/pairlink/v1/info" }, heartbeat_interval: 30, presence_ttl: 90,
+  })
+  const read = (bootstrap: unknown) => refreshGatewaySession(session, vi.fn(async input => String(input).endsWith("/auth/me") ? ok({ user: session.user, device: session.device }) : String(input).endsWith("/bootstrap") ? ok(bootstrap) : ok({})) as typeof fetch)
+  it("accepts separate server-authorized sources and strips unrecognized role/source fields", async () => {
+    const result = await read(boot())
+    expect(result.bootstrap?.gateway_models?.source_id).toBe("gateway:global")
+    expect(JSON.stringify(result.bootstrap)).not.toContain("strip-me")
+  })
+  it("rejects foreign routes, duplicate identities, invalid grants and malformed role metadata", async () => {
+    const mutations = [
+      (b: ReturnType<typeof boot>) => { b.gateway_models.api_base_url = "https://foreign.invalid/client/models/v1/gateway" },
+      (b: ReturnType<typeof boot>) => { b.gateway_models.catalog_url += "?redirect=1" },
+      (b: ReturnType<typeof boot>) => { b.gateway_models.source_id = b.models.source_id },
+      (b: ReturnType<typeof boot>) => { Object.assign(b.gateway_models, { api_access_enabled: "true" }) },
+      (b: ReturnType<typeof boot>) => { b.models.client_catalog_url = "https://foreign.invalid/models" },
+      (b: ReturnType<typeof boot>) => { b.models.roles.push(b.models.roles[0]) },
+      (b: ReturnType<typeof boot>) => { b.models.roles[0].id = "unknown" },
+      (b: ReturnType<typeof boot>) => { Object.assign(b.models, { defaults: { conversation: null } }) },
+    ]
+    for (const mutate of mutations) {
+      const bootstrap = boot(); mutate(bootstrap)
+      await expect(read(bootstrap)).rejects.toThrow("invalid_gateway_response")
+    }
   })
 })

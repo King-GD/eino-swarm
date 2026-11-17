@@ -178,6 +178,35 @@ describe("ThreadScreen", () => {
     )
   })
 
+  it("translates the selected English passage without sending or quoting it", async () => {
+    setLocale("zh")
+    const rpc = vi.fn().mockResolvedValue({ ok: true, translation: "保留两台主机。" })
+    const onSend = vi.fn()
+    render(<ThreadScreen detail={{ id: "t1", title: "talk" }}
+      fileLink={{ rpc, alive: () => true } as never}
+      blocks={[{ id: "a1", kind: "answer", text: "Keep two hosts." }]}
+      onBack={vi.fn()} onSend={onSend} onSteer={vi.fn()} onStop={vi.fn()}
+      onAnswer={vi.fn()} onAnswerStructured={vi.fn()} />)
+    const range = document.createRange()
+    range.selectNodeContents(screen.getByText("Keep two hosts."))
+    range.getBoundingClientRect = () => ({ bottom: 0 } as DOMRect)
+    window.getSelection()?.removeAllRanges()
+    window.getSelection()?.addRange(range)
+    fireEvent(document, new Event("selectionchange"))
+    fireEvent.click(screen.getByRole("button", { name: "翻译" }))
+    const translated = await screen.findByText("保留两台主机。")
+    expect(translated).toBeVisible()
+    const translatedRange = document.createRange()
+    translatedRange.selectNodeContents(translated)
+    window.getSelection()?.removeAllRanges()
+    window.getSelection()?.addRange(translatedRange)
+    fireEvent(document, new Event("selectionchange"))
+    expect(screen.getByRole("button", { name: "加入对话" })).toBeVisible()
+    expect(rpc).toHaveBeenCalledWith(expect.objectContaining({ op: "translate_selection", thread_id: "t1", text: "Keep two hosts." }), expect.anything())
+    expect(screen.queryByTestId("quote-draft")).not.toBeInTheDocument()
+    expect(onSend).not.toHaveBeenCalled()
+  })
+
   it("does not quote selected composer text", () => {
     setLocale("en")
     render(

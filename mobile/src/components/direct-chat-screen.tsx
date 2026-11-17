@@ -41,6 +41,7 @@ export function DirectChatScreen({
   reconnecting,
   providers,
   gatewaySourceID,
+  gatewaySourceIDs,
   onSelectHost,
   onAddHost,
   onUnlink,
@@ -58,6 +59,7 @@ export function DirectChatScreen({
   reconnecting?: boolean
   providers: DirectProvider[]
   gatewaySourceID?: string
+  gatewaySourceIDs?: string[]
   onSelectHost: (fingerprint: string) => void
   onAddHost: () => void
   onUnlink: () => void
@@ -70,7 +72,8 @@ export function DirectChatScreen({
 }) {
   const sourceID = gatewaySourceID ?? providers.find((row) => row.sourceKind === "gateway")?.id ?? ""
   const account = usePhoneAccount()
-  const visible = (row: DirectThread) => (account.mode !== "account" && !row.providerId.startsWith("gateway:")) || row.providerId === sourceID
+  const sourceIDs = new Set(gatewaySourceIDs ?? [sourceID, ...providers.filter(row => row.sourceKind === "gateway").map(row => row.id)])
+  const visible = (row: DirectThread) => (account.mode !== "account" && !row.providerId.startsWith("gateway:")) || sourceIDs.has(row.providerId)
   const [threads, setThreads] = useState(loadThreads)
   const [openID, setOpenID] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -328,6 +331,9 @@ export function DirectChatScreen({
         hint={notice || (selectedUnavailable ? t("account.sourceUnavailable") : undefined)}
         hideModel={account.mode === "account"}
         models={models}
+        onRefreshModels={account.refreshModels}
+        refreshBusy={account.modelsBusy}
+        refreshError={account.modelsError ? t("account.modelsFailed") : undefined}
         reasoningLevels={models.length ? thinking : []}
         providerId={open?.providerId || pick.providerId}
         model={open?.model || pick.model}

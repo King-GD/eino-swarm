@@ -21,6 +21,59 @@ the URL in `engine.json` (a random loopback port unless `--addr` was set).
 | `429` | too many terminals are already open |
 | `501` | the shell cannot do this (`reveal` / `open` when this process is not a loopback engine or the desktop app) |
 
+## Voice
+
+`F-148` / `C-048`. Voice is independent of chat turns and writes no audio files
+or transcript events. Existing same-origin protection and startup admission
+apply. All responses are `no-store`.
+
+| endpoint | behavior |
+|---|---|
+| `POST /api/audio/transcriptions` | multipart `file`; returns `{ "text": "…" }` for insertion into an editable draft |
+| `POST /api/audio/speech` | JSON `{ "text": "…" }`, one bounded prose segment; returns audio bytes with their MIME. Finished answers and the PC selection menu both use this endpoint |
+| `POST /api/audio/models` | JSON `{ "kind": "input" }` or `output`; discovers the configured voice service's models by capability |
+
+With `speech.output.format: pcm`, `/api/audio/speech` flushes audio as it arrives
+instead of buffering the segment. The upstream request uses
+`response_format: "pcm"` and `stream_format: "audio"`. Responses are `audio/pcm` (mono 24 kHz,
+signed 16-bit little-endian) or an upstream `text/event-stream` containing
+OpenAI `speech.audio.delta` base64 audio and `speech.audio.done`. A failure after
+headers terminates the HTTP stream; it is not a successful partial audio file.
+Limits, configuration checks and cancellation remain active until the response
+is closed. MP3/WAV and the PC-local phone RPC retain complete-segment semantics.
+
+`GET /api/settings` and `PUT /api/settings` include `speech.input`,
+`speech.output` and `speech.limits`. Each direction has `enabled`, `source`
+(`account`, `provider`, `custom`), `provider_id`, `base_url`, `model` and
+direction-specific parameters. `api_key` is write-only: omitted keeps the saved
+key, an explicit empty string clears it; reads report `has_api_key`.
+Gateway mode resolves fixed voice roles with the PC's private account source.
+Local mode requires a provider/custom selection. The request cannot supply a
+replacement upstream URL, key or model.
+
+PC metadata and phone `speech_config`/catalog replies publish only a safe voice
+snapshot: `execution` (`gateway`/`pc_local`), verified `gateway_origin` when
+applicable, input/output `enabled`, `ready`, reason, model/label, parameters and
+limits. No local endpoint, API key or Host token is included.
+If a valid parameter set expands beyond the sealed-frame budget, `speech_config`
+returns `audio_config_limit`; ordinary metadata/catalog remain available with
+`speech_error` and no voice snapshot. A live refusal or invalid new snapshot
+revokes the previous executable phone cache rather than reusing stale settings.
+
+For local execution only, the sealed phone link supports `put` with
+`purpose:"audio"`, `audio_transcribe {audio_id,put_id}`,
+`audio_speech {audio_id,text}`, `audio_chunk {audio_id,offset}` and
+`audio_cancel {audio_id}`. Upload and operation IDs match. Model operations
+reply asynchronously in `audio`; chunks carry `audio_id,mime,size,offset,next,
+data,more`, with base64 data and decoded-byte offsets. Zero offsets and the final
+`more:false` remain explicit. Each raw chunk is at most 36 KiB. Cancel also
+releases downloaded output and is idempotent. Gateway-mode PC relay requests
+are refused: the phone uses its own Mobile token on `/v1/audio/*` directly.
+
+Voice errors expose safe category codes, never upstream bodies or credentials.
+Oversize input/output, an unavailable direction, upstream failure and cancellation
+do not change the main chat's state or retry automatically.
+
 ## Composer drafts
 
 `F-145` / `C-033`. Drafts belong to `thread:<thread_id>`,
@@ -111,7 +164,10 @@ This endpoint reports interface recovery; it never restarts or completes work.
 
 Before reload or replacement, `probe_failed` reports the last observed boundary:
 `callback_missing`, `location_pending`, `snapshot_pending`, `snapshot_error`,
-`snapshot_mismatch`, or no pending probe. These are observations, not proof of a
+`snapshot_mismatch`, `presentation_blank`, or no pending probe. `presentation_blank`
+means the visible window's own image is one flat colour below its top control
+band. A missed, hidden, or refused capture stays on the WebKit result and is
+not this reason. These are observations, not proof of a
 JavaScript/GPU cause. `duration_ms` is the age of the latest dispatched probe
 when known, not a completed recovery duration. Native error text is excluded.
 A successor waiting for its first paint sends bounded `probe_failed` records
@@ -273,12 +329,12 @@ endpoint:
 |---|---|
 | `signed_out` | no device login on this machine |
 | `pending` | signed in; the model catalog has not been read yet |
-| `ready` | the catalog was read (`models` is the total count). `kinds` counts `chat`, `unclassified`, `embedding`, `ocr`, `decisions` and `other`, and `embedding_models` lists the embedding names. `source_id` is the runtime `gateway:<32 hex>` id. Conversation rows in `GET /api/models` are the `chat` and unclassified names. When the server publishes fixed roles, `roles` is the read-only list `{id,enabled,label}` and a FOFA install uses those names instead of the catalog. The list may include `transcription`, `speech` and `image`; this client shows them and does not call them. An old server omits `roles` or returns only the first six or eight roles. LOCAL ignores the field |
+| `ready` | the catalog was read (`models` is the total count). `kinds` counts `chat`, `unclassified`, `embedding`, `ocr`, `decisions`, `transcription`, `speech` and `other`; `embedding_models`, `transcription_models` and `speech_models` list their respective model names. `source_id` is the runtime `gateway:<32 hex>` id. Conversation rows in `GET /api/models` are the `chat` and unclassified names. When the server publishes fixed roles, `roles` is the read-only list `{id,enabled,label}` and a FOFA install uses those names instead of the catalog. The list may include `transcription`, `speech`, `image`, `translation` and `naming`. Voice uses `transcription` and `speech` when separately enabled in Settings → Voice; see `F-148` / `C-048`. Image generation remains display-only. An enabled `translation` role posts Chat Completions JSON to the account base `/translations`; an enabled `naming` role posts conversation and schedule naming to `/naming`. While those roles are off, selection translation keeps the conversation model and naming keeps `title`. An old server omits `roles` or returns only the first six, eight or nine roles. LOCAL ignores the field. The account card omits the `decisions` count and role |
 | `no_access` | signed in but the account may not use the model API |
 | `unavailable` | signed in but the catalog could not be used; `reason` is one of `rejected`, `unsupported`, `network`, `gateway`, `unsafe_response`, `no_models` |
 
 When the server's bootstrap includes `models.profile`, `account_models.profile`
-is present. It carries `presentation` (`official` or `full`), `instruction`
+is present. It carries compatibility `presentation` (`official`), `instruction`
 (true when the server supplied guidance), and, only when a workspace allowlist
 was supplied, `restrict_tools: true` plus the allowed tool names. The guidance
 text itself is not in this object. `official` is the default. `label` is then
@@ -606,28 +662,42 @@ typeface.
 `local` is written. The desktop account portrait sends `local` or `fofa` on
 each third click. Any other value is `400` with `invalid_product_mode`.
 `GET /api/meta` reports the resolved value as `product_mode` (`fofa` or `local`).
-`GET /api/settings` does the same under `product.mode`. While the resolved mode
-is `fofa`, a `models` section that is not identical to what is stored, and
-`POST /api/models/discover`, are `403` with `custom_models_disabled`. The stored
-providers stay. A request that sets `local` in the same body may change models.
-While `fofa` and the account state is missing or `signed_out`, turn, steer,
-continue, retry, compact, follow-up, side chat, decision, review, schedule create and
-run, preempt, plan implement, and goal resume are `403` with `login_required`.
-`pending`, `ready`, `no_access`, and `unavailable` count as signed in. Stop and
-answer stay available. `--mock` does not require a sign-in. A server built
-without the account component has no sign-in state to require.
+`GET /api/settings` does the same under `product.mode`. Both meta and settings
+also publish `model_policy: {mode, configurable, ready, scope, defaults?, bindings?,
+roles?}`. Its client-facing `mode` is `local` or `gateway`. Only the existing
+account-portrait triple-click debug entry changes product mode; there is no normal
+mode selector. A running turn or worker keeps the model it already opened and
+does not block the change. A model call that has started holds admission until
+it finishes, and the change returns the existing busy error during that call.
+Backup, restore and restart also return that error. Later model requests use
+the new source.
 
-`models.default_source` (`account` or `provider`) chooses whose models a new
-conversation starts on; omitting it keeps the stored value (the model list is
-saved from many places that do not know it) and any other value is rejected with
-`400`. `models.account_presentation` is `official` or `full`. Omitting it keeps
-the stored value. An empty stored value means `official` and is not written
-back until an explicit save. Any other value is `400`. It only changes what
-this client shows while an official profile is active; it does not select the
-server's real model. `ui.welcome_dismissed` is a boolean with the same omitted-keeps rule, so a
-language-only write cannot bring the first-run welcome back. The runtime account
-projection is not part of the settings: provider ids starting with `gateway:`
-are reserved and rejected.
+An ordinary gateway permits provider edits, discovery and functional overrides.
+A managed preset or a gateway without a ready model source refuses model writes
+and discovery with `403 custom_models_disabled`; LOCAL allows personal configuration.
+Managed Settings reads strip personal model/endpoint choices; unrelated saves keep
+those hidden selections. Explicit conversation, worker, typed and project model
+choices are validated against the preset. Historical choices remain stored but
+execute with the managed preset. A LOCAL request can retain the signed-in account,
+while ignoring its source, roles and profile.
+
+`models.bindings` in Settings is the current scope's role-to-`{provider_id,model}`
+map. A PUT replaces that map without requiring `providers`; `{}` restores defaults.
+Other scope maps are preserved privately. Roles are `conversation`, `title`,
+`compact`, `embedding`, `transcription`, `speech`, `ocr` and `decisions`. Unset
+bindings follow updated gateway defaults; explicit bindings keep their selection.
+Saved gateway scopes separate origin/source/account owner and survive token renewal.
+`models.default_source` and `account_model` remain legacy fallback fields; an
+editable gateway binding save retires these global pins. `account_presentation`
+remains validated as `official`/`full` for compatibility and cannot unlock a preset.
+Gateway catalogs/credentials never become persisted providers; scoped references
+may name a runtime `gateway:` source, while `models.providers` rejects that prefix.
+
+Gateway work admission requires account state `ready`; `signed_out`, `pending`,
+`no_access` and `unavailable` return `403 login_required` for new work. Stop and
+answer remain available. `--mock` and a server without an account component retain
+the existing test/library bypass. `ui.welcome_dismissed` keeps its omitted-field
+semantics, so an unrelated save cannot re-open the welcome.
 
 Within a supplied `swarm` section, omitted `agent_timeout_seconds` preserves the
 latest stored value. Within a supplied provider row, omitted `timeout_seconds`
@@ -701,16 +771,16 @@ conversation can still select it, and a turn already on it keeps running.
 ```
 
 `source` is `account` for the signed-in server's models and `provider` for the
-user's own endpoints. While an official profile is in `official` presentation,
-this list is one account row: `label` is the server's name and `model` is the
-alias `account`. The catalog's real model ids are not returned. `full` keeps
-the user's own rows and still returns that one official row instead of the
-real ids. Account rows come first, their `provider_id` is
-`gateway:<32 hex>`, and they exist only while the account is signed in and its
-catalog is ready (they are never in `config.yaml`; no credential or endpoint is
-returned). A conversation that stored such an id and finds the account gone
-fails with the stable `account_login_required` error instead of falling back to
-a provider with a same-named model.
+user's own endpoints. Gateway mode with an editable account returns account and
+personal rows. A managed preset returns only its own conversation row,
+irrespective of legacy `account_presentation`; a profile uses its label and the
+alias `account`, never the broader catalog. LOCAL keeps a signed-in account and
+returns the personal rows plus each authorized server catalog: the third-party
+preset and the original gateway catalog, as separate `gateway:` providers. An
+unauthorized or empty catalog is absent. A gateway with no ready source returns
+no account rows. Runtime account rows carry no credential or endpoint. A
+`gateway:` id with no signed-in source produces `account_login_required`
+instead of choosing a same-named personal model.
 
 A catalog row may carry `model_type`. `chat` and a missing type stay in this
 list. `embedding`, `ocr` and `decisions` are omitted, and so is any other
@@ -1180,7 +1250,7 @@ The slim RPC the phone sends over pairlink is not an HTTP API. Request ops:
 `hello` / `list` / `more` / `open` / `read` / `start` / `send` / `steer` / `stop` /
 `followup_drop` / `followup_steer` / `preempt` /
 `answer` / `continue` / `watch` / `unwatch` / `log` / `run_now` / `cancel_wait` /
-`resume_goal` / `project_get` / `project_create` / `project_update` / `catalog` / `refresh_catalog` / `get_timeouts` / `set_timeouts` /
+`resume_goal` / `project_get` / `project_create` / `project_update` / `catalog` / `refresh_catalog` / `get_timeouts` / `set_timeouts` / `set_product_mode` /
 `tune` / `put` / `clients` / `files` /
 `file_chunk`. `hello` `{text}` is the phone's one-line model; the host
 keys it by the pairlink fingerprint, not a client-supplied id.
@@ -1356,6 +1426,24 @@ channel and add no unauthenticated HTTP or cross-origin surface.
 
 `catalog` additionally returns `memory_available`; older PCs omit it, so the
 mobile editor requests an upgrade rather than assuming an editable default.
+
+`set_product_mode` is an explicit paired-phone debug mutation with
+`product_mode: "local" | "fofa"`. It changes the selected PC's install-wide mode
+through the same persistence/model-use admission as desktop Settings, retaining
+PC login and already-open model clients. Success acknowledges `product_mode`
+and `model_policy`. Invalid/missing mode is `bad_request`; restoration and model
+use return `restoring`/`backup_busy`; persistence failure is sanitized
+`save_failed`. Older PCs return `unknown_op`. The phone commits its mode only
+after the exact requested mode is acknowledged; it retains the previous mode
+on failure and never retries automatically on reconnect or another PC. A timeout
+is an uncertain PC outcome, not proof of rollback.
+
+LOCAL `catalog`/`refresh_catalog` model rows optionally carry
+`catalog_group: "original" | "third_party"`, derived from the authorized server
+source descriptors. The phone localizes those group labels and retains the
+provider ID even for duplicate model names. Personal/legacy providers omit it.
+No PC credential or endpoint crosses Pairlink.
+
 `catalog` and `refresh_catalog` report `composer_predictions`; an explicit
 `false` hides paired-PC suggestions. The phone uses only the latest completed
 turn’s `composer_prediction` event and never sends it without a human submit.
@@ -1416,6 +1504,19 @@ this operation a 30-second wait without disconnecting the link on timeout,
 retains its previous list on error, and ignores responses from an old link or
 refresh generation. An older host's `unknown_op` becomes an update-PC message
 inside the model picker. Refresh never silently replaces an explicit selection.
+`translate_selection` `{thread_id,text}` returns `{translation}` using the PC's
+translation role or the current conversation model, with no tools or conversation
+writes (`C-049`). One translation runs per link outside the receive loop; Stop
+and ordinary reads stay responsive. Input is at most 8000 Unicode characters,
+output at most 12000, and the escaped response must fit one sealed frame. The
+model call has a 60-second budget. `cancel_translation` `{call_id}` cancels only
+the original RPC id; closing the link cancels and joins its request. Translation
+uses normal work/startup/backup admission. Errors include `bad_request`,
+`not_found`, `selection_translation_too_long`, `selection_translation_busy`,
+`selection_translation_timeout`, `selection_translation_cancelled`, and
+`selection_translation_unavailable`, without upstream bodies or credentials.
+Older hosts return `unknown_op` and the phone requests a PC update.
+
 `tune` `{thread_id, provider_id, model, reasoning, web_execution}` sets that conversation.
 Omitting `reasoning` leaves the level; `""` is the model's default. An
 unknown level is refused.
@@ -2182,15 +2283,39 @@ An unavailable answer returns `502 side_chat_unavailable`. A timed-out
 request returns `504 side_chat_timeout`; the side call has a 90-second budget
 and can also end sooner at the provider boundary.
 
+### `POST /api/threads/:id/translation` → `200`
+
+Translate one English selection into Simplified Chinese with the conversation's
+current model. Send `{"text":"…"}`. The response is `{"text":"…"}` with
+`Cache-Control: no-store`. This is not a turn: it writes no event, queued
+follow-up, or Trace row, and the model receives no tools.
+
+With no running turn, the request uses the conversation's provider, model, and
+reasoning effort. While the latest turn is running and both its provider and
+model are set, that turn's selection is used instead. An enabled account
+`translation` role replaces either choice. A missing or disabled role leaves
+that choice in place. The call budget is 60 seconds. At most two translations
+run at once.
+
+The text is trimmed. Blank text is `400 selection_translation_invalid`. More
+than 8000 Unicode characters is `400 selection_translation_too_long`. A body
+over 96 KiB is `413 selection_translation_too_long`. A missing conversation is
+`404`. A signed-out FOFA install is `403 login_required`. A third concurrent
+call is `429 selection_translation_busy`. An empty or tool-shaped model answer
+is `502 selection_translation_unavailable`. A timeout is `504
+selection_translation_timeout`. Those errors use a fixed message and do not
+include upstream text. Closing the request before it finishes writes no body.
+The answer is clipped at 12000 Unicode characters.
+
 ### `POST /api/threads/:id/decision` → `200`
 
 Ask the fixed decisions role about the current conversation. There is no
 request body and nothing to configure. The server uses the conversation text
 and records the answer as a `decision` event in that conversation. The
-response is `{"text":"…"}`. The button exists only while FOFA is signed in to
-a server that has the decisions role enabled. A conversation that cannot call
-it returns `404 decision_unavailable`. Signed-out FOFA returns `403
-login_required`.
+response is `{"text":"…"}`. Desktop and phone do not offer this call: there is
+no composer control, settings row, account-model count, or role list entry.
+A conversation that cannot call it returns `404 decision_unavailable`.
+Signed-out FOFA returns `403 login_required`.
 
 ### `POST /api/threads/:id/turns`
 
@@ -2697,7 +2822,7 @@ shortening only the bounded detail text.
 | `model_backoff` | a wait observation or private-candidate deferral, not a sent request or new retry allowance. Origin JSON is `{scope:"origin",cooldown_id,attempt,wait_ms}` on the actual caller/turn: cooldown_id is an opaque process-local service-generation identity shared across roles, with no endpoint; positive wait_ms is observed remaining cooldown (sub-millisecond waits use 1), and 0 means an active probe has not yet yielded valid content and its remaining wait is unknown. Only one recovery probe is admitted after cooldown; its first decoded nonempty body, reasoning or tool-call delta admits other requests while the stream stays open. Headers, role-only/empty/usage-only deltas and error frames do not admit them. Only the probe's final result resets or advances failures; concurrent results during that probe cannot change the streak or a later generation. A failed probe renews cooldown without cancelling already admitted requests; non-streaming Generate waits for its complete result. PC/phone chat and history show one timed row per conversation/generation and omit zero-delay probe rows; Trace keeps each caller observation. Candidate JSON instead uses `{scope:"schedule_answer",attempt,wait_ms,code,candidate_id}` as described below. Legacy rows may omit the added fields. |
 | `model_retry` | the manager hit a recoverable ChatModel failure and re-entered this turn. `text` is JSON `{attempt,cap,reason?}`. `reason` selects the transcript notice: `invalid_tool_json` (the model returned a tool call that was not valid JSON), `model_response_invalid` (the SDK cannot decode the model HTTP response or stream, including a wrong field type; the turn did not reach a tool), `rate_limited`, `model_unavailable` (HTTP 500/502/503/504/529), `model_transport` (dropped stream, connection reset, mid-stream read timeout), `model_idle` (silence after the first byte). Older rows omit `reason` and keep the generic retry line. `reason: "context_overflow"` is separate: the endpoint rejected the call because the prompt plus the requested output does not fit the window. That notice names the window, the turn compacts once, and a second rejection ends the turn with `the prompt plus the requested output exceeds this model's context window; automatic compact could not free enough space. Lower Max completion tokens in Settings → Swarm, or shorten the request, then retry`. A repeating schedule that ends that way is paused. When the in-turn retries are exhausted, the turn error is the same class: `the model returned a tool call that was not valid JSON`, `the model service is rate limiting requests`, `the model service is unavailable`, `the model service returned a response that could not be decoded`, or `the connection to the model service dropped`. An exhausted idle timeout keeps the sentence that names how long the model sent no data. A trailing tool call whose arguments are not valid JSON is refused before the next model request and then dropped, so that payload is not sent and a `400 Unterminated string` cannot repeat. `reason: "scheduled_no_activity"` is the scheduled-check continuation, not a model failure |
 | `title` | the conversation was named; `text` is the new title, `agent_id` is `title-namer`. Not rendered in the transcript |
-| `decision` | the fixed decisions role answered; `text` is the short result and the transcript shows it as a notice |
+| `decision` | the fixed decisions role answered; `text` is the short result. Not rendered in the conversation; the Trace tab's Full log lists it |
 | `session_memory` | the rolling session briefing was refreshed from the event log; `text` is JSON `{summary,through_seq}`. `agent_id` is `session-memory`. Not rendered in the transcript; compact and the reviewer read the thread fields. Post-turn refresh is background work: a queued follow-up starts as soon as the turn is `done` or `error`, and does not wait for this event |
 | `goal` | the human set or cleared a standing objective; `text` is the objective (empty when cleared). Resets complete/blocked/capped |
 | `goal_complete` | the manager called `complete_goal`; auto-continue stops. `text` is JSON `{summary}`. `reopen_goal` in the same turn records `goal_resumed`, resets the auto-continue budget, and pursuit continues |
@@ -3233,13 +3358,15 @@ suggestion. The phone receives the event and does not show it.
 
 `path` is workspace-relative and uses `/`. With no `q`, the response is every
 direct child of `dir` (`dir` empty or omitted is the workspace root). `q`
-searches the whole listed workspace and returns every match; it takes
-precedence over `dir`. A failed listing or search is an error with no partial
-`files` array. `uploaded` marks what the human put there, as opposed to what
-agents produced. Dot-directories, `node_modules` and `vendor` are omitted
-(agents can still read those paths). The Files panel loads the next directory
-when it is opened and uses `q` for its filter. The payload stays a flat list
-of that one result.
+searches the newest completed scan of the listed workspace and returns every
+match; it takes precedence over `dir`. Listing the workspace root, uploading,
+or deleting a file discards that scan and starts another. A query waits for
+the scan in progress. A failed or cancelled scan is an error with no partial
+`files` array, and a failed scan is not reused. `uploaded` marks what the
+human put there, as opposed to what agents produced. Dot-directories,
+`node_modules` and `vendor` are omitted (agents can still read those paths).
+The Files panel loads the next directory when it is opened and uses `q` for
+its filter. The payload stays a flat list of that one result.
 
 ### `POST /api/threads/:id/files` → `201`
 
@@ -3788,10 +3915,25 @@ a missing field does not add a restriction, `[]` allows none of those tools,
 and JSON `null` is rejected. `context_window` is an optional positive integer.
 An empty or over-long label, guidance over 8 KiB, an unknown or repeated tool,
 or a non-positive window rejects the bootstrap as `invalid_gateway_response`.
-A valid profile is not followed by a `/v1/models` discovery. Direct chat sends
-the alias `account` and shows `label`. The phone stores `official` or `full`
-locally (`zwai.phone.account.presentation`); a paired phone uses the PC's
-filtered catalog instead, where a row may add `label` and `locked`.
+A valid managed profile is not followed by a `/v1/models` discovery. The PC sends
+the alias `account` and the paired phone uses its filtered catalog/policy; the
+phone does not create a direct gateway chat provider or expose a presentation switch.
+
+Optional `models.configurable` is the server-owned edit permission. Optional
+客户端请求 Gateway bootstrap 时发送 `X-AIGateway-Model-Roles: 2`，声明支持包含翻译和命名的十一角色列表。网关未实现协商时仍兼容原有九角色响应；角色协商不改变模型授权或配置权限。
+
+`models.defaults` maps the eight functional roles listed above to nonblank model
+names (maximum 256 bytes, known role keys, no control characters). If permission
+is omitted, a legacy profile or fixed role list implies managed; a normal catalog
+is editable. A managed defaults-only preset requires `conversation` and avoids
+broader discovery. Explicit false cannot be overridden by a local preference.
+These are supported client fields; this change does not deploy a gateway producer.
+
+Phone Account mode requires a selected same-account PC with a live link and
+`meta.startup: ready`. Connecting/restoring/offline states retain the waiting page,
+with installation/sign-in/connection guidance and no direct chat fallback.
+`meta` and `catalog` phone RPC responses carry `model_policy`; an unconfigurable
+policy also refuses `refresh_catalog` and explicit model changes at the PC.
 
 Automatic reconciliation calls the existing Connect route only for already
 saved anonymous PCs whose full `host_pub`, complete Hub base endpoint and

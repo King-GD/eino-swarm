@@ -32,6 +32,7 @@ func cloneProvider(p Provider) Provider {
 func (c *Config) clone() *Config {
 	next := *c
 	next.mu = &sync.RWMutex{}
+	next.Models.Bindings = cloneBindings(c.Models.Bindings)
 	next.Models.Providers = slices.Clone(c.Models.Providers)
 	for i, p := range next.Models.Providers {
 		next.Models.Providers[i] = cloneProvider(p)
@@ -69,6 +70,7 @@ func (c *Config) ModelsSnapshot() ModelsConfig {
 	mu.RLock()
 	defer mu.RUnlock()
 	m := c.Models
+	m.Bindings = cloneBindings(m.Bindings)
 	m.Providers = slices.Clone(m.Providers)
 	for i, p := range m.Providers {
 		m.Providers[i] = cloneProvider(p)
@@ -131,6 +133,9 @@ func (c *Config) publish(n *Config) {
 	}
 	if c.Search != n.Search {
 		c.Search = n.Search
+	}
+	if c.Speech != n.Speech {
+		c.Speech = n.Speech
 	}
 	if c.Clients != n.Clients {
 		c.Clients = n.Clients

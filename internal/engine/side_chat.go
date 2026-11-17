@@ -78,6 +78,9 @@ func (e *Engine) askSideChat(ctx context.Context, threadID string, input SideCha
 		providerID, modelName, effort = active.ProviderID, active.Model, active.ReasoningEffort
 	}
 	if input.ProviderID != "" {
+		if err := e.pool.ValidateConversationSelection(input.ProviderID, input.Model); err != nil {
+			return "", err
+		}
 		providerID, modelName, effort = input.ProviderID, input.Model, ""
 	}
 	ctx = provider.WithIsolatedRecovery(ctx)

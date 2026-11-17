@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { AccountModels, Meta, ModelInfo, RemoteStatus, Settings } from "@/lib/types"
 import { useApp } from "@/store/app"
 
+import { AccountModelsCard } from "./account-models-card"
 import { ModelsTab } from "./model-settings"
 
 HTMLElement.prototype.scrollIntoView = function () {}
@@ -108,7 +109,7 @@ describe("server models on the Models page", () => {
     expect(onChange.mock.calls[0][0].models.providers).toHaveLength(1)
   })
 
-  it("keeps the official name until the person asks for every model", async () => {
+  it("keeps managed models locked without a presentation override", async () => {
     fake.status = signedIn
     useApp.setState({
       meta: meta({
@@ -121,21 +122,9 @@ describe("server models on the Models page", () => {
     render(<ModelsTab settings={settings({ account_model: "vendor-secret-model" })} onChange={onChange} />)
     expect(screen.queryByText("Your own model services")).toBeNull()
     expect(screen.queryByText("vendor-secret-model")).toBeNull()
-    expect(screen.getByRole("combobox", { name: "Model list" })).toHaveTextContent("Official model")
-    fireEvent.click(screen.getByRole("combobox", { name: "Model list" }))
-    fireEvent.click(await screen.findByRole("option", { name: "All models" }))
+    expect(screen.queryByRole("combobox",{name:"Model list"})).not.toBeInTheDocument()
+    expect(screen.queryByRole("option",{name:"All models"})).not.toBeInTheDocument()
     expect(onChange).not.toHaveBeenCalled()
-    const warning = await screen.findByRole("dialog", { name: "Switch to all models?" })
-    expect(warning).toHaveTextContent("do not have this account's online capabilities")
-    fireEvent.click(within(warning).getByRole("button", { name: "Stay on the official model" }))
-    expect(onChange).not.toHaveBeenCalled()
-    expect(screen.queryByRole("dialog", { name: "Switch to all models?" })).toBeNull()
-
-    fireEvent.click(screen.getByRole("combobox", { name: "Model list" }))
-    fireEvent.click(await screen.findByRole("option", { name: "All models" }))
-    fireEvent.click(within(await screen.findByRole("dialog", { name: "Switch to all models?" })).getByRole("button", { name: "Switch" }))
-    expect(onChange.mock.calls[0][0].models.account_presentation).toBe("full")
-    expect(onChange.mock.calls[0][0].models.account_model).toBe("vendor-secret-model")
   })
 
   it("counts models by type and lets the server row pick the conversation default", () => {
@@ -143,7 +132,7 @@ describe("server models on the Models page", () => {
     useApp.setState({
       meta: meta({
         state: "ready", models: 4, username: "account", source_id: "gateway:x",
-        kinds: { chat: 1, unclassified: 1, embedding: 1, ocr: 1, decisions: 0, other: 0, embedding_models: ["embed-a"] },
+        kinds: { chat: 1, unclassified: 1, embedding: 1, ocr: 1, decisions: 3, other: 0, embedding_models: ["embed-a"] },
       }),
       models: [
         { ...row("gateway:x", "server-a", "account"), context_window: 1048576 },
@@ -158,6 +147,7 @@ describe("server models on the Models page", () => {
     expect(within(card).getByText(/Unclassified 1/)).toBeTruthy()
     expect(within(card).getByText(/Embedding 1/)).toBeTruthy()
     expect(within(card).getByText(/OCR 1/)).toBeTruthy()
+    expect(within(card).queryByText(/Decisions/)).toBeNull()
     expect(within(card).queryByText("server-a")).toBeNull()
     expect(within(card).queryByText("embed-a")).toBeNull()
 
@@ -168,6 +158,26 @@ describe("server models on the Models page", () => {
     fireEvent.click(within(server).getByRole("button", { name: "server-b" }))
     expect(onChange.mock.calls[0][0].models.account_model).toBe("server-b")
     expect(onChange.mock.calls[0][0].models.default_source).toBe("account")
+  })
+
+  it("hides the decisions role from the server role list", () => {
+    fake.status = signedIn
+    useApp.setState({
+      meta: {
+        ...meta({
+          state: "ready", models: 1,
+          roles: [
+            { id: "title", enabled: true, label: "Title" },
+            { id: "decisions", enabled: true, label: "Decisions" },
+          ],
+        }),
+        product_mode: "fofa",
+      },
+      models: [],
+    })
+    render(<AccountModelsCard settings={settings()} onChange={vi.fn()} />)
+    expect(screen.getByText("Title")).toBeTruthy()
+    expect(screen.queryByText("Decisions")).toBeNull()
   })
 
   it("lets the server row take the default back from an own provider", () => {

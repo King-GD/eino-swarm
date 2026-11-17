@@ -26,6 +26,7 @@ export function ProjectManager({ link, projects, onSaved, onClose }: {
   const [models, setModels] = useState<ModelChoice[]>([])
   const [memory, setMemory] = useState(false)
   const [catalogReady, setCatalogReady] = useState(false)
+  const [configurable,setConfigurable]=useState(false)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
@@ -72,6 +73,7 @@ export function ProjectManager({ link, projects, onSaved, onClose }: {
         setUnsupported(catalog.ok)
         setError(t(catalog.ok ? "projects.unsupported" : "projects.catalogFailed")); return
       }
+      setConfigurable(catalog.model_policy?.configurable ?? !catalog.models?.some(m=>m.locked))
       setModels(catalog.models ?? []); setMemory(catalog.memory_available); setCatalogReady(true)
       const next = response?.project ?? { ...blank, memory_enabled: catalog.memory_available }
       setDraft({ ...next }); setOriginal({ ...next })
@@ -88,7 +90,7 @@ export function ProjectManager({ link, projects, onSaved, onClose }: {
       if (!draft.id || draft[key] !== original[key]) Object.assign(patch, { [key]: key === "name" ? draft.name.trim() : draft[key] })
     }
     const fields = ["nuwa_planner_provider_id", "nuwa_planner_model", "nuwa_executor_provider_id", "nuwa_executor_model"] as const
-    if (fields.every((key) => draft[key]) && fields.some((key) => draft[key] !== original[key])) {
+    if (configurable && fields.every((key) => draft[key]) && fields.some((key) => draft[key] !== original[key])) {
       for (const key of fields) patch[key] = draft[key]
     }
     if (!Object.keys(patch).length) return
@@ -114,7 +116,7 @@ export function ProjectManager({ link, projects, onSaved, onClose }: {
   }
   const toggleNuwa = (enabled: boolean) => {
     const patch: ProjectPatch = { nuwa_enabled: enabled }
-    if (enabled && !draft?.nuwa_planner_provider_id && models.length) {
+    if (configurable && enabled && !draft?.nuwa_planner_provider_id && models.length) {
       const planner = models.find((m) => m.default) ?? models[0]
       const executor = models.find((m) => modelKey(m.provider_id, m.model) !== modelKey(planner.provider_id, planner.model)) ?? planner
       Object.assign(patch, { nuwa_planner_provider_id: planner.provider_id, nuwa_planner_model: planner.model, nuwa_executor_provider_id: executor.provider_id, nuwa_executor_model: executor.model })
@@ -146,7 +148,7 @@ export function ProjectManager({ link, projects, onSaved, onClose }: {
               <label className="flex items-center justify-between gap-3 text-sm">{t("projects.memory")}<input type="checkbox" checked={draft.memory_enabled && memory} disabled={!memory} onChange={(e) => change({ memory_enabled: e.target.checked })} /></label>
               {!memory ? <p className="text-xs text-muted-foreground">{t("projects.memoryOff")}</p> : null}
               <label className="flex items-center justify-between gap-3 text-sm">{t("projects.nuwa")}<input type="checkbox" checked={draft.nuwa_enabled} onChange={(e) => toggleNuwa(e.target.checked)} /></label>
-              {draft.nuwa_enabled ? <>
+              {configurable && draft.nuwa_enabled ? <>
                 {(["planner", "executor"] as const).map((role) => {
                   const value = modelKey(draft[`nuwa_${role}_provider_id`], draft[`nuwa_${role}_model`])
                   return <label key={role} className="flex min-w-0 flex-col gap-1 text-sm">{t(role === "planner" ? "projects.planner" : "projects.executor")}

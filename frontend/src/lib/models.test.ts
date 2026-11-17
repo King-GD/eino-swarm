@@ -43,6 +43,7 @@ describe("displayed model", () => {
     const models = [row("saved", { default: true, default_follows_setting: true })]
     expect(rememberedCatalogModel(displayedModel(models, "gateway:a", ""), "")).toBeUndefined()
   })
+
 })
 
 describe("groupModels", () => {

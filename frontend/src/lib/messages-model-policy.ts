@@ -1,0 +1,28 @@
+export const modelPolicyEn = {
+ "modelPolicy.title": "Functional models",
+ "modelPolicy.description": "Choose a model for each function. Unchanged gateway bindings follow the server preset.",
+ "modelPolicy.default": "Use default",
+ "modelPolicy.provider": "Provider",
+ "modelPolicy.model": "Model",
+ "modelPolicy.conversation": "Conversation",
+ "modelPolicy.titleRole": "Conversation title",
+ "modelPolicy.compact": "Context compression",
+ "modelPolicy.embedding": "Semantic search",
+ "modelPolicy.transcription": "Speech recognition",
+ "modelPolicy.speech": "Spoken answers",
+ "modelPolicy.ocr": "Image text recognition",
+} as const
+export const modelPolicyZh: Record<keyof typeof modelPolicyEn,string> = {
+ "modelPolicy.title": "功能模型",
+ "modelPolicy.description": "分别选择各项功能使用的模型。未覆盖的网关绑定持续跟随服务端预置。",
+ "modelPolicy.default": "使用默认配置",
+ "modelPolicy.provider": "模型服务",
+ "modelPolicy.model": "模型",
+ "modelPolicy.conversation": "对话",
+ "modelPolicy.titleRole": "对话标题",
+ "modelPolicy.compact": "上下文压缩",
+ "modelPolicy.embedding": "语义检索",
+ "modelPolicy.transcription": "语音识别",
+ "modelPolicy.speech": "语音朗读",
+ "modelPolicy.ocr": "图片文字识别",
+}

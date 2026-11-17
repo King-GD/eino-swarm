@@ -36,6 +36,7 @@ type Config struct {
 	UI          UIConfig          `yaml:"ui" json:"ui"`
 	Remote      RemoteConfig      `yaml:"remote" json:"remote"`
 	Search      SearchConfig      `yaml:"search" json:"search"`
+	Speech      SpeechConfig      `yaml:"speech" json:"speech"`
 	Clients     ClientsConfig     `yaml:"clients" json:"clients"`
 	// Product is omitted while the install stays on the default FOFA behavior.
 	Product ProductConfig `yaml:"product,omitempty" json:"product,omitempty"`
@@ -58,7 +59,8 @@ type ServerConfig struct {
 
 // ModelsConfig is the provider list plus which one new conversations use.
 type ModelsConfig struct {
-	Default string `yaml:"default" json:"default"`
+	Bindings map[string]map[string]ModelRef `yaml:"bindings,omitempty" json:"bindings,omitempty"`
+	Default  string                         `yaml:"default" json:"default"`
 	// DefaultSource is account or provider: whose models a new conversation
 	// starts on when both are available. See settleDefaultSource.
 	DefaultSource string `yaml:"default_source" json:"default_source"`
@@ -566,6 +568,7 @@ func Default() *Config {
 			KeepAwake:    DefaultRemoteKeepAwake,
 		},
 		Clients: DefaultClients(),
+		Speech:  DefaultSpeech(),
 	}
 }
 
@@ -638,6 +641,9 @@ func Load(dataDir string) (*Config, error) {
 		return nil, err
 	}
 	if err := cfg.validateProduct(); err != nil {
+		return nil, err
+	}
+	if err := cfg.validateSpeech(); err != nil {
 		return nil, err
 	}
 	cfg.normalize()
@@ -869,6 +875,7 @@ func (c *Config) normalize() {
 	c.normalizeRemote()
 	c.normalizeSearch()
 	c.normalizeClients()
+	c.normalizeSpeech()
 }
 
 func (c *Config) providerIndex(id string) int {
@@ -936,6 +943,9 @@ func (c *Config) save() error {
 		return err
 	}
 	if err := c.validateProduct(); err != nil {
+		return err
+	}
+	if err := c.validateSpeech(); err != nil {
 		return err
 	}
 	if strings.TrimSpace(c.dataDir) == "" {

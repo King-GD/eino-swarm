@@ -11,6 +11,9 @@ export type DirectProvider = {
   id: string
   /** Gateway sources are ephemeral and cannot enter personal settings. */
   sourceKind?: "gateway" | "phone"
+  gatewayScope?: "gateway"
+  catalogURL?: string
+  modelLabels?: Record<string, string>
   label: string
   baseURL: string
   apiKey: string
@@ -77,7 +80,7 @@ export function providerChoices(rows: DirectProvider[]): ModelChoice[] {
     if (row.displayLabel) {
       out.push({
         provider_id: row.id,
-        provider_label: row.displayLabel,
+        provider_label: label,
         label: row.displayLabel,
         model: row.model.trim(),
         default: true,
@@ -93,6 +96,7 @@ export function providerChoices(rows: DirectProvider[]): ModelChoice[] {
         provider_id: row.id,
         provider_label: label,
         model: name,
+        ...(row.modelLabels?.[name] ? { label: row.modelLabels[name] } : {}),
         default: name === row.model.trim(),
       })
     }

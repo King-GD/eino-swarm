@@ -1,8 +1,14 @@
 import { act, fireEvent, render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { SelectionMenu } from "./selection-menu"
+import { ApiError, api } from "@/lib/api"
+import { defaultSpeechSettings, type SpeechSnapshot } from "@/lib/speech-types"
+import * as speechAPI from "@/lib/speech-api"
+import { speechPlayback } from "@/lib/speech-media"
 import { TERMINAL_SELECTION_EVENT, type TerminalSelection } from "@/lib/terminal"
+import type { Meta } from "@/lib/types"
+import { useApp } from "@/store/app"
+import { SelectionMenu, selectionSpeechKey } from "./selection-menu"
 
 function selectAll(el: HTMLElement) {
   const range = document.createRange()
@@ -12,7 +18,28 @@ function selectAll(el: HTMLElement) {
   sel?.addRange(range)
 }
 
+function speechReady(): SpeechSnapshot {
+  const defaults = defaultSpeechSettings()
+  return {
+    execution: "pc_local",
+    input: { ...defaults.input, enabled: false, ready: false, model: "", label: "" },
+    output: { ...defaults.output, enabled: true, ready: true, model: "tts", label: "TTS" },
+    limits: defaults.limits,
+  }
+}
+
 describe("SelectionMenu", () => {
+  beforeEach(() => {
+    useApp.setState({ locale: "en", meta: undefined })
+  })
+  afterEach(() => {
+    act(() => {
+      speechPlayback.stop()
+      useApp.setState({ locale: "en", meta: undefined })
+    })
+    vi.restoreAllMocks()
+  })
+
   function terminalSelection(source: HTMLElement, text: string | null, clear = vi.fn()) {
     act(() => document.dispatchEvent(new CustomEvent<TerminalSelection>(TERMINAL_SELECTION_EVENT, {
       detail: {
@@ -87,6 +114,8 @@ describe("SelectionMenu", () => {
     selectAll(screen.getByText("alpha beta"))
     fireEvent.mouseUp(document)
     expect(screen.getByRole("menuitem", { name: "Add to chat" })).toBeInTheDocument()
+    expect(screen.queryByRole("menuitem", { name: "Read aloud" })).toBeNull()
+    expect(screen.queryByRole("menuitem", { name: "Translate" })).toBeNull()
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Add to chat" }))
     expect(onAdd).toHaveBeenCalledWith("alpha beta")
@@ -223,5 +252,118 @@ describe("SelectionMenu", () => {
     selectAll(screen.getByText("composer draft"))
     fireEvent.mouseUp(document)
     expect(screen.queryByRole("menuitem", { name: "Add to chat" })).toBeNull()
+  })
+
+  it("reads the selection with the speech model and keeps the menu open", async () => {
+    const play = vi.spyOn(speechPlayback, "play").mockResolvedValue(undefined)
+    const synthesize = vi.spyOn(speechAPI, "synthesizeSpeech").mockResolvedValue(new Blob(["audio"], { type: "audio/mpeg" }))
+    const onAdd = vi.fn()
+    useApp.setState({ meta: { speech: speechReady() } as Meta })
+    render(<><div data-quote-source="">alpha beta</div><SelectionMenu onAdd={onAdd} /></>)
+    selectAll(screen.getByText("alpha beta"))
+    fireEvent.mouseUp(document)
+    fireEvent.click(screen.getByRole("menuitem", { name: "Read aloud" }))
+    expect(onAdd).not.toHaveBeenCalled()
+    expect(play).toHaveBeenCalledWith(selectionSpeechKey, "alpha beta", expect.objectContaining({ chunkChars: 1000 }))
+    await play.mock.calls[0][2].synthesize("alpha beta", new AbortController().signal)
+    expect(synthesize).toHaveBeenCalledWith("alpha beta", expect.any(AbortSignal), speechReady().limits.output_bytes)
+    expect(screen.getByRole("menuitem", { name: "Add to chat" })).toBeVisible()
+  })
+
+  it("hides reading when spoken output is switched off or not ready", () => {
+    const ready = speechReady()
+    ready.output.enabled = false
+    useApp.setState({ meta: { speech: ready } as Meta })
+    const view = render(<><div data-quote-source="">alpha beta</div><SelectionMenu onAdd={vi.fn()} /></>)
+    selectAll(screen.getByText("alpha beta"))
+    fireEvent.mouseUp(document)
+    expect(screen.queryByRole("menuitem", { name: "Read aloud" })).toBeNull()
+    ready.output.enabled = true
+    ready.output.ready = false
+    useApp.setState({ meta: { speech: ready } as Meta })
+    view.rerender(<><div data-quote-source="">alpha beta</div><SelectionMenu onAdd={vi.fn()} /></>)
+    expect(screen.queryByRole("menuitem", { name: "Read aloud" })).toBeNull()
+  })
+
+  it("stops selection playback when the menu closes", () => {
+    vi.spyOn(speechPlayback, "getSnapshot").mockReturnValue({ key: selectionSpeechKey, state: "playing" })
+    const stop = vi.spyOn(speechPlayback, "stop").mockImplementation(() => {})
+    useApp.setState({ meta: { speech: speechReady() } as Meta })
+    render(<><div data-quote-source="">alpha beta</div><SelectionMenu onAdd={vi.fn()} /></>)
+    selectAll(screen.getByText("alpha beta"))
+    fireEvent.mouseUp(document)
+    fireEvent.click(screen.getByRole("menuitem", { name: "Stop reading" }))
+    expect(stop).toHaveBeenCalled()
+    stop.mockClear()
+    fireEvent.wheel(document)
+    expect(stop).toHaveBeenCalled()
+    expect(screen.queryByRole("menu")).toBeNull()
+  })
+
+  it("translates an English selection into Chinese and leaves the quote in place", async () => {
+    useApp.setState({ locale: "zh" })
+    const translate = vi.spyOn(api, "translateSelection").mockResolvedValue({ text: "不要重启。" })
+    const onAdd = vi.fn()
+    render(<><div data-quote-source="">Do not restart.</div><SelectionMenu threadId="th_1" onAdd={onAdd} /></>)
+    selectAll(screen.getByText("Do not restart."))
+    fireEvent.mouseUp(document)
+    fireEvent.click(screen.getByRole("menuitem", { name: "翻译" }))
+    expect(translate).toHaveBeenCalledWith("th_1", "Do not restart.", expect.any(AbortSignal))
+    expect(await screen.findByRole("status", { name: "译文" })).toHaveTextContent("不要重启。")
+    expect(onAdd).not.toHaveBeenCalled()
+    expect(screen.getByRole("menuitem", { name: "加入对话" })).toBeVisible()
+  })
+
+  it("offers translation only for English text while the interface is Chinese", () => {
+    useApp.setState({ locale: "zh" })
+    render(
+      <>
+        <div data-quote-source="">这是中文</div>
+        <div data-quote-source="">check 这个</div>
+        <div data-quote-source="">Do not restart.</div>
+        <SelectionMenu threadId="th_1" onAdd={vi.fn()} />
+      </>,
+    )
+    selectAll(screen.getByText("这是中文"))
+    fireEvent.mouseUp(document)
+    expect(screen.queryByRole("menuitem", { name: "翻译" })).toBeNull()
+    selectAll(screen.getByText("check 这个"))
+    fireEvent.mouseUp(document)
+    expect(screen.queryByRole("menuitem", { name: "翻译" })).toBeNull()
+    selectAll(screen.getByText("Do not restart."))
+    fireEvent.mouseUp(document)
+    expect(screen.getByRole("menuitem", { name: "翻译" })).toBeVisible()
+
+    act(() => useApp.setState({ locale: "en" }))
+    expect(screen.queryByRole("menuitem", { name: "Translate" })).toBeNull()
+    expect(screen.queryByRole("menuitem", { name: "翻译" })).toBeNull()
+  })
+
+  it("shows a translation failure without the provider message and cancels when the menu closes", async () => {
+    useApp.setState({ locale: "zh" })
+    const translate = vi.spyOn(api, "translateSelection")
+    translate.mockRejectedValueOnce(new ApiError("private-upstream-detail", 502, "selection_translation_unavailable"))
+    render(<><div data-quote-source="">Do not restart.</div><SelectionMenu threadId="th_1" onAdd={vi.fn()} /></>)
+    const text = screen.getByText("Do not restart.")
+    selectAll(text)
+    fireEvent.mouseUp(document)
+    fireEvent.click(screen.getByRole("menuitem", { name: "翻译" }))
+    expect(await screen.findByText("翻译失败，请重试。")).toBeVisible()
+    expect(screen.queryByText("private-upstream-detail")).toBeNull()
+
+    translate.mockRejectedValueOnce(new ApiError("too long", 400, "selection_translation_too_long"))
+    fireEvent.click(screen.getByRole("menuitem", { name: "翻译" }))
+    expect(await screen.findByText("选区过长，请缩短后再翻译。")).toBeVisible()
+
+    let signal: AbortSignal | undefined
+    translate.mockImplementation((_id, _text, next: AbortSignal) => {
+      signal = next
+      return new Promise(() => {})
+    })
+    fireEvent.click(screen.getByRole("menuitem", { name: "翻译" }))
+    expect(await screen.findByText("正在翻译…")).toBeVisible()
+    fireEvent.wheel(document)
+    expect(signal?.aborted).toBe(true)
+    expect(screen.queryByRole("menu")).toBeNull()
   })
 })

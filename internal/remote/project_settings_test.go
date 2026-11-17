@@ -174,7 +174,11 @@ func TestPhoneProjectRPCTraversesTheSealedLinkDispatcher(t *testing.T) {
 
 func TestPhoneCatalogReportsExplicitlyDisabledComposerPredictions(t *testing.T) {
 	e := testEngine(t)
-	if err := e.UpdateConfig(func(cfg *config.Config) error { cfg.Swarm.ComposerPredictions = false; return nil }); err != nil {
+	if err := e.UpdateConfig(func(cfg *config.Config) error {
+		cfg.Product.Mode = config.ProductModeLocal
+		cfg.Swarm.ComposerPredictions = false
+		return nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 	for _, op := range []string{OpCatalog, OpRefreshCatalog} {
