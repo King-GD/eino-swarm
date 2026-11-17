@@ -59,6 +59,7 @@ func (rt *runtime) runManager(ctx context.Context, turn *store.Turn, reg *swarm.
 	// Bind the actual owner before restoring or spawning workers. A worker may
 	// outlive this manager check and must keep this original turn identity.
 	ctx = withHistoryReadOwner(ctx, turn.ThreadID, turn.ID)
+	ctx = e.bindRemoteToolRoutes(ctx, turn.ID)
 	rt.mu.Lock()
 	paused := rt.restartCap
 	rt.restartCap = nil

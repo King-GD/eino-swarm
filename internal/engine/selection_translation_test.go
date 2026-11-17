@@ -221,6 +221,7 @@ func TestSelectionTranslationUsesAnEnabledTranslationRole(t *testing.T) {
 		writeContextFlowReply(w, false, map[string]any{"content": translated}, "stop")
 	})
 	src := accountCatalog(t, e.cfg.Models.Providers[0].BaseURL, "conversation")
+	e.cfg.Product.Mode = config.ProductModeFOFA
 	src.SetRoles([]provider.AccountRole{
 		{ID: "conversation", Enabled: true},
 		{ID: "translation", Enabled: false, Label: "翻译"},
@@ -266,6 +267,7 @@ func TestEnabledTitleRoleUsesTheExclusiveNamingRoute(t *testing.T) {
 		writeContextFlowReply(w, false, map[string]any{"content": "迁移计划"}, "stop")
 	})
 	src := accountCatalog(t, e.cfg.Models.Providers[0].BaseURL, "conversation")
+	e.cfg.Product.Mode = config.ProductModeFOFA
 	src.SetRoles([]provider.AccountRole{
 		{ID: "conversation", Enabled: true},
 		{ID: "title", Enabled: false, Label: "对话命名"},

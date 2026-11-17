@@ -30,8 +30,11 @@ describe("goal editing during engine restoration", () => {
     render(<GoalBanner goal="Existing objective" onEdit={onEdit} onClear={vi.fn()} />)
     fireEvent.click(screen.getByTestId("goal-text"))
     fireEvent.change(screen.getByTestId("goal-edit"), { target: { value: "Retained objective edit" } })
-    fireEvent.keyDown(screen.getByTestId("goal-edit"), { key: "Enter" })
-    await waitFor(() => expect(onEdit).toHaveBeenCalledTimes(1))
+    // A callback invocation is not its acknowledgement. Join the refusal
+    // before retrying, or the pending-save guard correctly drops the retry.
+    await act(async () => { fireEvent.keyDown(screen.getByTestId("goal-edit"), { key: "Enter" }) })
+    expect(onEdit).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId("goal-edit")).toBeEnabled()
     expect(screen.getByTestId("goal-edit")).toHaveValue("Retained objective edit")
     fireEvent.keyDown(screen.getByTestId("goal-edit"), { key: "Enter" })
     await waitFor(() => expect(screen.queryByTestId("goal-edit")).toBeNull())

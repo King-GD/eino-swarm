@@ -100,7 +100,7 @@ func (e *Engine) TranslateSelection(ctx context.Context, threadID, text string) 
 		}
 		return "", err
 	}
-	chatModel := provider.WithoutBuiltinTools(build("translation", selectionTranslatorAgentID))
+	chatModel := provider.WithoutBuiltinTools(build(selectionTranslatorAgentID, selectionTranslatorAgentID))
 	limit := min(selectionTranslationMaxTokens, e.cfg.SwarmSnapshot().CompletionTokenLimit())
 	out, err := selectionTranslateGenerate(ctx, chatModel, []*schema.Message{
 		schema.SystemMessage(selectionTranslationPrompt()),

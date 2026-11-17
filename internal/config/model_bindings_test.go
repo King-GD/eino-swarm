@@ -10,6 +10,9 @@ func TestFunctionalBindingsAreValidatedAndDetached(t *testing.T) {
 		scope, role, provider, model string
 		valid                        bool
 	}{
+		{"local", "embedding", "", "", true}, {"gateway:scope", "embedding", "", "", true},
+		{"local", "embedding", "own", "", false}, {"local", "embedding", "", "embed", false},
+		{"local", "title", "", "", false},
 		{"local", "title", "own", "small", true}, {"gateway:scope", "speech", "gateway:account", "voice", true},
 		{"bad", "title", "own", "small", false}, {"local", "unknown", "own", "small", false},
 		{"local", "title", "", "small", false}, {"local", "title", "own", "", false},
@@ -36,7 +39,7 @@ func TestFunctionalBindingsAreValidatedAndDetached(t *testing.T) {
 	if err := Default().validateModelBindings(); err != nil {
 		t.Fatal(err)
 	}
-	if KnownModelRole("unknown") || len(ModelRoles()) != 8 {
+	if KnownModelRole("unknown") || len(ModelRoles()) != 10 {
 		t.Fatal("role validation")
 	}
 }

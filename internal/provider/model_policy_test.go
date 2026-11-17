@@ -227,12 +227,15 @@ func TestLocalModeSwitchesAuthorizedServerCatalogs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	preset.SetCatalogGroup("third_party")
+	gateway.SetCatalogGroup("original")
+	gateway.SetModelPolicy(true, nil)
 	p.SetLocalAccountSources([]*AccountSource{preset, gateway})
 
 	got := map[string]string{}
 	personal := 0
 	for _, row := range p.List() {
-		if row.Model == "embedding" {
+		if row.Model == "embedding" || (row.ProviderID == primary.ID() && row.Model == "title") {
 			t.Fatal("non-conversation catalog row was selectable")
 		}
 		if row.Source == SourceAccount {
@@ -241,7 +244,7 @@ func TestLocalModeSwitchesAuthorizedServerCatalogs(t *testing.T) {
 		}
 		personal++
 	}
-	if personal == 0 || got[primary.ID()+"/conversation"] != "Partner" || got[primary.ID()+"/title"] != "Partner" || got[gatewayID+"/conversation"] != "服务器" || got[gatewayID+"/original"] != "服务器" {
+	if personal == 0 || got[primary.ID()+"/conversation"] != "Partner" || got[gatewayID+"/conversation"] != "服务器" || got[gatewayID+"/original"] != "服务器" {
 		t.Fatalf("LOCAL list personal=%d rows=%v", personal, got)
 	}
 	chosen, err := p.ResolveModel(gatewayID, "original")

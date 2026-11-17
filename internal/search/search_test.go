@@ -47,7 +47,9 @@ func testCfg(t *testing.T, embedding bool) (*config.Config, *store.Store) {
 		t.Fatal(err)
 	}
 	cfg.Search.Embedding = embedding
-	cfg.Search.EmbeddingModel = "named-embed"
+	if embedding {
+		cfg.Search.EmbeddingModel = "named-embed"
+	}
 	st, err := store.Open(cfg.DBPath())
 	if err != nil {
 		t.Fatal(err)
@@ -234,11 +236,11 @@ func TestIndexQueuesEmbeddingsOnlyWhenEnabled(t *testing.T) {
 		t.Fatalf("off must not embed, calls=%d", embed.calls)
 	}
 
-	cfg.Search.Embedding = true
+	cfg.Search.EmbeddingModel = "named-embed"
 	svc.Reload()
 	svc.WaitIdle()
 	if embed.calls == 0 {
-		t.Fatal("turning the switch on must backfill embeddings")
+		t.Fatal("configuring a model must backfill embeddings")
 	}
 	calls := embed.calls
 	svc.Index(th.ID)
@@ -246,7 +248,7 @@ func TestIndexQueuesEmbeddingsOnlyWhenEnabled(t *testing.T) {
 	if embed.calls != calls {
 		t.Fatalf("unchanged text must not re-embed, %d → %d", calls, embed.calls)
 	}
-	cfg.Search.Embedding = false
+	cfg.Search.EmbeddingModel = ""
 	svc.Reload()
 	calls = embed.calls
 	svc.Index(th.ID)

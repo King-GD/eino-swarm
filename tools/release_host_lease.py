@@ -121,7 +121,10 @@ def effective_directory(argv, cwd):
 def process_cwd(pid, *, timeout=2):
     if sys.platform.startswith("linux"):
         return Path(os.readlink(f"/proc/{pid}/cwd"))
-    result = subprocess.run(["/usr/sbin/lsof", "-a", "-p", str(pid), "-d", "cwd", "-Fn"],
+    # Only the cwd path is needed. Avoid blocking kernel probes and unrelated
+    # host/service name resolution inside the existing identity deadline.
+    # Missing or ambiguous output still refuses below; -b is no permission.
+    result = subprocess.run(["/usr/sbin/lsof", "-b", "-nP", "-a", "-p", str(pid), "-d", "cwd", "-Fn"],
                             capture_output=True, text=True, timeout=timeout)
     paths = [line[1:] for line in result.stdout.splitlines() if line.startswith("n")]
     if result.returncode or len(paths) != 1 or not paths[0].startswith("/"):

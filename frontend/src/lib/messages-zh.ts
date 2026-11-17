@@ -1,3 +1,4 @@
+import { modelSettingsZh } from "./messages-model-settings"
 import { backoffZh } from "./messages-backoff"
 import { modelPolicyZh } from "./messages-model-policy"
 import { remoteLoginZh } from "./messages-remote-login"
@@ -17,6 +18,7 @@ import { speechZh } from "./messages-speech"
 
 export const zh: { [K in keyof typeof en]: string } = {
   ...modelPolicyZh,
+  ...modelSettingsZh,
   ...speechZh,
   ...backupZh,
   ...mcpZH,
@@ -701,85 +703,6 @@ export const zh: { [K in keyof typeof en]: string } = {
   "settings.general.dataDir": "数据目录",
   "settings.general.version": "版本 {version} · {mode} 模式",
   "settings.general.mock": " · 离线脚本化提供商",
-
-  "settings.models.title": "模型",
-  "settings.models.desc":
-    "配置对话、语音输入和语音朗读模型。网关模式由账号提供模型，本地模式可配置自己的服务。",
-  "settings.models.providers": "提供商",
-  "settings.models.providersDesc":
-    "每个接口一行。开关决定它出不出现在输入框的模型列表里。打开后可改 URL、密钥和默认模型。",
-  "settings.models.listed": "在输入框里显示 {name}",
-  "settings.models.listedHint":
-    "关掉后，这个接口不会出现在输入框的模型列表里。已经在用它的会话继续用。最后一个不能关。",
-  "settings.models.add": "添加提供商",
-  "settings.models.provider": "提供商",
-  "settings.models.providerPlaceholder": "给这个提供商起名",
-  "settings.models.noModel": "还没有模型",
-  "settings.models.default": "默认",
-  "settings.models.makeDefault": "设为默认",
-  "settings.models.remove": "移除 {name}",
-  "settings.models.details": "{name} 详情",
-  "settings.models.baseUrl": "接口地址",
-  "settings.models.apiMode": "API 模式",
-  "notice.cloudTool": "云端工具：{type} · {status}",
-  "settings.models.apiModeHint": "选择接口支持的协议。云端内置工具需要使用 Responses。",
-  "settings.models.builtinTools": "云端内置工具（JSON）",
-  "settings.models.builtinToolsHint": "由提供商通过 Responses 在云端执行，与本地函数工具分开。填写 JSON 数组，每项必须包含 type；工具参数会原样保留。当前支持 web_search、web_search_preview、file_search、code_interpreter。空列表表示禁用，实际可用性取决于提供商和模型。",
-  "settings.models.builtinToolsInvalid": "请填写工具对象组成的 JSON 数组，每项包含非空的 type。修正后才会保存设置。",
-  "settings.models.builtinToolsNeedsResponses": "请切换到 Responses，或清空云端工具列表后再保存。当前工具配置会保留。",
-  "settings.models.apiKey": "API 密钥",
-  "settings.models.apiKeySet": "已存有密钥。输入即替换。",
-  "settings.models.apiKeyHint": "不需要密钥的接口可以留空。",
-  "settings.models.defaultModel": "默认模型",
-  "settings.models.defaultModelHint":
-    "这个接口上有 {n} 个模型。在输入框里按会话切换。",
-  "settings.models.defaultModelEmpty":
-    "点发现可列出这个接口上的全部模型。这里只选默认。",
-  "settings.models.discover": "发现模型",
-  "settings.models.discoverFailed": "没法列出模型",
-  "settings.saveFailed": "没法保存设置",
-  "settings.loadFailed": "没法加载设置",
-  "settings.models.pickDefault": "选一个默认",
-  "settings.models.typeModel": "发现，或自己输入模型名",
-  "settings.models.window": "上下文窗口（tokens）",
-  "settings.models.windowHint":
-    "这个接口上的模型能吃多少 token，直到某个名字有自己的窗口。",
-  "settings.models.windowPlaceholder": "来自接口，或留空",
-  "settings.models.windows": "上下文窗口",
-  "settings.models.windowsHint":
-    "这个接口上每个名字自己的上限。发现会在列表带窗口时填入对应的值。",
-  "settings.models.windowFor": "{name} 的上下文窗口",
-  "settings.models.windowFallback": "其他名字的兜底",
-  "settings.models.windowFallbackHint":
-    "只在某个名字没有自己的窗口时用。别把某一个模型的上限填在这里。",
-  "settings.models.timeout": "请求超时（秒）",
-  "settings.models.timeoutHint":
-    "流开始后允许连续静默多久。还在输出的调用不会被中断；持续静默的接口会。压缩也使用这个超时。",
-  "settings.models.firstByteTimeout": "首字节等待时间（秒）",
-  "settings.models.firstByteTimeoutHint":
-    "等待模型响应头的时间。模型启动响应较慢时可调大；与流开始后的请求超时独立。0 使用默认值。",
-
-  "settings.aux.title": "辅助模型",
-  "settings.aux.desc": "这些活默认跟会话模型走，除非你钉死一个。",
-  "settings.aux.titleGen": "生成标题",
-  "settings.aux.compact": "压缩摘要",
-  "settings.aux.badge": "会话",
-  "settings.aux.auto": "自动 · 跟这次会话的模型",
-  "settings.aux.automatic": "自动",
-  "settings.aux.titleAria": "生成标题所用模型",
-  "settings.aux.compactAria": "压缩摘要所用模型",
-
-  "settings.searchEmbed.title": "会话搜索",
-  "settings.searchEmbed.desc":
-    "关键字搜索一直开着。打开嵌入后，⌘K 还会按意思排会话。嵌入模型从服务器标成嵌入的列表里选。",
-  "settings.searchEmbed.embedding": "语义搜索",
-  "settings.searchEmbed.embeddingHint":
-    "默认关。打开后 ⌘K 除了字面匹配还会按意思排。需要选一个服务器标成嵌入的模型。",
-  "settings.searchEmbed.model": "嵌入模型",
-  "settings.searchEmbed.modelHint": "只列出服务器标成嵌入的模型。",
-  "settings.searchEmbed.modelAria": "嵌入模型",
-  "settings.searchEmbed.badge": "搜索",
-  "settings.searchEmbed.pick": "选择模型",
 
   "settings.swarm.title": "集群",
   "settings.swarm.desc": "同时跑多少工人，以及主管什么时候不再等。",

@@ -41,10 +41,12 @@ func TestLocalCatalogRevocationSurvivesSiblingOutage(t *testing.T) {
 						"source_id": accountModelsSourceID, "source_kind": "gateway", "label": "Preset", "execution": "desktop",
 						"api_base_url": g.server.URL + "/client/desktop/v1", "catalog_url": g.server.URL + "/client/desktop/v1/models",
 						"client_catalog_url": g.server.URL + "/preset/models", "api_access_enabled": !(tc.revokePreset && revoked.Load()),
+						"configurable": true, "defaults": map[string]string{"conversation": "preset-model"},
 					},
 					"gateway_models": map[string]any{
 						"source_id": localGatewaySourceID, "source_kind": "gateway", "label": "Gateway", "execution": "desktop",
 						"api_base_url": g.server.URL + "/global", "catalog_url": g.server.URL + "/global/models", "api_access_enabled": !(revoked.Load() && !tc.revokePreset && !tc.denyHTTP),
+						"configurable": true,
 					},
 				}})
 			}

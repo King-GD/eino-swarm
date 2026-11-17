@@ -85,13 +85,15 @@ test("local agent tasks stay hidden until clients are enabled in config", async 
   await expect(page.getByTestId("client-task")).toHaveCount(0)
 })
 
-test("semantic search is off until a model is pinned", async ({ page }) => {
+test("semantic search is off until a model is pinned", async ({ page, request }) => {
   await page.goto("/")
   await page.getByRole("button", { name: "Settings" }).click()
   const dialog = page.getByRole("dialog")
   await dialog.getByRole("tab", { name: "Models" }).click()
-  await expect(dialog.getByRole("switch", { name: "Semantic search", exact: true })).not.toBeChecked()
-  await expect(dialog.getByLabel("Embedding model")).toHaveCount(0)
+  await expect(dialog.getByRole("switch", { name: "Semantic search", exact: true })).toHaveCount(0)
+  await expect(dialog.getByLabel("Embedding model Provider", { exact: true })).toContainText("off")
+  await expect(dialog.getByLabel("Embedding model Model", { exact: true })).toHaveCount(0)
+  expect((await (await request.get("/api/search?q=configuration-probe")).json()).embedding).toBe(false)
 })
 
 // A config that has never been saved from the UI is the state every install

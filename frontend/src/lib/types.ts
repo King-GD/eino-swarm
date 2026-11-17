@@ -700,7 +700,7 @@ export function defaultClientsSettings(
   }
 }
 
-/** Conversation search. Keyword indexing is always on; embeddings are opt-in. */
+/** Conversation search. Keyword indexing is always on; a model enables embeddings. */
 export interface SearchSettings {
   embedding: boolean
   embedding_provider: string
@@ -711,7 +711,7 @@ export function defaultSearchSettings(
   search?: Partial<SearchSettings> | null,
 ): SearchSettings {
   return {
-    embedding: search?.embedding ?? false,
+    embedding: Boolean(search?.embedding_model?.trim()),
     embedding_provider: search?.embedding_provider ?? "",
     embedding_model: search?.embedding_model ?? "",
   }

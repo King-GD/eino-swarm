@@ -124,7 +124,7 @@ func TestTimeoutTypedPatchValidatesEveryEditedFieldBeforePublishing(t *testing.T
 	if err := cfg.Update(func(c *Config) error {
 		c.Log.Level = "debug"
 		c.Remote.ThreadLimit = 9
-		c.Search.Embedding = true
+		c.Search.EmbeddingModel = "test-embed"
 		c.Clients.RecentDays = 8
 		return nil
 	}); err != nil {

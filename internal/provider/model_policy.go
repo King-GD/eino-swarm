@@ -152,7 +152,7 @@ func (p *Pool) RoleSelection(role, fallbackProvider, fallbackModel string) (conf
 				}
 				return config.ModelRef{ProviderID: src.id, Model: role}, true
 			}
-			if role == "title" || role == "compact" {
+			if role == "title" || role == "compact" || role == "translation" && !src.negotiated {
 				return config.ModelRef{ProviderID: src.id, Model: src.provider("").Model}, true
 			}
 			return config.ModelRef{}, true

@@ -39,7 +39,7 @@ func TestSearchEmbeddingDefaultsOffAndNamesNothing(t *testing.T) {
 	}
 }
 
-func TestSearchEmbeddingOffSurvivesNormalize(t *testing.T) {
+func TestConfiguredEmbeddingEnablesSearchDespiteLegacyFalse(t *testing.T) {
 	dir := t.TempDir()
 	raw := "search:\n  embedding: false\n  embedding_model: leftover\n"
 	if err := os.WriteFile(filepath.Join(dir, FileName), []byte(raw), 0o600); err != nil {
@@ -49,14 +49,14 @@ func TestSearchEmbeddingOffSurvivesNormalize(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Search.Embedding {
-		t.Fatal("normalize turned embedding back on")
+	if !cfg.Search.Embedding {
+		t.Fatal("configured model must derive embedding=true")
 	}
 	if cfg.Search.EmbeddingModel != "leftover" {
-		t.Fatalf("a typed model must survive while the switch is off: %+v", cfg.Search)
+		t.Fatalf("a configured model must survive normalization: %+v", cfg.Search)
 	}
-	if cfg.Search.SemanticEnabled() {
-		t.Fatal("a leftover model with the switch off must not enable embeddings")
+	if !cfg.Search.SemanticEnabled() {
+		t.Fatal("a configured model must enable embeddings")
 	}
 }
 
@@ -124,5 +124,19 @@ func TestSearchSettingsRoundTrip(t *testing.T) {
 	}
 	if !reloaded.Search.SemanticEnabled() {
 		t.Fatal("round-tripped pin must be semantically enabled")
+	}
+}
+
+func TestSearchUsesModelConfigurationInsteadOfLegacySwitch(t *testing.T) {
+	for _, tc := range []struct {
+		model        string
+		legacy, want bool
+	}{
+		{"", false, false}, {"", true, false}, {" ", true, false},
+		{"named-embed", false, true}, {"named-embed", true, true},
+	} {
+		if got := (SearchConfig{Embedding: tc.legacy, EmbeddingModel: tc.model}).SemanticEnabled(); got != tc.want {
+			t.Fatalf("model=%q legacy=%v: semantic=%v", tc.model, tc.legacy, got)
+		}
 	}
 }

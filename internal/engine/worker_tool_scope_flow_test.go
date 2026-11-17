@@ -231,6 +231,14 @@ func runToolScopeFlow(t *testing.T, names *[]string, writeProbe, failReadReceipt
 				call("scope-read", "read", map[string]string{"file_path": fileName})
 			case 2:
 				if writeProbe {
+					if refusedWrite {
+						if !strings.Contains(result("scope-write-probe"), `"code":"tool_not_registered"`) {
+							fail("worker did not receive its scoped write refusal")
+							return
+						}
+						answer("The write probe was refused.")
+						return
+					}
 					answer("The write probe completed.")
 					return
 				}
@@ -358,15 +366,16 @@ func runToolScopeFlow(t *testing.T, names *[]string, writeProbe, failReadReceipt
 				return
 			}
 			want := "done"
-			if refusedWrite {
-				want = "failed"
-			}
 			if wait.TimedOut || len(wait.Agents) != 1 || wait.Agents[0].toolScopeWorkerID != spawn ||
 				spawn.AgentID == "" || spawn.Generation <= 0 || wait.Agents[0].Status != want {
 				fail(fmt.Sprintf("wait did not collect the expected worker generation and status %s: %+v", want, wait))
 				return
 			}
 			if writeProbe {
+				if refusedWrite && wait.Agents[0].Result != "The write probe was refused." {
+					fail("manager did not collect the worker's explicit refusal")
+					return
+				}
 				answer("The worker result was collected.")
 				return
 			}
@@ -486,8 +495,8 @@ func runToolScopeFlow(t *testing.T, names *[]string, writeProbe, failReadReceipt
 	if writeProbe {
 		body, err := os.ReadFile(filepath.Join(workspace, probePath))
 		if refusedWrite {
-			if !os.IsNotExist(err) || worker.Status != "failed" {
-				t.Fatalf("out-of-scope write changed the workspace or hid the failure: err=%v status=%s", err, worker.Status)
+			if !os.IsNotExist(err) || worker.Status != "done" {
+				t.Fatalf("out-of-scope write changed the workspace or interrupted refusal recovery: err=%v status=%s", err, worker.Status)
 			}
 		} else if err != nil || string(body) != value || worker.Status != "done" {
 			t.Fatalf("positive write control failed: err=%v status=%s", err, worker.Status)

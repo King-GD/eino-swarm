@@ -204,8 +204,17 @@ func (s *AccountSource) conversationalNames() []string {
 		}
 		return nil
 	}
+	// A third-party catalog lists functional bindings, even when several use
+	// the chat protocol. Only its conversation binding is a model choice.
+	conversation := s.defaults["conversation"]
+	if conversation == "" {
+		conversation = "conversation"
+	}
 	out := make([]string, 0, len(s.names))
 	for _, name := range s.names {
+		if s.catalogGroup == "third_party" && name != conversation {
+			continue
+		}
 		if conversationalModelType(s.types[name]) {
 			out = append(out, name)
 		}

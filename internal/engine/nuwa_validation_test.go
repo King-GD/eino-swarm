@@ -364,13 +364,20 @@ func TestNuwaValidationActualManagerRefusesForgedOrInvalidWrites(t *testing.T) {
 }
 
 func TestNuwaValidationPlanningManagerCannotCallSharedWrites(t *testing.T) {
-	e, calls := newScheduleCompletionHTTPEngine(t, func(w http.ResponseWriter, _ *http.Request, _ int, request scheduleCompletionRequest) {
+	e, calls := newScheduleCompletionHTTPEngine(t, func(w http.ResponseWriter, _ *http.Request, step int, request scheduleCompletionRequest) {
 		for _, available := range request.Tools {
 			if available.Function.Name == "record_work" {
 				t.Error("planning manager was given record_work")
 			}
 		}
-		writeScheduleCompletionTool(w, request, "record_work", `{"kind":"fact","title":"Unapproved planning write"}`)
+		if step == 1 {
+			writeScheduleCompletionTool(w, request, "record_work", `{"kind":"fact","title":"Unapproved planning write"}`)
+			return
+		}
+		if receipt := nuwaValidationReceipt(request, "scheduled-completion-call"); !strings.Contains(receipt, `"code":"tool_not_registered"`) {
+			t.Errorf("planning manager lost the explicit write refusal: %s", receipt)
+		}
+		writeContextFlowReply(w, request.Stream, map[string]any{"content": "The planning write was refused."}, "stop")
 	})
 	project, err := e.CreateProject("Read-only planning", "", "", false, true)
 	if err != nil {
@@ -390,7 +397,7 @@ func TestNuwaValidationPlanningManagerCannotCallSharedWrites(t *testing.T) {
 	got := waitForTurn(t, e, turn.ID)
 	waitSettled(t, e, thread.ID)
 	_, nodes, err := e.store.NuwaSnapshot(t.Context(), project.ID)
-	if got.Status != store.TurnError || len(nodes) != 0 || err != nil || len(calls.snapshot()) != 1 {
+	if got.Status != store.TurnDone || len(nodes) != 0 || err != nil || len(calls.snapshot()) != 2 {
 		t.Fatalf("planning tool refusal=%+v nodes=%+v err=%v requests=%d", got, nodes, err, len(calls.snapshot()))
 	}
 }

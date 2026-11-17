@@ -177,6 +177,7 @@ func TestTitleFirstRouteRefusalKeepsBothNamingPathsSingleRequest(t *testing.T) {
 func newAuxiliaryRouteFixture(t *testing.T) (*Engine, string, *atomic.Int32, *timingtest.ManualClock) {
 	t.Helper()
 	e, _ := newReviewProtocolEngine(t, func(int) (string, []reviewOperation) { return "", nil })
+	e.cfg.Product.Mode = config.ProductModeLocal
 	requests := new(atomic.Int32)
 	endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

@@ -1012,13 +1012,16 @@ Android Back returns to the list. Back from the root inbox exits the app.
 
 ## `search`
 
-Conversation search for ⌘K. Keyword indexing is always on. Embeddings are
-opt-in: calling an extra endpoint is a cost the install did not ask for, and
-no model name is baked in.
+Conversation search for ⌘K. Keyword indexing is always on. Configuring an
+embedding model automatically enables semantic search; no model means off.
+No model name is baked in. Settings → Models → Functional models is the single
+current entry point. Its scoped embedding binding or gateway preset takes
+priority over the legacy fields below. An explicit empty embedding reference
+(`provider_id: ""`, `model: ""`) disables search even with a gateway preset.
 
 | key | default | meaning |
 |---|---|---|
-| `embedding` | `false` | when true **and** `embedding_model` is set, ⌘K also ranks by meaning. A true switch with an empty model stays keyword-only. |
+| `embedding` | `false` | legacy compatibility value derived from `embedding_model`, no longer an independent switch. Old `false` plus a saved model now enables search; clear the model to keep keyword-only search. |
 | `embedding_provider` | empty | endpoint `/embeddings` is sent to. Empty follows `models.default`. A deleted id is cleared on load. |
 | `embedding_model` | empty | the name that endpoint expects for embeddings. Never defaulted to a product name. Pin one in Settings → Models. |
 
@@ -1058,3 +1061,5 @@ This signing configuration is managed outside the application Settings; see
 [release setup and recovery](RELEASE.md#testflight-version-and-build-number).
 
 语音设置入口随模型配置权限显示：LOCAL 和可配置的普通网关账号在 Settings → Models 编辑功能模型及语音参数；托管第三方账号隐藏 Models，只在 Speech 入口显示语音开关、音色和资源参数，不显示模型、Provider 或凭据配置。
+
+旧版 LOCAL 设置没有 `model_policy` 时，明确的本地产品模式仍允许编辑原有语音配置；网关模式缺少已验证的能力清单时不推断语音权限，也不显示语音控制。

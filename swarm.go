@@ -46,7 +46,6 @@ import (
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -880,7 +879,7 @@ func (r *Registry) ManagerConfig(name, description string, m model.BaseChatModel
 			MaxIterations: 24,
 		},
 	}
-	mc.ToolsConfig.ToolsNodeConfig = compose.ToolsNodeConfig{Tools: r.Tools()}
+	mc.ToolsConfig.ToolsNodeConfig = RegisteredToolsNode(r.Tools(), false)
 	// stream inner sub-agent events up to the manager's event stream, and let
 	// the manager itself run streaming — no blocking generations anywhere.
 	mc.ToolsConfig.EmitInternalEvents = true

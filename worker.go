@@ -9,7 +9,6 @@ import (
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -23,7 +22,7 @@ func (r *Registry) workerInstruction(task string) string {
 // that value transport explicit; inheriting the full manager context would
 // also carry its model/role/accounting state and shorter execution lifetime.
 func (r *Registry) workerContext(parent context.Context) context.Context {
-	detached := context.Background()
+	detached := copyRemoteToolRoutes(parent, context.Background())
 	config := r.workerConfigurationForContext(parent)
 	if config.WorkerContextValues != nil {
 		detached = context.WithoutCancel(config.WorkerContextValues(parent, detached))
@@ -110,7 +109,7 @@ func (r *Registry) startWorker(ctx context.Context, h *Handle, task, message, in
 			Instruction: instruction,
 			Model:       &generationModel{BaseChatModel: modelOpt(role, id), acc: acc},
 			ToolsConfig: adk.ToolsConfig{
-				ToolsNodeConfig: compose.ToolsNodeConfig{Tools: extraTools},
+				ToolsNodeConfig: RegisteredToolsNode(extraTools, false),
 			},
 			MaxIterations: r.turnsLimit(),
 			Handlers:      handlers,

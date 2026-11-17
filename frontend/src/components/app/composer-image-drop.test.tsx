@@ -1,9 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { fireEvent, screen, waitFor } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { Composer } from "./composer"
-import { TooltipProvider } from "@/components/ui/tooltip"
-import type { Attachment } from "@/lib/types"
+import { renderComposer } from "@/test/composer"
+import type { Attachment, Meta } from "@/lib/types"
+import { useApp } from "@/store/app"
+
+beforeEach(() => useApp.setState({ meta: { product_mode: "local", model_policy: { mode: "local", configurable: true, ready: true, scope: "local" } } as Meta }))
 
 describe("Composer desktop image input", () => {
   it.each([
@@ -14,24 +16,7 @@ describe("Composer desktop image input", () => {
     Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: () => {} })
     const onSend = vi.fn()
     const onUpload = vi.fn(async (): Promise<Attachment[]> => [])
-    render(
-      <TooltipProvider>
-        <Composer
-          running={false}
-          models={[]}
-          provider=""
-          model=""
-          onModelChange={vi.fn()}
-          reasoning=""
-          reasoningLevels={[]}
-          onReasoningChange={vi.fn()}
-          onSend={onSend}
-          onStop={vi.fn()}
-          onUpload={onUpload}
-          focusSignal={0}
-        />
-      </TooltipProvider>,
-    )
+    renderComposer({ models: [], provider: "", model: "", reasoningLevels: [], onSend, onUpload })
     const photo = new File([new Uint8Array([1, 2, 3])], "photo.jpg", { type })
     const transfer = {
       types: ["Files"], files: [photo],

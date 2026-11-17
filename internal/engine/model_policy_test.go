@@ -30,14 +30,14 @@ func TestRunningTurnDoesNotBlockDebugSourceSwitch(t *testing.T) {
 	if err := e.UpdateConfigForMode(&mode, func(c *config.Config) error {
 		c.Product = mode
 		return nil
-	}); !errors.Is(err, ErrBackupBusy) {
-		t.Fatalf("running turn allowed a source switch: %v", err)
+	}); err != nil {
+		t.Fatalf("running turn blocked a source switch: %v", err)
 	}
-	if e.Config().Snapshot().Product.Resolved() != config.ProductModeLocal {
-		t.Fatal("refused switch changed the saved source")
+	if e.Config().Snapshot().Product.Resolved() != config.ProductModeFOFA {
+		t.Fatal("source switch did not persist")
 	}
 	if !e.Status("th_running").Running {
-		t.Fatal("refused source switch stopped the turn")
+		t.Fatal("source switch stopped the turn")
 	}
 	rt.mu.Lock()
 	rt.running = false

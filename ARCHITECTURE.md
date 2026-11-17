@@ -639,7 +639,13 @@ back when a stored `gateway:` id has no source. In local mode that refresh also
 reads the bootstrap's same-origin third-party catalog and, when the response
 enables it, the original gateway catalog. An empty desktop catalog adopts the
 third-party catalog instead of reporting no access. Those catalogs are extra
-account sources the pool lists only while local mode is signed in. The projection exists only in
+account sources the pool lists only while local mode is signed in. The third-party
+catalog (`catalog_group:third_party`) exposes only its conversation binding in
+PC and paired-phone model choices: the server's explicit conversation default,
+or the `conversation` alias when no default is given. Other functional bindings
+remain available to their own callers, even when their transport type is `chat`.
+Original gateway catalogs retain their ordinary model-type filtering.
+The projection exists only in
 memory: `internal/config` rejects the reserved prefix in `models.providers`, and
 `models.default_source` (`account`/`provider`, migrated from the old
 default-provider rule) picks which one a new conversation starts on.
@@ -1099,7 +1105,11 @@ rebuilds the names stored with that decision.
 The first actual invocation, direct or proxied, connects under its running
 tool's cancellation context. Tools from one server share a holder, which binds
 that first entry, so later calls cannot silently reset server state. A proxied
-call accepts a discovered remote name and arguments. Paging stays at the
+call accepts a discovered remote name and arguments. Calling that remote name
+as its own function returns `tool_not_registered` and, when the frozen
+progressive catalog lists it on one server, the `call_tool` proxy that must
+receive it. The remote tool is not executed, and the other calls in that reply
+still run. Paging stays at the
 default of 10.
 
 Local commands use the captured workspace as cwd with the application's normal
@@ -1229,7 +1239,9 @@ Each project turn loads `projects.system_prompt` into the manager's system
 prompt. For a human-initiated project turn outside planning, the engine gives
 the manager a project-bound `update_project_description` tool. Its SQLite
 write compares the description seen by that turn and checks the running
-turn's current project membership. A later turn loads the committed value.
+turn's current project membership. The success result contains the saved
+description. This turn has no separate tool for reading it back. A later
+turn loads the committed value.
 The project settings editor reads the current record when opened and omits an
 untouched description from its patch.
 

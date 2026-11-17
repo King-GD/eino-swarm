@@ -303,6 +303,9 @@ func testEngineConfig(t testing.TB, dir string) *config.Config {
 		t.Fatalf("config.Load: %v", err)
 	}
 	// The test swarm remains small, while its actual workers still run in parallel.
+	// These fixtures execute personal/offline models. Gateway tests install
+	// their own source policy explicitly instead of borrowing local access.
+	cfg.Product.Mode = config.ProductModeLocal
 	cfg.Swarm.MaxConcurrent = 4
 	cfg.Swarm.AgentTimeoutSeconds = 30
 	return cfg

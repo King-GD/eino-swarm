@@ -25,6 +25,12 @@ export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery
   const t = useT()
   const query = settingsMatch(searchQuery, t("speech.title"), speechSettingsSearch) ? "" : searchQuery
   const local = useApp((store) => store.meta?.model_policy ? store.meta.model_policy.configurable : store.meta?.product_mode === "local")
+  const mode = useApp((store) => store.meta?.product_mode)
+  // Legacy LOCAL settings have no policy, but do have an explicit product
+  // mode. An absent Gateway manifest still grants no voice capability.
+  const legacyLocal = !settings.model_policy && mode === "local"
+  const inputAllowed = legacyLocal || policyAllows(settings.model_policy, "transcription")
+  const outputAllowed = legacyLocal || policyAllows(settings.model_policy, "speech")
   const snapshot = useApp((store) => store.meta?.speech)
   const raw = defaultSpeechSettings(settings.speech)
   const speech = local ? { ...raw,
@@ -41,7 +47,7 @@ export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery
     discovery.current?.abort(); discovery.current = undefined; setDiscovering(undefined); setModels({})
   }, [connectionIdentity])
   useEffect(() => () => discovery.current?.abort(), [])
-  if (!policyAllows(settings.model_policy, "transcription") && !policyAllows(settings.model_policy, "speech")) return null
+  if (!inputAllowed && !outputAllowed) return null
   const update = <K extends Kind>(kind: K, patch: Partial<(typeof speech)[K]>) => onChange({
     ...settings, speech: { ...speech, [kind]: { ...speech[kind], ...patch } },
   })
@@ -86,7 +92,7 @@ export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery
     </SettingsRow>}
   </>
   return <>
-    {policyAllows(settings.model_policy, "transcription") ? <SettingsSection title={t("speech.input")} description={t("speech.description")}>
+    {inputAllowed ? <SettingsSection title={t("speech.input")} description={t("speech.description")}>
       <Field label={t("speech.enabled")} query={query}><Switch checked={speech.input.enabled} onCheckedChange={(enabled) => update("input", { enabled })} /></Field>
       {connection("input", speech.input)}
       <Field label={t("speech.language")} query={query}><Input value={speech.input.language} placeholder={t("speech.autoLanguage")} onChange={(event) => update("input", { language: event.target.value })} /></Field>
@@ -97,7 +103,7 @@ export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery
       <Field label={t("speech.duration")} query={query}><Input type="number" min={1} value={speech.input.max_duration_seconds} onChange={(event) => update("input", { max_duration_seconds: Number(event.target.value) })} /></Field>
       <Field label={t("speech.timeout")} query={query}><Input type="number" min={1} value={speech.input.timeout_seconds} onChange={(event) => update("input", { timeout_seconds: Number(event.target.value) })} /></Field>
     </SettingsSection> : null}
-    {policyAllows(settings.model_policy, "speech") ? <SettingsSection title={t("speech.output")}>
+    {outputAllowed ? <SettingsSection title={t("speech.output")}>
       <Field label={t("speech.enabled")} query={query}><Switch checked={speech.output.enabled} onCheckedChange={(enabled) => update("output", { enabled })} /></Field>
       {connection("output", speech.output)}
       <Field label={t("speech.voice")} query={query}><Input value={speech.output.voice} placeholder={t("speech.modelDefault")} onChange={(event) => update("output", { voice: event.target.value })} /></Field>

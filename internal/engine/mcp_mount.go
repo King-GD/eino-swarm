@@ -117,17 +117,107 @@ func (e *Engine) applyMCPSurface(ctx context.Context, turn *store.Turn, set *too
 		return nil, ctx.Err()
 	}
 	if record, ok := e.loadMCPMount(turn.ID); ok {
+		e.rememberRemoteRoutes(turn.ID, e.routesForMount(record))
 		return e.rebuildMCPSurface(set, record), nil
 	}
 	if resumed {
+		e.rememberRemoteRoutes(turn.ID, nil)
 		return set, nil
 	}
 	next, record, err := e.resolveMCPSurface(ctx, turn, set)
 	if err != nil {
 		return nil, err
 	}
+	e.rememberRemoteRoutes(turn.ID, e.routesForMount(record))
 	e.storeMCPMount(turn, record)
 	return next, nil
+}
+
+func (e *Engine) rememberRemoteRoutes(turnID string, routes map[string]string) {
+	if e == nil || turnID == "" {
+		return
+	}
+	if len(routes) == 0 {
+		e.remoteRoutes.Delete(turnID)
+		return
+	}
+	cloned := make(map[string]string, len(routes))
+	for name, call := range routes {
+		if name == "" {
+			continue
+		}
+		cloned[name] = call
+	}
+	if len(cloned) == 0 {
+		e.remoteRoutes.Delete(turnID)
+		return
+	}
+	e.remoteRoutes.Store(turnID, cloned)
+}
+
+func (e *Engine) bindRemoteToolRoutes(ctx context.Context, turnID string) context.Context {
+	if e == nil || turnID == "" {
+		return ctx
+	}
+	value, ok := e.remoteRoutes.LoadAndDelete(turnID)
+	if !ok {
+		return ctx
+	}
+	routes, _ := value.(map[string]string)
+	return swarm.WithRemoteToolRoutes(ctx, routes)
+}
+
+func (e *Engine) routesForMount(record mcpMountRecord) map[string]string {
+	if e == nil || e.cfg == nil {
+		return nil
+	}
+	snap := e.cfg.Snapshot()
+	byID := make(map[string]config.MCPServer, len(snap.MCP.Servers))
+	for _, server := range snap.MCP.Servers {
+		byID[server.ID] = server
+	}
+	routes := map[string]string{}
+	for _, item := range record.Servers {
+		if item.Mode == "direct" {
+			continue
+		}
+		server, ok := byID[item.ID]
+		if !ok {
+			continue
+		}
+		catalog, _ := mcpclient.LoadCatalog(e.cfg.DataDir(), server)
+		for name, call := range remoteCallRoutes(server, catalog) {
+			if prev, exists := routes[name]; exists && prev != call {
+				routes[name] = ""
+				continue
+			}
+			routes[name] = call
+		}
+	}
+	if len(routes) == 0 {
+		return nil
+	}
+	return routes
+}
+
+func remoteCallRoutes(server config.MCPServer, catalog mcpclient.Catalog) map[string]string {
+	mountable, _ := mcpclient.PrepareDirect(server, catalog, true, nil)
+	_, call := mcpclient.ProxyNames(server.ID)
+	if call == "" {
+		return nil
+	}
+	routes := make(map[string]string, len(mountable))
+	for _, remote := range mountable {
+		name := remote.OriginalName
+		if name == "" {
+			name = remote.Name
+		}
+		if name == "" {
+			continue
+		}
+		routes[name] = call
+	}
+	return routes
 }
 
 func (e *Engine) resolveMCPSurface(ctx context.Context, turn *store.Turn, set *tools.Set) (*tools.Set, mcpMountRecord, error) {

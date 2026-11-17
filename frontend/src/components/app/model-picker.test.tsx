@@ -145,7 +145,8 @@ describe("ModelPicker", () => {
 
   it("lists the signed-in server's models before the user's own services", () => {
     const mixed: ModelInfo[] = [
-      { id: "g\tserver-a", provider_id: "gateway:x", provider_label: "Server", label: "server-a", model: "server-a", ready: true, default: true, source: "account" },
+      { id: "g\tserver-a", provider_id: "gateway:x", provider_label: "Server", label: "server-a", model: "server-a", ready: true, default: true, source: "account",
+        capabilities: { authorized: true, available: true, configurable: true, capabilities: { conversation: { supported: true, available: true, configurable: true, endpoints: ["chat_completions"] } } } },
       ...models.map((m) => ({ ...m, default: false, source: "provider" as const })),
     ]
     render(<ModelPicker models={mixed} providerId="gateway:x" model="server-a" onChange={vi.fn()} />)

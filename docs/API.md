@@ -694,8 +694,11 @@ while ignoring its source, roles and profile.
 `models.bindings` in Settings is the current scope's role-to-`{provider_id,model}`
 map. A PUT replaces that map without requiring `providers`; `{}` restores defaults.
 Other scope maps are preserved privately. Roles are `conversation`, `title`,
-`compact`, `embedding`, `transcription`, `speech`, `ocr` and `decisions`. Unset
+`compact`, `translation`, `image`, `embedding`, `transcription`, `speech`, `ocr` and `decisions`. Image generation has no client adapter; its Settings row explains that it is unavailable. Unset
 bindings follow updated gateway defaults; explicit bindings keep their selection.
+For `embedding` only, `{ "provider_id": "", "model": "" }` explicitly disables
+semantic search, overriding both a gateway default and a legacy search pin.
+A partially empty reference is invalid.
 Saved gateway scopes separate origin/source/account owner and survive token renewal.
 `models.default_source` and `account_model` remain legacy fallback fields; an
 editable gateway binding save retires these global pins. `account_presentation`
@@ -721,9 +724,13 @@ live configuration and provider caches unchanged. Worker limit updates affect
 subsequent lifetimes, preserving current deadlines and watchdog failure counts.
 
 `search` is conversation search. Keyword indexing (FTS5) is always on.
-`embedding` defaults to `false`. Turning it on without `embedding_model` still
-ranks by keywords only. A named model starts semantic ranking (and a background
-backfill); changing the name drops vectors from the previous pin. Empty
+The functional `embedding` binding (or current gateway default) is the primary
+selection. When none is supplied, legacy `search.embedding_model` is used. A named
+model automatically enables semantic ranking and a background backfill; removing
+the model disables it. `search.embedding` is retained as a derived compatibility
+field for the legacy model, not an independent switch. An old `false` with a
+nonempty model now enables search; clear the model to keep keyword-only search.
+Changing the name drops vectors from the previous pin. Empty
 `embedding_provider` follows `models.default`. PUT reloads the search worker
 without a restart.
 
@@ -786,13 +793,21 @@ returns account and personal rows. A managed preset returns only its own
 conversation row, irrespective of legacy `account_presentation`; a profile uses
 its label and the alias `account`, never the broader catalog. A gateway with no
 ready source returns no model choices. Runtime account rows carry a `gateway:`
-provider ID and no credential or endpoint. Missing account sources produce
+provider ID and no credential or endpoint. Third-party rows with
+`catalog_group: "third_party"` offer only the configured conversation binding
+(the server's conversation default, or the `conversation` alias when absent).
+Title, compact, translation and other functional bindings are auxiliary targets,
+even if classified as `chat`; they remain available to their own callers.
+The paired-phone catalog uses the same projection, including cached refreshes.
+Original gateway and personal model catalogs keep their existing type filtering.
+Missing account sources produce
 `account_login_required` instead of choosing a same-named personal model.
 
 A catalog row may carry `model_type`. `chat` and a missing type stay in this
 list. `embedding`, `ocr` and `decisions` are omitted, and so is any other
 non-empty type. The model name is not used to guess. A catalog that does not
-send the field is unchanged. An empty account catalog is `no_models`. A catalog
+send the field is unchanged, except for the third-party functional projection
+above. An empty account catalog is `no_models`. A catalog
 that only contains non-conversation types stays `ready` and contributes no
 rows here; its counts and embedding names are on `account_models.kinds`.
 `default` on an account row is the name an empty conversation would use.
@@ -822,7 +837,7 @@ reports a simulated window so the ring still moves.
 Ranks conversations for ⌘K. `q` is required; blank returns no hits (not a
 wildcard). `limit` defaults to 20, cap 50. Keyword search is always on (FTS5
 trigram, with LIKE for queries shorter than three runes so two-character CJK
-still hits). `embedding` is true only when Settings has embeddings on **and**
+still hits). `embedding` is true only when an embedding model is configured **and**
 the query vector succeeded; a failed embed falls back to keywords and reports
 `false`.
 
@@ -1024,7 +1039,9 @@ turn's schema estimate fits `direct_load_percent`, each listed tool is its own
 function and `call_tool` is not mounted. Otherwise the toolset exposes
 namespaced `list_tools`/`call_tool` proxies; `call_tool.name` uses the listed
 remote name, and `list_tools` accepts `query` plus exact-name selection and
-paging. Inspection returns the full catalog. Inspection
+paging. Calling that remote name as its own function returns
+`tool_not_registered` and the matching `call_tool` proxy; the remote tool is
+not executed. Inspection returns the full catalog. Inspection
 uses the configured connection/discovery timeout. A missing ID returns `404`; connection or discovery failure returns
 `502 mcp_connection_failed` with a generic configuration hint and a safe typed
 `reason` such as `connection_failed`, `discovery_failed` or `invalid_schema`.
@@ -1711,7 +1728,8 @@ and does not change the project. Any other omitted field is left alone. Both
 respond `{"project": {…}}`.
 
 `system_prompt` is also the global description saved by the manager's
-project-bound `update_project_description` tool. Subsequent GET requests and
+project-bound `update_project_description` tool. A successful tool result
+contains the saved description. Subsequent GET requests and
 turns read the saved value. When editing another field, omit `system_prompt`
 to preserve the current description.
 

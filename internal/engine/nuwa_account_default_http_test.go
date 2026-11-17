@@ -137,6 +137,7 @@ func TestNewNuwaConversationUsesChosenAccountBeforeDelegatingHTTPWorker(t *testi
 	t.Cleanup(endpoint.Close)
 
 	e := newTestEngine(t)
+	e.cfg.Product.Mode = config.ProductModeFOFA
 	e.cfg.Swarm.AutoTitle = false
 	e.cfg.Models = config.ModelsConfig{
 		Default: privateID, DefaultSource: config.DefaultSourceAccount,
@@ -197,6 +198,7 @@ func TestNewConversationPreservesExplicitSourceAndSignedOutFallback(t *testing.T
 	endpoint := httptest.NewServer(http.NotFoundHandler())
 	t.Cleanup(endpoint.Close)
 	e := newTestEngine(t)
+	e.cfg.Product.Mode = config.ProductModeFOFA
 	e.cfg.Swarm.AutoTitle = false
 	e.cfg.Models = config.ModelsConfig{Default: privateID, Providers: []config.Provider{
 		{ID: privateID, BaseURL: endpoint.URL, Model: "fixture-model"},

@@ -641,6 +641,16 @@ reserved prefix; `internal/server/account_models_http_test.go` goes through HTTP
 for `configured`, model order, credential absence, `default_source` and
 `welcome_dismissed` surviving unrelated saves.
 
+Third-party conversation choices (`F-171`, `C-040`) use functional binding
+identity rather than the Chat Completions transport type.
+`internal/provider/account_catalog_group_test.go` covers unclassified and typed
+auxiliary aliases, explicit conversation defaults, absent conversations and
+unchanged original/legacy catalogs. `internal/remote/account_conversation_catalog_test.go`
+crosses real bootstrap/catalog HTTP, retained-cache refresh and the phone
+projection while preserving auxiliary resolution.
+`internal/server/account_conversation_catalog_test.go` checks the PC model
+picker's actual `/api/models` response.
+
 Frontend unit tests cover the pure rules (`account-models.test.ts`), the
 welcome gate and banner (`welcome-gate.test.tsx`, `configured-banner.test.tsx`),
 the Models card, the sync hook and the settings-persist omit-keeps behaviour.
@@ -9177,3 +9187,40 @@ evidence, not accepted by a later green retry.
 0.1.80 的原生 Account／LOCAL 验收：iOS `testNativeSignedInAccountWaitsForPCThenLocalKeepsLogin` 和 Android `accountWaitsForPCAndDebugLocalRetainsLogin` 从真实合成 CAS／PKCE 登录进入 Account 等待页，确认不会发现直连目录；通过实际头像三击进入 LOCAL 保留登录和授权来源，再切回 Account 并连接同账号 PC，检查真实加密 RPC。直接模型的重定向、取消及分块流用例显式在 LOCAL 执行；用户中心关闭后进入聊天，不依赖已移除的 Chat history 按钮。
 
 桌面 LOCAL 的授权双目录由 `internal/remote/account_local_sources_test.go` 覆盖：个人、预置和额外网关模型可并列，实际模型请求保持来源身份；撤权、空列表和退出不改用其他接口。
+
+
+### Embedding configuration and visible model availability
+
+`internal/config/search_test.go` covers model-derived enablement, including old
+`embedding: false` values with a saved model. `internal/provider/embedding_configuration_test.go`
+checks editable gateway defaults and explicit empty overrides.
+`internal/server/search_model_configuration_test.go` crosses Settings PUT, durable
+configuration reload and the actual search endpoint for enable/disable behavior.
+`frontend/e2e/model-policy.spec.ts` configures and clears the model through the UI,
+checks real semantic-search responses and verifies the disabled state after reload.
+Functional-model unit tests retain translation/image availability explanations.
+
+`unknown_tool_test.go` and `internal/engine/mcp_mount_test.go` cover detached
+route copies, one-turn consumption, explicit clearing, missing server/catalog
+data and legacy remote names, alongside real manager/worker/reviewer requests.
+Capability-dependent UI fixtures provide explicit local policies or verified
+Gateway grants. Speech regressions keep legacy LOCAL settings editable while
+refusing missing Gateway grants; stale-catalog polling tests count discovery
+separately from the independent capability refresh.
+
+Personal/offline engine fixtures select LOCAL explicitly; account-routing
+fixtures select Gateway explicitly. Source-switch tests retain an already-opened
+client's endpoint while requiring new lookups to use the new source. Nuwa
+planner, planning and scoped-worker HTTP regressions inspect the explicit
+`tool_not_registered` receipt on the next real model request and continue to
+assert no workspace, MCP or shared-state write occurred.
+Selection-translation regressions exercise the dedicated offline translator and
+legacy role-off fallback; `internal/provider/translation_policy_test.go` keeps
+negotiated denial separate. `frontend/e2e/legacy-local-settings.spec.ts` removes
+policy fields from both real HTTP snapshots, edits voice settings through the
+browser and verifies persistence after reload.
+
+Host validation inventory requests `lsof -b -nP` for cwd lookup, avoiding blocking
+kernel probes and hostname/service resolution inside its unchanged deadline.
+`tools/test_release_host_lease.py` retains the real cross-copy unittest-process
+identity check and rejects failed, absent, relative or ambiguous cwd results.

@@ -44,6 +44,11 @@ func (c *Config) validateModelBindings() error {
 			return errors.New("config: invalid model binding scope")
 		}
 		for role, ref := range refs {
+			// An empty embedding reference explicitly disables semantic search,
+			// including a gateway default and any legacy search pin.
+			if role == "embedding" && ref == (ModelRef{}) {
+				continue
+			}
 			if !KnownModelRole(role) || strings.TrimSpace(ref.ProviderID) == "" || strings.TrimSpace(ref.Model) == "" {
 				return errors.New("config: a model binding needs a known role, provider_id and model")
 			}

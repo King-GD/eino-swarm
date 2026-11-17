@@ -6,15 +6,16 @@ import { speechPlayback } from "@/lib/speech-media"
 import { defaultSpeechSettings } from "@/lib/speech-types"
 import type { Settings, Meta } from "@/lib/types"
 import { useApp } from "@/store/app"
+import { gatewayVoicePolicy } from "@/test/gateway-policy"
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
-function setup(mode: "local" | "fofa", onChange = vi.fn(), onFlush = vi.fn(async () => {})) {
-  useApp.setState({ meta: { product_mode: mode } as Meta })
+function setup(mode: "local" | "fofa", onChange = vi.fn(), onFlush = vi.fn(async () => {}), model_policy?: Settings["model_policy"]) {
+  useApp.setState({ meta: { product_mode: mode, model_policy } as Meta })
   const speech = defaultSpeechSettings()
   speech.input.has_api_key = true
   function Host() {
-    const [settings, setSettings] = useState({ speech, models: { default: "", providers: [] } } as unknown as Settings)
+    const [settings, setSettings] = useState({ speech, models: { default: "", providers: [] }, model_policy } as unknown as Settings)
     return <SpeechSettings settings={settings} onChange={(next) => { setSettings(next); onChange(next) }} onFlush={onFlush} />
   }
   render(<Host />)
@@ -49,13 +50,20 @@ describe("Speech settings", () => {
   })
 
   it("uses gateway-managed roles without exposing endpoint or credential configuration", () => {
-    const { onChange } = setup("fofa")
+    const { onChange } = setup("fofa", vi.fn(), vi.fn(async () => {}), gatewayVoicePolicy())
     expect(screen.queryByLabelText("API base URL")).toBeNull()
     expect(screen.queryByLabelText("API key")).toBeNull()
-    expect(screen.getAllByText("Managed by the gateway")).toHaveLength(2)
+    expect(screen.getByRole("heading", { name: "Voice input" })).toBeVisible()
     fireEvent.click(screen.getAllByLabelText("Enabled")[1])
     expect(onChange.mock.lastCall![0].speech.output).toMatchObject({ enabled: true, source: "account" })
     expect(onChange.mock.lastCall![0].speech.input.enabled).toBe(false)
+  })
+
+  it("does not infer Gateway voice permission from product mode alone", () => {
+    const { onChange } = setup("fofa")
+    expect(screen.queryByRole("heading", { name: "Voice input" })).toBeNull()
+    expect(screen.queryByLabelText("Enabled")).toBeNull()
+    expect(onChange).not.toHaveBeenCalled()
   })
 
   it("discovers models only after pending configuration writes finish", async () => {

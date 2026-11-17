@@ -1,3 +1,4 @@
+import { modelSettingsEn } from "./messages-model-settings"
 import { backoffEn } from "./messages-backoff"
 import { modelPolicyEn } from "./messages-model-policy"
 import { remoteLoginEn } from "./messages-remote-login"
@@ -16,6 +17,7 @@ import { speechEn } from "./messages-speech"
 
 export const en = {
   ...modelPolicyEn,
+  ...modelSettingsEn,
   ...speechEn,
   ...backupEn,
   ...mcpEN,
@@ -731,87 +733,6 @@ export const en = {
   "settings.general.dataDir": "Data directory",
   "settings.general.version": "Version {version} · {mode} mode",
   "settings.general.mock": " · offline scripted provider",
-
-  "settings.models.title": "Models",
-  "settings.models.desc":
-    "Configure conversation, voice input, and read-aloud models. Gateway models come from your account; local mode lets you configure your own services.",
-  "settings.models.providers": "Providers",
-  "settings.models.providersDesc":
-    "Each endpoint is a row. The switch puts it in the composer. Open one to edit the URL, key, and default model.",
-  "settings.models.listed": "Show {name} in the composer",
-  "settings.models.listedHint":
-    "Off hides this endpoint from the model list. A conversation already using it stays on it. The last one stays on.",
-  "settings.models.add": "Add a provider",
-  "settings.models.provider": "Provider",
-  "settings.models.providerPlaceholder": "Name this provider",
-  "settings.models.noModel": "No model yet",
-  "settings.models.default": "default",
-  "settings.models.makeDefault": "Make default",
-  "settings.models.remove": "Remove {name}",
-  "settings.models.details": "{name} details",
-  "settings.models.baseUrl": "Base URL",
-  "settings.models.apiMode": "API mode",
-  "notice.cloudTool": "Cloud tool: {type} · {status}",
-  "settings.models.apiModeHint": "Choose the protocol this endpoint supports. Cloud built-in tools require Responses.",
-  "settings.models.builtinTools": "Cloud built-in tools (JSON)",
-  "settings.models.builtinToolsHint": "Executed by the provider in Responses, separately from local function tools. Enter a JSON array with a type in each entry; tool options are preserved. Supported: web_search, web_search_preview, file_search, code_interpreter. Empty means disabled. Availability depends on the provider and model.",
-  "settings.models.builtinToolsInvalid": "Enter a JSON array of tool objects, each with a non-empty type. Settings will save after this is corrected.",
-  "settings.models.builtinToolsNeedsResponses": "Select Responses or clear the cloud tool list before saving. Your tool configuration is retained.",
-  "settings.models.apiKey": "API key",
-  "settings.models.apiKeySet": "A key is stored. Type to replace it.",
-  "settings.models.apiKeyHint": "Leave empty for endpoints that need no key.",
-  "settings.models.defaultModel": "Default model",
-  "settings.models.defaultModelHint":
-    "{n} model{s} on this endpoint. Switch per conversation in the composer.",
-  "settings.models.defaultModelEmpty":
-    "Discover to list every model this endpoint serves. You only pick the default here.",
-  "settings.models.discover": "Discover models",
-  "settings.models.discoverFailed": "Couldn't list models",
-  "settings.saveFailed": "Couldn't save settings",
-  "settings.loadFailed": "Couldn't load settings",
-  "settings.models.pickDefault": "Pick a default",
-  "settings.models.typeModel": "discover, or type a model name",
-  "settings.models.window": "Context window (tokens)",
-  "settings.models.windowHint":
-    "How many tokens a model on this endpoint can take, until a name has its own window.",
-  "settings.models.windowPlaceholder": "from the endpoint, or leave blank",
-  "settings.models.windows": "Context windows",
-  "settings.models.windowsHint":
-    "Each name on this endpoint has its own limit. Discover fills a value when the listing includes one.",
-  "settings.models.windowFor": "{name} context window",
-  "settings.models.windowFallback": "Fallback for other names",
-  "settings.models.windowFallbackHint":
-    "Used only when a name has no window of its own. Do not put one model's limit here.",
-  "settings.models.timeout": "Request timeout (seconds)",
-  "settings.models.timeoutHint":
-    "How long a started stream may stay silent. A call that is still streaming is not cut off; a silent endpoint is. Compact uses the same timeout.",
-  "settings.models.firstByteTimeout": "First-byte timeout (seconds)",
-  "settings.models.firstByteTimeoutHint":
-    "How long to wait for the model's response headers. Increase this if the model is slow to start. Separate from the request timeout after streaming starts. 0 uses the default.",
-
-  "settings.aux.title": "Auxiliary models",
-  "settings.aux.desc":
-    "These jobs use the conversation's model unless you pin one.",
-  "settings.aux.titleGen": "Title generation",
-  "settings.aux.compact": "Compact summary",
-  "settings.aux.badge": "conversations",
-  "settings.aux.auto": "Automatic · this conversation's model",
-  "settings.aux.automatic": "Automatic",
-  "settings.aux.titleAria": "Title generation model",
-  "settings.aux.compactAria": "Compact summary model",
-
-  "settings.searchEmbed.title": "Conversation search",
-  "settings.searchEmbed.desc":
-    "Keyword search is always on. Turn on embeddings to also rank by meaning. The embedding model comes from the server's embedding list.",
-  "settings.searchEmbed.embedding": "Semantic search",
-  "settings.searchEmbed.embeddingHint":
-    "Off by default. When on, ⌘K ranks conversations by meaning as well as words. Pick an embedding model the server classified.",
-  "settings.searchEmbed.model": "Embedding model",
-  "settings.searchEmbed.modelHint":
-    "Only models the server classified as embedding.",
-  "settings.searchEmbed.modelAria": "Embedding model",
-  "settings.searchEmbed.badge": "search",
-  "settings.searchEmbed.pick": "Select a model",
 
   "settings.swarm.title": "Swarm",
   "settings.swarm.desc":

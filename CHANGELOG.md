@@ -20,6 +20,13 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
+- Conversation semantic search now follows embedding-model configuration, without
+  a separate switch. Clearing the model disables it; editable gateway defaults
+  can be explicitly disabled. Legacy saved models now enable search even when
+  their old switch was false. Translation and image-generation rows explain
+  unavailable capabilities instead of disappearing; image generation still has
+  no client adapter. (`F-410`, `C-040`)
+
 - Phone launches automatically connect all enabled online account PCs and list
   online PCs before offline PCs. Existing live sockets and pairing tickets are
   reused; background connections leave the selected view unchanged.
@@ -38,6 +45,20 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
   survives unrelated phone model-catalog refreshes. (`F-148`, `C-048`)
 
 ### Fixed
+
+- Third-party functional catalogs offer only their conversation binding in PC
+  and paired-phone model pickers. Auxiliary bindings stay available to their
+  own callers, including when they use the chat protocol. (`F-171`, `C-040`)
+- Legacy LOCAL voice settings remain editable when no model-policy field is
+  supplied. A missing Gateway capability manifest still grants no voice controls.
+- Offline selection translation uses its dedicated translator role. Legacy
+  fixed-role accounts retain conversation translation when the separate role is
+  off; a negotiated translation denial still refuses the call. (`F-181`, `C-049`)
+- An unrecognized tool name returns `tool_not_registered` to the model. Other
+  calls in the same reply still run, and the turn continues. A progressive MCP
+  catalog name includes its `call_tool` proxy and is not executed.
+- `update_project_description` returns the saved description. The current turn
+  has no separate tool for reading it back.
 
 - Phone Gateway voice is available without configuring or enabling voice on a
   PC. Recognition and playback use independently authorized defaults, while
