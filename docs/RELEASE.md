@@ -19,6 +19,9 @@ SHA without reuploading completed platforms. The contributor rules are in
 [AGENTS.md](../AGENTS.md). `C-010` is in [CONTRACTS](CONTRACTS.md). The
 reconciliation command is in [TESTING](TESTING.md).
 
+先读[发布执行最短路径与已知阻塞](RELEASE_FAST_PATH.md)：明确开发验证与发布的交接、
+有效回执复用、阶段计时，以及 v0.1.81 暴露的测试工具与恢复问题。
+
 ## Local verification before publication
 
 Use [原生测试最短路径](NATIVE_TESTING_FAST_PATH.md) for input/admission checks,
@@ -515,8 +518,12 @@ An accepted build/upload is resumed, not uploaded again. Uncertain upload attemp
 stay `waiting_upload_confirmation` for investigation instead of blind retry. A
 failed Apple processing result stops this platform. Processing is polled every
 30 seconds, up to 600 seconds (`processing_timeout_seconds` in private config).
-Then the same command resumes compliance, associations and review. Apple review
-waits remain `waiting_beta_review`; rerun the iOS-only entry to observe completion.
+The iOS-only entry can resume compliance, associations and review, but it is a
+publication command and can mutate Apple; it is not a read-only status poll. Apple
+review waits remain `waiting_beta_review`. Observe the current build with GET-only
+queries first; an existing upload or review submission must not be repeated to
+resolve a query timeout. See the [recovery procedure](RELEASE_FAST_PATH.md#apple-处理与审核恢复)
+for supported queries, completion criteria and the current automation limits.
 
 The Beijing natural day permits one **newly available** build, counted by first
 verified group availability, not upload/VALID date. Ready builds are reconciled
