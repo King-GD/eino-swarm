@@ -204,8 +204,9 @@ been sent yet drops immediately.
 Select text in the transcript, a sub-agent's log, or the terminal and **Add
 to chat**. It works while a turn is streaming. The snippet is a count chip —
 hover to read, edit, or drop it — and is sent in `<selected_text>` beside
-`<user_request>`. On the phone, the same action sits near the selection. The
-phone's selected text appears above the message box. Terminal selections
+`<user_request>`. On the phone, the same action sits near a selection in the
+transcript or in expanded thinking text. The phone's selected text appears
+above the message box. Terminal selections
 include their source tab, conversation or project, initial directory and
 shell, and they go into the current composer even when the terminal belongs
 to another conversation. Only selected text is included. The initial directory

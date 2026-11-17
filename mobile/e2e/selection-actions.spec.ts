@@ -58,3 +58,23 @@ for (const theme of ["light", "dark"] as const) {
     await expect(page.getByTestId("quote-draft")).toHaveValue("Here is what changed:")
   })
 }
+
+test("expanded thinking text offers add to chat", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("zwai.phone.locale", "zh"))
+  await page.goto("/?mock=1&tick=0&history=reasoning-only")
+  const transcript = page.getByTestId("transcript")
+  await transcript.getByTestId("phone-thought-toggle").click()
+  const body = transcript.getByTestId("phone-thought")
+  await expect(body).toBeVisible()
+  await body.evaluate((element) => {
+    const range = document.createRange()
+    range.selectNodeContents(element)
+    window.getSelection()?.removeAllRanges()
+    window.getSelection()?.addRange(range)
+    document.dispatchEvent(new Event("selectionchange"))
+  })
+  const menu = page.locator("[data-phone-quote-action]")
+  await expect(menu.getByRole("button", { name: "加入对话" })).toBeVisible()
+  await menu.getByRole("button", { name: "加入对话" }).click()
+  await expect(page.getByTestId("quote-draft")).toHaveValue("Reading the current shape before touching it.")
+})

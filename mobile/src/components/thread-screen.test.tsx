@@ -6,6 +6,14 @@ import { ThreadScreen } from "./thread-screen"
 import { applyEvent, type CompactBlock } from "@/lib/transcript"
 import type { RemoteEvent } from "@/lib/rpc"
 
+function select(source: Node) {
+  const range = document.createRange()
+  range.selectNodeContents(source)
+  window.getSelection()?.removeAllRanges()
+  window.getSelection()?.addRange(range)
+  fireEvent(document, new Event("selectionchange"))
+}
+
 describe("ThreadScreen", () => {
   it("explains a live turn with only hidden background events and offers older history", () => {
     setLocale("en")
@@ -252,6 +260,52 @@ describe("ThreadScreen", () => {
     window.getSelection()?.removeAllRanges()
     window.getSelection()?.addRange(range)
     fireEvent(document, new Event("selectionchange"))
+    expect(screen.queryByRole("button", { name: "Add to chat" })).not.toBeInTheDocument()
+  })
+
+  it("adds expanded thinking text to the draft from the main transcript and a work group", () => {
+    setLocale("en")
+    const props = {
+      detail: { id: "t1", title: "talk" },
+      onBack: vi.fn(),
+      onSend: vi.fn(),
+      onSteer: vi.fn(),
+      onStop: vi.fn(),
+      onAnswer: vi.fn(),
+      onAnswerStructured: vi.fn(),
+    }
+    const { unmount } = render(<ThreadScreen {...props} blocks={[{ id: "r1", kind: "reasoning", text: "checked the path" }]} />)
+    fireEvent.click(screen.getByTestId("phone-thought-toggle"))
+    select(screen.getByTestId("phone-thought"))
+    fireEvent.click(screen.getByRole("button", { name: "Add to chat" }))
+    expect(screen.getByRole("textbox", { name: "Edit quote 1" })).toHaveValue("checked the path")
+    unmount()
+
+    render(<ThreadScreen {...props} blocks={[
+      { id: "r1", kind: "reasoning", text: "checked the path" },
+      { id: "tool1", kind: "tool", text: "opened", toolName: "read_file" },
+    ]} />)
+    fireEvent.click(screen.getByTestId("work-fold"))
+    fireEvent.click(screen.getByTestId("phone-thought-toggle"))
+    select(screen.getByTestId("phone-thought"))
+    expect(screen.getByRole("button", { name: "Add to chat" })).toBeVisible()
+  })
+
+  it("does not quote the thinking disclosure label", () => {
+    setLocale("en")
+    render(
+      <ThreadScreen
+        detail={{ id: "t1", title: "talk" }}
+        blocks={[{ id: "r1", kind: "reasoning", text: "checked the path" }]}
+        onBack={vi.fn()}
+        onSend={vi.fn()}
+        onSteer={vi.fn()}
+        onStop={vi.fn()}
+        onAnswer={vi.fn()}
+        onAnswerStructured={vi.fn()}
+      />,
+    )
+    select(screen.getByTestId("phone-thought-toggle"))
     expect(screen.queryByRole("button", { name: "Add to chat" })).not.toBeInTheDocument()
   })
 

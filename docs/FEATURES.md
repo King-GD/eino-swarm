@@ -426,7 +426,7 @@ This is the current user-facing capability map. The code and tests named below a
 
 - 点击选区之外收起「加入对话」并释放旧选区；点击该操作仍将原文插入草稿，不发送。证据：`mobile/src/components/thread-screen.test.tsx`、`mobile/e2e/composer-layout.spec.ts`。
 
-- 目的：从手机对话选择原文并附在下一条消息；使用者：手机用户；入口：选中对话正文 → 选区附近的 Add to chat／加入对话，系统复制／全选菜单仍可用；输入：选区及可选请求；输出：可查看、编辑、移除引用，发送或插入后显示独立的引用块；前置条件：打开 PC 对话，选区在正文中；失败表现：无效选区不显示操作，发送失败恢复草稿；关联契约：`C-011`, `C-017`；实现证据：`mobile/src/components/thread-screen.tsx`, `mobile/src/components/composer.tsx`, `mobile/src/lib/quote.ts`, `mobile/e2e/walkthrough.spec.ts`, `mobile/e2e/composer-layout.spec.ts`。
+- 目的：从手机对话选择原文并附在下一条消息；使用者：手机用户；入口：选中对话正文或已展开的思考原文 → 选区附近的 Add to chat／加入对话，系统复制／全选菜单仍可用；输入：选区及可选请求；输出：可查看、编辑、移除引用，发送或插入后显示独立的引用块；前置条件：打开 PC 对话，选区在用户消息、回答或已展开的思考原文中；失败表现：思考标题、工具控件和输入框等无效选区不显示操作，发送失败恢复草稿；关联契约：`C-011`, `C-017`；实现证据：`mobile/src/components/thread-screen.tsx`, `mobile/src/components/thought.tsx`, `mobile/src/components/composer.tsx`, `mobile/src/lib/quote.ts`, `mobile/src/components/thread-screen.test.tsx`, `mobile/e2e/walkthrough.spec.ts`, `mobile/e2e/composer-layout.spec.ts`, `mobile/e2e/selection-actions.spec.ts`。
 - 引用与目标／计划命令同时存在时，按 `F-150` 的提交前拒绝与完整保稿边界处理，不通过丢弃引用激活命令。
 
 ### F-222 Inspect sub-agents on the phone

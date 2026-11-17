@@ -8,6 +8,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Phone Add to chat now appears for text selected inside an expanded thought,
+  including a thought opened from a work group. The disclosure label and tool
+  controls still do not quote. (`F-221`, `C-011`)
+
 - Phone voice service failures show their HTTP status instead of only a generic
   error; private upstream error bodies remain hidden. (`F-148`, `C-048`)
 

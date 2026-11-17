@@ -24,6 +24,7 @@ export function PhoneThought({ text, className }: { text: string; className?: st
         <p
           id={contentId}
           data-testid="phone-thought"
+          data-quote-text=""
           className={cn("whitespace-pre-wrap text-xs text-muted-foreground", className)}
         >
           {text}
