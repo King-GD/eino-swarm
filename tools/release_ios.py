@@ -160,6 +160,44 @@ class IOSRelease:
             raise ValueError('Ambiguous remote build number')
         return builds[0] if builds else None
 
+    def current_status(self):
+        """Current live availability only; no quota reconciliation or state writes."""
+        build = self.snapshot()
+        result = {'version': self.version, 'source_sha': self.source_sha,
+                  'build_number': self.number, 'marketing_version': self.marketing_version}
+        if build is None:
+            uploads = [u for u in self.uploads if str(u['attributes'].get('cfBundleVersion')) == self.number]
+            failed = any(u['attributes'].get('state', {}).get('state') == 'FAILED' for u in uploads)
+            return dict(result, status='processing_failed' if failed else
+                        ('waiting_processing' if uploads else 'waiting_upload_confirmation'))
+        existing = self.state.get('ios', {})
+        known = next((r for r in self.ledger.get('releases', [])
+                      if r.get('app_id') == self.module.APP_ID and str(r.get('build_number')) == self.number), {})
+        if existing.get('source_sha', known.get('source_sha')) != self.source_sha:
+            raise ValueError('Remote build has no matching source receipt')
+        build_id = build['id']
+        if existing.get('build_id', build_id) != build_id:
+            raise ValueError('Remote build identity differs from the retained receipt')
+        marketing = self.api.request('GET', f'builds/{build_id}/preReleaseVersion')['data']['attributes']['version']
+        if marketing != self.marketing_version:
+            raise ValueError('Remote build marketing version mismatch')
+        detail = self.api.request('GET', f'builds/{build_id}/buildBetaDetail').get('data')
+        review = self.api.request('GET', f'builds/{build_id}/betaAppReviewSubmission').get('data')
+        forward = [g for g, ids in self.members.items() if build_id in ids]
+        reverse = {g['id'] for g in self.api.all(f'betaGroups?filter%5Bbuilds%5D={build_id}&limit=200')}
+        attrs = build['attributes']
+        ready = (attrs.get('processingState') == 'VALID' and attrs.get('expired') is False
+                 and available(detail, review, forward, self.config['group_ids'])
+                 and set(self.config['group_ids']) <= reverse)
+        status = 'available' if ready else 'waiting_beta_review'
+        if attrs.get('expired'):
+            status = 'expired'
+        elif attrs.get('processingState') != 'VALID':
+            status = 'processing_failed' if attrs.get('processingState') == 'FAILED' else 'waiting_processing'
+        return dict(result, status=status, build_id=build_id, processing_state=attrs.get('processingState'),
+                    expired=attrs.get('expired'), detail=detail, review=review,
+                    groups_forward=sorted(forward), groups_reverse=sorted(reverse))
+
     def verify_publication(self):
         """Prove an iOS-first frozen batch without archiving or mutating Apple."""
         if 'first_publication' in self.state:
@@ -235,10 +273,19 @@ class IOSRelease:
                 self.state.setdefault('first_publication', proof)
         return ready
 
+    def published_numbers(self):
+        # First verified availability is durable; observing it again cannot change its day.
+        return {str(row.get('build_number')) for row in self.ledger.get('releases', [])
+                if row.get('app_id') == self.module.APP_ID and row.get('successfully_published') is True}
+
     def quota(self, record=True):
-        # Observe every ready build before changing availability, including pending reviews.
+        published = self.published_numbers()
+        # Unknown/pending candidates must still reconcile before an availability mutation.
         for build in self.builds:
-            self.observe(build, record)
+            attrs = build['attributes']
+            if (attrs['version'] not in published and not attrs.get('expired')
+                    and attrs.get('processingState') == 'VALID'):
+                self.observe(build, record)
         return any(r.get('successfully_published') and r.get('success_beijing_date') == self.day
                    and str(r.get('build_number')) != self.number
                    for r in self.ledger.get('releases', []) if r.get('app_id') == self.module.APP_ID)
@@ -395,8 +442,11 @@ class IOSRelease:
         pending = [r for r in self.ledger.get('releases', []) if r.get('app_id') == self.module.APP_ID
                    and not r.get('successfully_published') and str(r.get('build_number')) != self.number]
         # Another publisher may have submitted a candidate without our local receipt.
+        published = self.published_numbers()
         for candidate in self.builds:
-            if candidate['attributes']['version'] != self.number and not candidate['attributes'].get('expired'):
+            if (candidate['attributes']['version'] != self.number
+                    and candidate['attributes']['version'] not in published
+                    and not candidate['attributes'].get('expired')):
                 review = self.api.request('GET', f'builds/{candidate["id"]}/betaAppReviewSubmission').get('data')
                 if (review or {}).get('attributes', {}).get('betaReviewState') in ('WAITING_FOR_REVIEW', 'IN_REVIEW'):
                     pending.append(candidate)

@@ -128,7 +128,7 @@ and matching native acceptance; previous-version evidence never transfers.
 The 25–35 minute healthy-environment target remains unmeasured for this entry.
 
 `make release VERSION=x.y.z` publishes only the allocated batch's outstanding
-required platforms in macOS → Android → iOS → Windows → Linux order. Windows is required only when the workset lists
+required platforms in macOS → Android → Windows → Linux → iOS order. Windows is required only when the workset lists
 it; older ledger rows without a windows field do not gain one. The Windows
 build cross-compiles both architectures with CGO disabled and does not run a
 Windows desktop session. The in-app updater still installs only the Mac zip.
@@ -165,6 +165,16 @@ matching receipt refuses Android upload. The receipt records prior installation,
 upgrade/signature and behavior acceptance; the hash check does not perform or
 replace those checks. A still-pending batch without this receipt retains the
 existing build entry. Existing public APKs retain their remote-digest retry rule.
+
+For Windows, `release_windows_validation` uses top-level `status: "passed"`,
+`version`, `source_sha`, and `assets` keyed by `amd64` and `arm64`. Each entry
+binds `status: "passed"`, `arch`, `asset_name` and `asset_sha256`. Keep both
+accepted ZIPs in `bin/`: publication verifies their bytes and PE architectures
+without rebuilding. A ready batch without receipts or a conflicting receipt
+refuses upload. Partial-publication recovery verifies existing remote digests
+and requires matching native evidence for each new archive; it never rebuilds
+the already public architecture. Legacy batches without receipts retain their
+build path only before any Windows asset is public, subject to native admission.
 
 Platform errors are printed immediately; independent platforms continue. The command
 exits non-zero if a required platform fails or is waiting. No version is incremented
@@ -523,7 +533,23 @@ publication command and can mutate Apple; it is not a read-only status poll. App
 review waits remain `waiting_beta_review`. Observe the current build with GET-only
 queries first; an existing upload or review submission must not be repeated to
 resolve a query timeout. See the [recovery procedure](RELEASE_FAST_PATH.md#apple-处理与审核恢复)
-for supported queries, completion criteria and the current automation limits.
+for supported queries, completion criteria and the implemented recovery paths.
+
+For a GET-only current-build observation, use:
+
+```bash
+python3 -B tools/release.py --version x.y.z --platform ios --ios-status --source-dir /absolute/frozen-checkout
+```
+
+It requires matching retained version/source, checks current marketing version,
+processing, expiry, review and both group directions, and returns JSON. Exit0
+means `available`; other observed states return1; invalid flag combinations return2.
+It does not call Xcode, scan historical quota/reviews, mutate Apple, write ledgers
+or take/create a publication lock. It always queries live state even if a retained
+first-public proof exists. Actual publication/recording remains a separate locked action.
+Historical builds already confirmed published in this app's ledger are excluded
+from per-build quota/detail/review reconciliation; unknown/pending builds still
+receive the existing checks. No historical availability date is changed.
 
 The Beijing natural day permits one **newly available** build, counted by first
 verified group availability, not upload/VALID date. Ready builds are reconciled

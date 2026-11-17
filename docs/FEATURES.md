@@ -539,6 +539,8 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-430 Build and release paths
 
+- Windows 已验收原包首次／部分上传恢复：统一发布入口核版本／源码、两个架构回执、原包 SHA 与 PE，复用接受字节；批次先发布所有非 iOS 平台，再等待 Apple。`--platform ios --ios-status` 对当前 TestFlight 构建实时只读观察，核完整双向组关系，返回可用或等待状态；正式恢复跳过已确认发布历史的详情请求，未知候选保护保持。关联契约：`C-010`；实现／验证：`tools/release.py`、`tools/release_ios.py`、`tools/test_release_resume_paths.py`、`docs/RELEASE.md`。
+
 - Linux amd64/arm64 Web/CLI 包：`make linux-release` 生成 `zwai-<version>-linux-<arch>.tar.gz`（`amd64`、`arm64`），只有 0755、little-endian ELF64 且机器类型与文件名架构匹配的 `zwai`，包含前端，默认 Web 模式；不包含原生桌面窗口。批次显式包含 linux 才发布，旧行不新增交付义务。关联契约：`C-010`；证据：`tools/release_linux.py`、`tools/test_release_linux.py`、`cmd/zwai/default_shell_server_test.go`。
 
 - Windows amd64 与 arm64 桌面 zip：入口是 `make windows-release`，以及批次工作集包含 windows 时的 `tools/release.py`。两份 zip 的唯一文件都是对应架构的 `zwai.exe`；缺一、不是 zip、或 PE 机器类型与文件名不符时不上传。没有 windows 字段的旧台账行不会因此变成待发布。应用内更新仍只安装 macOS zip。关联契约：`C-010`；实现证据：`internal/desktop/winpack`、`internal/update/version.go`、`internal/release/publish.go`、`tools/release.py`、`tools/test_release_windows.py`。

@@ -423,6 +423,9 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 
 ## C-010 Build artifacts and update channel
 
+- 已验收 Windows 原包：`release_windows_validation` 绑定状态、版本、源码及 amd64/arm64 的状态、架构、附件名与 SHA-256；首次和部分上传恢复均校验 ZIP/PE 与原包，禁止重建后继承旧验收。已有远端字节按 digest 验证，冲突或缺证拒绝新上传。统一批次先持久化所有非 iOS 平台结果，再进入 iOS 等待；必需平台未完成仍返回非零。实现／验证：`tools/release.py`、`tools/test_release_resume_paths.py`；关联 `F-430`。
+- TestFlight 观察与交付分离：`--platform ios --ios-status` 仅实时 GET 当前构建及完整组关系，核源码／营销版本、VALID／未过期、内外测、review 与双向配置组，不读取历史 review、不写账本或 Apple、不记录成功；未知或等待状态非零。正式恢复跳过本应用已确认发布的历史构建，仍核未知／待交付候选及日限制，保留首次可用日期。实现／验证：`tools/release_ios.py`、`tools/release.py`、`tools/test_release_resume_paths.py`；关联 `F-430`。
+
 - 版本建议与发布分离：`tools/next_release_version.py` 只读比较新鲜 origin 数字 tags、全部 Release（含 draft）和已有批次占用，按既有构建号边界建议递增 patch；不保留版本、不改源码或台账。重复调用在已有分配之后建议新的未占用版本，不用于发布重试；重试必须复用冻结版本，并由实际发布预检再次校验冲突。无法确认基线或占用时拒绝建议。证据：`tools/next_release_version.py`、`tools/test_next_release_version.py`。
 
 - 并行阶段准入：正常 owned stage 的 durable pending 发布不等于异常清理拒绝；只有失败／未确认 setup 或 cleanup 才设置 sticky refusal。输入／cache 读取后与 Popen 前在短准入锁内复查，命令执行期间不持此锁。pending 发布中断保留原取消 cause 与拒绝，清理成功落盘后才清拒绝；后发生的其他阶段失败不抹除已启动命令的实际 PID／时间／退出／流证据。证据：`tools/release_stages.py`、`tools/test_release_stages.py`；入口与边界见 `docs/RELEASE.md`。

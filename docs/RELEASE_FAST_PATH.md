@@ -88,17 +88,34 @@ GitHub 首次公开为 **2026-11-17 07:45:02 +08:00**，iOS 严格可用首次�
 重发。成功标准保持：VALID、未过期、内部 `READY_FOR_BETA_TESTING`、外部 `IN_BETA_TESTING`、
 存在的 review 为 `APPROVED`，所有配置组正反关联一致。之后才按现有记录流程保存成功与完成交付。
 
-## 当前工具缺口，不得描述成已实现的提速
+## 已补齐的发布工具路径
 
-- `tools/release.py::github_platform` 对尚未公开的 Windows ZIP 仍会进入 `make windows-release`；
-  目前没有与 Mac/Android/Linux 对等的、正式 Windows 已验收原包复用入口。不要重建后沿用旧
-  原生接受，也不要把裸 Go uploader 绕过账本记录作为标准恢复命令；需修正式入口并回归。
-- 默认发布顺序是 Mac → Android → iOS → Windows → Linux；当前实现没有把 Apple 等待自动移出
-  其他平台的关键路径。其他平台可按已有单平台入口和各自门槛安排，但写入仍须串行，并注意上述
-  Windows 缺口，不能同时开多个发布者。
-- iOS 的 `quota()` 会遍历历史构建并逐个观察；`--platform ios` 是可写恢复入口，不是仅查当前
-  build 的廉价状态命令。仓库目前没有正式的“当前构建只读观察／仅补缺失步骤”CLI；v0.1.81
-  使用的私有脚本不能作为已经产品化的工具。提速需要后续工具修复与实测，不能只修改文档后宣称完成。
+- Windows 批次的 `release_windows_validation` 绑定通过状态、版本、源码和两个架构的
+  `status`、`arch`、`asset_name`、`asset_sha256`。统一入口直接校验并上传保留 ZIP，不调用
+  `make windows-release`；缺失、冲突、改字节或 PE 架构不符均拒绝上传。部分已公开时，先核
+  已有附件的远端 digest，只允许另一架构的精确已验收原包补传。无验收回执的旧构建路径保持，
+  原生准入门槛仍生效；部分公开不能回到重建路径。
+- 默认发布顺序为 Mac → Android → Windows → Linux → iOS（仅包含本批必需且未完成的平台）。
+  非 iOS 平台逐一持久化结果后才进入 Apple 阶段，因此 Apple 处理／审核等待不阻塞这些上传；
+  发布仍串行持锁，不同时开多个发布者。任何必需平台未完成，整体仍返回非零。
+- iOS 复用本应用账本中已确认发布的历史构建，不再逐个请求它们的详情或 review，也不改写
+  首次可用日期。未知、待交付候选仍查询和阻断；普通日发布限制保持。发布恢复使用原入口。
+- 当前构建的正式只读入口如下；它执行 GET、完整组分页和双向核对，不运行 quota、Xcode、
+  archive、upload、合规写入、组关联或审核提交，不写发布状态或交付账本，也不创建发布锁。
+  已保留的首次公开证明不能替代这次实时观察。
+
+```bash
+python3 -B tools/release.py --version x.y.z --platform ios --ios-status \
+  --source-dir /absolute/frozen-checkout
+```
+
+`--source-dir` 的 HEAD 必须匹配该版本已保留的源码身份。输出 JSON 的 `status: available`
+仅在严格内外测状态、未过期、营销版本与所有组的正反关联通过时返回，exit0；等待／失败状态
+exit1，参数组合非法 exit2。这个只读入口不能与 `--check`、`--verify`、发布授权原因或其他平台
+组合。它不记录交付成功；需要变更或正式落证时仍使用持锁的 iOS 发布恢复流程。
+
+回归入口：`python3 -B -m unittest discover -s tools -p 'test_release*.py'`。这些实现消除已知的
+重建和重复远端查询，不意味着全量验证、网络或 Apple 审批已有几分钟的保证。
 
 ## 本页修改的验证
 

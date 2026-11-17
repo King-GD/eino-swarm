@@ -105,6 +105,10 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
 
 ### Fixed
 
+- Reuse accepted Windows archives for first/partial uploads, publish other required
+  installers before iOS waits, and avoid re-querying confirmed TestFlight history.
+  Add GET-only current-build `--ios-status` with strict live availability checks.
+
 - Linux release builds and validates amd64 and arm64 archives, with per-architecture
   runtime receipts and immutable partial-publication retries. (#172, `C-010`)
 - Headless Web keeps the engine alive without a browser, reports exhausted

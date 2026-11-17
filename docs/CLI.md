@@ -212,7 +212,7 @@ make mobile-ios-release VERSION=x.y.z  # resume only TestFlight, same version/SH
 ```
 
 `make release` serially publishes only the batch's still-required platforms
-in macOS → Android → iOS → Windows order. Windows is in that list only when
+in macOS → Android → Windows → Linux → iOS order. Windows is in that list only when
 the batch workset includes it. If both desktop and mobile changed, macOS zip
 and sideload APK go to the same GitHub tag; iOS goes to the configured TestFlight
 internal/external groups. Each platform has an independent gate: failure or
@@ -223,7 +223,12 @@ marketing version and advance only the package-derived build number. `VERSION`
 identifies the source batch; optional `IOS_RELEASE_CONFIG.marketing_version` starts
 a new TestFlight version for new candidates. Existing receipts freeze the iOS
 version on recovery. Same-version builds may still require Apple review.
-See [release setup and recovery](RELEASE.md).
+Current-build GET-only TestFlight status uses
+`python3 -B tools/release.py --version x.y.z --platform ios --ios-status --source-dir /absolute/frozen-checkout`.
+It checks live strict availability, never uploads or records delivery, and does not
+scan historical build reviews. JSON `available` returns0; other states return1.
+The retained release source must match the selected checkout. See
+[release setup and recovery](RELEASE.md).
 
 The source must be clean and part of successfully fetched/pushed main. A mobile
 publication must also contain the committed mobile package version; a Mac-only
