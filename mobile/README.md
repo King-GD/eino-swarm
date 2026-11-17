@@ -1,5 +1,11 @@
 # zwai phone
 
+Automatic voice capture converts MP4/AAC, WebM/Opus and Ogg recordings to
+16 kHz mono PCM WAV before recognition. Newer iPhones may record WebM; those
+recordings use the same conversion instead of uploading an unsupported container.
+Recognition results remove a complete leading `language …<asr_text>` envelope
+before inserting the transcript into the draft; ordinary text remains intact.
+
 Gateway model catalogs refresh after the selected PC acknowledges a mode change
 and when account model permissions change. Older PCs that omit model capability
 metadata show an update notice; the phone does not borrow its own grant to

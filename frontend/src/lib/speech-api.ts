@@ -1,5 +1,6 @@
 import { ApiError } from "./api"
 import { speechAudioResponse, type SpeechAudio } from "./speech-stream"
+import { transcriptionText } from "./speech-text"
 
 async function speechResponse(path: string, init: RequestInit): Promise<Response> {
   const response = await fetch(path, { ...init, cache: "no-store", redirect: "error" })
@@ -21,10 +22,11 @@ export async function transcribeSpeech(blob: Blob, signal: AbortSignal): Promise
   form.append("file", blob, `recording.${extension}`)
   const response = await speechResponse("/api/audio/transcriptions", { method: "POST", body: form, signal })
   const body: unknown = await response.json()
-  if (!body || typeof body !== "object" || !("text" in body) || typeof body.text !== "string" || !body.text.trim()) {
+  const text = body && typeof body === "object" && "text" in body && typeof body.text === "string" ? transcriptionText(body.text) : ""
+  if (!text.trim()) {
     throw new Error("No speech was recognized. Try recording again.")
   }
-  return body.text
+  return text
 }
 
 export async function synthesizeSpeech(text: string, signal: AbortSignal, maxBytes: number): Promise<SpeechAudio> {

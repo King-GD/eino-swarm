@@ -3,6 +3,7 @@ import { currentGatewayVoice, gatewayCapabilityAllows, GATEWAY_CAPABILITIES_EVEN
 import { useEffect, useSyncExternalStore } from "react"
 import { speechRoute, type SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
 import { speechPlayback } from "../../../frontend/src/lib/speech-media"
+import { transcriptionText } from "../../../frontend/src/lib/speech-text"
 import type { SpeechAudio } from "../../../frontend/src/lib/speech-stream"
 import { GATEWAY_ACCOUNT_EVENT, loadGatewaySession } from "./gateway-account"
 import { gatewayAuthorityCurrent, sameGatewayAuthority, GATEWAY_REFUSAL_EVENT } from "./gateway-authority"
@@ -213,5 +214,9 @@ async function call(operation: "transcribe" | "speak", input: Blob | string, sig
   } finally { if (!retained) release() }
 }
 
-export async function transcribePhoneSpeech(blob: Blob, signal: AbortSignal): Promise<string> { return await call("transcribe", blob, signal) as string }
+export async function transcribePhoneSpeech(blob: Blob, signal: AbortSignal): Promise<string> {
+  const text = transcriptionText(await call("transcribe", blob, signal) as string)
+  if (!text.trim()) throw new SpeechCallError("empty")
+  return text
+}
 export async function synthesizePhoneSpeech(text: string, signal: AbortSignal): Promise<SpeechAudio> { return await call("speak", text, signal) as SpeechAudio }

@@ -43,9 +43,11 @@ gateway supplies the models and hides model/endpoint controls; ordinary voice
 parameters remain editable.
 
 `speech.input.recording_format` accepts `auto` and `wav`. Automatic recording
-normalizes WebKit's MP4/AAC container to 16 kHz mono PCM WAV for ASR
-interoperability; other browser containers remain unchanged. Explicit WAV also
+normalizes MP4/AAC, WebM/Opus and Ogg recordings to 16 kHz mono PCM WAV for ASR
+interoperability, including newer iPhones that record WebM. Explicit WAV also
 converts other containers. The input byte limit applies after conversion too.
+Before draft insertion, a complete leading ASR `language …<asr_text>` envelope
+is separated from the transcript. Plain text and literal tags elsewhere are kept.
 
 `speech.output.format` accepts `mp3` (the existing default), `wav` and `pcm`.
 Select **PCM (streaming playback)** to play a response while it is generated.

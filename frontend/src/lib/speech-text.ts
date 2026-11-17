@@ -1,5 +1,13 @@
 import { fromMarkdown } from "mdast-util-from-markdown"
 
+/** Some ASR endpoints expose the decoder's language envelope in `text`.
+ * Only a complete leading envelope is metadata; literal tags elsewhere stay.
+ * Wire format: QwenLM/Qwen3-ASR, qwen_asr/inference/utils.py parse_asr_output. */
+export function transcriptionText(raw: string): string {
+  const prefix = /^\s*language[ \t]+[a-z][a-z -]{0,63}\s*<asr_text>/i.exec(raw)
+  return prefix ? raw.slice(prefix[0].length).trim() : raw
+}
+
 /** Extract public prose from the Markdown source, never UI/DOM labels. */
 export function speechText(markdown: string): string {
   type Node = { type: string; value?: string; children?: Node[] }
