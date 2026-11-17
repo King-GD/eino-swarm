@@ -36,6 +36,14 @@ export function safeSpeechSnapshot(raw: unknown): SpeechSnapshot | undefined {
   if (typeof output.speed !== "number" || !Number.isFinite(output.speed) || output.speed < 0.25 || output.speed > 4) return
   if (!count(limits.input_bytes, 256 * 1024 * 1024) || !count(limits.output_bytes, 256 * 1024 * 1024) || !count(limits.chunk_chars, 4096) || !count(limits.staging_ttl_seconds, 3600)) return
   let outputRoute: Pick<SpeechSnapshot["output"], "execution" | "gateway_origin"> = {}
+  let inputRoute: Pick<SpeechSnapshot["input"], "execution" | "gateway_origin"> = {}
+  if (input.execution !== undefined || input.gateway_origin !== undefined) {
+    if (input.execution === "gateway") {
+      if (typeof input.gateway_origin !== "string") return
+      try { inputRoute = { execution: "gateway", gateway_origin: normalizeGatewayOrigin(input.gateway_origin) } } catch { return }
+    } else if (input.execution === "pc_local" && input.gateway_origin === undefined) inputRoute = { execution: "pc_local" }
+    else return
+  }
   if (output.execution !== undefined || output.gateway_origin !== undefined) {
     if (output.execution === "gateway") {
       if (typeof output.gateway_origin !== "string") return
@@ -46,11 +54,12 @@ export function safeSpeechSnapshot(raw: unknown): SpeechSnapshot | undefined {
   let origin: string | undefined
   if (source.execution === "gateway") {
     if (source.gateway_origin) { try { origin = normalizeGatewayOrigin(String(source.gateway_origin)) } catch { return } }
-    else if ((input.enabled && input.ready) || (output.execution === undefined && output.enabled && output.ready)) return
+    else if ((input.execution === undefined && input.enabled && input.ready) || (output.execution === undefined && output.enabled && output.ready)) return
   }
   return {
     execution: source.execution, ...(origin ? { gateway_origin: origin } : {}),
     input: {
+      ...inputRoute,
       enabled: input.enabled as boolean, ready: input.ready as boolean,
       ...(text(input.reason, 256) ? { reason: text(input.reason, 256) } : {}),
       model: input.model as string, label: input.label as string, language: input.language as string, prompt: input.prompt as string,

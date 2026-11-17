@@ -114,7 +114,7 @@ export function saveActiveFingerprint(fp: string) {
   localStorage.setItem(ACTIVE_KEY, v)
 }
 
-export function saveLink(link: SavedLink) {
+export function saveLink(link: SavedLink, select = true) {
   const next = asLink(link)
   if (!next) return
   const links = loadSavedLinks()
@@ -124,9 +124,9 @@ export function saveLink(link: SavedLink) {
   }
   const rest = links.filter((row) => row.fingerprint !== next.fingerprint)
   rest.push(next)
-  localStorage.setItem(ACTIVE_KEY, next.fingerprint)
+  if (select) localStorage.setItem(ACTIVE_KEY, next.fingerprint)
   const legacyLast = localStorage.getItem(LAST_KEY)
-  if (legacyLast && !localStorage.getItem(LAST_KEY + "." + next.fingerprint)) {
+  if (select && legacyLast && !localStorage.getItem(LAST_KEY + "." + next.fingerprint)) {
     localStorage.setItem(LAST_KEY + "." + next.fingerprint, legacyLast)
   }
   writeLinks(rest)

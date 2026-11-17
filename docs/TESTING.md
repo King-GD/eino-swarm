@@ -651,13 +651,16 @@ across reload, "Use my own model service" lands on Settings → Models, and a
 ready account never sees the welcome. It needs a private `ZWAI_E2E_PORT` and
 `ZWAI_E2E_DATA_DIR` when another zwai already holds the default port.
 
-Phone tests (`gateway-auto-connect.test.ts`, `use-gateway-account-fresh-login.test.tsx`,
-`gateway-account-start.test.tsx`, `gateway-account-shell.test.tsx` and
-`mobile/e2e/gateway-account.spec.ts`) include the counter-examples of the
-auto-connect rule: several online PCs, no online PC, an existing saved
-connection or active fingerprint, a restart with a cached session, a sign-out,
-server change or second sign-in before the first read lands, and a failed first
-read must not connect; offline or disabled siblings are not counted as choices.
+Phone connection regressions (`gateway-auto-connect.test.ts`,
+`use-auto-gateway-pcs.test.tsx`, `gateway-account-start.test.tsx`,
+`phone-pcs.test.ts` and `mobile/e2e/gateway-account.spec.ts`) cover automatic
+preparation for all enabled online PCs on fresh and returning launches,
+retention of a manual selection while another PC completes, offline ordering,
+no fabricated offline credentials, and account/bootstrap admission. The pooled
+lifecycle shares foreground/background opens and releases stale late results.
+`internal/speech/input_route_test.go` checks ordinary Gateway defaults and a
+same-name personal override. Phone speech/cache fixtures check both direct
+routes and allowlisted route persistence without credentials.
 
 `models/account/AccountCatalog.tla` (`make model-check`) checks the publication
 protocol: the published catalog belongs to the current credential.

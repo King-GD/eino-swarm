@@ -21,6 +21,27 @@ const signIn = (owner = "owner") => saveGatewaySession({ origin: speech.gateway_
 afterEach(() => { act(() => setPhoneSpeechSource(undefined, null)); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe("phone speech capability follows the selected PC", () => {
+  it("sends both default Gateway voice directions directly with the phone session", async () => {
+    signIn()
+    const rpc = vi.fn<RemoteLink["rpc"]>(async () => { throw new Error("Default gateway voice must bypass PC RPC") })
+    setPhoneSpeechSource(pc, { alive: () => true, rpc } as unknown as RemoteLink)
+    expect(acceptPhoneSpeechConfig(pc, { ...speech, execution: "pc_local", gateway_origin: undefined,
+      input: { ...speech.input, execution: "gateway", gateway_origin: pc.gatewayOrigin },
+      output: { ...speech.output, enabled: true, execution: "gateway", gateway_origin: pc.gatewayOrigin } })).toBe(true)
+    const fetcher = vi.fn<typeof fetch>(async url => String(url).endsWith("/transcriptions")
+      ? new Response(JSON.stringify({ text: "Recognized directly" }))
+      : new Response(new Uint8Array([0, 1]), { headers: { "Content-Type": "audio/mpeg" } }))
+    vi.stubGlobal("fetch", fetcher)
+    const view = renderHook(() => usePhoneSpeech())
+    try {
+      expect(view.result.current).toMatchObject({ inputReady: true, outputReady: true })
+      const recording = Object.assign(new Blob([new Uint8Array([0, 1])], { type: "audio/wav" }), { arrayBuffer: async () => new Uint8Array([0, 1]).buffer })
+      await expect(transcribePhoneSpeech(recording, new AbortController().signal)).resolves.toBe("Recognized directly")
+      await expect(synthesizePhoneSpeech("Read directly", new AbortController().signal)).resolves.toMatchObject({ type: "audio/mpeg" })
+      expect(fetcher.mock.calls.map(([url]) => String(url))).toEqual(["https://gateway.test/v1/audio/transcriptions", "https://gateway.test/v1/audio/speech"])
+      expect(rpc).not.toHaveBeenCalled()
+    } finally { view.unmount() }
+  })
   it.each(["configuration", "disconnect"] as const)("stops already queued sound when paired speech loses its %s authority", async (change) => {
     signIn()
     const config = { ...speech, output: { ...speech.output, enabled: true, format: "pcm" as const } }

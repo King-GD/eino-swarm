@@ -13,6 +13,8 @@ import (
 
 // InputView is safe to send to a paired phone; it carries no endpoint credential.
 type InputView struct {
+	Execution          string `json:"execution"`
+	GatewayOrigin      string `json:"gateway_origin,omitempty"`
 	Enabled            bool   `json:"enabled"`
 	Ready              bool   `json:"ready"`
 	Reason             string `json:"reason,omitempty"`
@@ -65,7 +67,7 @@ func (s *Service) Snapshot() SnapshotView {
 	cfg := s.cfg.Snapshot()
 	input, output := cfg.Speech.Input, cfg.Speech.Output
 	v := SnapshotView{Execution: "pc_local", Limits: cfg.Speech.Limits,
-		Input:  InputView{Enabled: input.Enabled, Model: input.Model, Language: input.Language, Prompt: input.Prompt, RecordingFormat: input.RecordingFormat, MaxDurationSeconds: input.MaxDurationSeconds, TimeoutSeconds: input.TimeoutSeconds},
+		Input:  InputView{Execution: "pc_local", Enabled: input.Enabled, Model: input.Model, Language: input.Language, Prompt: input.Prompt, RecordingFormat: input.RecordingFormat, MaxDurationSeconds: input.MaxDurationSeconds, TimeoutSeconds: input.TimeoutSeconds},
 		Output: OutputView{Execution: "pc_local", Enabled: output.Enabled, Model: output.Model, Voice: output.Voice, Speed: output.Speed, Format: output.Format, Instructions: output.Instructions, TimeoutSeconds: output.TimeoutSeconds},
 	}
 	if s.pool != nil && s.pool.OfficialOnly() {
@@ -82,6 +84,9 @@ func (s *Service) Snapshot() SnapshotView {
 		if isInput {
 			v.Input.Model = selection.target.Model
 			v.Input.Ready, v.Input.Reason, v.Input.Label = ready, reason, selection.target.Label
+			if gatewayOrigin := origin(selection.target.BaseURL); strings.HasPrefix(selection.target.ID, config.AccountSourcePrefix) && gatewayOrigin != "" {
+				v.Input.Execution, v.Input.GatewayOrigin = "gateway", gatewayOrigin
+			}
 		} else {
 			v.Output.Model = selection.target.Model
 			v.Output.Ready, v.Output.Reason, v.Output.Label = ready, reason, selection.target.Label

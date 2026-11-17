@@ -8,6 +8,13 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
+- Phone launches automatically connect all enabled online account PCs and list
+  online PCs before offline PCs. Existing live sockets and pairing tickets are
+  reused; background connections leave the selected view unchanged.
+- Recognition and spoken output each publish their resolved route. Unchanged
+  Gateway defaults use direct phone-to-Gateway voice requests; personal PC
+  bindings retain PC-local RPC, including same-name services.
+
 - Mobile avatar debug switching waits for the selected PC to acknowledge its mode,
   with separate original and third-party interface groups. Refusal retains the
   previous phone mode. (`F-173`, `F-220`, `C-013`)

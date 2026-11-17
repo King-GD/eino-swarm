@@ -47,19 +47,17 @@ function publish(changed: boolean) {
   const speech = source?.cached?.snapshot
   const session = loadGatewaySession()
   const connected = Boolean(source?.link?.alive())
-  const allowed = connected && (speech?.execution === "pc_local" || Boolean(speech && session &&
-    speech.gateway_origin === session.origin && gatewayAuthorityCurrent(session) &&
+  const routeAllowed = (kind: "input" | "output") => {
+    const route = speech && speechRoute(speech, kind)
+    return connected && (route?.execution === "pc_local" || Boolean(route?.execution === "gateway" && session &&
+    route.gateway_origin === session.origin && gatewayAuthorityCurrent(session) &&
+    (!source?.pc.gatewayOrigin || source.pc.gatewayOrigin === route.gateway_origin) &&
     (!source?.pc.gatewayOwnerID || source.pc.gatewayOwnerID === session.user.id) &&
     (!source?.pc.gatewayMobileID || source.pc.gatewayMobileID === session.device.id)))
-  const outputRoute = speech && speechRoute(speech, "output")
-  const outputAllowed = connected && (outputRoute?.execution === "pc_local" || Boolean(outputRoute?.execution === "gateway" && session &&
-    outputRoute.gateway_origin === session.origin && gatewayAuthorityCurrent(session) &&
-    (!source?.pc.gatewayOrigin || source.pc.gatewayOrigin === outputRoute.gateway_origin) &&
-    (!source?.pc.gatewayOwnerID || source.pc.gatewayOwnerID === session.user.id) &&
-    (!source?.pc.gatewayMobileID || source.pc.gatewayMobileID === session.device.id)))
+  }
   state = { epoch: state.epoch + (changed ? 1 : 0), snapshot: speech, syncedAt: source?.cached?.syncedAt,
     host: source?.pc.label || source?.pc.fingerprint, connected,
-    inputReady: Boolean(allowed && speech?.input.enabled && speech.input.ready), outputReady: Boolean(outputAllowed && speech?.output.enabled && speech.output.ready) }
+    inputReady: Boolean(routeAllowed("input") && speech?.input.enabled && speech.input.ready), outputReady: Boolean(routeAllowed("output") && speech?.output.enabled && speech.output.ready) }
   for (const listener of listeners) listener()
 }
 

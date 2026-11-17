@@ -12,6 +12,7 @@ import { cn } from "@/lib/cn"
 import { webShellVersion } from "@/lib/app-update"
 import { localeSwitchLabel, t } from "@/lib/i18n"
 import { linkLabel, type SavedLink } from "@/lib/store"
+import { phonePCChoices } from "@/lib/phone-pcs"
 
 export function HostChrome({
   hosts,
@@ -179,12 +180,12 @@ export function HostChrome({
             <span className="max-w-28 truncate">{t("chat.tab")}</span>
           </button>
         ) : null}
-        {hosts.map((host) => {
-          const selected = !chatSelected && host.fingerprint === activeFingerprint
-          const label = linkLabel(host, hosts)
+        {phonePCChoices(hosts, account.pcs?.hosts, account.pcs?.origin).map((host) => {
+          const selected = !chatSelected && Boolean(host.fingerprint) && host.fingerprint === activeFingerprint
+          const label = host.label || t("account.unnamedPC")
           return (
             <button
-              key={host.fingerprint}
+              key={host.id}
               type="button"
               role="tab"
               aria-label={label}
@@ -195,23 +196,27 @@ export function HostChrome({
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground",
               )}
-              onClick={() => onSelect(host.fingerprint)}
+              disabled={!host.enabled || host.online === false}
+              onClick={() => {
+                if (host.fingerprint) onSelect(host.fingerprint)
+                else if (host.hostID) void account.pcs?.connect(host.hostID).catch(() => undefined)
+              }}
             >
               <Monitor className="size-3.5 shrink-0" aria-hidden />
               <span className="max-w-28 truncate">{label}</span>
-              {selected ? (
+              {selected || host.online !== undefined ? (
                 // Color is liveness. Path stays on the title; gray on this chip reads as down.
                 <span
                   className={cn(
                     "size-1.5 shrink-0 rounded-full",
-                    reconnecting
+                    selected && reconnecting
                       ? "animate-pulse bg-destructive"
-                      : connected
+                      : selected ? connected ? "bg-[hsl(var(--online))]" : "bg-muted-foreground" : host.online
                         ? "bg-[hsl(var(--online))]"
                         : "bg-muted-foreground",
                   )}
                   title={
-                    reconnecting
+                    !selected ? t(host.online ? "account.online" : "account.offline") : reconnecting
                       ? t("home.reconnecting")
                       : !connected
                         ? t("home.offline")
@@ -219,7 +224,7 @@ export function HostChrome({
                           ? t("home.direct")
                           : t("home.relay")
                   }
-                  aria-label={`path=${pathKind}`}
+                  aria-label={selected ? `path=${pathKind}` : t(host.online ? "account.online" : "account.offline")}
                 />
               ) : null}
             </button>

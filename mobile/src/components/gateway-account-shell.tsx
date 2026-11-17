@@ -8,8 +8,8 @@ import type { DirectProvider } from "@/lib/direct-provider"
 import { gatewayUserDisplayName } from "@/lib/gateway-names"
 import { t } from "@/lib/i18n"
 import type { GatewayHost } from "@/lib/gateway-account"
-import { autoConnectTarget } from "@/lib/gateway-auto-connect"
-import { loadActiveFingerprint, loadSavedLinks, type SavedLink } from "@/lib/store"
+import { type SavedLink } from "@/lib/store"
+import { useAutoGatewayPCs } from "@/lib/use-auto-gateway-pcs"
 import { useLocalModelSources } from "@/lib/use-local-model-sources"
 import { useGatewayAccount } from "@/lib/use-gateway-account"
 import { PcModeSwitchError, type BindPcModeSwitch } from "@/lib/use-pc-mode-switch"
@@ -29,7 +29,7 @@ type PhoneAccount = {
   modelsError?: boolean
   empty?: ReactNode
   /** The signed-in account's computers, for the Add a PC sheet to list first. */
-  pcs?: { hosts: GatewayHost[]; connect: (id: string) => Promise<void> }
+  pcs?: { hosts: GatewayHost[]; origin?: string; connect: (id: string) => Promise<void> }
   hasProfile?: boolean
   officialOnly?: boolean
   presentation?: AccountPresentation
@@ -40,6 +40,7 @@ export const usePhoneAccount = () => useContext(PhoneAccountContext)
 
 export function GatewayAccountShell({ children }: { children: ReactNode }) {
   const account = useGatewayAccount()
+  useAutoGatewayPCs(account)
   const [mode, setMode] = useState(loadPhoneMode)
   const pcSwitch = useRef<((mode: PhoneMode) => Promise<void>) | null>(null)
   const bindPcModeSwitch: BindPcModeSwitch = useCallback(switcher => {
@@ -72,6 +73,11 @@ export function GatewayAccountShell({ children }: { children: ReactNode }) {
     }).finally(() => { switching.current = false; setModeBusy(false) })
   }
   const [dialog, setDialog] = useState<{ pcWeb?: PcWebSnapshot }>()
+  useEffect(() => {
+    const selected = () => setDialog(undefined)
+    window.addEventListener("zwai.gateway.connect", selected)
+    return () => window.removeEventListener("zwai.gateway.connect", selected)
+  }, [])
   const open = Boolean(dialog)
   const localModels = useLocalModelSources(mode, account.status, account.session, account.bootstrap)
   const providers = localModels.providers
@@ -94,16 +100,7 @@ export function GatewayAccountShell({ children }: { children: ReactNode }) {
     scan: () => window.dispatchEvent(new Event("zwai.gateway.scan")),
     addModel: () => window.dispatchEvent(new Event("zwai.gateway.models")),
   }
-  const { freshLogin, consumeFreshLogin, status, bootstrap, hosts } = account
-  // Once per sign-in, and only on a phone with no computer yet: the one online
-  // computer opens by itself. Later refreshes, restarts and a deliberate
-  // disconnect never reach this, so it cannot pull the person back.
-  useEffect(() => {
-    if (!freshLogin || status !== "authorized" || !bootstrap) return
-    consumeFreshLogin()
-    const target = autoConnectTarget(hosts, loadSavedLinks(), loadActiveFingerprint())
-    if (target) void connect(target.id).catch(() => undefined)
-  }, [freshLogin, status, bootstrap])
+  useEffect(() => { window.dispatchEvent(new Event("zwai.gateway.account")) }, [account.hosts])
   const screen = <GatewayAccountScreen account={account} onToggleMode={toggleMode} modeBusy={modeBusy} modeError={modeError} providers={providers} modelBusy={modelBusy}
     modelError={modelError} pcRequired={mode === "account"} pcWeb={dialog?.pcWeb} onClose={restricted ? undefined : () => setDialog(undefined)} onConnect={connect} onRefresh={refresh} onOpenChat={openChat} />
   return (
@@ -124,7 +121,7 @@ export function GatewayAccountShell({ children }: { children: ReactNode }) {
         modeBusy={modeBusy} modeError={modeError}
         providers={providers} modelBusy={modelBusy} modelError={modelError} pcRequired={mode === "account"} onConnect={connect}
         onRefresh={refresh} onOpenChat={openChat} onOtherWays={mode === "local" ? otherWays : undefined} /> : undefined,
-      pcs: account.status === "authorized" ? { hosts: account.hosts, connect } : undefined,
+      pcs: account.status === "authorized" ? { hosts: account.hosts, origin: account.session?.origin, connect } : undefined,
     }}>
       {restricted ? screen : <div key={`${mode}:${account.session?.origin ?? ""}:${account.session?.user.id ?? ""}:${account.session?.device.id ?? ""}`} className="h-full min-h-0" inert={open || undefined} aria-hidden={open || undefined}>{children}</div>}
       {open && !restricted ? <div role="dialog" aria-modal="true" aria-label={t("account.title")} className="fixed inset-0 z-50 bg-background pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)]">{screen}</div> : null}

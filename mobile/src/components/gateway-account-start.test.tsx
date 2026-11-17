@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { App } from "@/app"
 import type { useGatewayAccount } from "@/lib/use-gateway-account"
+import { saveLink } from "@/lib/store"
 import { setLocale, t } from "@/lib/i18n"
 
 const mocks = vi.hoisted(() => ({ account: {} as ReturnType<typeof useGatewayAccount>, discover: vi.fn() }))
@@ -31,44 +32,39 @@ const signedIn = (patch: Partial<ReturnType<typeof useGatewayAccount>>) => {
   mocks.account = { ...mocks.account, status: "authorized", session, bootstrap, ...patch }
 }
 
-describe("opening the computer right after sign-in", () => {
-  it("connects the only online computer, once, and announces it to the page", async () => {
-    signedIn({ hosts: [pc("pc-online", "Work PC"), pc("pc-offline", "Home PC", false)], freshLogin: true, connectHost: vi.fn(async () => ({ fingerprint: "fp-work" })) as never })
+describe("automatically connecting account PCs", () => {
+  const prepared = (id: string, options?: { select?: boolean }) => {
+    const saved = { fingerprint: "fp-" + id, gatewayHostID: id, gatewayOrigin: session.origin,
+      gatewayOwnerID: session.user.id, gatewayMobileID: session.device.id, hubURL: session.origin,
+      ticket: id, hostPub: id, sessionID: id }
+    saveLink(saved, options?.select !== false)
+    return saved
+  }
+  it.each([true, false])("automatically prepares all online PCs for freshLogin=%s", async freshLogin => {
+    signedIn({ hosts: [pc("first", "Work PC"), pc("second", "Lab PC"), pc("offline", "Home PC", false)],
+      freshLogin, connectHost: vi.fn(async (id: string, options?: { select?: boolean }) => prepared(id, options)) })
     const { rerender } = render(<App />)
-    await waitFor(() => expect(opened).toEqual(["fp-work"]))
-    expect(mocks.account.connectHost).toHaveBeenCalledOnce()
-    expect(mocks.account.connectHost).toHaveBeenCalledWith("pc-online")
-    expect(mocks.account.consumeFreshLogin).toHaveBeenCalledOnce()
-    // The flag is consumed by the hook; a re-render that still shows it (as
-    // this fixture does) must not connect a second time.
+    await waitFor(() => expect(mocks.account.connectHost).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(opened).toHaveLength(1))
+    expect(mocks.account.connectHost).toHaveBeenCalledWith("first", { select: false })
+    expect(mocks.account.connectHost).toHaveBeenCalledWith("second", { select: false })
     rerender(<App />)
-    await screen.findByTestId("pc-wait")
-    expect(mocks.account.connectHost).toHaveBeenCalledOnce()
+    expect(mocks.account.connectHost).toHaveBeenCalledTimes(2)
   })
-
-  it.each<[string, Partial<ReturnType<typeof useGatewayAccount>>, boolean]>([
-    ["not a fresh sign-in (restart, refresh, returning user)", { hosts: [pc("pc-online", "Work PC")], freshLogin: false }, false],
-    ["several online computers: the person chooses", { hosts: [pc("a", "Work PC"), pc("b", "Lab PC")], freshLogin: true }, true],
-    ["no computer online", { hosts: [pc("pc-offline", "Home PC", false)], freshLogin: true }, true],
-    ["no computers at all", { hosts: [], freshLogin: true }, true],
-  ])("does not connect on %s", async (_name, patch, consumed) => {
-    signedIn({ ...patch, connectHost: vi.fn(async () => ({ fingerprint: "fp" })) as never })
+  it.each([{ hosts: [] }, { hosts: [pc("offline", "Home PC", false)] }])("does not dial unavailable PCs: %j", async ({ hosts }) => {
+    signedIn({ hosts })
     render(<App />)
     await screen.findByTestId("pc-wait")
     expect(mocks.account.connectHost).not.toHaveBeenCalled()
     expect(opened).toEqual([])
-    expect(vi.mocked(mocks.account.consumeFreshLogin).mock.calls.length > 0).toBe(consumed)
   })
-
-  it("waits until the account is authorized and its first read has loaded", () => {
-    signedIn({ hosts: [pc("pc-online", "Work PC")], freshLogin: true, bootstrap: undefined, connectHost: vi.fn() as never })
+  it("waits for the authorized bootstrap before preparing credentials", () => {
+    signedIn({ hosts: [pc("first", "Work PC")], bootstrap: undefined })
     render(<App />)
     expect(mocks.account.connectHost).not.toHaveBeenCalled()
-    expect(mocks.account.consumeFreshLogin).not.toHaveBeenCalled()
   })
-
-  it("leaves the person on the account page, with the PC list, when the automatic connection fails", async () => {
-    signedIn({ bootstrap: noModels, hosts: [pc("pc-online", "Work PC")], freshLogin: true, connectHost: vi.fn(async () => { throw new Error("offline") }) as never })
+  it("keeps the PC list available when automatic preparation fails", async () => {
+    signedIn({ bootstrap: noModels, hosts: [pc("first", "Work PC")], connectHost: vi.fn(async () => { throw new Error("offline") }) })
     render(<App />)
     await waitFor(() => expect(mocks.account.connectHost).toHaveBeenCalledOnce())
     expect(opened).toEqual([])

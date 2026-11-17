@@ -7,6 +7,7 @@ import { RetainedPhoneLinks } from "./retained-phone-links"
 
 type Options = {
   allowsLink?: (link: SavedLink) => boolean
+  onlineLink?: (link: SavedLink) => boolean | undefined
   link: RefObject<RemoteLink | null>; authority: RefObject<SavedLink | null>
   generation: RefObject<number>; unlinking: RefObject<boolean>; retryTimer: RefObject<number>
   recoverRef: RefObject<(force?: boolean) => Promise<void>>
@@ -25,6 +26,8 @@ export function usePhoneLinkLifecycle(options: Options) {
   const opening = useRef<{ generation: number } | null>(null)
   const attempts = useRef(0)
   const retained = useRef(new RetainedPhoneLinks())
+  const permitted = useCallback((saved: SavedLink) => latest.current.allowsLink?.(saved) !== false
+    && !gatewayUpgradePending(saved) && loadSavedLinks().some(row => sameLinkAuthority(row, saved)), [])
   const detach = useCallback(() => {
     const o = latest.current
     const previous = o.link.current, saved = o.authority.current
@@ -62,8 +65,9 @@ export function usePhoneLinkLifecycle(options: Options) {
     else detach()
     o.authority.current = saved
     try {
-      const next = retained.current.take(saved) ?? await openLink(saved)
-      if (!valid()) { next.close(); return }
+      const next = await retained.current.connect(saved, openLink, () => permitted(saved))
+      if (!valid()) return
+      retained.current.take(saved)
       o.authority.current = saved
       o.link.current = next
       o.attach(next)
@@ -95,11 +99,32 @@ export function usePhoneLinkLifecycle(options: Options) {
         }
       }
     }
-  }, [close, detach])
+  }, [close, detach, permitted])
   const boot = useCallback(() => run(true), [run])
   const recover = useCallback((force = false) => run(false, force), [run])
   options.recoverRef.current = recover
   useEffect(() => { retained.current.reconcile(loadSavedLinks(), latest.current.allowsLink) })
+  useEffect(() => {
+    let stopped = false
+    const warm = () => {
+      if (stopped || document.hidden) return
+      for (const saved of loadSavedLinks()) {
+        if (!permitted(saved) || latest.current.onlineLink?.(saved) === false || sameLinkAuthority(saved, latest.current.authority.current)) continue
+        void retained.current.connect(saved, openLink, () => !stopped && permitted(saved)).catch(() => undefined)
+      }
+    }
+    warm()
+    const visible = () => { if (!document.hidden) warm() }
+    window.addEventListener("zwai.gateway.account", warm)
+    document.addEventListener("visibilitychange", visible)
+    const timer = window.setInterval(warm, 15_000)
+    return () => {
+      stopped = true
+      window.clearInterval(timer)
+      window.removeEventListener("zwai.gateway.account", warm)
+      document.removeEventListener("visibilitychange", visible)
+    }
+  }, [permitted])
   useEffect(() => {
     void boot()
     return () => {

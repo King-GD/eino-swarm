@@ -3,16 +3,20 @@
 iOS and Android apps. **Sign in** uses the built-in default Gateway
 (`https://ai.fofa.info:2440`). No manual address, Key or Pairlink setup is
 required. Finish device authorization in the system browser. Pending/rejected
-accounts show only review status. Approved accounts list their online PCs in
-**User center**; selecting one connects without a QR and remembers that PC for
-reconnection. Account mode waits for a same-account PC and a ready engine,
+accounts show only review status. Approved accounts automatically connect all enabled online PCs, including on a
+returning launch. **User center** and the PC rail show online PCs first and
+offline PCs afterwards. An existing online selection stays selected; otherwise
+the first available PC opens without a QR or a manual Connect action. Account mode waits for a same-account PC and a ready engine,
 even when the account has API access. The waiting page explains how to install
 and open the desktop app, sign in to the same gateway and keep it online. There
 is no direct gateway Chat fallback. Disconnecting returns to that page; the draft
 and history remain mounted for reconnection.
 
 Paired voice uses the selected PC's safe settings only while it is online and
-ready. Gateway voice uses the phone's own same-origin credential. Cached status
+ready. Recognition and read aloud each follow their resolved service: unchanged
+Gateway defaults use direct phone-to-Gateway HTTP with this phone's session; a
+personal/custom PC binding uses the encrypted PC route. New PCs publish each
+direction's route explicitly; old snapshots keep their legacy routing. Gateway voice uses the phone's own same-origin credential. Cached status
 cannot enable offline calls. Both directions default off. Dictation creates an
 editable draft and never sends it; read aloud skips code blocks. LOCAL direct
 Chat can configure recognition and spoken-answer models independently under its
@@ -101,8 +105,10 @@ pairing under **Other ways**. When signed in, it independently reads the authori
 private preset and Gateway catalogs and groups them beside personal providers.
 A denied or empty source has no group; model names shared across sources keep
 separate routes. Source credentials and catalogs stay in memory.
-After a fresh sign-in, the only online enabled PC is selected once when there is
-no saved or active PC; a returning session or several PCs requires a selection.
+The phone prepares each online PC independently, reuses saved pairing tickets
+and retains its live connections. A background connection never switches an
+already selected view. Offline PCs remain visible and are not dialed until the
+Gateway reports them online.
 
 User center shows the Gateway and PC display names provided by the Gateway.
 A safe public `avatar_url` on `fofa.info`, `nosec.org`, `baimaohui.net`, or a subdomain of one of those roots is shown

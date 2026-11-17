@@ -7,10 +7,10 @@ import {
   setGatewayOrigin, startGatewayLogin, normalizeGatewayOrigin,
   type GatewayBootstrap, type GatewayHost, type GatewayPending, type GatewayStatus,
 } from "./gateway-account"
-import { saveLink } from "./store"
+import { loadSavedLinks, saveLink } from "./store"
 import { usePhoneVisibility } from "./phone-visibility"
 import { gatewayFetch } from "./gateway-fetch"
-import { accountHostLink, completeAccountHostLink, sameGatewaySession, upgradeAnonymousGatewayLinks } from "./gateway-link-upgrade"
+import { accountHostLink, completeAccountHostLink, gatewayUpgradePending, sameGatewaySession, upgradeAnonymousGatewayLinks } from "./gateway-link-upgrade"
 import { sameGatewayAuthority, watchGatewayRefusal } from "./gateway-authority"
 
 export function useGatewayAccount() {
@@ -21,9 +21,8 @@ export function useGatewayAccount() {
   const [hosts, putHosts] = useState<GatewayHost[]>([])
   const [error, putError] = useState<string>()
   const [busy, putBusy] = useState(false)
-  // True from the first successful account read after a sign-in completes until
-  // the shell decides whether to open the one online computer. It is memory
-  // only: a restart with a cached session never counts as a fresh sign-in.
+  // A memory-only verification signal for a newly completed sign-in. Automatic
+  // PC preparation also runs for returning sessions, independently of this flag.
   const [freshLogin, putFreshLogin] = useState(false)
   const freshToken = useRef("")
   const generation = useRef(0)
@@ -255,22 +254,25 @@ export function useGatewayAccount() {
     putError(undefined)
   }, [cancel, clearResources, forgetFreshLogin])
 
-  const connectHost = useCallback(async (id: string) => {
+  const connectHost = useCallback(async (id: string, options?: { select?: boolean }) => {
     const current = loadGatewaySession()
     if (!current || status !== "authorized") throw new GatewayError(401, "session_expired")
     const round = generation.current
-    const selection = ++selecting.current
+    const select = options?.select !== false
+    const selection = select ? ++selecting.current : selecting.current
     const selected = hosts.find((host) => host.id === id)
     if (!selected?.enabled || !selected.online) throw new GatewayError(409, "pc_unavailable")
-    const saved = await accountHostLink(current, selected).catch(async (err: unknown) => {
-      if (round === generation.current && selection === selecting.current && sameGatewaySession(current) && err instanceof GatewayError && (err.status === 401 || err.status === 403)) await failure(err)
+    const existing = loadSavedLinks().find(link => link.gatewayOrigin === current.origin && link.gatewayOwnerID === current.user.id
+      && link.gatewayMobileID === current.device.id && link.gatewayHostID === id && (!selected.host_pub || selected.host_pub === link.hostPub) && !gatewayUpgradePending(link))
+    const saved = existing ?? await accountHostLink(current, selected).catch(async (err: unknown) => {
+      if (round === generation.current && (!select || selection === selecting.current) && sameGatewaySession(current) && err instanceof GatewayError && (err.status === 401 || err.status === 403)) await failure(err)
       throw err
     })
-    if (round !== generation.current || selection !== selecting.current || !sameGatewaySession(current)) {
+    if (round !== generation.current || (select && selection !== selecting.current) || !sameGatewaySession(current)) {
       completeAccountHostLink(current, id, saved)
       throw new GatewayError(401, "session_expired")
     }
-    try { saveLink(saved) } catch (error) { window.dispatchEvent(new Event("zwai.gateway.account")); throw error }
+    try { saveLink(saved, select) } catch (error) { window.dispatchEvent(new Event("zwai.gateway.account")); throw error }
     completeAccountHostLink(current, id, saved)
     return saved
   }, [failure, hosts, status])

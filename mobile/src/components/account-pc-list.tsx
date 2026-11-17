@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { GatewayError, type GatewayHost } from "@/lib/gateway-account"
 import { gatewayHostDisplayName } from "@/lib/gateway-names"
 import { t } from "@/lib/i18n"
+import { onlineFirst } from "@/lib/phone-pcs"
 
 /** The computers signed in to this account, one Connect action each. Shared by
  *  the account page and the Add a PC sheet so both explain a refusal the same
@@ -27,7 +28,7 @@ export function AccountPcList({ hosts, onConnect }: {
   return (
     <>
       <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
-        {hosts.map((host) => {
+        {onlineFirst(hosts).map((host) => {
           const name = gatewayHostDisplayName(host) || t("account.unnamedPC")
           return <li key={host.id} className="flex items-center gap-2 p-3">
             <Monitor className="size-4 shrink-0 text-muted-foreground" aria-hidden />

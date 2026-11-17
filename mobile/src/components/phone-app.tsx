@@ -90,10 +90,13 @@ import { phonePrediction } from "@/lib/composer-prediction"
 import { useModelCatalog } from "@/lib/use-model-catalog"
 import { usePhoneSpeechSync } from "@/lib/phone-speech"
 import { usePcModeSwitch } from "@/lib/use-pc-mode-switch"
+import { orderSavedPCs } from "@/lib/phone-pcs"
 
 export function PhoneApp() {
   const account = usePhoneAccount()
-  const savedHosts = () => loadSavedLinks().filter((row) => account.allowsLink?.(row) ?? true)
+  const accountRef = useRef(account)
+  accountRef.current = account
+  const savedHosts = () => orderSavedPCs(loadSavedLinks().filter((row) => accountRef.current.allowsLink?.(row) ?? true), accountRef.current.pcs?.hosts, accountRef.current.pcs?.origin)
   const connectionError = (error: unknown) => linkError(error, Boolean(loadSavedLink()?.gatewayOwnerID))
   const [locale, setLocaleTick] = useState(getLocale())
   const [hosts, setHosts] = useState(() => savedHosts())
@@ -297,6 +300,7 @@ export function PhoneApp() {
   const { boot, recover, close: closeLink, detach: detachLink } = usePhoneLinkLifecycle({
     link: linkRef, authority: authorityRef, generation: bindGen, unlinking: unlinkingRef, retryTimer, recoverRef,
     allowsLink: account.allowsLink, install: setLink, attach: attachPush, firstList: consumeFirstList,
+    onlineLink: saved => !saved.gatewayHostID || !accountRef.current.pcs ? undefined : accountRef.current.pcs.hosts.some(host => host.id === saved.gatewayHostID && host.online && host.enabled && saved.gatewayOrigin === accountRef.current.pcs?.origin),
     restore: async (next) => { const id = viewRef.current.threadId; if (id) await openThreadOn(next, id); else await consumeFirstList(next) },
     busy: setBusy, reconnecting: setReconnecting, error: setError, message: connectionError,
   })

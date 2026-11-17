@@ -15,8 +15,8 @@ describe("opening a computer right after sign-in", () => {
     expect(autoConnectTarget([host("a"), host("b", { online: false }), host("c", { enabled: false })], [], "")?.id).toBe("a")
   })
 
-  it("never chooses for the person when there is more than one to choose from", () => {
-    expect(autoConnectTarget([host("a"), host("b")], [], "")).toBeUndefined()
+  it("opens the first online PC when several are available", () => {
+    expect(autoConnectTarget([host("a"), host("b")], [], "")?.id).toBe("a")
   })
 
   it("does nothing without an online computer", () => {
@@ -24,8 +24,8 @@ describe("opening a computer right after sign-in", () => {
     expect(autoConnectTarget([host("a", { online: false })], [], "")).toBeUndefined()
   })
 
-  it("leaves a phone that already has a computer alone", () => {
-    expect(autoConnectTarget([host("a")], [saved], "")).toBeUndefined()
-    expect(autoConnectTarget([host("a")], [], "fp")).toBeUndefined()
+  it("preserves an independent saved selection and otherwise opens an available account PC", () => {
+    expect(autoConnectTarget([host("a")], [saved], "fp")).toBeUndefined()
+    expect(autoConnectTarget([host("a")], [], "fp")?.id).toBe("a")
   })
 })

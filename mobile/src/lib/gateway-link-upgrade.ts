@@ -44,7 +44,8 @@ export async function accountHostLink(session: GatewaySession, host: GatewayHost
   requireCurrentGatewaySession(session)
   prune(session)
   const id = key(session, host.id)
-  for (const [otherID, other] of issuances) if (otherID !== id && other.next && !other.expected) issuances.delete(otherID)
+  // Each PC owns its issuance: another PC's automatic connection must not
+  // discard a rotated ticket whose local write still needs to be retried.
   let entry = issuances.get(id)
   if (!entry) {
     const original = expected || ownedAnonymous(session, host)

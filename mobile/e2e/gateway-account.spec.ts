@@ -30,7 +30,10 @@ async function fixture(page: Page, options: { apiEnabled?: boolean; hosts?: unkn
     else if (path === "/client/api/v1/bootstrap") data = { ...bootstrap, models: { ...bootstrap.models, api_access_enabled: options.apiEnabled !== false } }
     else if (path === "/client/api/v1/link-hosts") data = options.hosts || []
     else if (path === "/client/api/v1/link-hosts/pc-online/connect" && options.denyConnect) { connectionRefused = true; await route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: { code: "permission_denied" } }) }); return }
-    else if (path === "/client/api/v1/link-hosts/pc-online/connect") data = { binding_id: "binding", ticket: "b".repeat(64), host_pub: "D".repeat(42) + "A", session_id: "c".repeat(32) }
+    else if (/^\/client\/api\/v1\/link-hosts\/[^/]+\/connect$/.test(path)) {
+      const sibling = path.includes("pc-lab")
+      data = { binding_id: "binding", ticket: (sibling ? "e" : "b").repeat(64), host_pub: (sibling ? "E" : "D").repeat(42) + "A", session_id: (sibling ? "f" : "c").repeat(32) }
+    }
     else if (path === "/v1/models") data = [{ id: "shared-model" }]
     else if (path === "/v1/chat/completions") {
       expect(request.headers().authorization).toBe("Bearer " + token)
@@ -241,25 +244,24 @@ test("a fresh sign-in opens the account's only online PC without scanning", asyn
   expect(links[0]).toMatchObject({ gatewayHostID: "pc-online", gatewayOwnerID: "owner" })
 })
 
-test("a returning session with an online PC still waits for the person to choose", async ({ page }) => {
+test("a returning session automatically connects its online PC", async ({ page }) => {
   await approved(page)
   const calls = await fixture(page, { apiEnabled: false, hosts: [workPC] })
   await page.goto("/")
-  await expect(page.getByRole("button", { name: "连接 办公电脑" })).toBeEnabled()
-  await page.waitForTimeout(1_000)
-  expect(connectCalls(calls)).toHaveLength(0)
-  await expect(page.getByRole("tab", { name: "办公电脑" })).toHaveCount(0)
+  await expect.poll(() => connectCalls(calls).length).toBe(1)
+  await expect(page.getByRole("tab", { name: "办公电脑" })).toHaveAttribute("aria-selected", "true")
 })
 
-test("a fresh sign-in with several online PCs lets the person pick one", async ({ page }) => {
-  const calls = await fixture(page, { apiEnabled: false, review: "authorized", hosts: [workPC, { ...workPC, id: "pc-lab", name: "实验室电脑", hostname: "lab" }] })
+test("sign-in prepares all online PCs and displays the offline PC last", async ({ page }) => {
+  await approved(page)
+  const calls = await fixture(page, { apiEnabled: false, hosts: [{ ...workPC, id: "pc-offline", name: "离线电脑", online: false }, workPC, { ...workPC, id: "pc-lab", name: "实验室电脑", hostname: "lab" }] })
   await page.goto("/")
-  await page.getByRole("button", { name: "登录", exact: true }).click()
-  await page.getByRole("dialog", { name: "用户中心", exact: true }).getByRole("button", { name: "登录", exact: true }).click()
-  await expect(page.getByRole("button", { name: "连接 办公电脑" })).toBeEnabled({ timeout: 20_000 })
-  await expect(page.getByRole("button", { name: "连接 实验室电脑" })).toBeEnabled()
-  await page.waitForTimeout(1_000)
-  expect(connectCalls(calls)).toHaveLength(0)
+  await expect.poll(() => connectCalls(calls).length).toBe(2)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("zwai.remote.links") || "[]").length)).toBe(2)
+  const tabs = page.getByRole("tablist", { name: "电脑" }).getByRole("tab")
+  await expect(tabs).toHaveCount(3)
+  await expect(tabs.last()).toHaveAccessibleName("离线电脑")
+  await expect(tabs.last()).toBeDisabled()
 })
 
 test("same-account login merges a saved anonymous PC and preserves the selected independent Hub", async ({ page }, testInfo) => {

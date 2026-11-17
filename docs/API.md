@@ -57,13 +57,14 @@ The request cannot supply a replacement upstream URL, key or model.
 PC metadata and phone `speech_config`/catalog replies publish only a safe voice
 snapshot: `execution` (`gateway`/`pc_local`), verified `gateway_origin` when
 applicable, input/output `enabled`, `ready`, reason, model/label, parameters and
-limits. Output additionally publishes its own `execution` and, only for an
-account source, `gateway_origin`. New phones prefer these output fields for
-spoken audio, so an editable gateway's selected speech model goes directly to
-that gateway even when recognition uses the PC. Older snapshots without output
-routing fall back to the global fields; global routing and recognition routing are
-unchanged. A personal output explicitly publishes `execution:"pc_local"` without
-an origin. No endpoint path, API key or Host token is included.
+limits. Both `input` and `output` additionally publish their own `execution`
+and, only for a resolved account source, `gateway_origin`. New phones prefer
+that direction's fields. Unchanged Gateway defaults therefore send recognition
+and spoken audio directly to that Gateway with the phone's own session; personal
+PC bindings explicitly publish `pc_local` without an origin. Each direction in
+an older snapshot without its own routing fields inherits the legacy global
+route. Source identity, rather than equal model names or endpoint URLs, decides
+the route. No endpoint path, API key or Host token is included.
 If a valid parameter set expands beyond the sealed-frame budget, `speech_config`
 returns `audio_config_limit`; ordinary metadata/catalog remain available with
 `speech_error` and no voice snapshot. A live refusal or invalid new snapshot

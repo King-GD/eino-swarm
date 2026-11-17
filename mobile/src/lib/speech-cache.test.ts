@@ -11,6 +11,15 @@ const snapshot = {
 }
 
 describe("PC-owned phone speech configuration", () => {
+  it("retains the input's independent gateway route without credentials or endpoint paths", () => {
+    const saved = saveSpeechCache(pc, { ...snapshot, execution: "pc_local", gateway_origin: undefined,
+      input: { ...snapshot.input, execution: "gateway", gateway_origin: "https://gateway.test/", api_key: "private-input" } })
+    expect(saved?.snapshot.input).toMatchObject({ execution: "gateway", gateway_origin: "https://gateway.test" })
+    expect(loadSpeechCache(pc)?.snapshot.input).toEqual(saved?.snapshot.input)
+    expect(localStorage.getItem("zwai.phone.speech")).not.toContain("private-input")
+    expect(saveSpeechCache(pc, { ...snapshot, input: { ...snapshot.input, execution: "gateway" } })).toBeUndefined()
+    expect(saveSpeechCache(pc, { ...snapshot, input: { ...snapshot.input, execution: "pc_local", gateway_origin: "https://gateway.test" } })).toBeUndefined()
+  })
   it("retains a configurable Gateway output independently of the legacy input route without copying credentials", () => {
     const raw = { ...snapshot, execution: "pc_local", gateway_origin: undefined,
       output: { ...snapshot.output, execution: "gateway", gateway_origin: "https://gateway.test/", format: "pcm", api_key: "output-secret", token: "output-secret", base_url: "https://private-endpoint.test/v1" } }

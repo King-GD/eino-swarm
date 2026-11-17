@@ -46,17 +46,18 @@ export interface SpeechRoute {
 export interface SpeechSnapshot extends SpeechRoute {
   input: Pick<SpeechInputSettings, "enabled" | "language" | "prompt" | "recording_format" | "max_duration_seconds" | "timeout_seconds"> & {
     ready: boolean; reason?: string; model: string; label: string
-  }
+  } & Partial<SpeechRoute>
   output: Pick<SpeechOutputSettings, "enabled" | "voice" | "speed" | "format" | "instructions" | "timeout_seconds"> & {
     ready: boolean; reason?: string; model: string; label: string
   } & Partial<SpeechRoute>
   limits: SpeechLimits
 }
 
-/** Output authority is independent of legacy ASR routing. Only old snapshots
- * with neither output authority field inherit the global route. */
+/** Each direction owns its route. Only legacy snapshots without that
+ * direction's authority fields inherit the global route. */
 export function speechRoute(snapshot: SpeechSnapshot, kind: "input" | "output"): SpeechRoute | undefined {
-  const route = kind === "output" && (snapshot.output.execution !== undefined || snapshot.output.gateway_origin !== undefined) ? snapshot.output : snapshot
+  const direction = snapshot[kind]
+  const route = direction.execution !== undefined || direction.gateway_origin !== undefined ? direction : snapshot
   if (route.execution === "pc_local" && (route === snapshot || route.gateway_origin === undefined)) return { execution: "pc_local" }
   if (route.execution === "gateway" && typeof route.gateway_origin === "string") return { execution: "gateway", gateway_origin: route.gateway_origin }
 }
