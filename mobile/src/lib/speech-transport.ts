@@ -168,7 +168,9 @@ export async function endpointSpeechCall(snapshot: SpeechSnapshot, baseURL: stri
       }
       return audio
     }
-    const maximum = operation === "transcribe" ? snapshot.limits.input_bytes : snapshot.limits.output_bytes
+    // The declared file limit bounds upload bytes, not the JSON transcript.
+    // Match the PC transcription adapter's independent response budget.
+    const maximum = operation === "transcribe" ? 1 << 20 : snapshot.limits.output_bytes
     const bytes = await boundedBody(response, maximum, aborter.signal)
     if ((authority && !gatewayAuthorityCurrent(authority)) || aborter.signal.aborted) throw new DOMException("Aborted", "AbortError")
     if (operation === "transcribe") {

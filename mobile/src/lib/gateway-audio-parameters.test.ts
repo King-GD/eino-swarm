@@ -66,3 +66,27 @@ it("does not replace an invalid PC choice with automatic gateway defaults",async
  publishGatewayCapabilities(session,boot)
  expect(authoritativeGatewayAudio(session,automatic)!.output).toMatchObject({ready:false,audio:{overrides:{voice:"b"}}})
 })
+
+it("applies the gateway upload limit only to the recording, not to the recognized JSON text",async()=>{
+ const boot=setup()
+ boot.capabilities!.sources.preset!.capabilities.transcription!.audio_parameters_version=1
+ boot.voice_parameters!["gateway:preset"].transcription={version:1,revision:"asr-r1",status:"configured",parameters:{language:{values:["en","zh"],default:"zh",configurable:true},response_format:{values:["json"],default:"json",configurable:false},max_file_bytes:512}}
+ publishGatewayCapabilities(session,boot)
+ const snapshot=gatewayVoiceSnapshot(session,boot)
+ const bytes=new Uint8Array(364),header=new DataView(bytes.buffer)
+ const ascii=(at:number,value:string)=>{bytes.set(new TextEncoder().encode(value),at)}
+ ascii(0,"RIFF"); header.setUint32(4,356,true)
+ ascii(8,"WAVEfmt "); header.setUint32(16,16,true)
+ header.setUint16(20,1,true); header.setUint16(22,1,true)
+ header.setUint32(24,16000,true); header.setUint32(28,32000,true)
+ header.setUint16(32,2,true); header.setUint16(34,16,true)
+ ascii(36,"data"); header.setUint32(40,320,true)
+ const text="recognized ".repeat(200)
+ const fetcher=vi.fn<typeof fetch>(async()=>new Response(JSON.stringify({text}),{headers:{"Content-Type":"application/json"}}))
+ await expect(gatewaySpeechCall(snapshot,session,"transcribe",new Blob([bytes],{type:"audio/wav"}),new AbortController().signal,fetcher)).resolves.toBe(text)
+ const fields=fetcher.mock.calls[0][1]?.body as FormData
+ expect(fields.get("model")).toBe("transcription");expect(fields.has("language")).toBe(false);expect(fields.has("response_format")).toBe(false)
+ expect((fields.get("file") as File).size).toBe(bytes.length)
+ await expect(gatewaySpeechCall(snapshot,session,"transcribe",new Blob([new Uint8Array(513)],{type:"audio/wav"}),new AbortController().signal,fetcher)).rejects.toMatchObject({code:"too_large"})
+ expect(fetcher).toHaveBeenCalledOnce()
+})
