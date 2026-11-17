@@ -4,7 +4,9 @@ package speech
 
 import (
 	"errors"
+	"github.com/LubyRuffy/eino-swarm/internal/audioparams"
 	"net/url"
+	"reflect"
 	"strings"
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
@@ -13,36 +15,38 @@ import (
 
 // InputView is safe to send to a paired phone; it carries no endpoint credential.
 type InputView struct {
-	SourceID           string `json:"source_id,omitempty"`
-	Execution          string `json:"execution"`
-	GatewayOrigin      string `json:"gateway_origin,omitempty"`
-	Enabled            bool   `json:"enabled"`
-	Ready              bool   `json:"ready"`
-	Reason             string `json:"reason,omitempty"`
-	Model              string `json:"model"`
-	Label              string `json:"label"`
-	Language           string `json:"language"`
-	Prompt             string `json:"prompt"`
-	RecordingFormat    string `json:"recording_format"`
-	MaxDurationSeconds int    `json:"max_duration_seconds"`
-	TimeoutSeconds     int    `json:"timeout_seconds"`
+	Audio              *audioparams.View `json:"audio,omitempty"`
+	SourceID           string            `json:"source_id,omitempty"`
+	Execution          string            `json:"execution"`
+	GatewayOrigin      string            `json:"gateway_origin,omitempty"`
+	Enabled            bool              `json:"enabled"`
+	Ready              bool              `json:"ready"`
+	Reason             string            `json:"reason,omitempty"`
+	Model              string            `json:"model"`
+	Label              string            `json:"label"`
+	Language           string            `json:"language"`
+	Prompt             string            `json:"prompt"`
+	RecordingFormat    string            `json:"recording_format"`
+	MaxDurationSeconds int               `json:"max_duration_seconds"`
+	TimeoutSeconds     int               `json:"timeout_seconds"`
 }
 
 // OutputView describes on-demand playback using the PC's selected service.
 type OutputView struct {
-	SourceID       string  `json:"source_id,omitempty"`
-	Execution      string  `json:"execution"`
-	GatewayOrigin  string  `json:"gateway_origin,omitempty"`
-	Enabled        bool    `json:"enabled"`
-	Ready          bool    `json:"ready"`
-	Reason         string  `json:"reason,omitempty"`
-	Model          string  `json:"model"`
-	Label          string  `json:"label"`
-	Voice          string  `json:"voice"`
-	Speed          float64 `json:"speed"`
-	Format         string  `json:"format"`
-	Instructions   string  `json:"instructions"`
-	TimeoutSeconds int     `json:"timeout_seconds"`
+	Audio          *audioparams.View `json:"audio,omitempty"`
+	SourceID       string            `json:"source_id,omitempty"`
+	Execution      string            `json:"execution"`
+	GatewayOrigin  string            `json:"gateway_origin,omitempty"`
+	Enabled        bool              `json:"enabled"`
+	Ready          bool              `json:"ready"`
+	Reason         string            `json:"reason,omitempty"`
+	Model          string            `json:"model"`
+	Label          string            `json:"label"`
+	Voice          string            `json:"voice"`
+	Speed          float64           `json:"speed"`
+	Format         string            `json:"format"`
+	Instructions   string            `json:"instructions"`
+	TimeoutSeconds int               `json:"timeout_seconds"`
 }
 
 // SnapshotView is the non-secret, PC-owned configuration used by every client.
@@ -84,6 +88,8 @@ func (s *Service) Snapshot() SnapshotView {
 			reason = errorCode(err)
 		}
 		if isInput {
+			v.Input.Audio = selection.audio
+			v.Input.Language, v.Input.Prompt = selection.settings.Input.Language, selection.settings.Input.Prompt
 			v.Input.SourceID = selection.target.ID
 			v.Input.Model = selection.target.Model
 			v.Input.Ready, v.Input.Reason, v.Input.Label = ready, reason, selection.target.Label
@@ -91,12 +97,20 @@ func (s *Service) Snapshot() SnapshotView {
 				v.Input.Execution, v.Input.GatewayOrigin = "gateway", gatewayOrigin
 			}
 		} else {
+			v.Output.Audio = selection.audio
+			v.Output.Voice, v.Output.Speed, v.Output.Format, v.Output.Instructions = selection.settings.Output.Voice, selection.settings.Output.Speed, selection.settings.Output.Format, selection.settings.Output.Instructions
 			v.Output.SourceID = selection.target.ID
 			v.Output.Model = selection.target.Model
 			v.Output.Ready, v.Output.Reason, v.Output.Label = ready, reason, selection.target.Label
 			if gatewayOrigin := origin(selection.target.BaseURL); strings.HasPrefix(selection.target.ID, config.AccountSourcePrefix) && gatewayOrigin != "" {
 				v.Output.Execution, v.Output.GatewayOrigin = "gateway", gatewayOrigin
 			}
+		}
+		if selection.settings.Limits.InputBytes < v.Limits.InputBytes {
+			v.Limits.InputBytes = selection.settings.Limits.InputBytes
+		}
+		if selection.settings.Limits.ChunkChars < v.Limits.ChunkChars {
+			v.Limits.ChunkChars = selection.settings.Limits.ChunkChars
 		}
 		if v.Execution == "gateway" && selection.target.BaseURL != "" {
 			v.GatewayOrigin = origin(selection.target.BaseURL)
@@ -106,15 +120,20 @@ func (s *Service) Snapshot() SnapshotView {
 }
 
 type selection struct {
-	settings config.SpeechConfig
-	product  string
-	target   config.Provider
-	timeout  int
-	isInput  bool
+	audio      *audioparams.View
+	parameters map[string]any
+	settings   config.SpeechConfig
+	product    string
+	target     config.Provider
+	timeout    int
+	isInput    bool
 }
 
 func (s *Service) selectTarget(cfg *config.Config, isInput bool) (selection, error) {
 	selected, err := s.endpointTarget(cfg, isInput)
+	if err == nil {
+		err = s.resolveAudio(&selected)
+	}
 	enabled := cfg.Speech.Output.Enabled
 	if isInput {
 		enabled = cfg.Speech.Input.Enabled
@@ -206,5 +225,5 @@ func origin(raw string) string {
 
 func (s *Service) unchanged(old selection) bool {
 	now, err := s.selectTarget(s.cfg.Snapshot(), old.isInput)
-	return err == nil && now.settings == old.settings && now.product == old.product && now.target.ID == old.target.ID && now.target.BaseURL == old.target.BaseURL && now.target.APIKey == old.target.APIKey && now.target.Model == old.target.Model
+	return err == nil && reflect.DeepEqual(now.settings, old.settings) && reflect.DeepEqual(now.audio, old.audio) && now.product == old.product && now.target.ID == old.target.ID && now.target.BaseURL == old.target.BaseURL && now.target.APIKey == old.target.APIKey && now.target.Model == old.target.Model
 }

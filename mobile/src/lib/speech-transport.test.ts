@@ -1,3 +1,5 @@
+import { gatewayAudioBootstrap } from "../test/gateway-audio"
+import { publishGatewayCapabilities } from "./gateway-capabilities"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
 import { clearGatewaySession, saveGatewaySession, type GatewaySession } from "./gateway-account"
@@ -8,12 +10,12 @@ import type { RemoteRequest, RemoteResponse } from "./rpc"
 const session: GatewaySession = { origin: "https://voice.test", token: "agm_" + "a".repeat(64), user: { id: "u", username: "user", approval_status: "approved" }, device: { id: "m", expires_at: "2099-01-01T00:00:00Z" } }
 const config: SpeechSnapshot = {
   execution: "gateway", gateway_origin: session.origin,
-  input: { enabled: true, ready: true, model: "transcription", label: "ASR", language: "en", prompt: "", recording_format: "auto", max_duration_seconds: 120, timeout_seconds: 120 },
-  output: { enabled: true, ready: true, model: "speech", label: "TTS", voice: "", speed: 1, format: "wav", instructions: "", timeout_seconds: 120 },
+  input: { source_id:"gateway:preset", enabled: true, ready: true, model: "transcription", label: "ASR", language: "en", prompt: "", recording_format: "auto", max_duration_seconds: 120, timeout_seconds: 120 },
+  output: { source_id:"gateway:preset", enabled: true, ready: true, model: "speech", label: "TTS", voice: "", speed: 1, format: "wav", instructions: "", timeout_seconds: 120 },
   limits: { input_bytes: 1024 * 1024, output_bytes: 1024 * 1024, chunk_chars: 1000, staging_ttl_seconds: 300 },
 }
 const blob = () => Object.assign(new Blob([new Uint8Array([82, 73, 70, 70, 0, 255])], { type: "audio/wav" }), { arrayBuffer: async () => new Uint8Array([82, 73, 70, 70, 0, 255]).buffer })
-beforeEach(() => saveGatewaySession(session))
+beforeEach(() => { saveGatewaySession(session); publishGatewayCapabilities(session,gatewayAudioBootstrap(session)) })
 afterEach(() => vi.useRealTimers())
 
 it("reports an unreadable WebView response as a transport failure without exposing private diagnostics", async () => {

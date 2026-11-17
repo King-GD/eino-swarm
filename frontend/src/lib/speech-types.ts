@@ -1,3 +1,4 @@
+import type { AudioOverrides, AudioParameterView } from "./audio-parameters"
 /** Persisted on the PC; credentials never enter the phone snapshot. */
 export interface SpeechConnectionSettings {
   enabled: boolean
@@ -33,6 +34,7 @@ export interface SpeechLimits {
 }
 
 export interface SpeechSettings {
+  gateway_parameters?: Record<string, AudioOverrides>
   input: SpeechInputSettings
   output: SpeechOutputSettings
   limits: SpeechLimits
@@ -46,10 +48,10 @@ export interface SpeechRoute {
 
 export interface SpeechSnapshot extends SpeechRoute {
   input: Pick<SpeechInputSettings, "enabled" | "language" | "prompt" | "recording_format" | "max_duration_seconds" | "timeout_seconds"> & {
-    ready: boolean; reason?: string; model: string; label: string
+    ready: boolean; reason?: string; model: string; label: string; audio?: AudioParameterView
   } & Partial<SpeechRoute>
   output: Pick<SpeechOutputSettings, "enabled" | "voice" | "speed" | "format" | "instructions" | "timeout_seconds"> & {
-    ready: boolean; reason?: string; model: string; label: string
+    ready: boolean; reason?: string; model: string; label: string; audio?: AudioParameterView
   } & Partial<SpeechRoute>
   limits: SpeechLimits
 }
@@ -66,6 +68,7 @@ export function speechRoute(snapshot: SpeechSnapshot, kind: "input" | "output"):
 export function defaultSpeechSettings(value?: Partial<SpeechSettings>): SpeechSettings {
   const connection = { enabled: false, source: "account" as const, provider_id: "", base_url: "", model: "" }
   return {
+    gateway_parameters: value?.gateway_parameters,
     input: { ...connection, language: "", prompt: "", recording_format: "auto", max_duration_seconds: 120, timeout_seconds: 120, ...value?.input },
     output: { ...connection, voice: "", speed: 1, format: "mp3", instructions: "", timeout_seconds: 120, ...value?.output },
     limits: { input_bytes: 25 << 20, output_bytes: 32 << 20, chunk_chars: 1000, staging_ttl_seconds: 300, ...value?.limits },

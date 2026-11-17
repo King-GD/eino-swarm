@@ -75,7 +75,10 @@ func (p *LinkPump) audioRevision() [32]byte {
 	cfg := p.eng.Config().Snapshot()
 	// Hash private configuration only in memory: credential replacement must
 	// revoke a pending call even when its public model label did not change.
-	return sha256.Sum256([]byte(fmt.Sprintf("%#v:%#v:%#v", cfg.Product, cfg.Speech, cfg.Models)))
+	// Preferences contain detached pointers; hash their values, never addresses.
+	preferences, _ := json.Marshal(cfg.Speech.GatewayParameters)
+	cfg.Speech.GatewayParameters = nil
+	return sha256.Sum256([]byte(fmt.Sprintf("%#v:%#v:%#v:%s", cfg.Product, cfg.Speech, cfg.Models, preferences)))
 }
 
 func (p *LinkPump) audioAdmission(input bool) (*speech.SnapshotView, string) {

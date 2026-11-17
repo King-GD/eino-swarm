@@ -1,6 +1,6 @@
-import { discoverGatewayVoiceModels, type GatewayVoiceModels } from "./gateway-speech"
+import { discoverGatewayVoiceModels, type GatewayVoiceModels, type GatewayAudioParameters } from "./gateway-speech"
 import { parseCapabilities, type ClientCapabilities } from "../../../frontend/src/lib/capabilities"
-import { publishGatewayCapabilities, knownGatewayVoiceModels } from "./gateway-capabilities"
+import { publishGatewayCapabilities, knownGatewayVoiceModels, knownGatewayAudioParameters } from "./gateway-capabilities"
 import { Browser } from "@capacitor/browser"
 import { AppLauncher } from "@capacitor/app-launcher"
 import { Capacitor } from "@capacitor/core"
@@ -46,6 +46,7 @@ export type GatewayModelProfile = { label: string; tools?: string[]; context_win
 export type GatewayModelRole = { id: string; enabled: boolean; label: string }
 export type GatewayModelSourceDescriptor = { source_id: string; source_kind: "gateway"; label: string; execution: "phone"; api_base_url: string; catalog_url: string; api_access_enabled: boolean; configurable?: boolean; defaults?: Record<string, string> }
 export type GatewayBootstrap = {
+  voice_parameters?: GatewayAudioParameters
   voice_models?: GatewayVoiceModels
   capabilities_url?: string
   capabilities?: ClientCapabilities
@@ -288,6 +289,7 @@ export async function refreshGatewaySession(session: GatewaySession, fetcher: ty
     // Discovery failure closes gateway features without discarding account PCs.
   }
   bootstrap.voice_models = knownGatewayVoiceModels(current)
+  bootstrap.voice_parameters = knownGatewayAudioParameters(current)
   publishGatewayCapabilities(current, bootstrap)
   if (bootstrap.user?.id === current.user.id) current.user = gatewayUser({ ...current.user, avatar_url: bootstrap.user.avatar_url }, current.user)
   const hosts: GatewayHost[] = []
@@ -304,13 +306,14 @@ export async function refreshGatewaySession(session: GatewaySession, fetcher: ty
 }
 
 export async function refreshGatewayVoiceModels(session: GatewaySession, bootstrap: GatewayBootstrap, fetcher: typeof fetch = gatewayFetch, signal?: AbortSignal): Promise<GatewayBootstrap> {
+  const voice_parameters: GatewayAudioParameters = {}
   const voice_models = await discoverGatewayVoiceModels(bootstrap, async url => {
     const target = new URL(url)
     if (target.origin !== session.origin || target.username || target.password || target.search || target.hash) throw new GatewayError(0, "invalid_gateway_response")
     return (await request<unknown>(session.origin, "", fetcher, session.token, undefined, signal, target.href)).data
-  })
+  }, voice_parameters)
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
-  return { ...bootstrap, voice_models }
+  return { ...bootstrap, voice_models, voice_parameters }
 }
 
 function validateBootstrap(origin: string, bootstrap: GatewayBootstrap, session: GatewaySession) {

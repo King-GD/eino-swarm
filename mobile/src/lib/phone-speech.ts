@@ -1,5 +1,6 @@
+import { GATEWAY_AUDIO_PREFERENCES_EVENT } from "./gateway-audio-parameters"
 import { selectPhoneSpeech, speechExecutionKey, type VoiceOwner } from "./phone-speech-selection"
-import { currentGatewayVoice, gatewayCapabilityAllows, GATEWAY_CAPABILITIES_EVENT } from "./gateway-capabilities"
+import { authoritativeGatewayAudio, currentGatewayVoice, gatewayCapabilityAllows, GATEWAY_CAPABILITIES_EVENT } from "./gateway-capabilities"
 import { useEffect, useSyncExternalStore } from "react"
 import { speechRoute, type SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
 import { speechPlayback } from "../../../frontend/src/lib/speech-media"
@@ -59,7 +60,7 @@ function publish(forceCancel: boolean) {
   }
   const chosen = selectPhoneSpeech(gateway, preferred, standalone, connected, gatewayAllowed)
   owners = chosen.owners
-  const speech = chosen.snapshot
+  const speech = session && chosen.snapshot ? authoritativeGatewayAudio(session,chosen.snapshot) ?? chosen.snapshot : chosen.snapshot
   const key = speechExecutionKey(speech, owners)
   const usesPC = Object.values(owners).includes("pc")
   const usesGateway = Object.values(owners).includes("gateway")
@@ -160,6 +161,7 @@ export function usePhoneSpeechSync(link: RemoteLink | null, pc: SavedLink | unde
     window.addEventListener(GATEWAY_ACCOUNT_EVENT, authorityChanged)
     window.addEventListener(GATEWAY_REFUSAL_EVENT, authorityRefused)
     window.addEventListener(GATEWAY_CAPABILITIES_EVENT, authorityRefused)
+    window.addEventListener(GATEWAY_AUDIO_PREFERENCES_EVENT, authorityRefused)
     void refresh()
     return () => {
       alive = false; clearInterval(timer)
@@ -168,6 +170,7 @@ export function usePhoneSpeechSync(link: RemoteLink | null, pc: SavedLink | unde
       window.removeEventListener(GATEWAY_ACCOUNT_EVENT, authorityChanged)
       window.removeEventListener(GATEWAY_REFUSAL_EVENT, authorityRefused)
       window.removeEventListener(GATEWAY_CAPABILITIES_EVENT, authorityRefused)
+      window.removeEventListener(GATEWAY_AUDIO_PREFERENCES_EVENT, authorityRefused)
     }
     // The complete binding captures every pairing authority field. Host labels
     // are presentation only, and the cached snapshot owns its own timestamp.

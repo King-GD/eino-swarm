@@ -1,3 +1,5 @@
+import { t, readLocalePref, resolveLocale } from "./i18n"
+import { refreshCapabilities } from "./refresh-capabilities"
 import { ApiError } from "./api"
 import { speechAudioResponse, type SpeechAudio } from "./speech-stream"
 import { transcriptionText } from "./speech-text"
@@ -13,6 +15,10 @@ async function speechResponse(path: string, init: RequestInit): Promise<Response
     if (typeof body?.error === "string") message = body.error
     if (typeof body?.code === "string") code = body.code
   } catch { /* The HTTP status remains useful when no safe JSON error exists. */ }
+  if (code === "invalid_audio_parameter" || code === "audio_parameters_changed") {
+    message = t(resolveLocale(readLocalePref()), "speech.audioInvalid")
+    void refreshCapabilities().catch(() => undefined)
+  }
   throw new ApiError(message, response.status, code)
 }
 

@@ -14,11 +14,12 @@ import (
 
 // RoleCapability contains public protocol identifiers, never model credentials.
 type RoleCapability struct {
-	Supported    bool     `json:"supported"`
-	Available    bool     `json:"available"`
-	Configurable bool     `json:"configurable"`
-	Endpoints    []string `json:"endpoints"`
-	Reason       string   `json:"reason,omitempty"`
+	AudioParametersVersion int      `json:"audio_parameters_version,omitempty"`
+	Supported              bool     `json:"supported"`
+	Available              bool     `json:"available"`
+	Configurable           bool     `json:"configurable"`
+	Endpoints              []string `json:"endpoints"`
+	Reason                 string   `json:"reason,omitempty"`
 }
 
 type SourceCapabilities struct {
