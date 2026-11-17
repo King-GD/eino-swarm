@@ -126,10 +126,12 @@ those sources. A source returning 403 disappears without signing out or hiding
 other sources. Refresh retries transient failures while retaining this account's
 last catalog. Account mode continues to require a ready PC. Sign-out removes account
 credentials and managed tickets, retaining private providers and anonymous pairings.
-**User center → Other server** changes the default for self-hosting.
+User center does not offer another server address.
 
 Open **User center → Web tools** from the menu or the settings icon in an open
-conversation. The preferences and their status summaries live there. Each
+LOCAL conversation after the account is authorized. A signed-out User center
+does not show these controls, and Account mode does not show them either. The
+preferences and their status summaries live there. Each
 Gateway/account has two independent preferences:
 
 - **Phone model calls**: Automatic, Cloud server, or Off. Automatic attaches cloud
@@ -550,7 +552,7 @@ tickets also stay on the phone. Camera
 and cleartext (user-typed hub URLs, including `http` on a LAN) are declared
 in `Info.plist` and `AndroidManifest.xml`. The iOS camera component also
 references the photo library, so those purpose strings are declared too;
-the app itself only asks for the camera. The official Gateway default can be changed in User center; anonymous QR offers continue to select their own hub.
+the app itself only asks for the camera. User center does not edit that Gateway address. Anonymous QR offers continue to select their own hub.
 
 ## Updates
 
@@ -560,7 +562,9 @@ If the newest Release has no matching Android APK, it searches the release
 list for the newest version with an installable APK; a desktop-only version
 does not offer a phone update.
 It does not ask the PC. The browser walkthrough (`?mock=1`) does not check,
-so a desk session never phones GitHub. A newer `zwai-*-android.apk` on
+so a desk session never phones GitHub. On Android the offer is pinned at the
+top of User center, above the title and account content, including the
+signed-out account page, and it stays put while that page scrolls. A newer `zwai-*-android.apk` on
 Android is downloaded and handed to the system installer. While the bytes
 are moving, the banner shows the percent when the response has a length,
 otherwise how much has arrived. The sheet still

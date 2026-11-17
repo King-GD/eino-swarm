@@ -125,6 +125,10 @@ only after its own acceptance; older mobile deliveries retain their frozen batch
 
 - Document release handoff, valid evidence reuse, phase timing, native fixture pitfalls,
   and TestFlight timeout recovery; distinguish current publisher gaps from implemented automation.
+- Mobile User center no longer offers another server address. LOCAL Web-tool
+  preferences appear only after the account is authorized. (`F-211`)
+- An available Android update stays pinned at the top of User center, including
+  the signed-out account page. (`F-240`)
 
 - Voice input, read aloud and audio resource settings now live in Settings →
   Models. Models is available in Gateway mode with managed models and voice

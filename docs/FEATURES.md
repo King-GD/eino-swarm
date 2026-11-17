@@ -372,7 +372,7 @@ This is the current user-facing capability map. The code and tests named below a
 
 - 手机用户中心优先展示 Gateway 的账号与 PC 显示名，并在名称旁显示 `fofa.info`、`nosec.org`、`baimaohui.net` 或其子域名上的合格公开头像。旧 Gateway 的已知合成账号名回退到可读部分，PC 使用可读名称、主机名或未命名提示；保存连接后保留可读 PC 名称。头像地址省略或图片加载失败时保留名称首字，不留空白头像。Host ID、公钥、指纹和账号 ID 仍用于原有身份与重连逻辑。证据：`mobile/src/lib/gateway-names.ts`、`mobile/src/lib/avatar-url.ts`、`mobile/src/lib/gateway-account.test.ts`、`mobile/src/components/gateway-account-shell.test.tsx`、`mobile/e2e/gateway-account.spec.ts`；关联 `C-006`。
 
-- 手机的联网状态与偏好集中在用户中心。列表通过菜单进入，已打开的会话通过标题栏齿轮进入。关闭用户中心后回到原会话。证据见 `mobile/src/components/web-execution-settings.tsx` 和 `mobile/e2e/cloud-web-tools.spec.ts`。
+- 手机的联网状态与偏好集中在 LOCAL 用户中心，且只在账号已授权后显示。未登录、过期、待审和 Account 模式不展示这些控件。列表通过菜单进入，已打开的会话通过标题栏齿轮进入。关闭用户中心后回到原会话。证据见 `mobile/src/components/web-execution-settings.tsx`、`mobile/src/components/gateway-account-shell.test.tsx` 和 `mobile/e2e/cloud-web-tools.spec.ts`。
 
 - 用户中心分别配置手机直连联网工具 `auto`／`cloud`／`off` 和 PC 会话 `inherit`／`local`／`cloud`，按 Gateway origin 与账号隔离，互不覆盖。手机直连自动模式仅在已批准、启用且未过期会话下声明云端 Search／Fetch，否则普通聊天；显式云端缺会话时在模型请求前报错，关闭时普通聊天。服务器或个人模型都必须支持标准 function calling；不静默换模型、去掉工具重试或本地降级。PC 默认继承其全局配置，手机登录不覆盖；显式偏好只写目标会话，从下一回合生效，PC 云工具用自身授权，不转发手机 Token。旧共享 `local` 读取为手机 `off` 与 PC `local`，旧 `cloud` 保留明确选择。设置摘要是下一回合策略，PC 状态是本机回执快照而非实时权限承诺。Gateway 401 仅清理同一当前会话；403 暂停新数据面但保持当前对话挂载，复核 approved 后恢复，pending／rejected 或复核失败才隔离，不假定待审；拒绝 headers 即释放未读 body，native stream 准备阶段也可取消；个人模型 401 不登出 Gateway；注销、换账号、改偏好和 Stop 取消自有请求。关联 `C-006`、`C-013`；证据：`mobile/src/lib/web-execution.ts`、`mobile/src/lib/web-execution.test.ts`、`mobile/src/lib/cloud-web-tools.ts`、`mobile/src/lib/openai-tool-wire.ts`、`mobile/src/lib/openai-client-web-tools.test.ts`、`mobile/src/lib/pc-web-execution.test.ts`、`mobile/src/lib/gateway-authority-account.test.tsx`、`mobile/src/lib/openai-client-authority.test.ts`、`mobile/src/lib/stream-body-cancel.test.ts`、`internal/remote/web_execution_test.go`、`internal/remote/web_execution_status_test.go`。
 
@@ -382,7 +382,7 @@ This is the current user-facing capability map. The code and tests named below a
 
 - 用户中心弹层的标题与关闭按钮保留设备顶部和左右安全区；独立审核页沿用页面安全区，底部内边距不重复增加。布局与实际关闭回归见 `mobile/e2e/gateway-account.spec.ts`，iOS 还需原生布局验收。
 
-- 目的：不手工配置服务器即可登录、发现并连接本人电脑；入口：手机「登录」及菜单「用户中心」；输入：浏览器登录和显式设备授权、用户选择的在线 PC；输出：审核状态、本人 PC 列表、自动获取的连接票据和心跳。待审／拒审只显示审核界面，普通 API 权限不决定设备连接权限。匿名扫码独立保留，账号模式选择 PC 无需扫码；保存并重连选中的 Host ID／公钥，不批量连接账号的所有 PC（唯一在线电脑的一次性自动连接见本节「登录优先」条目）。失败可刷新／重新登录，离线 PC 禁用连接，退出删除受管票据而保留匿名票据与自配模型。关联 `C-006`、`C-013`、`F-230`；实现证据：`mobile/src/lib/gateway-account.ts`、`mobile/src/lib/use-gateway-account.ts`、`mobile/src/components/gateway-account-shell.tsx`、`mobile/src/components/gateway-account-screen.tsx`、`mobile/e2e/gateway-account.spec.ts`。
+- 目的：不手工配置服务器即可登录、发现并连接本人电脑；入口：手机「登录」及菜单「用户中心」；输入：浏览器登录和显式设备授权、用户选择的在线 PC；输出：审核状态、本人 PC 列表、自动获取的连接票据和心跳。用户中心不提供其他服务器地址入口。待审／拒审只显示审核界面，普通 API 权限不决定设备连接权限。匿名扫码独立保留，账号模式选择 PC 无需扫码；保存并重连选中的 Host ID／公钥，不批量连接账号的所有 PC（唯一在线电脑的一次性自动连接见本节「登录优先」条目）。失败可刷新／重新登录，离线 PC 禁用连接，退出删除受管票据而保留匿名票据与自配模型。关联 `C-006`、`C-013`、`F-230`；实现证据：`mobile/src/lib/gateway-account.ts`、`mobile/src/lib/use-gateway-account.ts`、`mobile/src/components/gateway-account-shell.tsx`、`mobile/src/components/gateway-account-screen.tsx`、`mobile/e2e/gateway-account.spec.ts`。
 
 - 登录优先：默认 Account 首页要求登录；登录后未连接 ready PC 时列出本人电脑并显示接入引导。扫码、粘贴配对链接和「自配模型」仅在头像三击切换的 LOCAL 调试模式下通过「其他方式」提供。登录刚完成时，若手机没有任何已保存连接或活动指纹，且账号恰有一台在线且启用的电脑，自动连接这一台一次：该标记只在内存，在失败、退出、重新登录、换服务器后清除，每次登录最多一次，之后重启或刷新不会再自动选；有多台、没有在线电脑或手机已有连接时不猜测，由用户选择。离线电脑仍禁用，自动连接失败回到可选列表。关联 `C-006`；证据：`mobile/src/lib/gateway-auto-connect.ts`、`mobile/src/lib/gateway-auto-connect.test.ts`、`mobile/src/lib/use-gateway-account-fresh-login.test.tsx`、`mobile/src/components/gateway-account-shell.tsx`、`mobile/src/components/account-pc-list.tsx`、`mobile/src/components/scan-screen.tsx`、`mobile/src/components/gateway-account-start.test.tsx`、`mobile/e2e/gateway-account.spec.ts`。
 
@@ -460,7 +460,7 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-240 Phone updates
 
-- 目的：发现并安装 Android 可用版本；使用者：Android 手机用户；入口：菜单 Check for updates 和更新提示；输入：最近一个含匹配 APK 的 GitHub Release；输出：Android 安装请求；前置条件：网络和新版本；失败表现：手动检查显示错误。iOS 测试版由 TestFlight 分发和更新，应用内不显示 GitHub 检查入口；关联契约：`C-010`；实现证据：`mobile/src/components/host-chrome.tsx`, `mobile/src/components/update-notice.tsx`, `mobile/src/lib/app-update.ts`, `mobile/e2e/version-check.spec.ts`, `mobile/ios/App/AppUITests/BindFlowTests.swift`。
+- 目的：发现并安装 Android 可用版本；使用者：Android 手机用户；入口：菜单 Check for updates 和更新提示；输入：最近一个含匹配 APK 的 GitHub Release；输出：Android 安装请求；前置条件：网络和新版本；失败表现：手动检查显示错误。有新版本时，更新提示固定在用户中心顶部，位于标题和账号内容之上，未登录的 Account 页同样可见，不随用户中心滚动；关掉一处提示后，被盖住的另一处同时收起。iOS 测试版由 TestFlight 分发和更新，应用内不显示 GitHub 检查入口；关联契约：`C-010`；实现证据：`mobile/src/components/host-chrome.tsx`, `mobile/src/components/update-notice.tsx`, `mobile/src/components/gateway-account-screen.tsx`, `mobile/src/lib/app-update.ts`, `mobile/e2e/version-check.spec.ts`, `mobile/ios/App/AppUITests/BindFlowTests.swift`。
 
 ### F-310 HTTP API and live events
 
