@@ -16,11 +16,19 @@ type exclusiveContentModel struct {
 }
 
 func (m *exclusiveContentModel) Generate(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.Message, error) {
-	return m.inner.Generate(ctx, providerMessages(in), opts...)
+	out, err := m.inner.Generate(ctx, exclusiveContent(in), opts...)
+	if retry, ok := systemOrderRetry(ctx, err, in); ok {
+		return m.inner.Generate(ctx, exclusiveContent(retry), opts...)
+	}
+	return out, err
 }
 
 func (m *exclusiveContentModel) Stream(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
-	return m.inner.Stream(ctx, providerMessages(in), opts...)
+	out, err := m.inner.Stream(ctx, exclusiveContent(in), opts...)
+	if retry, ok := systemOrderRetry(ctx, err, in); ok {
+		return m.inner.Stream(ctx, exclusiveContent(retry), opts...)
+	}
+	return out, err
 }
 
 func exclusiveContent(in []*schema.Message) []*schema.Message {

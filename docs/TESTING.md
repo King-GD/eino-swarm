@@ -9262,3 +9262,10 @@ Protocol and source tests use versioned state plus actual Registry/model HTTP, C
 The task-panel [formal model map](../models/panels/README.md) states finite bounds and the exact implementation boundaries. Current cases and guard-removal counterexamples cover operation digests/CAS, running source ownership, recovery failure isolation, overlapping GET/SSE per-panel revisions/deletions, hidden iframe resynchronization and observed HTTP result delivery before join. Every model has reachable witness cases. The independent audit regressions preserve the original failing order; protocol model success is not a SQLite atomicity, cancelled final-flush durability, wall-clock or native presentation proof.
 
 Paired mobile coverage adds `internal/remote/task_panels_test.go` and the Store transfer tests for actual sealed frames, frozen multi-chunk data during updates, exact patches, invalid scope/old cleanup, deletion and oversize refusal. `mobile/src/lib/remote-task-panels.test.ts` and `use-task-panels.test.tsx` verify complete body checks, cancellation, hidden reads, repair and PC/visit fencing. `mobile/e2e/task-panels.spec.ts` uses the same bundled plugin on Chromium/WebKit phone profiles with touch zoom, snapshot/patch identity, hidden/reopen, rotation, multiple panels and failure/version states. Tests use synthetic data; native packaged-app and physical-device acceptance remain separate. An isolated only-mobile dependency build checks that the shared plugin does not secretly need frontend node_modules. `MobileTaskPanel.tla` plus isolated client guard mutations cover the transport refinement; they do not prove arbitrary multi-panel memory or network timing.
+
+`internal/provider/leading_system_test.go` exercises real Chat and Responses
+Generate/Stream HTTP adapters. Accepted requests retain System boundaries; exact
+input refusals admit one lossless text-System compatibility retry. Authorization,
+server/unknown errors, cancellation, non-text System messages and repeated
+refusal cannot expand that budget. Engine model-JSON, midturn-output recovery and
+restart-inbox tests retain their original independent-role/roster assertions.

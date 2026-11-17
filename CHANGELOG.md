@@ -45,11 +45,12 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - Phone voice service failures show their HTTP status instead of only a generic
   error; private upstream error bodies remain hidden. (`F-148`, `C-048`)
 
-- Model requests keep a single leading system message. Further leading system
-  sections are joined into it, and a system message that arrives after the
-  conversation stays in place as a user message. A turn no longer dies on the
-  next request after context compression, or after a mid-turn notice, when the
-  endpoint accepts a system message only at the start.
+- Model requests preserve their original system roles and ordering. Only an
+  explicit typed HTTP 400/422 rejection of system placement permits one
+  compatibility retry: text system sections retain their complete content and
+  transcript positions inside one leading system message. System notices never
+  become human messages; unsupported multimodal systems fail without rewriting.
+  This also preserves worker-roster and restart/reasoning recovery boundaries.
 
 - Automatic voice capture now normalizes WebM/Opus and Ogg as well as MP4/AAC
   to WAV, fixing ASR format rejection on newer iPhones that record WebM.

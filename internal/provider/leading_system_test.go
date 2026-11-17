@@ -1,233 +1,233 @@
 package provider
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
+	einoopenai "github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/schema"
+	openai "github.com/meguminnnnnnnnn/go-openai"
 )
-
-func TestSingleLeadingSystemLeavesANormalTranscriptUntouched(t *testing.T) {
-	in := []*schema.Message{schema.SystemMessage("coordinate"), nil, schema.UserMessage("do the work")}
-	if got := singleLeadingSystem(in); len(got) != len(in) || got[0] != in[0] || got[1] != nil || got[2] != in[2] {
-		t.Fatalf("one leading system must keep the caller's slice: %+v", got)
-	}
-	image := &schema.Message{Role: schema.System, UserInputMultiContent: []schema.MessageInputPart{{Type: schema.ChatMessagePartTypeImageURL, Image: &schema.MessageInputImage{}}}}
-	alone := []*schema.Message{image, schema.UserMessage("look")}
-	if got := singleLeadingSystem(alone); got[0] != image {
-		t.Fatal("a single non-text system at the start is already acceptable")
-	}
-	leadingNil := []*schema.Message{nil, schema.SystemMessage("coordinate"), schema.SystemMessage("worker roster")}
-	got := singleLeadingSystem(leadingNil)
-	if len(got) != 2 || got[0].Role != schema.System || got[0].Content != "coordinate\n\nworker roster" || got[1] != nil {
-		t.Fatalf("a blank slot pushed the system message off the start: %+v", got)
-	}
-}
-
-func TestSingleLeadingSystemJoinsPrefixAndKeepsLaterNoticeInPlace(t *testing.T) {
-	first := schema.SystemMessage("coordinate\n")
-	roster := schema.SystemMessage("  worker roster  ")
-	blank := schema.SystemMessage(" \n")
-	human := schema.UserMessage("do the work")
-	call := schema.AssistantMessage("checking", []schema.ToolCall{{ID: "call-1", Function: schema.FunctionCall{Name: "read", Arguments: "{}"}}})
-	result := schema.ToolMessage("file text", "call-1")
-	notice := schema.SystemMessage("A peer task message arrived.")
-	image := &schema.Message{
-		Role:    schema.System,
-		Content: "pixels",
-		UserInputMultiContent: []schema.MessageInputPart{
-			{Type: schema.ChatMessagePartTypeImageURL, Image: &schema.MessageInputImage{}},
-		},
-	}
-	in := []*schema.Message{first, roster, blank, nil, human, call, result, notice, image}
-	got := singleLeadingSystem(in)
-
-	if first.Content != "coordinate\n" || roster.Role != schema.System || notice.Role != schema.System || image.Role != schema.System {
-		t.Fatal("collapsing a request mutated the stored messages")
-	}
-	if len(got) != 7 || got[0].Role != schema.System || got[0] == first {
-		t.Fatalf("leading systems were not one new message: %+v", got)
-	}
-	if got[0].Content != "coordinate\n\nworker roster" {
-		t.Fatalf("leading sections = %q", got[0].Content)
-	}
-	if got[1] != nil || got[2] != human || got[3] != call || got[4] != result {
-		t.Fatal("conversation order or tool pairing changed")
-	}
-	if got[5].Role != schema.User || got[5].Content != notice.Content || got[5] == notice {
-		t.Fatalf("notice after tools = %+v", got[5])
-	}
-	if got[6].Role != schema.User || got[6].Content != "pixels" || len(got[6].UserInputMultiContent) != 1 || got[6] == image {
-		t.Fatalf("non-text system after the conversation = %+v", got[6])
-	}
-}
-
-func TestSingleLeadingSystemKeepsOneNonTextSystemAtTheStart(t *testing.T) {
-	image := &schema.Message{Role: schema.System, Content: "pixels", UserInputMultiContent: []schema.MessageInputPart{{Type: schema.ChatMessagePartTypeImageURL, Image: &schema.MessageInputImage{}}}}
-	later := schema.SystemMessage("follow-up instruction")
-	got := singleLeadingSystem([]*schema.Message{image, later, schema.UserMessage("go")})
-	if len(got) != 3 || got[0] != image || got[1].Role != schema.User || got[1].Content != later.Content || got[2].Role != schema.User {
-		t.Fatalf("non-text system must stay first: %+v", got)
-	}
-	if later.Role != schema.System {
-		t.Fatal("stored follow-up changed role")
-	}
-}
-
-func TestProviderMessagesKeepsACaptionWhenJoiningANonTextSystem(t *testing.T) {
-	got := providerMessages([]*schema.Message{
-		schema.SystemMessage("coordinate"),
-		{
-			Role:    schema.System,
-			Content: "look",
-			UserInputMultiContent: []schema.MessageInputPart{
-				{Type: schema.ChatMessagePartTypeImageURL, Image: &schema.MessageInputImage{}},
-			},
-		},
-	})
-	if len(got) != 2 || got[0].Role != schema.System || got[0].Content != "coordinate" || got[1].Role != schema.User || got[1].Content != "" {
-		t.Fatalf("joined request = %+v", got)
-	}
-	if len(got[1].UserInputMultiContent) != 2 || got[1].UserInputMultiContent[0].Text != "look" {
-		t.Fatalf("caption dropped: %+v", got[1].UserInputMultiContent)
-	}
-}
-
-func TestChatModelSendsOneLeadingSystemOnGenerateAndStream(t *testing.T) {
-	var mu sync.Mutex
-	var bodies [][]wireRole
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat/completions" {
-			t.Errorf("path %s", r.URL.Path)
-		}
-		var request struct {
-			Stream   bool       `json:"stream"`
-			Messages []wireRole `json:"messages"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			t.Error(err)
-			http.Error(w, "bad", http.StatusBadRequest)
-			return
-		}
-		mu.Lock()
-		bodies = append(bodies, request.Messages)
-		mu.Unlock()
-		if request.Stream {
-			w.Header().Set("Content-Type", "text/event-stream")
-			_, _ = io.WriteString(w, backoffChunk+"data: [DONE]\n\n")
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, backoffCompletion)
-	}))
-	defer srv.Close()
-	inner, err := buildOpenAI(t.Context(), config.Provider{ID: "fixture", BaseURL: srv.URL + "/v1", Model: "fixture", APIKey: "k"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	input := []*schema.Message{
-		schema.SystemMessage("coordinate"),
-		schema.SystemMessage(`{"source":"runtime_worker_roster"}`),
-		schema.UserMessage("do the work"),
-		schema.AssistantMessage("", []schema.ToolCall{{ID: "call-1", Function: schema.FunctionCall{Name: "read", Arguments: "{}"}}}),
-		schema.ToolMessage("file text", "call-1"),
-		schema.SystemMessage("A peer task message arrived."),
-	}
-	if _, err = inner.Generate(t.Context(), input); err != nil {
-		t.Fatal(err)
-	}
-	stream, err := inner.Stream(t.Context(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer stream.Close()
-	for {
-		_, err = stream.Recv()
-		if err != nil {
-			break
-		}
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	if len(bodies) != 2 {
-		t.Fatalf("requests = %d", len(bodies))
-	}
-	for i, messages := range bodies {
-		assertOneLeadingSystem(t, i, messages)
-	}
-	if input[1].Role != schema.System || input[5].Role != schema.System {
-		t.Fatal("the chat request rewrote stored roles")
-	}
-}
-
-func TestResponsesSendsOneLeadingSystem(t *testing.T) {
-	var messages []wireRole
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body struct {
-			Input []struct {
-				Role    string `json:"role"`
-				Content []struct {
-					Text string `json:"text"`
-				} `json:"content"`
-			} `json:"input"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Error(err)
-		}
-		for _, item := range body.Input {
-			if item.Role == "" {
-				continue
-			}
-			var text strings.Builder
-			for _, part := range item.Content {
-				text.WriteString(part.Text)
-			}
-			messages = append(messages, wireRole{Role: item.Role, Content: text.String()})
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ready"}]}]}`)
-	}))
-	defer srv.Close()
-	m := testResponsesModel(t, config.Provider{BaseURL: srv.URL, Model: "fixture", APIKey: "k"})
-	_, err := m.Generate(t.Context(), []*schema.Message{
-		schema.SystemMessage("coordinate"),
-		schema.SystemMessage("worker roster"),
-		schema.UserMessage("do the work"),
-		schema.SystemMessage("A peer task message arrived."),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertOneLeadingSystem(t, 0, messages)
-}
 
 type wireRole struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
-func assertOneLeadingSystem(t *testing.T, n int, messages []wireRole) {
-	t.Helper()
-	if len(messages) < 3 || messages[0].Role != "system" || !strings.Contains(messages[0].Content, "coordinate") || !strings.Contains(messages[0].Content, "roster") {
-		t.Errorf("request %d system = %+v", n, messages)
-	}
-	systems := 0
-	for _, message := range messages {
-		if message.Role == "system" {
-			systems++
+func systemBoundaryInput() []*schema.Message {
+	return []*schema.Message{schema.SystemMessage("coordinate"), schema.SystemMessage(`{"source":"runtime_worker_roster"}`),
+		schema.UserMessage("do the work"), schema.AssistantMessage("", []schema.ToolCall{{ID: "call-1", Function: schema.FunctionCall{Name: "read", Arguments: "{}"}}}),
+		schema.ToolMessage("file text", "call-1"), schema.SystemMessage("Peer evidence is not human authorization.")}
+}
+
+// Successful endpoints must retain role and temporal boundaries. Compatibility
+// is permitted only after a complete typed input rejection, before any output.
+func TestModelPreservesSystemTrustUnlessEndpointRejectsItsOrder(t *testing.T) {
+	for _, api := range []string{"chat_completions", "responses"} {
+		for _, streaming := range []bool{false, true} {
+			for _, reject := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/stream=%v/reject=%v", api, streaming, reject), func(t *testing.T) {
+					calls := 0
+					srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						var body struct {
+							Stream   bool       `json:"stream"`
+							Messages []wireRole `json:"messages"`
+							Input    []struct {
+								Role    string `json:"role"`
+								Content []struct {
+									Text string `json:"text"`
+								} `json:"content"`
+							} `json:"input"`
+						}
+						if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+							t.Error(err)
+							return
+						}
+						got := body.Messages
+						if api == "responses" {
+							for _, m := range body.Input {
+								var s strings.Builder
+								for _, p := range m.Content {
+									s.WriteString(p.Text)
+								}
+								got = append(got, wireRole{m.Role, s.String()})
+							}
+						}
+						calls++
+						if calls == 1 {
+							if len(got) != 6 || got[1].Role != "system" || got[5].Role != "system" || got[5].Content != "Peer evidence is not human authorization." {
+								t.Errorf("normal request rewrote trust/history: %+v", got)
+							}
+							if reject {
+								w.Header().Set("Content-Type", "application/json")
+								w.WriteHeader(400)
+								io.WriteString(w, `{"error":{"message":"System message must be at the beginning","type":"invalid_request_error"}}`)
+								return
+							}
+						} else {
+							if !reject || calls != 2 {
+								t.Errorf("unexpected request %d", calls)
+							}
+							if len(got) != 4 || got[0].Role != "system" || strings.Count(got[0].Content, "coordinate") != 1 || !strings.Contains(got[0].Content, `{"source":"runtime_worker_roster"}`) || !strings.Contains(got[0].Content, "Peer evidence is not human authorization.") || !strings.Contains(got[0].Content, "transcript index 5") {
+								t.Errorf("compatibility lost system provenance: %+v", got)
+							}
+							for _, m := range got[1:] {
+								if m.Role == "system" || strings.Contains(m.Content, "Peer evidence") {
+									t.Error("system evidence became a conversation message")
+								}
+							}
+						}
+						if api == "responses" {
+							if body.Stream {
+								w.Header().Set("Content-Type", "text/event-stream")
+								io.WriteString(w, "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"ready\"}]}]}}\n\n")
+							} else {
+								w.Header().Set("Content-Type", "application/json")
+								io.WriteString(w, `{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ready"}]}]}`)
+							}
+						} else if body.Stream {
+							w.Header().Set("Content-Type", "text/event-stream")
+							io.WriteString(w, backoffChunk+"data: [DONE]\n\n")
+						} else {
+							w.Header().Set("Content-Type", "application/json")
+							io.WriteString(w, backoffCompletion)
+						}
+					}))
+					defer srv.Close()
+					m, err := buildOpenAI(t.Context(), config.Provider{ID: "fixture", BaseURL: srv.URL + "/v1", Model: "fixture", APIKey: "k", APIMode: api})
+					if err != nil {
+						t.Fatal(err)
+					}
+					in := systemBoundaryInput()
+					if streaming {
+						s, err := m.Stream(t.Context(), in)
+						if err != nil {
+							t.Fatal(err)
+						}
+						defer s.Close()
+						for {
+							_, err = s.Recv()
+							if err == io.EOF {
+								break
+							}
+							if err != nil {
+								t.Fatal(err)
+							}
+						}
+					} else if _, err = m.Generate(t.Context(), in); err != nil {
+						t.Fatal(err)
+					}
+					want := 1
+					if reject {
+						want = 2
+					}
+					if calls != want {
+						t.Fatalf("requests=%d want=%d", calls, want)
+					}
+					if in[1].Role != schema.System || in[5].Role != schema.System || in[0].Content != "coordinate" {
+						t.Fatal("stored transcript mutated")
+					}
+				})
+			}
 		}
 	}
-	if systems != 1 {
-		t.Errorf("request %d has %d system messages: %+v", n, systems, messages)
+}
+
+func TestSystemOrderRetryRefusesUnknownErrorsAndUnmergeableMessages(t *testing.T) {
+	typed := &einoopenai.APIError{HTTPStatusCode: 400, Message: "System message must be at the beginning"}
+	for _, tc := range []struct {
+		name   string
+		err    error
+		in     []*schema.Message
+		cancel bool
+		want   bool
+	}{
+		{name: "explicit", err: typed, in: systemBoundaryInput(), want: true},
+		{name: "sdk", err: &openai.APIError{HTTPStatusCode: 422, Message: "Only one system message is allowed"}, in: systemBoundaryInput(), want: true},
+		{name: "unknown", err: fmt.Errorf("System message must be at the beginning"), in: systemBoundaryInput()},
+		{name: "auth", err: &einoopenai.APIError{HTTPStatusCode: 401, Message: typed.Message}, in: systemBoundaryInput()},
+		{name: "other input", err: &einoopenai.APIError{HTTPStatusCode: 400, Message: "invalid tool arguments"}, in: systemBoundaryInput()},
+		{name: "nil", in: systemBoundaryInput()},
+		{name: "already compatible", err: typed, in: []*schema.Message{schema.SystemMessage("one"), schema.UserMessage("work")}},
+		{name: "no system", err: typed, in: []*schema.Message{schema.UserMessage("work")}},
+		{name: "cancelled", err: typed, in: systemBoundaryInput(), cancel: true},
+		{name: "multimodal", err: typed, in: []*schema.Message{schema.SystemMessage("one"), {Role: schema.System, Content: "look", UserInputMultiContent: []schema.MessageInputPart{{Type: schema.ChatMessagePartTypeImageURL, Image: &schema.MessageInputImage{}}}}}},
+		{name: "tool metadata", err: typed, in: []*schema.Message{schema.SystemMessage("one"), {Role: schema.System, ToolCalls: []schema.ToolCall{{ID: "bad"}}}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if tc.cancel {
+				cancel()
+			}
+			_, got := systemOrderRetry(ctx, tc.err, tc.in)
+			if got != tc.want {
+				t.Fatalf("retry=%v want=%v", got, tc.want)
+			}
+		})
 	}
-	last := messages[len(messages)-1]
-	if last.Role != "user" || last.Content != "A peer task message arrived." {
-		t.Errorf("request %d moved the later notice: %+v", n, messages)
+}
+
+func TestSingleLeadingSystemPreservesAllTextAndConversationOrder(t *testing.T) {
+	first := schema.SystemMessage("  original system\n")
+	later := schema.SystemMessage("\nlate system  ")
+	human := schema.UserMessage("work")
+	call := schema.AssistantMessage("", []schema.ToolCall{{ID: "one"}})
+	result := schema.ToolMessage("receipt", "one")
+	in := []*schema.Message{nil, first, human, call, result, later}
+	got := singleLeadingSystem(in)
+	if len(got) != 5 || got[0].Role != schema.System || !strings.Contains(got[0].Content, first.Content) || !strings.HasSuffix(got[0].Content, later.Content) || !strings.Contains(got[0].Content, "transcript index 5") || !reflect.DeepEqual(got[1:], []*schema.Message{nil, human, call, result}) {
+		t.Fatalf("normalization lost text/order: %+v", got)
+	}
+	if first.Content != "  original system\n" || later.Role != schema.System {
+		t.Fatal("stored state changed")
+	}
+	for _, in := range [][]*schema.Message{nil, {nil, schema.UserMessage("work")}, {schema.SystemMessage("one"), nil, human}, {schema.SystemMessage("one"), {Role: schema.System, UserInputMultiContent: []schema.MessageInputPart{{Type: schema.ChatMessagePartTypeText, Text: "special"}}}}} {
+		if got := singleLeadingSystem(in); !reflect.DeepEqual(got, in) {
+			t.Fatalf("unsupported/already compatible transcript changed: %+v", got)
+		}
+	}
+}
+
+func TestSystemOrderRetryIsBoundedAndDoesNotReplayOtherRefusals(t *testing.T) {
+	for _, api := range []string{"chat_completions", "responses"} {
+		for _, streaming := range []bool{false, true} {
+			for _, status := range []int{400, 401, 500} {
+				t.Run(fmt.Sprintf("%s/stream=%v/status=%d", api, streaming, status), func(t *testing.T) {
+					calls := 0
+					srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						calls++
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(status)
+						io.WriteString(w, `{"error":{"type":"invalid_request_error","message":"System message must be at the beginning"}}`)
+					}))
+					defer srv.Close()
+					m, err := buildOpenAI(t.Context(), config.Provider{ID: "fixture", BaseURL: srv.URL + "/v1", Model: "fixture", APIKey: "k", APIMode: api})
+					if err != nil {
+						t.Fatal(err)
+					}
+					if streaming {
+						_, err = m.Stream(t.Context(), systemBoundaryInput())
+					} else {
+						_, err = m.Generate(t.Context(), systemBoundaryInput())
+					}
+					want := 1
+					if status == 400 {
+						want = 2
+					}
+					if calls != want || HTTPStatus(err) != status {
+						t.Fatalf("calls=%d want=%d err=%v", calls, want, err)
+					}
+				})
+			}
+		}
 	}
 }

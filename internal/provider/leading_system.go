@@ -1,114 +1,82 @@
 package provider
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"strings"
 
+	einoopenai "github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/schema"
+	openai "github.com/meguminnnnnnnnn/go-openai"
 )
 
-// singleLeadingSystem makes one provider request acceptable to chat templates
-// that allow a system message only as the first message. A second system
-// message is rejected even when it is still ahead of the user message, which
-// is how a turn that already called tools fails on the next request.
-//
-// Leading plain system messages are joined, in order, into that first
-// message. A system message after the conversation stays at that position
-// with the user role, so a notice that arrived after tool results is not
-// moved above the work it refers to. Agent state is unchanged: callers keep
-// the separate system messages they already stored.
+// systemOrderRetry is admitted only by an explicit typed input rejection, before
+// any model output. Normal endpoints retain the original roles and chronology.
+func systemOrderRetry(ctx context.Context, err error, in []*schema.Message) ([]*schema.Message, bool) {
+	if ctx.Err() != nil || (HTTPStatus(err) != 400 && HTTPStatus(err) != 422) {
+		return nil, false
+	}
+	var message string
+	var eino *einoopenai.APIError
+	var sdk *openai.APIError
+	switch {
+	case errors.As(err, &eino):
+		message = eino.Message
+	case errors.As(err, &sdk):
+		message = sdk.Message
+	}
+	switch strings.TrimSuffix(strings.ToLower(strings.TrimSpace(message)), ".") {
+	case "system message must be at the beginning", "system role must be at the beginning", "only one system message is allowed":
+		if needsSingleLeadingSystem(in) {
+			return singleLeadingSystem(in), true
+		}
+	}
+	return nil, false
+}
+
+// singleLeadingSystem retains system authority and text without inventing a
+// human message. Original transcript indices preserve the placement of later
+// sections in this compatibility representation; stored ADK state stays intact.
+// Non-text systems cannot be represented without loss and are never rewritten.
 func singleLeadingSystem(in []*schema.Message) []*schema.Message {
 	if !needsSingleLeadingSystem(in) {
 		return in
 	}
-	out := make([]*schema.Message, 0, len(in))
 	var lead *schema.Message
-	var before []*schema.Message
-	closed := false
-	flushBefore := func() {
-		out = append(out, before...)
-		before = nil
-	}
-	for _, msg := range in {
-		if msg == nil {
-			if !closed && lead == nil {
-				before = append(before, nil)
-				continue
-			}
-			out = append(out, nil)
-			continue
-		}
-		if !closed && plainSystem(msg) {
-			if lead == nil {
-				cp := *msg
-				cp.Content = strings.TrimSpace(msg.Content)
-				lead = &cp
-				out = append(out, lead)
-				flushBefore()
-				continue
-			}
-			if text := strings.TrimSpace(msg.Content); text != "" {
-				if lead.Content != "" {
-					lead.Content += "\n\n"
-				}
-				lead.Content += text
-			}
-			continue
-		}
-		if msg.Role == schema.System && !closed && lead == nil {
+	out := make([]*schema.Message, 1, len(in))
+	for i, msg := range in {
+		if msg == nil || msg.Role != schema.System {
 			out = append(out, msg)
-			flushBefore()
-			closed = true
 			continue
 		}
-		if msg.Role == schema.System {
-			flushBefore()
+		if lead == nil {
 			cp := *msg
-			cp.Role = schema.User
-			out = append(out, &cp)
-			closed = true
-			continue
+			lead = &cp
+			out[0] = lead
+			if i > 0 {
+				lead.Content = fmt.Sprintf("[System message at transcript index %d]\n", i) + lead.Content
+			}
+		} else {
+			lead.Content += fmt.Sprintf("\n\n[System message at transcript index %d]\n", i) + msg.Content
 		}
-		flushBefore()
-		closed = true
-		out = append(out, msg)
 	}
-	flushBefore()
 	return out
 }
 
 func needsSingleLeadingSystem(in []*schema.Message) bool {
-	seenOther := false
-	leading := 0
-	for _, msg := range in {
-		if msg == nil {
+	count, first := 0, -1
+	for i, msg := range in {
+		if msg == nil || msg.Role != schema.System {
 			continue
 		}
-		if msg.Role != schema.System {
-			seenOther = true
-			continue
+		if len(msg.ToolCalls) > 0 || hasMulti(msg) {
+			return false
 		}
-		if seenOther {
-			return true
+		if first < 0 {
+			first = i
 		}
-		if !plainSystem(msg) {
-			if leading > 0 {
-				return true
-			}
-			seenOther = true
-			continue
-		}
-		leading++
-		if leading > 1 {
-			return true
-		}
+		count++
 	}
-	return false
-}
-
-func plainSystem(msg *schema.Message) bool {
-	return msg != nil && msg.Role == schema.System && len(msg.ToolCalls) == 0 && !hasMulti(msg)
-}
-
-func providerMessages(in []*schema.Message) []*schema.Message {
-	return exclusiveContent(singleLeadingSystem(in))
+	return count > 1 || count == 1 && first > 0
 }

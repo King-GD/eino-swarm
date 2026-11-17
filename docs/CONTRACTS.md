@@ -741,6 +741,15 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 - 变更规则：类型支持、协议或执行来源变化必须同步配置/API/功能文档、适配器及 Trace 回归测试。
 - 来源：2026-10-21 provider 云端内置工具配置需求；[OpenAI web search](https://developers.openai.com/api/docs/guides/tools-web-search?api-mode=responses)。
 
+
+Provider transport preserves original System roles and chronology on accepted
+requests. A typed HTTP 400/422 with an explicitly recognized System placement
+rejection permits one retry before any model output. That compatibility request
+combines only text System sections, preserving complete content, original order
+and transcript indices under the System role. It never promotes a runtime notice
+to a user message or changes durable/ADK history. Cancellation, unknown errors,
+multimodal System messages and a second refusal do not authorize another retry.
+
 ## C-031 Native desktop tests own their guest lifecycle
 
 - 初始 `wait_window(initial=True)` 仅对空 `snapshot` 的 `AXRole`／`-25204`／`api_error` 完整非零观测允许重新观察：必须核当前独立调用收据的全部字段与原结果、case／PID／helper／bundle／origin、完整 stdout／stderr 及同一 shared deadline。每个失败图整体丢弃，原 code2／原始流不改，后续完整新图和原窗口／像素断言通过之前不得 fill／Send／Press。沿用原 pause、每调用最多一次激活和原 raise 行为，不声称 snapshot 没有激活副作用，不增期限、不重放输入；expected 非空的滚动观察不进入此分类。身份／权限、库存未知、写证失败、超时、畸形／截断或其他 AX 错误仍立即拒绝。helper 对 Role／Children 的未知读保首错，明确 NoValue／Unsupported 的 Children 才是已知叶；SystemWide 设置仅改变本 helper 进程的原两秒消息默认上限，不查询系统对象、不证明整图时长。证据：`tools/native_macos_smoke.py`、`tools/native_macos_ax.m`、`tools/test_native_macos_initial_observation.py`、`tools/test_native_macos_activation.py`；Fixed，Issue #135。
