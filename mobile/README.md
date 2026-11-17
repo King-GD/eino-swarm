@@ -1,5 +1,12 @@
 # zwai phone
 
+Gateway model catalogs refresh after the selected PC acknowledges a mode change
+and when account model permissions change. Older PCs that omit model capability
+metadata show an update notice; the phone does not borrow its own grant to
+authorize a PC model. Unreadable voice HTTP responses show a network/Gateway
+configuration error separately from microphone permission failures. A Gateway
+CORS response defect requires a Gateway update before voice can succeed.
+
 iOS and Android apps. **Sign in** uses the built-in default Gateway
 (`https://ai.fofa.info:2440`). No manual address, Key or Pairlink setup is
 required. Finish device authorization in the system browser. Pending/rejected

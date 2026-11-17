@@ -364,6 +364,8 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-210 Pair a phone with a PC
 
+- PC model choices refresh after acknowledged mode changes and account-policy changes without reconnecting the PC. Older PCs lacking Gateway capability metadata show an update notice. (`C-006`; `mobile/src/lib/model-source-refresh.test.ts`)
+
 - 多 PC 共用同一 Hub 的手机物理长连接，各自保留独立加密会话、RPC 与任务视图；周期心跳及后台补连不会挤掉当前 PC。未变化的启动元数据不触发整页状态更新。关闭或超时一台 PC 只释放其逻辑会话。关联契约：`C-006`；实现与回归用例：`mobile/src/lib/hub-socket.ts`、`mobile/src/lib/client.ts`、`mobile/src/lib/multi-pc-link.test.ts`。
 - 目的：安全绑定手机和 PC；使用者：手机用户；入口：手机登录同一账号后选择这台电脑；输入：账号授权和选中的在线 PC；输出：加密连接和设备列表；前置条件：hub 和 PC 在线；失败表现：网络、过期或 host offline；关联契约：`C-006`；实现证据：`internal/remote`, `mobile/src/components/gateway-account-screen.tsx`, `mobile/src/lib/link.ts`。Settings → Phone 不展示配对 QR。
 - PC 的 hub 注册在受控后台生命周期内执行；网络迟缓只影响手机连接，不阻塞本地程序启动。Stop／Reload 可取消注册，旧结果不得重新启用已停止或已替换的 host。证据：`internal/remote/host.go`、`internal/remote/host_start.go`、`internal/remote/host_start_test.go`、`internal/app/startup_remote_test.go`。

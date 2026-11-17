@@ -9,7 +9,7 @@ import { putFrames } from "./put-chunks"
 import { OpAudioCancel, OpAudioChunk, OpAudioSpeech, OpAudioTranscribe, type RemoteResponse } from "./rpc"
 
 export class SpeechCallError extends Error {
-  constructor(readonly code: "unavailable" | "failed" | "timeout" | "too_large" | "invalid_audio" | "empty" | "permission" = "failed") { super(code); this.name = "SpeechCallError" }
+  constructor(readonly code: "unavailable" | "failed" | "network" | "timeout" | "too_large" | "invalid_audio" | "empty" | "permission" = "failed") { super(code); this.name = "SpeechCallError" }
 }
 
 /** A response retains timeout and authority through queued playback. Successful
@@ -112,6 +112,7 @@ export async function endpointSpeechCall(snapshot: SpeechSnapshot, baseURL: stri
     if (timedOut) return new SpeechCallError("timeout")
     if (aborter.signal.aborted) return new DOMException("Aborted", "AbortError")
     if (error instanceof SpeechCallError || (error instanceof Error && error.name === "AbortError")) return error
+    if (error instanceof TypeError) return new SpeechCallError("network")
     const code = error && typeof error === "object" && "code" in error ? error.code : undefined
     return new SpeechCallError(code === "too_large" || code === "invalid_audio" || code === "empty" ? code : "failed")
   }

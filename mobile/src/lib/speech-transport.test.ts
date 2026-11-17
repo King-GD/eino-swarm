@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
 import { clearGatewaySession, saveGatewaySession, type GatewaySession } from "./gateway-account"
-import { gatewaySpeechCall, localSpeechCall } from "./speech-transport"
+import { endpointSpeechCall, gatewaySpeechCall, localSpeechCall } from "./speech-transport"
 import type { RemoteLink } from "./link"
 import type { RemoteRequest, RemoteResponse } from "./rpc"
 
@@ -15,6 +15,11 @@ const config: SpeechSnapshot = {
 const blob = () => Object.assign(new Blob([new Uint8Array([82, 73, 70, 70, 0, 255])], { type: "audio/wav" }), { arrayBuffer: async () => new Uint8Array([82, 73, 70, 70, 0, 255]).buffer })
 beforeEach(() => saveGatewaySession(session))
 afterEach(() => vi.useRealTimers())
+
+it("reports an unreadable WebView response as a transport failure without exposing private diagnostics", async () => {
+  await expect(endpointSpeechCall(config, "https://voice.test/v1", "private-fixture", "transcribe", blob(), new AbortController().signal,
+    async () => { throw new TypeError("private network diagnostic") })).rejects.toMatchObject({ name: "SpeechCallError", code: "network", message: "network" })
+})
 
 describe("phone speech calls follow the PC's execution mode", () => {
   it("uses the explicit Gateway output with the phone credential while ASR keeps its legacy PC route", async () => {

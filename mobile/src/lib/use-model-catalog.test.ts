@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { setLocale } from "./i18n"
 import type { RemoteLink } from "./link"
-import { OpCatalog, OpRefreshCatalog, type ModelChoice, type RemoteResponse } from "./rpc"
+import { OpCatalog, OpRefreshCatalog, OpRefreshCapabilities, type ModelChoice, type RemoteResponse } from "./rpc"
 import { useModelCatalog } from "./use-model-catalog"
 
 const old = [{ provider_id: "p", model: "old-model", default: true }]
@@ -14,8 +14,13 @@ function deferred() {
   const promise = new Promise<RemoteResponse>((yes, no) => { resolve = yes; reject = no })
   return { promise, resolve, reject }
 }
-function link(rpc = vi.fn(async () => ok(old))): RemoteLink {
-  return { rpc, path: "direct", alive: () => true, close: vi.fn(), announceDevice: vi.fn() }
+function link(rpc: RemoteLink["rpc"] = vi.fn(async () => ok(old))): RemoteLink {
+  // These cases exercise legacy catalog refresh. Negotiated hosts have their
+  // own mode/grant regression below, rather than accidentally returning a
+  // catalog for every unknown RPC operation.
+  return { rpc: (request, options) => request.op === OpRefreshCapabilities
+    ? Promise.resolve({ v: 1, id: "r", ok: false, code: "unknown_op" }) : rpc(request, options),
+  path: "direct", alive: () => true, close: vi.fn(), announceDevice: vi.fn() }
 }
 
 describe("model catalog ownership", () => {

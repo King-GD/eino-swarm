@@ -129,10 +129,11 @@ export function PhoneApp() {
   const [clientTools, setClientTools] = useState<ClientTool[]>([])
   const [loadingGroup, setLoadingGroup] = useState("")
   const [loadingMore, setLoadingMore] = useState(false)
-  const { policy: catalogPolicy, models, levels, catalogBusy, refreshModels, refreshBusy, refreshError, webExecutionStatus, predictionsEnabled } = useModelCatalog(link)
   const startup = useEngineStartup(link)
+  const { policy: catalogPolicy, models, levels, catalogBusy, refreshModels, refreshBusy, refreshError, webExecutionStatus, predictionsEnabled } = useModelCatalog(link, `${startup?.product_mode ?? ""}:${startup?.model_policy?.scope ?? ""}`)
   usePhoneSpeechSync(startup?.startup === "ready" ? link : null, hosts.find((host) => host.fingerprint === activeFp), hosts, surface === "chat" && account.mode !== "account", providers)
-  const hidePcModel = (catalogPolicy ?? startup?.model_policy)?.mode === "gateway" && !(catalogPolicy ?? startup?.model_policy)?.capabilities?.capabilities.conversation?.configurable
+  const currentPolicy = catalogPolicy?.scope === startup?.model_policy?.scope ? catalogPolicy : startup?.model_policy ?? catalogPolicy
+  const hidePcModel = currentPolicy?.mode === "gateway" && !currentPolicy.capabilities?.capabilities.conversation?.configurable
   const restoring = startup?.startup === "restoring"
   const [composerPending, setComposerPending] = useState(false)
   const [view, setView] = useState<PhoneView>(emptyView())

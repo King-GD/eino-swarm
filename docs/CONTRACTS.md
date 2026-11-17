@@ -296,6 +296,8 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 
 ## C-006 Phone remote protocol
 
+- Model discovery is refreshed on the same live link after a PC mode/scope change and after phone account model-policy changes. Refreshes to one PC are serialized; late old-scope responses cannot replace the current list. Voice-only catalog metadata does not refresh model choices. A legacy PC omitting Gateway capability metadata shows an explicit PC-update notice; phone authority never substitutes for that PC's grant. Evidence: `mobile/src/lib/model-source-refresh.test.ts`.
+
 - 项目管理（`F-225`，兼容扩展）：`project_get` 显式读取单个 PC 项目及全局 `memory_available`；`project_create`／`project_update` 通过 `project_patch` 保存同一 PC 数据，更新省略字段保留。名称／指令／目录／记忆／女娲模式与规划执行模型使用既有引擎校验；模型组合必须四字段齐全，就绪校验在字段写入前完成。写入在 `restoring` 阶段拒绝；读取超帧返回 `too_large`，写入只回 ID／名称以保留确认空间，不把完整指令加入收件箱轮询。手机关闭／切换 PC 后不得应用旧响应；失败保留草稿，旧主机能力缺失明确提示升级。目录属于 PC，按 `C-026` 保留空白路径身份。证据：`internal/remote/project_settings.go`、`internal/remote/project_settings_test.go`、`mobile/src/components/project-manager.test.tsx`、`mobile/e2e/project-management.spec.ts`。
 
 - 主管工具回合上限：`max_iterations` 的普通 limit／extend_by 元数据在手机投影为可见提示，不得作为 packed JSON 隐藏。手机以 `continue` RPC 携带 thread_id 与显式布尔 continue；true 延长当前暂停轮次，false 中断，不替换为新消息或新回合。缺失决定拒绝，非暂停轮次返回 idle；操作失败保留提示并可见报错。`RunningView`／watch status 的 `awaiting_continue` 保留 false，供重开、重连和分页缺少原 cap 时恢复／收口按钮；旧 PC 缺失字段可沿已载入事件展示提示，但不假称它支持新 RPC。关联 `F-220`；证据：`internal/remote/iteration_continue_test.go`、`internal/remote/log_test.go`、`mobile/src/lib/iteration-limit.test.ts`、`mobile/src/lib/phone-continue.test.ts`、`mobile/e2e/iteration-limit.spec.ts`；变更类型：Fixed。

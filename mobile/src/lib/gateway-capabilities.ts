@@ -5,9 +5,18 @@ import type { GatewayBootstrap, GatewaySession } from "./gateway-account"
 export const GATEWAY_CAPABILITY_REFRESH_EVENT = "zwai.gateway.capabilities.refresh"
 export const GATEWAY_CAPABILITIES_EVENT = "zwai.gateway.capabilities"
 let current: { session: GatewaySession; bootstrap: GatewayBootstrap } | undefined
+let modelPolicyRevision = 0
+export function gatewayModelPolicyRevision(): number { return modelPolicyRevision }
+function policyKey(value: typeof current): string {
+  if (!value) return ""
+  const { session, bootstrap } = value
+  return JSON.stringify([session.origin, session.token, session.user.id, session.device.id, bootstrap.capabilities,
+    bootstrap.models.source_id, bootstrap.gateway_models?.source_id, bootstrap.models.defaults, bootstrap.gateway_models?.defaults])
+}
 export function publishGatewayCapabilities(session: GatewaySession, bootstrap: GatewayBootstrap): void {
-  const changed = !current || current.session.token !== session.token || current.session.origin !== session.origin ||
-    JSON.stringify([current.bootstrap.capabilities, current.bootstrap.models.source_id, current.bootstrap.gateway_models?.source_id, current.bootstrap.models.defaults, current.bootstrap.gateway_models?.defaults, current.bootstrap.voice_models]) !== JSON.stringify([bootstrap.capabilities, bootstrap.models.source_id, bootstrap.gateway_models?.source_id, bootstrap.models.defaults, bootstrap.gateway_models?.defaults, bootstrap.voice_models])
+  const policyChanged = policyKey(current) !== policyKey({ session, bootstrap })
+  if (policyChanged) modelPolicyRevision++
+  const changed = policyChanged || JSON.stringify(current?.bootstrap.voice_models) !== JSON.stringify(bootstrap.voice_models)
   current = { session, bootstrap }
   if (changed) window.dispatchEvent(new Event(GATEWAY_CAPABILITIES_EVENT))
 }
@@ -22,6 +31,7 @@ export function gatewayCapabilityAllows(session: GatewaySession, sourceID: strin
 export function invalidateGatewayCapabilities(session: GatewaySession): void {
   if (current?.session.token !== session.token || current.session.origin !== session.origin || !current.bootstrap.capabilities) return
   current = { session, bootstrap: { ...current.bootstrap, capabilities: undefined, capability_status: "unavailable" } }
+  modelPolicyRevision++
   window.dispatchEvent(new Event(GATEWAY_CAPABILITIES_EVENT))
 }
 

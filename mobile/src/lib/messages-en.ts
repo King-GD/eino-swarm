@@ -108,6 +108,7 @@ export const en = {
   "composer.noModels": "No models available.",
   "composer.refreshFailed": "Could not refresh models. Try again.",
   "composer.refreshUnsupported": "Update the PC app to refresh its models.",
+  "composer.gatewayPCUpgrade": "Update this PC app to use Gateway models. This PC does not report their permissions yet.",
   "composer.commandTextOnly": "The /goal and /plan commands accept text only. Remove quotations first. Your draft was kept.",
   "composer.attach": "Attach files",
   "composer.remove": "Remove {name}",

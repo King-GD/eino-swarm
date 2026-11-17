@@ -6,6 +6,13 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ## Unreleased
 
+### Fixed
+
+- Phone model choices refresh after PC mode/account-policy changes; older PCs
+  missing Gateway permission metadata show an update notice instead of silently
+  omitting all Gateway models. Voice HTTP transport failures show a distinct
+  network/Gateway configuration message. (`F-210`, `F-148`, `C-006`, `C-048`)
+
 ### Changed
 
 - Phone launches automatically connect all enabled online account PCs and list
