@@ -32,6 +32,7 @@ func cloneProvider(p Provider) Provider {
 func (c *Config) clone() *Config {
 	next := *c
 	next.mu = &sync.RWMutex{}
+	next.TaskPanels = c.TaskPanels.WithDefaults()
 	next.Models.Bindings = cloneBindings(c.Models.Bindings)
 	next.Models.Providers = slices.Clone(c.Models.Providers)
 	for i, p := range next.Models.Providers {
@@ -136,6 +137,9 @@ func (c *Config) publish(n *Config) {
 	}
 	if c.Speech != n.Speech {
 		c.Speech = n.Speech
+	}
+	if !reflect.DeepEqual(c.TaskPanels, n.TaskPanels) {
+		c.TaskPanels = n.TaskPanels
 	}
 	if c.Clients != n.Clients {
 		c.Clients = n.Clients

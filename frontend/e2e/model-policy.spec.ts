@@ -61,7 +61,7 @@ test("embedding configuration alone enables search and clearing it survives relo
     const picker = dialog.getByLabel("Embedding model Provider", { exact: true })
     await expect(picker).toContainText("off")
     await picker.click()
-    await page.getByRole("option", { name: provider.label || provider.id, exact: true }).click()
+    await page.getByRole("option", { name: "configured-embedding", exact: true }).click()
     const model = dialog.getByLabel("Embedding model Model", { exact: true })
     await model.fill("configured-embedding")
     await model.press("Tab")

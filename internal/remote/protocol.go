@@ -8,6 +8,7 @@ import (
 	"github.com/LubyRuffy/eino-swarm/internal/engine"
 	"github.com/LubyRuffy/eino-swarm/internal/provider"
 	"github.com/LubyRuffy/eino-swarm/internal/speech"
+	"github.com/LubyRuffy/eino-swarm/internal/store"
 	"github.com/LubyRuffy/eino-swarm/internal/tools"
 )
 
@@ -52,6 +53,9 @@ const (
 	OpClientRead          = "client_read"
 	OpFiles               = "files"
 	OpFileChunk           = "file_chunk"
+	OpTaskPanels          = "task_panels"
+	OpTaskPanelRead       = "task_panel_read"
+	OpTaskPanelCancel     = "task_panel_cancel"
 	OpTranslateSelection  = "translate_selection"
 	OpCancelTranslation   = "cancel_translation"
 	OpRefreshCapabilities = "refresh_capabilities"
@@ -138,6 +142,10 @@ type Request struct {
 	// Text on OpFiles searches the whole listed workspace instead of one directory.
 	Directory string `json:"directory,omitempty"`
 
+	PanelID           string `json:"panel_id,omitempty"`
+	PanelBaseRevision *int64 `json:"base_revision,omitempty"`
+	PanelTransferID   string `json:"transfer_id,omitempty"`
+
 	ProjectPatch    json.RawMessage `json:"project_patch,omitempty"`
 	TimeoutSettings json.RawMessage `json:"timeout_settings,omitempty"`
 	timeoutInvalid  bool
@@ -146,48 +154,50 @@ type Request struct {
 // Response is what the PC replies. Path and SessionID are pairlink
 // metadata so zwai trace can join the remote hop.
 type Response struct {
-	Translation           string                  `json:"translation,omitempty"`
-	ModelPolicy           *provider.ModelPolicy   `json:"model_policy,omitempty"`
-	Speech                *speech.SnapshotView    `json:"speech,omitempty"`
-	SpeechError           string                  `json:"speech_error,omitempty"`
-	Audio                 *AudioView              `json:"audio,omitempty"`
-	Startup               string                  `json:"startup,omitempty"`
-	Restore               *engine.RestoreProgress `json:"restore,omitempty"`
-	DataGeneration        *int64                  `json:"data_generation,omitempty"`
-	ProductMode           string                  `json:"product_mode,omitempty"`
-	V                     int                     `json:"v"`
-	ID                    string                  `json:"id"`
-	OK                    bool                    `json:"ok"`
-	Error                 string                  `json:"error,omitempty"`
-	Code                  string                  `json:"code,omitempty"`
-	Path                  string                  `json:"path,omitempty"`
-	SessionID             string                  `json:"session_id,omitempty"`
-	Host                  string                  `json:"host,omitempty"`
-	Projects              []ProjectView           `json:"projects,omitempty"`
-	Threads               []ThreadView            `json:"threads,omitempty"`
-	Running               []RunningView           `json:"running,omitempty"`
-	Attention             []ThreadView            `json:"attention,omitempty"`
-	AttentionMore         bool                    `json:"attention_more,omitempty"`
-	AttentionCursor       string                  `json:"attention_cursor,omitempty"`
-	More                  bool                    `json:"more,omitempty"`
-	Next                  string                  `json:"next,omitempty"`
-	Detail                *ThreadDetail           `json:"detail,omitempty"`
-	Op                    string                  `json:"op,omitempty"`
-	ThreadID              string                  `json:"thread_id,omitempty"`
-	Seq                   int64                   `json:"seq,omitempty"`
-	Event                 *EventView              `json:"event,omitempty"`
-	Events                []EventView             `json:"events,omitempty"`
-	Status                *WatchStatus            `json:"status,omitempty"`
-	Models                []ModelView             `json:"models,omitempty"`
-	ReasoningLevels       []string                `json:"reasoning_levels,omitempty"`
-	WebExecutionSupported bool                    `json:"web_execution_supported,omitempty"`
-	Put                   *PutView                `json:"put,omitempty"`
-	Groups                []ThreadGroup           `json:"groups,omitempty"`
-	Followups             *[]FollowupView         `json:"followups,omitempty"`
-	Clients               *ClientCatalog          `json:"clients,omitempty"`
-	ClientView            *ClientView             `json:"client_view,omitempty"`
-	Files                 []FileView              `json:"files,omitempty"`
-	FileChunk             *FileChunkView          `json:"file_chunk,omitempty"`
+	Translation           string                     `json:"translation,omitempty"`
+	ModelPolicy           *provider.ModelPolicy      `json:"model_policy,omitempty"`
+	Speech                *speech.SnapshotView       `json:"speech,omitempty"`
+	SpeechError           string                     `json:"speech_error,omitempty"`
+	Audio                 *AudioView                 `json:"audio,omitempty"`
+	Startup               string                     `json:"startup,omitempty"`
+	Restore               *engine.RestoreProgress    `json:"restore,omitempty"`
+	DataGeneration        *int64                     `json:"data_generation,omitempty"`
+	ProductMode           string                     `json:"product_mode,omitempty"`
+	V                     int                        `json:"v"`
+	ID                    string                     `json:"id"`
+	OK                    bool                       `json:"ok"`
+	Error                 string                     `json:"error,omitempty"`
+	Code                  string                     `json:"code,omitempty"`
+	Path                  string                     `json:"path,omitempty"`
+	SessionID             string                     `json:"session_id,omitempty"`
+	Host                  string                     `json:"host,omitempty"`
+	Projects              []ProjectView              `json:"projects,omitempty"`
+	Threads               []ThreadView               `json:"threads,omitempty"`
+	Running               []RunningView              `json:"running,omitempty"`
+	Attention             []ThreadView               `json:"attention,omitempty"`
+	AttentionMore         bool                       `json:"attention_more,omitempty"`
+	AttentionCursor       string                     `json:"attention_cursor,omitempty"`
+	More                  bool                       `json:"more,omitempty"`
+	Next                  string                     `json:"next,omitempty"`
+	Detail                *ThreadDetail              `json:"detail,omitempty"`
+	Op                    string                     `json:"op,omitempty"`
+	ThreadID              string                     `json:"thread_id,omitempty"`
+	Seq                   int64                      `json:"seq,omitempty"`
+	Event                 *EventView                 `json:"event,omitempty"`
+	Events                []EventView                `json:"events,omitempty"`
+	Status                *WatchStatus               `json:"status,omitempty"`
+	Models                []ModelView                `json:"models,omitempty"`
+	ReasoningLevels       []string                   `json:"reasoning_levels,omitempty"`
+	WebExecutionSupported bool                       `json:"web_execution_supported,omitempty"`
+	Put                   *PutView                   `json:"put,omitempty"`
+	Groups                []ThreadGroup              `json:"groups,omitempty"`
+	Followups             *[]FollowupView            `json:"followups,omitempty"`
+	Clients               *ClientCatalog             `json:"clients,omitempty"`
+	ClientView            *ClientView                `json:"client_view,omitempty"`
+	Files                 []FileView                 `json:"files,omitempty"`
+	FileChunk             *FileChunkView             `json:"file_chunk,omitempty"`
+	TaskPanels            *[]store.TaskPanelManifest `json:"task_panels,omitempty"`
+	PanelTransfer         *PanelTransferView         `json:"panel_transfer,omitempty"`
 
 	Project             *ProjectSettings          `json:"project,omitempty"`
 	ComposerPredictions *bool                     `json:"composer_predictions,omitempty"`

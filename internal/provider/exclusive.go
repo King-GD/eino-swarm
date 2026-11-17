@@ -16,11 +16,11 @@ type exclusiveContentModel struct {
 }
 
 func (m *exclusiveContentModel) Generate(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.Message, error) {
-	return m.inner.Generate(ctx, exclusiveContent(in), opts...)
+	return m.inner.Generate(ctx, providerMessages(in), opts...)
 }
 
 func (m *exclusiveContentModel) Stream(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
-	return m.inner.Stream(ctx, exclusiveContent(in), opts...)
+	return m.inner.Stream(ctx, providerMessages(in), opts...)
 }
 
 func exclusiveContent(in []*schema.Message) []*schema.Message {

@@ -103,7 +103,7 @@ func TestHumanCancellationRevokesClaimedAndManagerCancelledWaitsOverHTTP(t *test
 					return
 				}
 				for _, message := range input.Messages {
-					if message.Role == "system" && strings.HasPrefix(message.Content, "## Thread wake authorization\n") && strings.Contains(message.Content, scheduleID.Load().(string)) {
+					if message.Role == "system" && strings.Contains(message.Content, "## Thread wake authorization\n") && strings.Contains(message.Content, scheduleID.Load().(string)) {
 						observedCancellation.Store(true)
 					}
 				}

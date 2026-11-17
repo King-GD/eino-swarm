@@ -169,11 +169,25 @@ func (s *Service) endpointTarget(cfg *config.Config, isInput bool) (selection, e
 				return selected, failure("speech_not_configured", 400)
 			}
 		case config.SpeechSourceCustom:
-			target = config.Provider{BaseURL: endpoint.BaseURL, APIKey: endpoint.APIKey}
+			target = config.Provider{BaseURL: endpoint.BaseURL, APIKey: endpoint.APIKey, Model: strings.TrimSpace(endpoint.Model)}
+		case config.SpeechSourceAccount:
+			if s.pool == nil {
+				return selected, failure("speech_login_required", 401)
+			}
+			resolved, _, err := s.pool.AccountAudio(role)
+			if errors.Is(err, provider.ErrAccountLoginRequired) {
+				return selected, failure("speech_login_required", 401)
+			}
+			if err != nil {
+				return selected, failure("speech_role_unavailable", 403)
+			}
+			target = resolved
 		default:
 			return selected, failure("speech_not_configured", 400)
 		}
-		target.Model = strings.TrimSpace(endpoint.Model)
+		if endpoint.Source == config.SpeechSourceProvider {
+			target.Model = strings.TrimSpace(endpoint.Model)
+		}
 	}
 	if origin(target.BaseURL) == "" {
 		return selected, failure("speech_not_configured", 400)

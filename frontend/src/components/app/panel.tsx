@@ -1,3 +1,6 @@
+import { TaskPanels } from "./task-panels"
+import { useTaskPanels } from "@/store/task-panels"
+import { panelText } from "@/task-panels/messages"
 import { ArrowDownNarrowWide, ArrowLeft, ArrowUpNarrowWide, ChevronDown } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
@@ -38,7 +41,7 @@ import { cn } from "@/lib/utils"
 import { useTraceFocus } from "@/store/trace-focus"
 import { useApp } from "@/store/app"
 
-export type PanelTab = "agents" | "files" | "trace" | "memory" | "nuwa"
+export type PanelTab = "agents" | "files" | "trace" | "memory" | "nuwa" | "task-panels"
 
 /** The right-hand panel: who is working, what they produced, and what
  *  happened — the three questions the transcript alone cannot answer. */
@@ -90,6 +93,9 @@ export function RightPanel({
   nuwaProject?: Project
 }) {
   const t = useT()
+  const storedTaskPanels = useTaskPanels((state) => state.panels)
+  const taskPanelThread = useTaskPanels((state) => state.threadId)
+  const taskPanels = taskPanelThread === threadId ? storedTaskPanels : []
   const traceFocus = useTraceFocus()
   const previousThread = useRef(threadId)
   const changeTab = useRef(onTabChange)
@@ -130,6 +136,7 @@ export function RightPanel({
       >
         <div className="thin-scrollbar flex items-center gap-2 overflow-x-auto border-b border-border px-3 py-2">
           <TabsList className="shrink-0">
+            {taskPanels.length ? <TabsTrigger value="task-panels" className={chromeTypeClass}>{panelText(t.locale, "tab")}</TabsTrigger> : null}
             {showNuwa ? <TabsTrigger value="nuwa" className={chromeTypeClass}>{t("nuwa.tab")}</TabsTrigger> : null}
             <TabsTrigger value="agents" className={chromeTypeClass}>
               {t("panel.agents")}
@@ -159,6 +166,7 @@ export function RightPanel({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {taskPanels.length ? <TabsContent value="task-panels" forceMount className="flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"><TaskPanels visible={tab === "task-panels"} /></TabsContent> : null}
           {showNuwa && nuwaProject ? (
             <TabsContent value="nuwa" className="flex min-h-0 flex-1 flex-col overflow-hidden bg-card">
               <NuwaPanel

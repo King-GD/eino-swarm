@@ -1,4 +1,6 @@
 import type { SwarmEvent, ThreadStatus } from "./types"
+import { publishTaskPanelEvent } from "./task-panel-events"
+import type { PanelChange, TaskPanel } from "@/task-panels/types"
 
 export interface StreamHandlers {
   onEvent: (ev: SwarmEvent) => void
@@ -98,12 +100,23 @@ export function subscribeEvents(
   handlers: StreamHandlers,
   since = 0,
 ): () => void {
-  const url = `/api/threads/${threadId}/events${since > 0 ? `?since=${since}` : ""}`
+  const query = new URLSearchParams()
+  if (since > 0) query.set("since", String(since))
+  query.set("panels", "1")
+  const url = `/api/threads/${threadId}/events?${query}`
   const source = new EventSource(url)
   let closed = false
 
-  source.onopen = () => handlers.onOpen?.()
-  source.onerror = () => {
+  source.onopen = () => {
+    if (closed) return
+    publishTaskPanelEvent(threadId, { kind: "connection", connected: true })
+    handlers.onOpen?.()
+  }
+  source.onerror = (event) => {
+    // A named application `event: error` also invokes this property. It says
+    // nothing about the HTTP connection and still reaches onEvent below.
+    if (event instanceof MessageEvent) return
+    if (!closed) publishTaskPanelEvent(threadId, { kind: "connection", connected: false })
     // EventSource retries by itself unless the connection was closed for
     // good; only a terminal state is worth telling the UI about.
     if (source.readyState === EventSource.CLOSED && !closed) {
@@ -124,10 +137,31 @@ export function subscribeEvents(
       handlers.onReady?.({ seq: 0 })
     }
   })
+  // Sharing this connection prevents panels from consuming a third browser
+  // HTTP/1 connection per tab and starving draft writes in a second window.
+  source.addEventListener("panel_ready", (event) => {
+    if (closed) return
+    try {
+      const body = JSON.parse((event as MessageEvent).data) as { panels: TaskPanel[]; cursor: number }
+      if (Array.isArray(body.panels) && Number.isSafeInteger(body.cursor) && body.cursor >= 0)
+        publishTaskPanelEvent(threadId, { kind: "ready", ...body })
+    } catch { /* Initial GET and the next reconnect can repair a bad frame. */ }
+  })
+  source.addEventListener("panel_update", (event) => {
+    if (closed) return
+    try {
+      const change = JSON.parse((event as MessageEvent).data) as PanelChange
+      if (change.thread_id === threadId) publishTaskPanelEvent(threadId, { kind: "update", change })
+    } catch { /* A malformed notification cannot enter chat replay. */ }
+  })
+  source.addEventListener("panel_error", () => {
+    if (!closed) publishTaskPanelEvent(threadId, { kind: "error", error: "Panel state unavailable" })
+  })
 
   return () => {
     closed = true
     source.close()
+    publishTaskPanelEvent(threadId, { kind: "connection", connected: false })
     handlers.onClose?.("closed")
   }
 }

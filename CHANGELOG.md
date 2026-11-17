@@ -8,6 +8,25 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Speech recognition and spoken-answer settings list each signed-in catalog's
+  `transcription` and `speech` models. Those names stay out of the conversation
+  picker. A chat-only preset no longer hides voice models published by the
+  gateway catalog. (`F-148`, `F-171`, `C-040`)
+
+- Account model admission now has TLA+/TLC regression coverage for the historical
+  nil-gate panic, cancelled-wait accounting, capability checks and source-policy
+  holds. Seeded guard removals must fail; reachability witnesses prevent vacuous
+  success. (`C-029`)
+
+- Account model requests no longer panic while waiting for a shared service
+  cooldown. Capability checks retain the request's gate and source-policy hold;
+  cancellation records a wait without inventing an HTTP call. (`C-029`)
+
+- Mac local read-aloud preview uses the signed-in account's enabled speech role
+  when voice source is account and no functional model overrides it. A personal
+  binding or custom endpoint still wins. The preview no longer reports that
+  failure as a generic English sentence. (`F-148`, `C-048`)
+
 - Automatic phone Gateway read aloud now requests streaming PCM/SSE instead of
   waiting for a complete MP3 segment. Explicit PC and personal audio formats stay
   unchanged; the automatic phone profile uses shorter 200-character segments.
@@ -19,6 +38,12 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 - Phone voice service failures show their HTTP status instead of only a generic
   error; private upstream error bodies remain hidden. (`F-148`, `C-048`)
+
+- Model requests keep a single leading system message. Further leading system
+  sections are joined into it, and a system message that arrives after the
+  conversation stays in place as a user message. A turn no longer dies on the
+  next request after context compression, or after a mid-turn notice, when the
+  endpoint accepts a system message only at the start.
 
 - Automatic voice capture now normalizes WebM/Opus and Ogg as well as MP4/AAC
   to WAV, fixing ASR format rejection on newer iPhones that record WebM.
@@ -38,6 +63,13 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
   their old switch was false. Translation and image-generation rows explain
   unavailable capabilities instead of disappearing; image generation still has
   no client adapter. (`F-410`, `C-040`)
+
+- Functional model rows use one selector. Image generation keeps that selector
+  and retains a choice even though this client does not call it yet. In LOCAL,
+  the menu groups authorized gateway models, third-party catalog models and
+  models configured on this computer. A LOCAL binding may name a signed-in
+  `gateway:` catalog; sign-out keeps the binding and fails that call closed.
+  (`F-410`, `C-040`)
 
 - Phone launches automatically connect all enabled online account PCs and list
   online PCs before offline PCs. Existing live sockets and pairing tickets are
@@ -5361,3 +5393,10 @@ First GitHub Release. Tag `v0.1.0` is `1faf1a8`.
   on [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
   Pair from Settings → Phone. `adb install` works. A later APK signed with a
   different key cannot update this install in place.
+
+### Task-panel plugins and FOFA map example (unreleased)
+
+- Added repository-owned HTML/JS task panels with snapshot/JSON Patch data, durable conversation state, source lifecycle and an isolated iframe SDK.
+- Added a FOFA batch-collection/local HTTP-check example with country shading, incremental geographic markers and separate collection/check progress. No real query or public probe runs automatically.
+- Fixed task-panel ordering faults found by model checks and real-boundary regressions: hidden iframe retries, snapshot/live-update merging and deleted-instance recovery, running source write ownership, per-conversation recovery isolation and cancelled delivery of already observed HTTP results. Equivalent default-port origins now share one asset/check; known collection failures retain their recorded reason.
+- Added paired-phone task panels using the same bundled HTML/JS, full-screen touch presentation and immutable chunked Pairlink snapshots/patches. PC/conversation/database-generation changes fence old reads; hidden panes retain their iframe/zoom without restarting sources. Corrected two postal-code fallbacks that incorrectly colored unrelated map regions.

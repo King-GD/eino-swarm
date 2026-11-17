@@ -72,6 +72,10 @@ func dispatch(eng *engine.Engine, cfg config.RemoteConfig, stage *Staging, req R
 		return handleClients(eng, req, path, sessionID)
 	case OpClientRead:
 		return handleClientRead(eng, req, path, sessionID)
+	case OpTaskPanels:
+		return handleTaskPanels(eng, req, path, sessionID)
+	case OpTaskPanelRead, OpTaskPanelCancel:
+		return fail(req.ID, path, sessionID, "link_required", "panel transfers require a paired link")
 	case OpFiles:
 		return handleFiles(eng, req, path, sessionID)
 	case OpFileChunk:

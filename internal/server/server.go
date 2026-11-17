@@ -107,6 +107,7 @@ func New(opts Options) (*Server, error) {
 	api := r.Group("/api")
 	api.Use(s.rejectForeignOrigin(), s.requireStartupReady())
 	{
+		s.registerTaskPanels(api)
 		api.GET("/meta", s.getMeta)
 		api.POST("/account/capabilities/refresh", s.refreshCapabilities)
 		api.POST("/desktop/recovery", s.postDesktopRecovery)

@@ -284,7 +284,7 @@ RestoringHere == IF RestoreBeforeListen THEN "booting" ELSE "restoring"
 
 Publish ==
     /\ eng["new"] = "booting"
-    /\ ~RestoreBeforeListen \/ restorePhase \in {"done", "owner_refused", "foreign_claimed"}
+    /\ ~RestoreBeforeListen \/ restorePhase \in {"done", "owner_refused", "foreign_claimed", "panel_refused"}
     /\ eng' = [eng EXCEPT !["new"] = IF RestoreBeforeListen THEN "serving" ELSE "restoring"]
     /\ lease' = "new"
     /\ UNCHANGED <<stopping, sampled, hold, launcher, target, deadline, work, owner,
@@ -297,6 +297,17 @@ ReadCheckpoint ==
     /\ restorePhase' = "read"
     /\ UNCHANGED <<eng, lease, stopping, sampled, hold, launcher, target, deadline,
                    work, owner, checkpoint, stopped, stopAcked, gate, turns, successor>>
+
+(* Engine.Restore first settles this conversation's orphaned panel sources
+   under restoreMu. A storage/identity failure refuses this conversation before
+   occupying its runtime. Its durable input is retained; PanelOwnership checks
+   that the outer recovery pass still visits independent conversations. *)
+RefusePanelRecovery ==
+    /\ eng["new"] = RestoringHere /\ restorePhase = "pending"
+    /\ checkpoint' = "none" /\ snapshot' = "none" /\ restorePhase' = "panel_refused"
+    /\ eng' = IF RestoreBeforeListen THEN eng ELSE [eng EXCEPT !["new"] = "serving"]
+    /\ UNCHANGED <<lease, stopping, sampled, hold, launcher, target, deadline,
+                   work, owner, stopped, stopAcked, gate, turns, successor>>
 
 OccupyRuntime ==
     /\ eng["new"] = RestoringHere /\ restorePhase = "read"
@@ -396,7 +407,7 @@ Next ==
     \/ BeginHandoff \/ Freeze \/ Ack \/ OldAlreadyGone \/ HandoffTimesOut
     \/ OldExits \/ Spawn \/ DeadlineExpires \/ DeadlineKillsReplacement
     \/ HumanCancelsLaunch
-    \/ Publish \/ ReadCheckpoint \/ OccupyRuntime \/ RefuseForeignRuntime
+    \/ Publish \/ ReadCheckpoint \/ OccupyRuntime \/ RefuseForeignRuntime \/ RefusePanelRecovery
     \/ UnheldWebReady \/ Reserve \/ Attach \/ FrontendAttaches \/ WindowCloses
     \/ \E e \in Engines : IdleCommit(e) \/ IdleSample(e) \/ IdleExit(e)
 
@@ -417,7 +428,7 @@ TypeOK ==
     /\ work \in WorkStates
     /\ owner \in Engines
     /\ checkpoint \in {"none", "running", "parked"}
-    /\ restorePhase \in {"pending", "read", "done", "owner_refused", "foreign_claimed"}
+    /\ restorePhase \in {"pending", "read", "done", "owner_refused", "foreign_claimed", "panel_refused"}
     /\ snapshot \in {"none", "running", "parked", "foreign"}
     /\ stopped \in BOOLEAN
     /\ stopAcked \in BOOLEAN
@@ -454,6 +465,7 @@ NeverRestoredIntoWindow ==
     ~(launcher = "opened" /\ target = "new" /\ owner = "new" /\ work # "none")
 NeverParkedCheckpoint == ~(checkpoint = "parked")
 NeverRefusedForeignRuntime == restorePhase # "owner_refused"
+NeverRefusedPanelRecovery == restorePhase # "panel_refused"
 NeverParkedSuccessor == ~(successor = "admitted" /\ work = "running" /\ turns > 0)
 NeverRefusedParkedSuccessor == ~(successor = "refused" /\ work = "parked")
 NeverRefusedForeignParkedSuccessor == ~(successor = "owner_refused" /\ work = "parked")

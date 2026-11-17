@@ -10,6 +10,7 @@ import { toastError } from "@/store/toasts"
 import { defaultSpeechSettings, type SpeechInputSettings, type SpeechOutputSettings } from "@/lib/speech-types"
 import { speechPlayback, speechRecordingSupported, startSpeechRecording, type SpeechRecording } from "@/lib/speech-media"
 import { synthesizeSpeech, transcribeSpeech } from "@/lib/speech-api"
+import { speechFailureMessage } from "@/lib/speech-error"
 import type { Settings } from "@/lib/types"
 import { useT } from "@/lib/use-t"
 import { Field, SettingsChoice, SettingsRow, SettingsSection, settingsMatch } from "./settings-field"
@@ -33,7 +34,10 @@ export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery
   const outputAllowed = legacyLocal || policyAllows(settings.model_policy, "speech")
   const snapshot = useApp((store) => store.meta?.speech)
   const raw = defaultSpeechSettings(settings.speech)
-  const speech = local ? { ...raw,
+  // The provider/custom form has no account choice. A model-policy page keeps
+  // source "account", which is the signed-in recognition or speech role.
+  const legacyEndpoint = local && !settings.model_policy
+  const speech = legacyEndpoint ? { ...raw,
     input: raw.input.source === "account" ? { ...raw.input, source: "custom" as const } : raw.input,
     output: raw.output.source === "account" ? { ...raw.output, source: "custom" as const } : raw.output,
   } : raw
@@ -67,7 +71,7 @@ export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery
     finally { if (discovery.current === owner) { discovery.current = undefined; setDiscovering(undefined) } }
   }
   const connection = (kind: Kind, value: Connection) => settings.model_policy ? (
-    policyConfigurable(settings.model_policy, kind === "input" ? "transcription" : "speech") ? <SettingsRow label={t("speech.model")} hint={snapshot?.[kind].label || t("modelPolicy.default")} query={query} /> : null
+    policyConfigurable(settings.model_policy, kind === "input" ? "transcription" : "speech") ? <SettingsRow label={t("speech.model")} hint={snapshot?.[kind].ready ? (snapshot[kind].label || t("modelPolicy.default")) : t("speech.notReady")} query={query} /> : null
   ) : <>
     {local ? <>
       <SettingsChoice label={t("speech.source")} query={query} value={value.source} onValueChange={(source) => update(kind, { source: source as Connection["source"] })}>
@@ -133,6 +137,7 @@ function SpeechSettingsTest({ settings, onFlush }: { settings: Settings; onFlush
   const [text, setText] = useState("")
   const capture = useRef<SpeechRecording | undefined>(undefined)
   const controller = useRef<AbortController | undefined>(undefined)
+  const snapshot = useApp((store) => store.meta?.speech)
   const playback = useSyncExternalStore(speechPlayback.subscribe, speechPlayback.getSnapshot)
   const cancel = () => { controller.current?.abort(); capture.current?.cancel(); capture.current = undefined; setRecording(false); setBusy(false) }
   const cancelRef = useRef(cancel); cancelRef.current = cancel
@@ -147,7 +152,11 @@ function SpeechSettingsTest({ settings, onFlush }: { settings: Settings; onFlush
       await onFlush()
       const recognized = await transcribeSpeech(blob, owner.signal)
       if (!owner.signal.aborted) setResult(recognized)
-    } catch (error) { if (!owner.signal.aborted) toastError(error instanceof Error ? error.message : t("speech.failed")) }
+    } catch (error) {
+      if (owner.signal.aborted) return
+      const message = speechFailureMessage(error, t)
+      if (message) toastError(message)
+    }
     finally { if (controller.current === owner) setBusy(false) }
   }
   const start = async () => {
@@ -158,7 +167,11 @@ function SpeechSettingsTest({ settings, onFlush }: { settings: Settings; onFlush
       })
       if (owner.signal.aborted) { active.cancel(); return }
       capture.current = active; setRecording(true)
-    } catch (error) { if (!owner.signal.aborted) toastError(error instanceof Error ? error.message : t("speech.failed")) }
+    } catch (error) {
+      if (owner.signal.aborted) return
+      const message = speechFailureMessage(error, t)
+      if (message) toastError(message)
+    }
     finally { if (controller.current === owner) setBusy(false) }
   }
   return <SettingsSection description={t("speech.testHint")} title={t("speech.testReading")}>
@@ -169,13 +182,16 @@ function SpeechSettingsTest({ settings, onFlush }: { settings: Settings; onFlush
     {result ? <Field label={t("speech.testResult")}><Textarea value={result} readOnly /></Field> : null}
     <Field label={t("speech.testText")}><Textarea value={text} onChange={(event) => setText(event.target.value)} /></Field>
     <SettingsRow label={t("speech.testReading")}>
-      <Button type="button" variant="outline" size="sm" disabled={!speech.output.enabled || !text.trim()} onClick={() => {
+      <Button type="button" variant="outline" size="sm" disabled={!speech.output.enabled || snapshot?.output.ready === false || !text.trim()} onClick={() => {
         if (playback.key === "settings:speech") { speechPlayback.stop(); return }
         void speechPlayback.play("settings:speech", text, { chunkChars: speech.limits.chunk_chars, synthesize: async (part, signal) => {
           await onFlush(); return synthesizeSpeech(part, signal, speech.limits.output_bytes)
-        } }).catch((error) => toastError(error instanceof Error ? error.message : t("speech.failed")))
+        } }).catch((error) => {
+          const message = speechFailureMessage(error, t)
+          if (message) toastError(message)
+        })
       }}>{playback.key === "settings:speech" ? t("speech.stopReading") : t("speech.testReading")}</Button>
-      {playback.key === "settings:speech" ? <span role="status" aria-live="polite" className="text-xs text-muted-foreground">{t(playback.state === "loading" ? "speech.generating" : "speech.playing")}</span> : null}
+      {playback.key === "settings:speech" ? <span role="status" aria-live="polite" className="text-xs text-muted-foreground">{t(playback.state === "loading" ? "speech.generating" : "speech.playing")}</span> : speech.output.enabled && snapshot?.output.ready === false ? <span role="status" className="text-xs text-muted-foreground">{t("speech.notReady")}</span> : null}
     </SettingsRow>
   </SettingsSection>
 }

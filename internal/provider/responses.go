@@ -85,7 +85,7 @@ func (m *responsesModel) request(ctx context.Context, in []*schema.Message, stre
 	m.mu.RUnlock()
 	o := model.GetCommonOptions(&model.Options{Tools: bound}, opts...)
 	specific := model.GetImplSpecificOptions(&responsesOptions{}, opts...)
-	input, err := responsesInput(in)
+	input, err := responsesInput(singleLeadingSystem(in))
 	if err != nil {
 		return nil, err
 	}

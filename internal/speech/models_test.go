@@ -36,8 +36,8 @@ func TestVoiceDiscoveryFindsTypedModelsBeforeEnablingOrChoosingOne(t *testing.T)
 	if err := cfg.Update(func(c *config.Config) error { c.Speech.Input.Source = "account"; return nil }); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Models(context.Background(), true); errorCode(err) != "speech_not_configured" {
-		t.Fatalf("invalid discovery source=%v", err)
+	if _, err := svc.Models(context.Background(), true); errorCode(err) != "speech_login_required" {
+		t.Fatalf("signed-out account discovery=%v", err)
 	}
 }
 

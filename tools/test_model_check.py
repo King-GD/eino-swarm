@@ -115,6 +115,34 @@ class CaseTable(unittest.TestCase):
 
 
 class RegistrationGuards(unittest.TestCase):
+    def test_panel_counterexamples_and_reachability_cannot_be_dropped(self):
+        for name in ("task-panel-stale-base", "task-panel-changed-body",
+                     "panel-frame-hidden-resync", "panel-projection-stale-cursor",
+                     "panel-projection-omitted",
+                     "panel-ownership-steal", "panel-ownership-recovery",
+                     "panel-producer-stop", "panel-producer-early-return",
+                     "panel-producer-origin-identity"):
+            remaining = [c for c in mc.CASES if c.name != name]
+            with self.subTest(case=name):
+                self.assert_case_table_fails("test_every_switch_is_shown_to_break_an_invariant", remaining)
+        for name in ("mobile-panel-mixed-revision", "mobile-panel-late-visit", "mobile-panel-partial", "mobile-panel-unvalidated", "mobile-panel-old-close", "mobile-panel-chat-seq", "mobile-panel-refresh"):
+            with self.subTest(case=name):
+                self.assert_case_table_fails("test_every_safety_invariant_is_shown_to_catch_something", [c for c in mc.CASES if c.name != name])
+        for name in ("task-panel-reach-competing-writer", "panel-frame-reach-hidden-recovery",
+                     "panel-projection-reach-new-panel", "panel-ownership-reach-recovery",
+                     "panel-projection-reach-omitted",
+                     "panel-producer-reach-stop", "reach-refused-panel-recovery",
+                     "mobile-panel-reach-snapshot", "mobile-panel-reach-patch", "mobile-panel-reach-visit", "mobile-panel-reach-refresh"):
+            remaining = [c for c in mc.CASES if c.name != name]
+            with self.subTest(case=name):
+                self.assert_case_table_fails("test_every_witness_is_checked_alone_on_the_current_design", remaining)
+
+    def test_capability_composition_keeps_crash_and_partial_fix_counterexamples(self):
+        for name in ("known-nil-gate", "nil-guard-only"):
+            remaining = [c for c in mc.CASES if c.name != "capability-admission-" + name]
+            with self.subTest(case=name):
+                self.assert_case_table_fails("test_every_safety_invariant_is_shown_to_catch_something", remaining)
+
     def assert_case_table_fails(self, method, cases):
         result = unittest.TestResult()
         with mock.patch.object(mc, "CASES", tuple(cases)):
@@ -374,6 +402,16 @@ class RunningCase(unittest.TestCase):
 
 @unittest.skipUnless(available_jar(), "tla2tools.jar and java are not installed; run make model-check")
 class WithTLC(unittest.TestCase):
+    def test_capability_composition_finds_known_crash_and_guard_removals(self):
+        jar = available_jar()
+        out = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, out)
+        for case in mc.CASES:
+            if case.model != "capability-admission":
+                continue
+            outcome, log = mc.run_case(case, jar, out)
+            self.assertIsNone(mc.judge(case, outcome), log.read_text()[-3000:])
+
     def test_speech_models_find_known_faults_guard_removals_and_reachable_scenarios(self):
         jar = available_jar()
         out = Path(tempfile.mkdtemp())

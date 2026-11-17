@@ -13,6 +13,17 @@ export type ModelPolicy = {
   defaults?: Partial<Record<ModelRole, ModelRef>>
   bindings?: Partial<Record<ModelRole, ModelRef>>
   roles?: { id: string; enabled: boolean; label: string }[]
+  /** Typed names omitted from the conversation list, one entry per signed-in catalog. */
+  functional_catalogs?: FunctionalCatalog[]
+}
+
+export interface FunctionalCatalog {
+  provider_id: string
+  label?: string
+  catalog_group?: string
+  embedding_models?: string[]
+  transcription_models?: string[]
+  speech_models?: string[]
 }
 
 export const modelRoles: ModelRole[] = ["conversation", "title", "compact", "translation", "image", "embedding", "transcription", "speech", "ocr", "decisions"]

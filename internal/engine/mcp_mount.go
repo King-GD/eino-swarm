@@ -416,6 +416,7 @@ func (e *Engine) republishWorkerSurface(reg *swarm.Registry, toolset *tools.Set,
 	}
 	e.wireWorkerSurface(reg, toolset, pc)
 	e.wireNuwaRegistry(reg, toolset, pc, turn)
+	e.wireTaskPanelRegistry(reg, toolset, turn)
 	config := reg.WorkerConfiguration()
 	config.SubAgentTools = append([]tool.BaseTool(nil), reg.SubAgentTools...)
 	if reg.SelectableToolNames == nil {

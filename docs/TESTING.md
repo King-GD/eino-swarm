@@ -8716,7 +8716,18 @@ after progress, and the current reconnect ticket under `testing/synctest`.
 `backoff_integration_test.go` uses the
 real Pool/SDK boundary with keyless loopback HTTP fixtures to verify
 cross-role/model/provider and cache-invalidated calls, independent origins,
-malformed successful streams and delayed/cancelled header reconnects. After an
+malformed successful streams and delayed/cancelled header reconnects. Cancelled
+account-model waits exercise negotiated capability checks through the same
+factory and must record no extra HTTP call. `internal/provider/capability_backoff_test.go`
+checks account recovery through Chat Completions and Responses, both Generate
+and Stream, preserving gate/caller identity, source-policy holds and revocation.
+`models/provider/CapabilityAdmission.tla` retrospectively captures the nil-gate
+composition fault and the incomplete nil-guard-only repair. Its 15 registered
+checks cover five safety invariants, the known fault, seeded guard removals and
+eight reachability witnesses. Real HTTP regressions also retain an account
+stream's source hold and refuse a removed role while the source remains healthy.
+See [the provider model mapping and bounds](../models/provider/README.md).
+After an
 initial 503 and cooldown, a probe remains open: before its first decoded nonempty
 body, reasoning or tool-call delta, a sibling role/model request must not reach
 the server; after that delta, it must arrive before the probe finishes. Headers,
@@ -9224,3 +9235,11 @@ Host validation inventory requests `lsof -b -nP` for cwd lookup, avoiding blocki
 kernel probes and hostname/service resolution inside its unchanged deadline.
 `tools/test_release_host_lease.py` retains the real cross-copy unittest-process
 identity check and rejects failed, absent, relative or ambiguous cwd results.
+
+## Task panels and the FOFA example
+
+Protocol and source tests use versioned state plus actual Registry/model HTTP, CLI and local HTTP boundaries. `internal/panelplugins/fofaworld` tests the installed compatible CLI only against a loopback fake API, with fictional credentials and no public targets. Two-batch blocking verifies actual overlap; counters and accepted receipts distinguish errors/unknown/cancellation from completion. `frontend/e2e/task-panels.spec.ts` verifies the actual bundled iframe and map without reloading on data updates. See [Task panels](TASK_PANELS.md) for the protocol and remaining native acceptance gate.
+
+The task-panel [formal model map](../models/panels/README.md) states finite bounds and the exact implementation boundaries. Current cases and guard-removal counterexamples cover operation digests/CAS, running source ownership, recovery failure isolation, overlapping GET/SSE per-panel revisions/deletions, hidden iframe resynchronization and observed HTTP result delivery before join. Every model has reachable witness cases. The independent audit regressions preserve the original failing order; protocol model success is not a SQLite atomicity, cancelled final-flush durability, wall-clock or native presentation proof.
+
+Paired mobile coverage adds `internal/remote/task_panels_test.go` and the Store transfer tests for actual sealed frames, frozen multi-chunk data during updates, exact patches, invalid scope/old cleanup, deletion and oversize refusal. `mobile/src/lib/remote-task-panels.test.ts` and `use-task-panels.test.tsx` verify complete body checks, cancellation, hidden reads, repair and PC/visit fencing. `mobile/e2e/task-panels.spec.ts` uses the same bundled plugin on Chromium/WebKit phone profiles with touch zoom, snapshot/patch identity, hidden/reopen, rotation, multiple panels and failure/version states. Tests use synthetic data; native packaged-app and physical-device acceptance remain separate. An isolated only-mobile dependency build checks that the shared plugin does not secretly need frontend node_modules. `MobileTaskPanel.tla` plus isolated client guard mutations cover the transport refinement; they do not prove arbitrary multi-panel memory or network timing.

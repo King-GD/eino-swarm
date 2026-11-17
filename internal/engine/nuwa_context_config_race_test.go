@@ -14,7 +14,6 @@ import (
 	swarm "github.com/LubyRuffy/eino-swarm"
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
-	"github.com/cloudwego/eino/schema"
 )
 
 // Settings publish into the same Config used by an already-running manager.
@@ -174,25 +173,18 @@ func TestNuwaContextUsesCommittedToolBudgetDuringActualHTTPConfigUpdates(t *test
 
 func assertNuwaCommittedBudgetHTTP(t *testing.T, request scheduleCompletionRequest, projectID string, total, budget int, partial bool, readID string) {
 	t.Helper()
-	var block string
-	count := 0
-	for _, message := range request.Messages {
-		if message.Role == schema.System && strings.HasPrefix(message.Content, nuwaContextHTTPHeader) {
-			block = message.Content
-			count++
-		}
-	}
-	if count != 1 || utf8.RuneCountInString(block) > budget {
-		t.Errorf("committed preview budget=%d: blocks=%d runes=%d", budget, count, utf8.RuneCountInString(block))
+	block := runtimeSystemSection(t, request, nuwaContextHTTPHeader)
+	if block == "" || utf8.RuneCountInString(block) > budget {
+		t.Errorf("committed preview budget=%d: runes=%d", budget, utf8.RuneCountInString(block))
 	}
 	var preview nuwaContextUnitView
 	// A later call can already hold every id and summary in earlier tool
 	// results. That call sends the revision only; the same budget still has
 	// to bound the read_work receipt below.
-	if !strings.Contains(block, `"unchanged"`) {
+	if block != "" && !strings.Contains(block, `"unchanged"`) {
 		err := json.Unmarshal([]byte(strings.TrimPrefix(block, nuwaContextPrefix)), &preview)
 		if err != nil || preview.Status != "available" || preview.ProjectID != projectID || preview.Total != total || preview.Omitted != total-len(preview.Nodes) {
-			t.Errorf("committed preview budget=%d: blocks=%d nodes=%d omitted=%d total=%d err=%v", budget, count, len(preview.Nodes), preview.Omitted, preview.Total, err)
+			t.Errorf("committed preview budget=%d: nodes=%d omitted=%d total=%d err=%v", budget, len(preview.Nodes), preview.Omitted, preview.Total, err)
 		}
 		if len(preview.Nodes) == 0 || partial != (len(preview.Nodes) < total) {
 			t.Errorf("committed budget did not change whole preview nodes: budget=%d nodes=%d total=%d", budget, len(preview.Nodes), total)

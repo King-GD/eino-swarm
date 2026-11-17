@@ -320,7 +320,7 @@ test("pins a title-generation model when more than one name is listed", async ({
     const picker = dialog.getByRole("combobox", { name: "Conversation title Provider", exact: true })
     await expect(picker).toContainText("Use default")
     await picker.click()
-    await page.getByRole("option", { name: provider.label || provider.id, exact: true }).click()
+    await page.getByRole("option", { name: "beta", exact: true }).click()
     await dialog.getByLabel("Conversation title Model", { exact: true }).fill("beta")
     await dialog.getByLabel("Conversation title Model", { exact: true }).press("Tab")
     await dialog.getByRole("button", { name: "Back to app" }).click()

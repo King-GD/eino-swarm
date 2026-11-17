@@ -1,0 +1,116 @@
+import { expect, test, type Page, type TestInfo } from "@playwright/test"
+import { writeFile } from "node:fs/promises"
+
+test.use({ screenshot: "only-on-failure", trace: "retain-on-failure" })
+
+async function control(page: Page, kind: "show" | "patch" | "snapshot" | "remove", panelId = "mobile-map") {
+  await page.evaluate(({ kind, panel_id }) => window.dispatchEvent(new CustomEvent("zwai.mock.task-panel", { detail: { kind, panel_id } })), { kind, panel_id: panelId })
+}
+async function capture(page: Page, info: TestInfo, name: string) {
+  await writeFile(info.outputPath(name), await page.screenshot(), { mode: 0o600 })
+}
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("zwai.phone.locale", "en"))
+  await page.setViewportSize({ width: 390, height: 844 })
+})
+
+test("a paired task opens its local map once and preserves touch zoom through patch, hidden snapshot and rotation", async ({ page }, info) => {
+  const htmlRequests: string[] = []
+  page.on("request", (request) => { if (request.url().includes("/task-panels/")) htmlRequests.push(request.url()) })
+  await page.goto("/?mock=1&tick=0&panels=delayed")
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Task panels", exact: true })).toHaveCount(0)
+  await control(page, "show")
+  const sheet = page.getByRole("dialog", { name: "Task panels" })
+  await expect(sheet).toBeVisible()
+  const iframe = sheet.getByTestId("task-panel-frame")
+  const frame = page.frameLocator('[data-testid="phone-task-panels"] iframe')
+  const map = frame.locator("#map"), scene = frame.locator('[data-testid="map-scene"]')
+  await expect(frame.locator("body")).toHaveAttribute("data-revision", "1")
+  await expect(frame.locator("#phase")).toContainText("3 collected")
+  await expect(frame.locator(".countries path")).toHaveCount(177)
+  await expect(frame.locator(".points circle")).toHaveCount(0)
+  expect(await frame.locator('[data-country="CN"]').getAttribute("fill")).not.toBe(await frame.locator('[data-country="US"]').getAttribute("fill"))
+  await iframe.evaluate((node) => { (window as unknown as { savedPanel: Element }).savedPanel = node })
+  await scene.evaluate((node) => { (window as unknown as { savedScene: Element }).savedScene = node })
+  const box = await map.boundingBox()
+  expect(box).not.toBeNull()
+  const x = box!.x + box!.width * .5, y = box!.y + Math.min(100, box!.height * .5)
+  await page.touchscreen.tap(x, y)
+  await page.touchscreen.tap(x, y)
+  await expect(map).toHaveAttribute("data-zoom", /scale\(2\)/)
+  const zoom = await map.getAttribute("data-zoom")
+  await control(page, "patch")
+  await expect(frame.locator("body")).toHaveAttribute("data-revision", "2")
+  await expect(frame.locator(".points circle")).toHaveCount(1)
+  await expect(frame.locator("#progress-label")).toContainText("1 / 3")
+  await expect(map).toHaveAttribute("data-zoom", zoom!)
+  expect(await scene.evaluate((node) => node === (window as unknown as { savedScene: Element }).savedScene)).toBe(true)
+  await capture(page, info, "map-touch-patch-portrait.png")
+  await sheet.getByRole("button", { name: "Close", exact: true }).click()
+  await expect(sheet).toHaveCount(0)
+  await control(page, "snapshot")
+  // Cross the hidden-manifest poll; it must neither reopen nor render a queue.
+  await page.waitForTimeout(1_700)
+  await expect(page.getByRole("dialog", { name: "Task panels" })).toHaveCount(0)
+  await page.getByRole("button", { name: "Task panels", exact: true }).click()
+  await expect(frame.locator("body")).toHaveAttribute("data-revision", "3")
+  await expect(frame.locator(".points circle")).toHaveCount(3)
+  await expect(frame.locator("#progress-label")).toContainText("3 / 3")
+  expect(await iframe.evaluate((node) => node === (window as unknown as { savedPanel: Element }).savedPanel)).toBe(true)
+  await expect(map).toHaveAttribute("data-zoom", zoom!)
+  await page.setViewportSize({ width: 844, height: 390 })
+  await expect.poll(async () => (await iframe.boundingBox())?.width).toBeGreaterThan(800)
+  await expect(map).toHaveAttribute("data-zoom", zoom!)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await capture(page, info, "map-snapshot-landscape.png")
+  expect(htmlRequests).toHaveLength(1)
+  expect(new URL(htmlRequests[0]).origin).toBe(new URL(page.url()).origin)
+})
+
+test("multiple panels retain their frames and Back returns to the conversation", async ({ page }, info) => {
+  await page.goto("/?mock=1&tick=0&panels=multi")
+  const sheet = page.getByRole("dialog", { name: "Task panels" })
+  await expect(sheet.getByRole("combobox")).toBeVisible()
+  await expect(sheet.locator("iframe")).toHaveCount(2)
+  await sheet.getByRole("combobox").selectOption("mobile-map-second")
+  await expect(sheet.locator("iframe:visible")).toHaveCount(1)
+  await control(page, "snapshot", "mobile-map-second")
+  await expect(page.frameLocator('[data-testid="phone-task-panels"] iframe:visible').locator("body")).toHaveAttribute("data-revision", "2")
+  await capture(page, info, "multiple-panel-selected.png")
+  await sheet.getByRole("button", { name: "Back", exact: true }).click()
+  await expect(sheet).toHaveCount(0)
+  await expect(page.getByTestId("transcript")).toBeVisible()
+  await page.getByRole("button", { name: "Task panels", exact: true }).click()
+  await expect(sheet.getByRole("combobox")).toHaveValue("mobile-map-second")
+  await expect(sheet.locator("iframe")).toHaveCount(2)
+})
+
+test("a bundled version mismatch reports a local failure without loading plugin HTML", async ({ page }, info) => {
+  const htmlRequests: string[] = []
+  page.on("request", (request) => { if (request.url().includes("/task-panels/")) htmlRequests.push(request.url()) })
+  await page.goto("/?mock=1&tick=0&panels=incompatible")
+  const sheet = page.getByRole("dialog", { name: "Task panels" })
+  await expect(sheet.getByRole("alert")).toContainText("incompatible")
+  await expect(sheet.locator("iframe")).toHaveCount(0)
+  expect(htmlRequests).toHaveLength(0)
+  await capture(page, info, "version-refusal.png")
+})
+
+test("a failed initial body retains an entry and Retry can display the panel", async ({ page }) => {
+  await page.goto("/?mock=1&tick=0&panels=failed")
+  const entry = page.getByRole("button", { name: "Task panels", exact: true })
+  await expect(entry).toBeVisible()
+  await entry.click()
+  const sheet = page.getByRole("dialog", { name: "Task panels" })
+  await sheet.getByRole("button", { name: "Retry", exact: true }).click()
+  await expect(page.frameLocator('[data-testid="phone-task-panels"] iframe').locator("body")).toHaveAttribute("data-revision", "1")
+})
+
+test("a complete multi-chunk panel renders from the paired RPC body", async ({ page }) => {
+  await page.goto("/?mock=1&tick=0&panels=large")
+  const frame = page.frameLocator('[data-testid="phone-task-panels"] iframe')
+  await expect(frame.locator("body")).toHaveAttribute("data-revision", "1")
+  await expect(frame.locator("#phase")).toContainText("3 collected")
+  await expect(frame.locator(".countries path")).toHaveCount(177)
+})

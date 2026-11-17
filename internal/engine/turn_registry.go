@@ -18,6 +18,7 @@ func (e *Engine) newTurnRegistry(builder swarm.ModelBuilder, toolset *tools.Set,
 	e.wireWorkerSurface(reg, toolset, pc)
 	if len(turns) > 0 {
 		e.wireNuwaRegistry(reg, toolset, pc, turns[0])
+		e.wireTaskPanelRegistry(reg, toolset, turns[0])
 		config := reg.WorkerConfiguration()
 		config.Tag = turns[0].ID
 		config.RecoveredModels = turns[0].WorkerModelRecovery

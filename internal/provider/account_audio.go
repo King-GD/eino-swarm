@@ -15,7 +15,7 @@ func (p *Pool) AccountAudio(role string) (config.Provider, string, error) {
 	if role != "transcription" && role != "speech" {
 		return config.Provider{}, "", ErrAccountAudioUnavailable
 	}
-	src := p.activeAccount()
+	src := p.accountAudioSource()
 	if src == nil {
 		return config.Provider{}, "", ErrAccountLoginRequired
 	}
@@ -29,4 +29,17 @@ func (p *Pool) AccountAudio(role string) (config.Provider, string, error) {
 		}
 	}
 	return config.Provider{ID: src.id, Label: label, BaseURL: src.baseURL, APIKey: src.token, Model: role}, label, nil
+}
+
+// accountAudioSource is the signed-in login for an explicit account voice
+// source. LOCAL hides that login from conversation routing; it still owns the
+// recognition and speech roles selected by speech source "account".
+func (p *Pool) accountAudioSource() *AccountSource {
+	if src := p.activeAccount(); src != nil {
+		return src
+	}
+	if p.localExecution() {
+		return p.account.Load()
+	}
+	return nil
 }

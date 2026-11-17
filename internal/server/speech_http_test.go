@@ -157,7 +157,10 @@ func TestSpeechHTTPUploadsRecordingAndReturnsAudioWithoutCreatingATurn(t *testin
 	if err := h.app.Config.Update(func(c *config.Config) error { c.Speech.Output.Source = "account"; return nil }); err != nil {
 		t.Fatal(err)
 	}
-	h.json("POST", "/api/audio/models", map[string]any{"kind": "output"}, 400)
+	denied := h.json("POST", "/api/audio/models", map[string]any{"kind": "output"}, 401)
+	if denied["code"] != "speech_login_required" {
+		t.Fatalf("signed-out account discovery=%v", denied["code"])
+	}
 	listed := h.json("GET", "/api/threads", nil, 200)
 	if strings.Contains(string(mustJSON(t, listed)), "dictated words") {
 		t.Fatal("dictation created durable chat content")

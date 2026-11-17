@@ -31,28 +31,28 @@ type nuwaAssignmentHTTPView struct {
 // project instructions, forked human input, or the untrusted shared board.
 func assertNuwaAssignmentHTTP(t *testing.T, request scheduleCompletionRequest, want nuwaAssignmentHTTPView) {
 	t.Helper()
-	var blocks []string
-	for _, message := range request.Messages {
-		if message.Role == schema.System && strings.HasPrefix(message.Content, nuwaAssignmentHTTPHeader+"\n") {
-			blocks = append(blocks, message.Content)
-		}
-	}
-	if len(blocks) != 1 {
-		raw, _ := json.Marshal(request.Messages)
-		t.Errorf("actual worker HTTP input has %d trusted assignments, want one; complete messages=%s", len(blocks), raw)
+	section := runtimeSystemSection(t, request, nuwaAssignmentHTTPHeader+"\n")
+	if section == "" {
 		return
 	}
-	start := strings.Index(blocks[0], "{")
 	var got nuwaAssignmentHTTPView
-	if start < 0 || json.Unmarshal([]byte(blocks[0][start:]), &got) != nil || !reflect.DeepEqual(got, want) {
-		t.Errorf("actual worker assignment=%+v want=%+v; complete block=%s", got, want, blocks[0])
+	decodeRuntimeJSON(t, section, &got)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("actual worker assignment=%+v want=%+v; section=%s", got, want, section)
 	}
 }
 
 func assertNuwaAssignmentAbsentHTTP(t *testing.T, request scheduleCompletionRequest) {
 	t.Helper()
 	for _, message := range request.Messages {
-		if strings.HasPrefix(message.Content, nuwaAssignmentHTTPHeader+"\n") {
+		if message == nil {
+			continue
+		}
+		// A human message may quote the heading. Only a message that starts
+		// with it, or the joined system message that now carries the section,
+		// is an assignment the model was given.
+		if message.Role == schema.System && strings.Contains(message.Content, nuwaAssignmentHTTPHeader+"\n") ||
+			message.Role != schema.System && strings.HasPrefix(message.Content, nuwaAssignmentHTTPHeader+"\n") {
 			t.Error("manager or ordinary input gained a Nuwa worker assignment")
 		}
 	}

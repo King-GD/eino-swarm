@@ -42,6 +42,9 @@ func (s *Store) TruncateFromEventSeq(threadID string, fromSeq int64) error {
 		for _, t := range later {
 			ids = append(ids, t.ID)
 		}
+		if err := rewindTaskPanels(tx, threadID, fromSeq, ids); err != nil {
+			return err
+		}
 		removed := tx.Where("thread_id = ? AND (seq >= ? OR turn_id IN ?)", threadID, fromSeq, ids).Delete(&Event{})
 		if removed.Error != nil {
 			return removed.Error

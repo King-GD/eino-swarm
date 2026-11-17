@@ -844,6 +844,7 @@ export function PhoneApp() {
             prediction={phonePrediction(view.events, detail, predictionsEnabled && !catalogBusy)}
             onReadVisibility={(visible) => { managerVisible.current = visible }}
             fileLink={link ?? undefined}
+            panelOwnerKey={activeFp ? `${activeFp}:${startup?.data_generation ?? 0}` : ""}
             blocks={view.blocks}
             followups={view.followups}
             onSteerFollowup={(id) => void queueFollowup(OpFollowupSteer, detail.id, id)}

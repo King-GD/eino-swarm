@@ -38,6 +38,33 @@ func TestAudioUsesOnlyItsEnabledAccountRole(t *testing.T) {
 	}
 }
 
+func TestLocalModeSpeechUsesTheSignedInRoleWithoutBecomingTheConversationSource(t *testing.T) {
+	cfg := configFor(t, true)
+	if err := cfg.Update(func(c *config.Config) error {
+		c.Product.Mode = config.ProductModeLocal
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	p := New(cfg)
+	if _, _, err := p.AccountAudio("speech"); !errors.Is(err, ErrAccountLoginRequired) {
+		t.Fatalf("signed-out local voice: %v", err)
+	}
+	src := accountSourceFor(t, "https://gateway.invalid/client/desktop/v1", "private-token")
+	src.SetRoles([]AccountRole{{ID: "speech", Enabled: true, Label: "Voice"}, {ID: "transcription", Enabled: false}})
+	p.SetAccountSource(src)
+	if p.activeAccount() != nil {
+		t.Fatal("local mode published the login as the conversation source")
+	}
+	prov, label, err := p.AccountAudio("speech")
+	if err != nil || prov.Model != "speech" || prov.APIKey != "private-token" || prov.BaseURL != "https://gateway.invalid/client/desktop/v1" || label != "Voice" {
+		t.Fatalf("target=%+v label=%q err=%v", prov, label, err)
+	}
+	if _, _, err := p.AccountAudio("transcription"); !errors.Is(err, ErrAccountAudioUnavailable) {
+		t.Fatalf("disabled recognition: %v", err)
+	}
+}
+
 func TestVoiceCatalogKindsDoNotEnterConversationChoices(t *testing.T) {
 	src, err := NewAccountSource(accountTestID, "Server", "https://gateway.invalid/v1", "token", Catalog{Names: []string{"asr", "tts", "chat"}, Types: map[string]string{"asr": "transcription", "tts": "speech", "chat": "chat"}})
 	if err != nil {

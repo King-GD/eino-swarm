@@ -30,6 +30,9 @@ var copyOrder = []string{
 	"nuwa_nodes",
 	"nuwa_revisions",
 	"nuwa_verify_slots",
+	"task_panel_rows",
+	"task_panel_mutations",
+	"task_panel_change_rows",
 	"thread_wake_decisions",
 	"pending_schedule_answers",
 	"composer_drafts",
@@ -59,6 +62,7 @@ func failNext() error {
 var autoincTables = []string{
 	"messages", "events", "llm_calls", "attachments",
 	"nuwa_revisions", "nuwa_verify_slots", "search_docs", "search_chunks",
+	"task_panel_mutations", "task_panel_change_rows",
 }
 
 type column struct {
@@ -232,7 +236,7 @@ func copyTable(ctx context.Context, q queryer, src, dst, table, where string, ar
 		}
 		names[i] = quoted
 		exprs[i] = quoted
-		if offset > 0 && c.integer && (c.name == "id" || c.name == "event_id") {
+		if offset > 0 && c.integer && (c.name == "id" || c.name == "event_id" || table == "task_panel_change_rows" && c.name == "cursor") {
 			exprs[i] = fmt.Sprintf(`CASE WHEN %s IS NULL OR %s = 0 THEN %s ELSE %s + %d END`, quoted, quoted, quoted, quoted, offset)
 		}
 	}
@@ -280,7 +284,7 @@ func projectFilter(table, projectID string) (string, []any, bool, error) {
 	case "composer_drafts", "composer_draft_blobs":
 		return `draft_key = ? OR draft_key IN (SELECT 'thread:' || id FROM main.threads WHERE project_id = ?)`,
 			[]any{"new:" + projectID, projectID}, false, nil
-	case "turns", "events", "messages", "attachments", "followups", "llm_calls", "thread_wake_decisions", "pending_schedule_answers", "search_docs", "search_chunks":
+	case "turns", "events", "messages", "attachments", "followups", "llm_calls", "thread_wake_decisions", "pending_schedule_answers", "search_docs", "search_chunks", "task_panel_rows", "task_panel_mutations", "task_panel_change_rows":
 		return `thread_id IN (` + threads + `)`, []any{projectID}, false, nil
 	default:
 		return "", nil, false, invalidf("no project filter for %s", table)
@@ -530,7 +534,7 @@ func maxAutoinc(ctx context.Context, q queryer) (int64, error) {
 		if err := failNext(); err != nil {
 			return 0, err
 		}
-		if err := q.QueryRowContext(ctx, `SELECT MAX(id) FROM `+name).Scan(&n); err != nil {
+		if err := q.QueryRowContext(ctx, `SELECT MAX(`+autoincColumn(table)+`) FROM `+name).Scan(&n); err != nil {
 			return 0, err
 		}
 		if n.Valid && n.Int64 > max {
@@ -557,7 +561,7 @@ func bumpSequences(ctx context.Context, q queryer, schema string) error {
 			return err
 		}
 		var n sql.NullInt64
-		if err := q.QueryRowContext(ctx, `SELECT MAX(id) FROM `+schema+`.`+name).Scan(&n); err != nil {
+		if err := q.QueryRowContext(ctx, `SELECT MAX(`+autoincColumn(table)+`) FROM `+schema+`.`+name).Scan(&n); err != nil {
 			return err
 		}
 		if !n.Valid {
@@ -704,6 +708,8 @@ func findConflicts(ctx context.Context, conn *sql.Conn, projectID string, replac
 			func(v []string) { add("schedules", v[0], v[1], v[1] == projectID) }},
 		{`SELECT i.id, COALESCE(m.project_id, '') FROM incoming.nuwa_nodes AS i JOIN main.nuwa_nodes AS m ON m.id = i.id`, 2,
 			func(v []string) { add("nuwa_nodes", v[0], v[1], v[1] == projectID) }},
+		{`SELECT i.id, COALESCE(th.project_id, '') FROM incoming.task_panel_rows AS i JOIN main.task_panel_rows AS m ON m.id = i.id LEFT JOIN main.threads AS th ON th.id = m.thread_id`, 2,
+			func(v []string) { add("task_panel_rows", v[0], v[1], v[1] == projectID) }},
 		{`SELECT i.draft_key FROM incoming.composer_drafts AS i JOIN main.composer_drafts AS m ON m.draft_key = i.draft_key`, 1,
 			func(v []string) {
 				owner, owned := draftOwner(ctx, conn, v[0], projectID)

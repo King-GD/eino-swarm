@@ -49,6 +49,14 @@ describe("Speech settings", () => {
     expect(onChange.mock.lastCall![0].speech.input.api_key).toBe("")
   })
 
+  it("keeps the signed-in account voice role when local settings already have a model policy", () => {
+    const { onChange } = setup("local", vi.fn(), vi.fn(async () => {}), { ...gatewayVoicePolicy(true), mode: "local", scope: "local" })
+    expect(screen.queryByLabelText("API base URL")).toBeNull()
+    expect(screen.getAllByText("Not configured or unavailable").length).toBeGreaterThan(0)
+    fireEvent.change(screen.getByLabelText("Speech speed"), { target: { value: "1.2" } })
+    expect(onChange.mock.lastCall![0].speech.output).toMatchObject({ source: "account", speed: 1.2 })
+  })
+
   it("uses gateway-managed roles without exposing endpoint or credential configuration", () => {
     const { onChange } = setup("fofa", vi.fn(), vi.fn(async () => {}), gatewayVoicePolicy())
     expect(screen.queryByLabelText("API base URL")).toBeNull()

@@ -16,61 +16,77 @@ import (
 // A model stream, including an auxiliary call outside a turn, must finish
 // before changing execution source. The assertion crosses the real HTTP client.
 func TestModelStreamHoldsSourceUntilUpstreamCompletes(t *testing.T) {
-	entered, finish := make(chan struct{}), make(chan struct{})
-	var hits atomic.Int32
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
-		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"ready\"}}]}\n\n")
-		w.(http.Flusher).Flush()
-		close(entered)
-		select {
-		case <-finish:
-		case <-r.Context().Done():
-			return
+	for _, account := range []bool{false, true} {
+		name := "provider"
+		if account {
+			name = "account"
 		}
-		_, _ = io.WriteString(w, "data: [DONE]\n\n")
-	}))
-	defer upstream.Close()
-	cfg := configFor(t, false)
-	cfg.Product.Mode = config.ProductModeLocal
-	cfg.Models.Providers[0].BaseURL = upstream.URL
-	cfg.Models.Providers[0].Model = "configured-model"
-	p := New(cfg)
-	m, err := p.Get(t.Context(), "", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	stream, err := m.Stream(t.Context(), []*schema.Message{schema.UserMessage("inspect")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	<-entered
-	if release, ok := p.TryHoldModelPolicy(); ok {
-		release()
-		t.Error("live stream allowed source change")
-	}
-	close(finish)
-	for {
-		_, err = stream.Recv()
-		if err != nil {
-			break
-		}
-	}
-	stream.Close()
-	if !errors.Is(err, io.EOF) {
-		t.Fatal(err)
-	}
-	release, ok := p.TryHoldModelPolicy()
-	if !ok {
-		t.Fatal("completed stream retained hold")
-	}
-	if _, err = m.Generate(t.Context(), nil); !errors.Is(err, ErrModelPolicy) {
-		t.Fatalf("request entered frozen source: %v", err)
-	}
-	release()
-	if hits.Load() != 1 {
-		t.Fatal("refused call reached HTTP")
+		t.Run(name, func(t *testing.T) {
+			entered, finish := make(chan struct{}), make(chan struct{})
+			var hits atomic.Int32
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				hits.Add(1)
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"ready\"}}]}\n\n")
+				w.(http.Flusher).Flush()
+				close(entered)
+				select {
+				case <-finish:
+				case <-r.Context().Done():
+					return
+				}
+				_, _ = io.WriteString(w, "data: [DONE]\n\n")
+			}))
+			defer upstream.Close()
+			cfg := configFor(t, false)
+			cfg.Product.Mode = config.ProductModeLocal
+			cfg.Models.Providers[0].BaseURL = upstream.URL
+			cfg.Models.Providers[0].Model = "configured-model"
+			p := New(cfg)
+			providerID, modelName := "", ""
+			if account {
+				src := accountSourceFor(t, upstream.URL, "test-token")
+				src.SetCapabilities(roleManifest("conversation", "chat_completions", true))
+				p.SetAccountSource(src)
+				providerID, modelName = src.id, "server-model"
+			}
+			build, err := p.ModelBuilder(t.Context(), providerID, modelName, "", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			m := build("manager", "manager")
+			stream, err := m.Stream(t.Context(), []*schema.Message{schema.UserMessage("inspect")})
+			if err != nil {
+				t.Fatal(err)
+			}
+			<-entered
+			if release, ok := p.TryHoldModelPolicy(); ok {
+				release()
+				t.Error("live stream allowed source change")
+			}
+			close(finish)
+			for {
+				_, err = stream.Recv()
+				if err != nil {
+					break
+				}
+			}
+			stream.Close()
+			if !errors.Is(err, io.EOF) {
+				t.Fatal(err)
+			}
+			release, ok := p.TryHoldModelPolicy()
+			if !ok {
+				t.Fatal("completed stream retained hold")
+			}
+			if _, err = m.Generate(t.Context(), nil); !errors.Is(err, ErrModelPolicy) {
+				t.Fatalf("request entered frozen source: %v", err)
+			}
+			release()
+			if hits.Load() != 1 {
+				t.Fatal("refused call reached HTTP")
+			}
+		})
 	}
 }
 

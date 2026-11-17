@@ -21,8 +21,11 @@ export const modelPolicyEn = {
  "modelPolicy.unavailable": "Unavailable",
  "modelPolicy.roleManaged": "Managed by gateway",
  "modelPolicy.roleManagedHint": "This function uses the gateway preset; its model cannot be edited here.",
- "modelPolicy.imageUnavailable": "This client does not yet support image generation.",
+ "modelPolicy.imageUnavailable": "This client does not yet support image generation. A choice here is kept.",
  "modelPolicy.roleUnavailable": "The gateway has not provided an editable model capability for this function.",
+ "modelPolicy.group.gateway": "Gateway",
+ "modelPolicy.group.thirdParty": "Third-party",
+ "modelPolicy.group.local": "Local",
 } as const
 export const modelPolicyZh: Record<keyof typeof modelPolicyEn,string> = {
  "modelPolicy.title": "功能模型",
@@ -47,6 +50,9 @@ export const modelPolicyZh: Record<keyof typeof modelPolicyEn,string> = {
  "modelPolicy.unavailable": "暂不可用",
  "modelPolicy.roleManaged": "由网关管理",
  "modelPolicy.roleManagedHint": "这项功能使用网关预置模型，当前不可单独修改。",
- "modelPolicy.imageUnavailable": "当前客户端尚未接入图片生成，暂不可配置。",
+ "modelPolicy.imageUnavailable": "当前客户端尚未接入图片生成。这里的选择会保留，接入后沿用。",
  "modelPolicy.roleUnavailable": "当前网关未提供这项功能的可编辑模型权限。",
+ "modelPolicy.group.gateway": "网关",
+ "modelPolicy.group.thirdParty": "第三方",
+ "modelPolicy.group.local": "本地",
 }

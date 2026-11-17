@@ -464,6 +464,8 @@ export interface ModelInfo {
   /** `account` is the signed-in server's catalog; `provider` is the user's
    *  own endpoint. The list already puts the account first. */
   source?: ModelSource
+  /** `original` is the signed-in gateway catalog; `third_party` is its preset. */
+  catalog_group?: string
 }
 
 export type ModelSource = "account" | "provider"

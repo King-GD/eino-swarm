@@ -11,6 +11,7 @@ This is the current user-facing capability map. The code and tests named below a
     - `F-130` Agent runs, tools, and live control
     - `F-135` Independent task coordination
     - `F-136` Nuwa project collaboration
+    - `F-137` HTML/JS task panels
     - `F-140` Files and attachments
     - `F-145` Durable composer drafts
     - `F-146` Next-step composer suggestions
@@ -52,6 +53,8 @@ This is the current user-facing capability map. The code and tests named below a
 ### F-148 Voice input and spoken answers
 
 - The phone account’s automatic Gateway output uses streaming PCM/SSE so playback can begin before the segment finishes. Automatic segments are bounded at 200 characters; explicit PC or personal audio settings keep their chosen format and limits. Evidence: `mobile/src/lib/gateway-speech.test.ts`, `mobile/src/lib/phone-gateway-voice.test.tsx`.
+
+- LOCAL voice source `account` uses the signed-in account's enabled recognition or speech role for preview and playback when no functional binding overrides it. A personal binding, provider, or custom endpoint stays on that endpoint. No login or a disabled role stays not ready and is not replaced by a conversation model. Evidence: `internal/speech/failures_test.go`, `internal/provider/account_audio_test.go`.
 
 - Phone voice errors identify the service's HTTP status without exposing its raw error body; transport and microphone permission failures remain distinct. Evidence: `mobile/src/lib/speech-transport.test.ts`, `mobile/src/components/speech-errors.test.ts`.
 
@@ -320,7 +323,7 @@ This is the current user-facing capability map. The code and tests named below a
 - 手机 Account 登录后等待同账号 PC，ready 才工作；手机 LOCAL 的个人及授权账号来源直连见 `F-230`。
 - 同一条一 id 排障路径不变：账号模型的 turn 以 `gateway:` provider id 前缀标识来源，普通目录不新增事件类型，也不记录凭据。服务器下发官方档案时的名称、别名和工具名单见 `F-172`。
 
-- 网关能力协商（`C-040`）：桌面与手机在 bootstrap 后以本设备私有 Bearer 请求同 origin 的 `capabilities_url`，识别版本 1／十角色协议 3。preset 和 gateway 来源分别授权；功能必须同时满足 supported、available 和客户端已实现端点，选择器另需角色 configurable，来源设置入口另需来源 configurable。失败保留选择、展示重新获取入口；API 关闭不注销账号或断开 PC。标题、压缩和翻译选择 Chat 模型；图片输入按 OCR 能力控制，图片生成尚无客户端适配器。实现与回归用例：`internal/provider/capabilities.go`、`internal/provider/capabilities_test.go`、`internal/remote/account_capabilities.go`、`internal/remote/account_capabilities_test.go`、`frontend/src/lib/capabilities.ts`、`frontend/src/lib/capabilities.test.ts`、`mobile/src/lib/gateway-capabilities.ts`、`mobile/src/lib/gateway-capabilities.test.ts`。
+- 网关能力协商（`C-040`）：桌面与手机在 bootstrap 后以本设备私有 Bearer 请求同 origin 的 `capabilities_url`，识别版本 1／十角色协议 3。preset 和 gateway 来源分别授权；功能必须同时满足 supported、available 和客户端已实现端点，选择器另需角色 configurable，来源设置入口另需来源 configurable。失败保留选择、展示重新获取入口；API 关闭不注销账号或断开 PC。标题、压缩和翻译选择 Chat 模型；图片输入按 OCR 能力控制。图片生成尚无客户端适配器，设置行与其他功能使用同一选择器，并说明选择会保留到接入之后；LOCAL 的功能模型菜单按已授权的网关、第三方目录和本机 provider 分组，某一来源没有该功能的模型时不显示该组。语音识别和语音朗读只列出对应目录里 `model_type` 为 `transcription`／`speech` 的名称，这些名称在 `model_policy.functional_catalogs`，不进入输入框目录，也不借用其他目录的对话模型。实现与回归用例：`internal/provider/capabilities.go`、`internal/provider/capabilities_test.go`、`internal/remote/account_capabilities.go`、`internal/remote/account_capabilities_test.go`、`frontend/src/lib/capabilities.ts`、`frontend/src/lib/capabilities.test.ts`、`mobile/src/lib/gateway-capabilities.ts`、`mobile/src/lib/gateway-capabilities.test.ts`、`internal/provider/model_policy_test.go`、`frontend/src/lib/functional-model-choices.test.ts`。
 
 ### F-172 Official model profile
 
@@ -509,7 +512,7 @@ This is the current user-facing capability map. The code and tests named below a
 
 - 历史原文与建议：显式报告或实际历史读取后，host 依据规范 message／event 引用核验原文及真实归属，完整展示正文、来源、日期和定位；建议与问题另列，计数／区块由 host 生成。原文变化／缺失／越项目／超限时阻断旧答案，复用持久门禁纠正与恢复；建议本身是否成立仍需内容验收，不把原文展示当作语义通过。不会因读取历史而自动保存人工 summary 或写入 Memory。关联：`C-036`；实现：`internal/engine/history_report.go`、`internal/engine/history_answer.go`、`internal/store/history_evidence.go`；验证：`internal/engine/history_report_test.go`、`internal/engine/history_answer_http_test.go`、`internal/engine/history_answer_schedule_test.go`、`internal/engine/history_answer_recovery_http_test.go`、`tools/project_history_eval.py`。
 
-- 嵌入模型统一在 Settings → Models → 功能模型配置，用于会话语义搜索：未配置时关闭，配置后自动开启，关键词搜索始终可用。清空模型或选择“未配置（关闭）”可覆盖网关默认和旧搜索配置；恢复默认则继续跟随当前网关预置。旧 `search.embedding=false` 不再覆盖已填写模型。图片生成尚无客户端适配器，显示不可用原因；翻译缺少可编辑权限时保留说明行。证据：`frontend/src/components/app/functional-models.tsx`、`internal/config/search.go`、`internal/server/search_model_configuration_test.go`、`frontend/e2e/model-policy.spec.ts`。
+- 嵌入模型统一在 Settings → Models → 功能模型配置，用于会话语义搜索：未配置时关闭，配置后自动开启，关键词搜索始终可用。清空模型或选择“未配置（关闭）”可覆盖网关默认和旧搜索配置；恢复默认则继续跟随当前网关预置。旧 `search.embedding=false` 不再覆盖已填写模型。图片生成尚无客户端适配器，设置行使用同一选择器并保留已选模型；翻译缺少可编辑权限时保留说明行。LOCAL 功能绑定可以指向已登录的 `gateway:` 目录，退出登录后保留该绑定并按登录要求失败，不改走同名个人 provider。证据：`frontend/src/components/app/functional-models.tsx`、`internal/config/search.go`、`internal/server/search_model_configuration_test.go`、`frontend/e2e/model-policy.spec.ts`。
 
 - PC `⌘K` 同时筛选操作和检索会话；会话命中保留服务端排序，语义命中不要求包含原词。请求中、无匹配与请求失败分别显示状态；失败时仅回退到匹配的本地会话，旧查询／关闭面板后的响应不得覆盖当前结果。关键词检索覆盖标题、目标与用户／助手正文，不包含工具日志或归档会话。证据：`frontend/src/components/app/palette.tsx`、`frontend/src/components/app/palette.test.tsx`、`frontend/e2e/palette-search.spec.ts`、`internal/store/search.go`。
 
@@ -621,3 +624,7 @@ This is the current user-facing capability map. The code and tests named below a
 - 目的：从一个已验收、已分配版本的完整主线批次发布实际受影响的 macOS、Android 和 iOS 端；使用者：维护者；入口：`make release`, `make release-check`, `make mobile-ios-release`, `python3 tools/audit_pending_batch.py`；输入：干净源码、统一版本/SHA、签名配置（可选 `marketing_version` 显式开启新 TestFlight 版本）、测试组与源码中的授权应用合规声明（无字段的旧源码使用按 SHA/build 持久保留的精确确认）、交付台账及经验证的额外主线平台变更；输出：所需平台的 GitHub macOS zip/APK、TestFlight 构建与组/审核状态（常规更新沿用最近成功版本，仅增加 build number；已有候选冻结版本；同版本仍可能审核）、逐 Issue 交付结果，以及未分配变更的提交数、等待时长和发布平台；旧版仍待交付时保留冻结批次并独立恢复；前置条件：Go、Node、SDK、gh、私有 iOS CLI/签名资料，主线自上个公开版本超过三次提交或最早待发布修复等待超过 24 小时；失败表现：各端独立报错或等待，未交付时退出非零；关联契约：`C-010`；实现证据：`Makefile`, `tools/release.py`, `tools/release_ios.py`, `tools/test_release.py`, `tools/test_release_ios_versions.py`, `tools/audit_pending_batch.py`, `tools/test_audit_pending_batch.py`, `internal/release`, `internal/desktop/pack`, `mobile/scripts/android-release.ts`, `docs/RELEASE.md`。
 
 语音设置按当前来源协商到的 transcription／speech 能力分别显示；LOCAL 个人配置保留自身能力。可配置网关来源在 Models 显示获准角色的模型选择，固定来源仅在 Speech 显示已获准的语音参数。缺失或失败的能力清单不能由旧 configurable 布尔值重新开放控件；保存的选择保留，重试后恢复。
+
+### F-137 HTML/JS task panels
+
+- 目的：将任务的结构化结果持续呈现在插件自定义界面；入口：会话右侧任务面板、配对手机会话的全屏面板、Settings → Tools、Agent通用面板工具；输入：已安装插件定义、带来源的快照或增量；输出：持久状态、地图与本地/触摸交互；前置条件：插件版本兼容，数据源执行由当前任务拥有，手机通过Pairlink读取PC投影；失败表现：协议/版本/加载错误保留旧状态，取消与重启显示中断，旧PC不展示入口；关联契约：`C-050`。实现证据：`internal/taskpanel`、`internal/store/task_panels.go`、`internal/engine/task_panels.go`、`internal/remote/task_panels.go`、`internal/panelplugins/fofaworld`、`frontend/src/task-panels`、`frontend/src/components/app/task-panel-frame.tsx`、`mobile/src/components/task-panels.tsx`；说明：[Task panels](TASK_PANELS.md)。

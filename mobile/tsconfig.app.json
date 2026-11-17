@@ -6,6 +6,7 @@
     "module": "ESNext",
     "skipLibCheck": true,
     "moduleResolution": "bundler",
+    "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "moduleDetection": "force",
@@ -18,7 +19,13 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "react": ["./node_modules/@types/react"]
+      "react": ["./node_modules/@types/react"],
+      "react/*": ["./node_modules/@types/react/*"],
+      "shiki/core": ["./node_modules/shiki/dist/core.d.mts"],
+      "shiki/engine/javascript": ["./node_modules/shiki/dist/engine-javascript.d.mts"],
+      "shiki/*": ["./node_modules/shiki/dist/*"],
+      "mermaid": ["./node_modules/mermaid"],
+      "mdast-util-from-markdown": ["./node_modules/mdast-util-from-markdown"]
     },
     "types": ["vitest/globals", "@testing-library/jest-dom"]
   },

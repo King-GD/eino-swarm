@@ -132,7 +132,7 @@ func (rt *runtime) runManager(ctx context.Context, turn *store.Turn, reg *swarm.
 	managedExecIndex := rt.managedExecToolIndex(turn, th, toolset, resumed)
 	tail := applyAccountInstruction(managerExtra(e.cfg, th, pc, e.scheduleLines(rt.threadID), turn.NuwaEnabled), e.pool.AccountInstruction(turn.ProviderID))
 	instruction := managerPrompt(toolset, JoinPromptSections(historyPrompt(toolset, audience), taskCoordinationPrompt, executionGuidance,
-		tail, humanReply, rt.finalGoalWorkerSection(th)), turn.NuwaEnabled, managedExecIndex >= 0)
+		tail, humanReply, rt.finalGoalWorkerSection(th), e.taskPanelInstruction()), turn.NuwaEnabled, managedExecIndex >= 0)
 	// Fresh slice: pc.managerTools may return the workspace toolset's
 	// backing array, and appending complete_goal / block_goal in place
 	// would hand them to every sub-agent.
@@ -190,6 +190,7 @@ func (rt *runtime) runManager(ctx context.Context, turn *store.Turn, reg *swarm.
 	managerTools = append(managerTools, AskUserTool(rt.waitAsk))
 	managerTools = append(managerTools, rt.managerScheduleTools(turn)...)
 	managerTools = append(managerTools, rt.managerTaskTools(turn)...)
+	managerTools = append(managerTools, e.taskPanelTools(turn, toolset.WorkspaceDir, turn.NuwaReadOnly || (th != nil && th.PlanMode), turn.NuwaEnabled)...)
 	budget := e.cfg.SwarmSnapshot().ManagerIterations()
 	if pursuingGoal(th) && !pausedStandingGoal(th) {
 		budget = e.cfg.SwarmSnapshot().GoalSessionIterations()

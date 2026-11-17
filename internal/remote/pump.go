@@ -66,6 +66,9 @@ type LinkPump struct {
 	audioWG       sync.WaitGroup
 	audioJob      *audioJob
 	audioSeen     map[string]time.Time
+	panelMu       sync.Mutex
+	panelClosed   bool
+	panelTransfer *panelTransfer
 }
 
 func newLinkPump(eng *engine.Engine, cfg config.RemoteConfig, l *client.Link) *LinkPump {
@@ -88,6 +91,7 @@ func newLinkPump(eng *engine.Engine, cfg config.RemoteConfig, l *client.Link) *L
 }
 
 func (p *LinkPump) Close() {
+	p.stopTaskPanels()
 	p.stopSelectionTranslation()
 	p.stopAudio()
 	p.stopCatalogRefresh()
@@ -120,6 +124,8 @@ func (p *LinkPump) Dispatch(msg []byte) {
 		return
 	}
 	switch strings.TrimSpace(req.Op) {
+	case OpTaskPanels, OpTaskPanelRead, OpTaskPanelCancel:
+		p.dispatchTaskPanels(req)
 	case OpWatch:
 		p.reply(p.startWatch(req))
 	case OpUnwatch:

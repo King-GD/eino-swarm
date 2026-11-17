@@ -35,7 +35,10 @@ test("Web tool execution settings persist local and cloud choices across reloads
     await dialog.getByRole("tab", { name: "Tools" }).click()
     await expect(dialog.getByLabel("Web tools run on")).toHaveText("Server cloud")
     await expect(dialog.getByRole("heading", { name: "Proxy", exact: true })).toHaveCount(0)
-    await expect(dialog.getByLabel("HTTP")).toHaveCount(0)
+    // Cloud Web tools hide proxy inputs; the independent local panel source
+    // still has HTTP concurrency/timeout settings and must remain configurable.
+    await expect(dialog.getByLabel("HTTP", { exact: true })).toHaveCount(0)
+    await expect(dialog.getByLabel("HTTPS", { exact: true })).toHaveCount(0)
     await page.screenshot({ path: info.outputPath("web-tools-execution.png"), animations: "disabled" })
   } finally {
     await request.put("/api/settings", { data: { tools: settings.tools } })

@@ -76,6 +76,16 @@ This requires a PC version supporting the project RPCs; older PCs show an update
 message. No project settings are stored in the phone's direct-model Chat scope.
 Recent desktop/mobile differences are tracked in [the parity audit](../docs/MOBILE_DESKTOP_PARITY.md).
 
+Paired PC conversations can show the same task panels as desktop. A matching
+panel opens once, and **Task panels** in the conversation header reopens it.
+The full-screen view supports touch zoom, rotation and switching between
+available panels. Closing keeps the map position and does not stop collection
+on the PC. Progress and asset points update through the existing encrypted
+connection; reconnecting reads saved results without restarting collection.
+Conversations without a panel keep their ordinary header. An incompatible
+plugin reports an update requirement rather than loading different code.
+See [Task panels](../docs/TASK_PANELS.md) for plugin authoring and data rules.
+
 Conversation Mermaid fences open as fit-to-width/height diagrams with touch zoom,
 actual size and copyable source. Incomplete, invalid or resource-bearing diagrams
 remain code. In paired PC conversations, an idle empty composer can show the

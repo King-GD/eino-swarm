@@ -49,7 +49,12 @@ func (e *Engine) Restore(ctx context.Context, progress func(completed, total int
 			return err
 		}
 		e.restoreMu.Lock()
-		err := e.restoreThread(ctx, &threads[i], byThread[threads[i].ID])
+		_, err := e.store.RecoverTaskPanelSourcesForThread(ctx, threads[i].ID)
+		if err != nil {
+			err = fmt.Errorf("recover panel source observations: %w", err)
+		} else {
+			err = e.restoreThread(ctx, &threads[i], byThread[threads[i].ID])
+		}
 		e.restoreMu.Unlock()
 		if err != nil {
 			if ctx.Err() != nil {

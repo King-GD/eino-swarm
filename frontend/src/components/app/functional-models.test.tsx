@@ -54,8 +54,31 @@ it("explains missing translation and image capabilities instead of hiding their 
  expect(screen.getByText("Translation", { exact: true })).toBeInTheDocument()
  expect(screen.getByText("Image generation", { exact: true })).toBeInTheDocument()
  expect(screen.getByText(/client does not yet support image generation/)).toBeInTheDocument()
+ expect(screen.getByRole("combobox", { name: "Image generation" })).toBeDisabled()
  expect(screen.getAllByText(/gateway has not provided an editable/)).toHaveLength(2)
  expect(screen.queryByLabelText("Image generation Provider")).toBeNull()
+})
+
+it("lists gateway, third-party and local models in separate groups", () => {
+  const onChange = vi.fn()
+  const value = settings()
+  value.model_policy!.account_sources = {
+    "gateway:origin": { authorized: true, available: true, configurable: true, capabilities: { translation: { supported: true, available: true, configurable: true, endpoints: ["chat_completions"] } } },
+    "gateway:partner": { authorized: true, available: true, configurable: true, capabilities: { translation: { supported: true, available: true, configurable: true, endpoints: ["chat_completions"] } } },
+  }
+  useApp.setState({ models: [
+    { id: "o", provider_id: "gateway:origin", provider_label: "Origin", label: "origin-chat", model: "origin-chat", ready: true, source: "account", catalog_group: "original" },
+    { id: "p", provider_id: "gateway:partner", provider_label: "Partner", label: "partner-chat", model: "partner-chat", ready: true, source: "account", catalog_group: "third_party" },
+    { id: "l", provider_id: "own", provider_label: "Personal", label: "chat", model: "chat", ready: true, source: "provider" },
+  ] })
+  render(<FunctionalModels settings={value} onChange={onChange} />)
+  fireEvent.click(screen.getByLabelText("Translation Provider"))
+  expect(screen.getByText("Gateway")).toBeInTheDocument()
+  expect(screen.getByText("Third-party")).toBeInTheDocument()
+  expect(screen.getByText("Local")).toBeInTheDocument()
+  fireEvent.click(screen.getByRole("option", { name: "partner-chat" }))
+  expect(onChange.mock.lastCall?.[0].models.bindings.translation).toEqual({ provider_id: "gateway:partner", model: "partner-chat" })
+  expect(screen.getByRole("combobox", { name: "Image generation" })).toBeEnabled()
 })
 
 it("clears the old search pin when disabling semantic search", () => {

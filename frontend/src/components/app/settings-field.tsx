@@ -169,6 +169,7 @@ export function SettingsChoice({
   onValueChange,
   placeholder,
   ariaLabel,
+  disabled,
   children,
 }: {
   label: string
@@ -180,6 +181,7 @@ export function SettingsChoice({
   onValueChange: (value: string) => void
   placeholder?: string
   ariaLabel?: string
+  disabled?: boolean
   children: ReactNode
 }) {
   return (
@@ -190,7 +192,7 @@ export function SettingsChoice({
       query={query}
       search={search}
     >
-      <Select value={value} onValueChange={onValueChange}>
+      <Select value={value} onValueChange={onValueChange} disabled={disabled}>
         <SelectTrigger
           aria-label={ariaLabel ?? label}
           className={settingsSelectTriggerClass}

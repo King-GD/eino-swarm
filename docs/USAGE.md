@@ -9,7 +9,7 @@ behavior boundaries in [FEATURES](FEATURES.md) and [CONTRACTS](CONTRACTS.md).
 
 Configure **Settings → Models** on the PC. Voice input and spoken answers have
 separate switches, both initially off. Managed gateway mode reuses the account's
-enabled recognition/speech roles; editable gateways allow functional overrides. In local mode choose a service and its voice
+enabled recognition/speech roles; editable gateways allow functional overrides. In local mode, voice source account uses the signed-in account's enabled recognition or speech role. You can instead choose a service and its voice
 model, or configure a separate OpenAI-compatible endpoint. Select the recognition
 language, recording limit and, for playback, voice, speed and audio format.
 Try recording or playback in Settings to check the selected service.
@@ -107,10 +107,14 @@ stop the conversation.
 See [Configuration](CONFIG.md).
 
 **Settings → Models → Functional models** selects conversation, title, compression,
-embedding, recognition, spoken-answer and OCR models. The decisions role is a
+translation, embedding, recognition, spoken-answer, OCR and image-generation
+models. Image generation uses the same selector; this client does not call it
+yet, and a choice is kept. The decisions role is a
 background call and is not listed. Unchanged gateway
 roles follow updated server defaults. An explicit choice stays until **Use default**
-removes it. LOCAL works without login and uses your configured models plus any separately authorized account catalogs.
+removes it. In LOCAL the menu groups models you can already use: the signed-in
+gateway, an authorized third-party catalog, and providers configured on this
+computer. A group appears only when that source has a model for the function.
 
 In local mode, **Settings → Models** also edits base URL, API key, discovery
 and the default. The switch on a provider row shows that endpoint in the composer; off hides it

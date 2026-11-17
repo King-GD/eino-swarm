@@ -10,6 +10,7 @@ import { FileBrowser } from "@/components/file-browser"
 import { GoalBanner, ScheduleBanner } from "@/components/status-banners"
 import { SelectionActions } from "@/components/selection-actions"
 import { ThreadLog } from "@/components/thread-blocks"
+import { PhoneTaskPanelButton, PhoneTaskPanelSheet, usePhoneTaskPanelView } from "@/components/task-panels"
 import { Button } from "@/components/ui/button"
 import { agentRosterText } from "@/lib/agent-label"
 import { installAndroidBack } from "@/lib/android-back"
@@ -28,6 +29,7 @@ export function ThreadScreen({
   prediction,
   onReadVisibility,
   fileLink,
+  panelOwnerKey = "",
   blocks,
   hasMore,
   loadingOlder,
@@ -63,6 +65,7 @@ export function ThreadScreen({
   detail: ThreadDetail
   onReadVisibility?: (visible: boolean) => void
   fileLink?: RemoteLink
+  panelOwnerKey?: string
   blocks: CompactBlock[]
   hasMore?: boolean
   loadingOlder?: boolean
@@ -108,7 +111,8 @@ export function ThreadScreen({
     { id: "stopped", label: t("thread.agent.stoppedGroup", { n: stoppedAgents.length }), agents: stoppedAgents },
   ]
   const [agentPage, setAgentPage] = useState("chat")
-  useLayoutEffect(() => { onReadVisibility?.(agentPage === "chat") }, [agentPage, onReadVisibility])
+  const taskPanels = usePhoneTaskPanelView(fileLink, detail.id, panelOwnerKey)
+  useLayoutEffect(() => { onReadVisibility?.(agentPage === "chat" && !taskPanels.open) }, [agentPage, onReadVisibility, taskPanels.open])
   const selectedAgent = agents.find((agent) => agent.id === agentPage)
   const ask = pendingAsk(manager)
   const opening = !caughtUp && blocks.length === 0
@@ -144,10 +148,11 @@ export function ThreadScreen({
   }
 
   useEffect(() => installAndroidBack(() => {
+    if (taskPanels.open) { taskPanels.close(); return true }
     if (agentPage === "chat" || agentPage === "files") return false
     changePage(agentPage === "agents" ? "chat" : "agents")
     return true
-  }), [agentPage])
+  }), [agentPage, taskPanels.open, taskPanels.close])
 
   useEffect(() => {
     if (asking) return
@@ -276,12 +281,14 @@ export function ThreadScreen({
   }
 
   if (agentPage === "files" && fileLink) {
-    return <FileBrowser link={fileLink} threadId={detail.id} onClose={() => changePage("chat")}
-      status={<GoalBanner detail={detail} running={running} />} />
+    return <><div className="flex min-h-0 flex-1 flex-col" inert={taskPanels.open} aria-hidden={taskPanels.open}>
+      <FileBrowser link={fileLink} threadId={detail.id} onClose={() => changePage("chat")}
+        status={<GoalBanner detail={detail} running={running} />} />
+    </div><PhoneTaskPanelSheet view={taskPanels} /></>
   }
 
   return (
-    <main className="mx-auto flex h-full min-w-0 w-full max-w-lg flex-col overflow-hidden bg-background">
+    <><main inert={taskPanels.open} aria-hidden={taskPanels.open} className="mx-auto flex h-full min-w-0 w-full max-w-lg flex-col overflow-hidden bg-background">
       <header className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-1">
         <Button
           variant="ghost"
@@ -310,6 +317,7 @@ export function ThreadScreen({
             </span>
           ) : null}
         </div>
+        <PhoneTaskPanelButton view={taskPanels} />
         {agentPage === "chat" && fileLink ? (
           <Button variant="ghost" className="h-8 shrink-0 px-2 text-xs" onClick={() => changePage("files")}>
             <FileText className="mr-1 size-4" />{t("thread.files")}
@@ -535,7 +543,7 @@ export function ThreadScreen({
         onTune={onTune}
         onSubmit={asking ? onAnswer : onSend}
       /> : null}
-    </main>
+    </main><PhoneTaskPanelSheet view={taskPanels} /></>
   )
 }
 

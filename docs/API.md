@@ -674,7 +674,13 @@ each third click. Any other value is `400` with `invalid_product_mode`.
 `GET /api/meta` reports the resolved value as `product_mode` (`fofa` or `local`).
 `GET /api/settings` does the same under `product.mode`. Both meta and settings
 also publish `model_policy: {mode, configurable, ready, scope, defaults?, bindings?,
-roles?}`. Its client-facing `mode` is `local` or `gateway`. Only the existing
+roles?, functional_catalogs?}`. Its client-facing `mode` is `local` or `gateway`.
+`functional_catalogs` lists each signed-in catalog's embedding, transcription and
+speech names with that catalog's provider id, label and `catalog_group`. Those
+names are absent from `GET /api/models`. The Settings rows for those three
+functions use this list and still hide a source that has not authorized the
+function. An older response without the field keeps the single
+`account_models.kinds` list. Only the existing
 account-portrait triple-click debug entry changes product mode; there is no normal
 mode selector. A running turn or worker keeps the model it already opened and
 does not block the change. A model call that has started holds admission until
@@ -694,7 +700,7 @@ while ignoring its source, roles and profile.
 `models.bindings` in Settings is the current scope's role-to-`{provider_id,model}`
 map. A PUT replaces that map without requiring `providers`; `{}` restores defaults.
 Other scope maps are preserved privately. Roles are `conversation`, `title`,
-`compact`, `translation`, `image`, `embedding`, `transcription`, `speech`, `ocr` and `decisions`. Image generation has no client adapter; its Settings row explains that it is unavailable. Unset
+`compact`, `translation`, `image`, `embedding`, `transcription`, `speech`, `ocr` and `decisions`. Image generation has no client adapter. Its Settings row uses the same selector as the other functions and says a saved choice is kept until that call exists. The LOCAL selector groups authorized gateway, third-party and personal models. Unset
 bindings follow updated gateway defaults; explicit bindings keep their selection.
 For `embedding` only, `{ "provider_id": "", "model": "" }` explicitly disables
 semantic search, overriding both a gateway default and a legacy search pin.
@@ -810,6 +816,8 @@ send the field is unchanged, except for the third-party functional projection
 above. An empty account catalog is `no_models`. A catalog
 that only contains non-conversation types stays `ready` and contributes no
 rows here; its counts and embedding names are on `account_models.kinds`.
+LOCAL and gateway mode also publish each signed-in catalog's embedding,
+transcription and speech names on `model_policy.functional_catalogs`.
 `default` on an account row is the name an empty conversation would use.
 `default_follows_setting` is true only when that name is `models.account_model`
 (or, for the user's own endpoint, its configured `model`). A saved account
@@ -3990,3 +3998,11 @@ and honor cancellation; a native bridge missing that original transport refuses
 the request instead of substituting its redirecting native proxy. Native model
 streams retain StreamBody's no-redirect and cancellable HTTP reader; managed
 browser streams reject redirects too. Personal provider compatibility is unchanged.
+
+## Task panel protocol v1
+
+`GET /api/task-panels/catalog` returns `{plugins}`. `GET/PUT /api/task-panels/settings` reads/merges task-panel settings independently of other settings; invalid/unknown/null fields return400. `GET /api/threads/:id/panels` returns `{panels,cursor}`; `GET /api/threads/:id/panels/:panel` returns one owned instance, or404. `GET /api/threads/:id/panels/events` emits an atomic `ready` snapshot and committed `panel_update` snapshot/patch/deleted records on its own cursor. Reconnect does not execute work. There are no renderer-facing data-write or source-start endpoints. Agent tool and iframe contracts are documented in [Task panels](TASK_PANELS.md).
+
+Browser task panels negotiate `panels=1` on the existing conversation events URL. Named `panel_ready`, `panel_update`, `panel_error` frames have no SSE id and carry only their own body cursor. They never enter transcript replay or consume another persistent browser connection. Legacy subscriptions without the query retain their original frames.
+
+Paired phones use read-only Pairlink `task_panels`, `task_panel_read` and `task_panel_cancel`. The manifest contains no bulk state. A read freezes one `{panel}` snapshot or an exact-base `{change}` patch, transferred in at most36KiB raw/base64 chunks under the sealed frame cap. `panel_transfer` binds token, thread/panel identity, revision, complete size and SHA-256 to every offset. Continuation/cancel requests must name the same thread, panel and token. The complete envelope is at most64MiB; oversized manifests/transfers return `too_large`, invalid scope/offset `bad_request`, missing instances `not_found`, and stale tokens `transfer_expired`. One connection retains one immutable body until replacement, exact cancel or close. New manifest revisions never change an in-flight body. See [mobile transport details](TASK_PANELS.md#paired-mobile-transport).

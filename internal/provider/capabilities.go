@@ -136,12 +136,25 @@ func (p *Pool) guardCapability(inner model.BaseChatModel, id, role string) model
 	if !config.KnownModelRole(role) {
 		role = "conversation"
 	}
-	return &recordingModel{inner: inner, onResult: p.capabilityResult, policyUse: func() (func(), error) {
+	guarded := &recordingModel{inner: inner}
+	if shared, ok := inner.(*recordingModel); ok {
+		// Keep capability checks on the existing request admission. A second
+		// recording layer loses the gate identity and counts cancelled waits
+		// as calls before the inner layer has admitted any HTTP request.
+		*guarded = *shared
+	}
+	policyUse := guarded.policyUse
+	guarded.onResult = p.capabilityResult
+	guarded.policyUse = func() (func(), error) {
 		if source := p.accountForExecution(id); source == nil || !source.allowsRole(role) {
 			return nil, ErrModelPolicy
 		}
+		if policyUse != nil {
+			return policyUse()
+		}
 		return func() {}, nil
-	}}
+	}
+	return guarded
 }
 
 // RefreshCapabilities requests discovery on its existing owner loop.

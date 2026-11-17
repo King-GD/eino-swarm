@@ -16,7 +16,7 @@ func TestFunctionalBindingsAreValidatedAndDetached(t *testing.T) {
 		{"local", "title", "own", "small", true}, {"gateway:scope", "speech", "gateway:account", "voice", true},
 		{"bad", "title", "own", "small", false}, {"local", "unknown", "own", "small", false},
 		{"local", "title", "", "small", false}, {"local", "title", "own", "", false},
-		{"local", "title", "gateway:account", "small", false},
+		{"local", "title", "gateway:account", "small", true},
 	} {
 		t.Run(tc.scope+tc.role+tc.provider+tc.model, func(t *testing.T) {
 			cfg := Default()
