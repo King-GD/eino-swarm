@@ -1,3 +1,5 @@
+import { refreshGatewayVoiceModels } from "./gateway-account"
+import { publishGatewayCapabilities } from "./gateway-capabilities"
 import { GATEWAY_MODEL_REFRESH_EVENT } from "./gateway-models"
 import { invalidateGatewayCapabilities, GATEWAY_CAPABILITY_REFRESH_EVENT } from "./gateway-capabilities"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -130,6 +132,13 @@ export function useGatewayAccount() {
           if (round !== generation.current || controller.signal.aborted || !sameGatewaySession(current)) return
           if (err instanceof GatewayError && [401, 403].includes(err.status)) await failure(err)
           else putError("pc_upgrade_failed")
+        }
+      }
+      if (state.status === "authorized" && state.bootstrap) {
+        const speech = await refreshGatewayVoiceModels(state.session, state.bootstrap, gatewayFetch, controller.signal)
+        if (round === generation.current && !controller.signal.aborted && sameGatewaySession(current)) {
+          putBootstrap(speech)
+          publishGatewayCapabilities(state.session, speech)
         }
       }
     } catch (err) {

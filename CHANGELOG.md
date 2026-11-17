@@ -27,6 +27,13 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Phone Gateway voice is available without configuring or enabling voice on a
+  PC. Recognition and playback use independently authorized defaults, while
+  personal PC/phone overrides remain independent.
+- Multiple PCs share one Hub WebSocket with separate encrypted sessions, fixing
+  periodic reconnect banners caused by background connections evicting the
+  selected PC. Unchanged startup metadata no longer updates page state.
+
 - A conversation kept from LOCAL runs on the managed third-party preset after
   switching to gateway mode. The stored provider and model stay in place for a
   later LOCAL session. Choosing a different model is still refused.

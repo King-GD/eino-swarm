@@ -66,7 +66,7 @@ export function httpToWS(hub: string): string {
   const u = new URL(hub)
   if (u.protocol === "https:") u.protocol = "wss:"
   else if (u.protocol === "http:") u.protocol = "ws:"
-  const path = u.pathname.replace(/\/$/, "")
+  const path = u.pathname.replace(/\/+$/, "")
   u.pathname = path + "/pairlink/v1/ws"
   u.search = ""
   u.hash = ""

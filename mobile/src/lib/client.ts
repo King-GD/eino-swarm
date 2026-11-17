@@ -1,3 +1,4 @@
+import { openHubSocket, openBrowserSocket, type HubSocket, type SocketOpener } from "./hub-socket"
 import { b64urlToBytes, bytesToB64url, bytesToHex, equalBytes, hexToBytes } from "./bytes"
 import { fingerprint, finish, initiate, type Identity, type Session } from "./crypto"
 import { t } from "./i18n"
@@ -186,7 +187,7 @@ export function linkFromBind(bound: {
 }
 
 export class DeviceLink {
-  private ws: WebSocket | null = null
+  private ws: HubSocket | null = null
   private sess: Session | null = null
   private pending = new Map<string, PendingWait>()
   private keepTimer = 0
@@ -219,45 +220,50 @@ export class DeviceLink {
   async connect(
     hubURL: string,
     ticket: string,
-    open: (url: string, protocol: string) => WebSocket = (u, p) => new WebSocket(u, [p]),
+    open: SocketOpener = openBrowserSocket,
   ): Promise<void> {
     this.closing = false
     this.dropped = false
     const url = httpToWS(hubURL)
     const proto = TICKET_PROTO + ticket
-    const ws = open(url, proto)
-    ws.binaryType = "arraybuffer"
+    const ws = openHubSocket(url, proto, this.identity.pub, this.hostPub, this.sessionID, open)
     this.ws = ws
-    await new Promise<void>((resolve, reject) => {
-      const timer = window.setTimeout(
-        () => reject(new LinkFault("ws timeout", "network")),
-        WS_OPEN_TIMEOUT_MS,
-      )
-      const fail = (err: Error) => {
-        window.clearTimeout(timer)
-        reject(err)
-      }
-      ws.onopen = () => {
-        window.clearTimeout(timer)
-        resolve()
-      }
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timer = window.setTimeout(
+          () => reject(new LinkFault("ws timeout", "network")),
+          WS_OPEN_TIMEOUT_MS,
+        )
+        const fail = (err: Error) => {
+          window.clearTimeout(timer)
+          reject(err)
+        }
+        ws.onopen = () => {
+          window.clearTimeout(timer)
+          resolve()
+        }
+        ws.onerror = () => {
+          window.setTimeout(() => {
+            if (ws.readyState !== 1) fail(new LinkFault("ws error", "network"))
+          }, 0)
+        }
+        ws.onclose = (ev) => fail(faultFromClose(ev))
+      })
+      this.announceLabels()
+      await this.handshake()
+      ws.onmessage = (ev) => this.onMessage(ev)
       ws.onerror = () => {
         window.setTimeout(() => {
-          if (ws.readyState !== 1) fail(new LinkFault("ws error", "network"))
+          if (this.ws === ws) this.drop(new LinkFault("ws error", "network"))
         }, 0)
       }
-      ws.onclose = (ev) => fail(faultFromClose(ev))
-    })
-    this.announceLabels()
-    await this.handshake()
-    ws.onmessage = (ev) => this.onMessage(ev)
-    ws.onerror = () => {
-      window.setTimeout(() => {
-        if (this.ws === ws) this.drop(new LinkFault("ws error", "network"))
-      }, 0)
+      ws.onclose = (ev) => this.drop(faultFromClose(ev))
+      this.startKeepAlive()
+    } catch (error) {
+      if (this.ws === ws) { this.ws = null; this.sess = null }
+      ws.close()
+      throw error
     }
-    ws.onclose = (ev) => this.drop(faultFromClose(ev))
-    this.startKeepAlive()
   }
 
   /** Hub-visible name and software version. Not a sealed hello. */

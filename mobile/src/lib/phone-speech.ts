@@ -1,4 +1,5 @@
-import { gatewayCapabilityAllows, GATEWAY_CAPABILITIES_EVENT } from "./gateway-capabilities"
+import { selectPhoneSpeech, speechExecutionKey, type VoiceOwner } from "./phone-speech-selection"
+import { currentGatewayVoice, gatewayCapabilityAllows, GATEWAY_CAPABILITIES_EVENT } from "./gateway-capabilities"
 import { useEffect, useSyncExternalStore } from "react"
 import { speechRoute, type SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
 import { speechPlayback } from "../../../frontend/src/lib/speech-media"
@@ -36,42 +37,50 @@ export function cancelPhoneSpeech(): void {
   window.dispatchEvent(new Event("zwai.phone.speech.cancel"))
 }
 
-function publish(changed: boolean) {
-  if (changed) cancelPhoneSpeech()
-  if (standalone) {
-    const speech=localSpeechSnapshot()
-    state={epoch:state.epoch+(changed?1:0),snapshot:speech,connected:true,standalone:true,
-      inputReady:speech.input.enabled&&speech.input.ready,outputReady:speech.output.enabled&&speech.output.ready}
-    for (const listener of listeners) listener()
-    return
-  }
-  const speech = source?.cached?.snapshot
+let owners: Partial<Record<"input" | "output", VoiceOwner>> = {}
+let executionKey = ""
+let pcOwner: RemoteLink | null | undefined
+let gatewayOwner = ""
+
+function publish(forceCancel: boolean) {
   const session = loadGatewaySession()
+  const authorized = Boolean(session && gatewayAuthorityCurrent(session))
   const connected = Boolean(source?.link?.alive())
-  const routeAllowed = (kind: "input" | "output") => {
-    const route = speech && speechRoute(speech, kind)
-    return connected && (route?.execution === "pc_local" || Boolean(route?.execution === "gateway" && session &&
-    route.gateway_origin === session.origin && gatewayAuthorityCurrent(session) &&
-    gatewayCapabilityAllows(session, route.source_id, kind === "input" ? "transcription" : "speech") &&
-    (!source?.pc.gatewayOrigin || source.pc.gatewayOrigin === route.gateway_origin) &&
-    (!source?.pc.gatewayOwnerID || source.pc.gatewayOwnerID === session.user.id) &&
-    (!source?.pc.gatewayMobileID || source.pc.gatewayMobileID === session.device.id)))
+  const preferred = standalone ? localSpeechSnapshot() : source?.cached?.snapshot
+  const gateway = session && authorized ? currentGatewayVoice(session) : undefined
+  const gatewayAllowed = (kind: "input" | "output") => {
+    const route = preferred && speechRoute(preferred, kind)
+    return Boolean(route?.execution === "gateway" && session && authorized && route.gateway_origin === session.origin &&
+      gatewayCapabilityAllows(session, route.source_id, kind === "input" ? "transcription" : "speech") &&
+      (!source?.pc.gatewayOrigin || source.pc.gatewayOrigin === session.origin) &&
+      (!source?.pc.gatewayOwnerID || source.pc.gatewayOwnerID === session.user.id) &&
+      (!source?.pc.gatewayMobileID || source.pc.gatewayMobileID === session.device.id))
   }
-  state = { epoch: state.epoch + (changed ? 1 : 0), snapshot: speech, syncedAt: source?.cached?.syncedAt,
-    host: source?.pc.label || source?.pc.fingerprint, connected,
-    inputReady: Boolean(routeAllowed("input") && speech?.input.enabled && speech.input.ready), outputReady: Boolean(routeAllowed("output") && speech?.output.enabled && speech.output.ready) }
+  const chosen = selectPhoneSpeech(gateway, preferred, standalone, connected, gatewayAllowed)
+  owners = chosen.owners
+  const speech = chosen.snapshot
+  const key = speechExecutionKey(speech, owners)
+  const usesPC = Object.values(owners).includes("pc")
+  const usesGateway = Object.values(owners).includes("gateway")
+  const nextPC = usesPC ? source?.link : undefined
+  const nextGateway = usesGateway && session ? JSON.stringify([session.origin, session.token, session.user.id, session.device.id]) : ""
+  const changed = forceCancel || executionKey !== key || pcOwner !== nextPC || gatewayOwner !== nextGateway
+  executionKey = key; pcOwner = nextPC; gatewayOwner = nextGateway
+  if (changed) cancelPhoneSpeech()
+  state = { epoch: state.epoch + (changed ? 1 : 0), snapshot: speech,
+    syncedAt: usesPC ? source?.cached?.syncedAt : undefined, host: usesPC ? source?.pc.label || source?.pc.fingerprint : undefined,
+    connected, standalone, inputReady: Boolean(speech?.input.enabled && speech.input.ready), outputReady: Boolean(speech?.output.enabled && speech.output.ready) }
   for (const listener of listeners) listener()
 }
 
-/** Remote speech requires the selected live PC. LOCAL phone speech has its
- * own explicit personal-provider binding and does not consume this cache. */
+/** Personal PC overrides require that PC. Gateway defaults use only this
+ * phone's own account capability and remain independent of PC voice setup. */
 export function setPhoneSpeechSource(pc: SavedLink | undefined, link: RemoteLink | null): void {
   if (pc && source && speechBinding(pc) === speechBinding(source.pc)) {
-    // Losing the PC retires voice execution together with the task surface.
-    const localChanged = source.link !== link || state.connected !== Boolean(link?.alive())
+    // A PC disconnect retires its overrides; Gateway defaults own no PC socket.
     source.pc = pc
     source.link = link
-    publish(localChanged)
+    publish(false)
     return
   }
   source = pc ? { pc, link, cached: loadSpeechCache(pc) } : undefined
@@ -84,12 +93,11 @@ export function acceptPhoneSpeechConfig(pc: SavedLink, raw: unknown): boolean {
   if (!cached) {
     forgetSpeechCache(pc)
     source.cached = undefined
-    publish(true)
+    publish(false)
     return false
   }
-  const changed = JSON.stringify(cached.snapshot) !== JSON.stringify(source.cached?.snapshot)
   source.cached = cached
-  publish(changed)
+  publish(false)
   return true
 }
 
@@ -125,7 +133,7 @@ export function usePhoneSpeechSync(link: RemoteLink | null, pc: SavedLink | unde
           // A live old host cannot authorize cached features it no longer declares.
           source.cached = undefined
           forgetSpeechCache(pc)
-          publish(true)
+          publish(false)
         }
       } catch { if (alive) publish(false) }
       finally { busy = false }
@@ -143,7 +151,7 @@ export function usePhoneSpeechSync(link: RemoteLink | null, pc: SavedLink | unde
       authorityAllowed = nextAllowed
       publish(changed)
     }
-    const authorityRefused = () => publish(true)
+    const authorityRefused = () => publish(false)
     const visibility = () => { if (document.hidden) cancelPhoneSpeech(); else void refresh() }
     const timer = setInterval(() => { void refresh() }, 15000)
     window.addEventListener("focus", refresh)
@@ -169,10 +177,12 @@ export function usePhoneSpeechSync(link: RemoteLink | null, pc: SavedLink | unde
 export function usePhoneSpeech(): PhoneSpeechState { return useSyncExternalStore(subscribe, snapshot, snapshot) }
 
 async function call(operation: "transcribe" | "speak", input: Blob | string, signal: AbortSignal): Promise<string | SpeechAudio> {
-  const local = standalone
   const target = source
-  const speech = target?.cached?.snapshot
-  if (!local && (!target || !target.link?.alive() || !speech || !(operation === "transcribe" ? state.inputReady : state.outputReady))) throw new SpeechCallError("unavailable")
+  const speech = state.snapshot
+  const kind = operation === "transcribe" ? "input" : "output"
+  const owner = owners[kind]
+  const epoch = state.epoch
+  if (!speech || !owner || !(kind === "input" ? state.inputReady : state.outputReady)) throw new SpeechCallError("unavailable")
   const controller = new AbortController()
   const abort = () => controller.abort()
   requests.add(controller)
@@ -180,13 +190,13 @@ async function call(operation: "transcribe" | "speak", input: Blob | string, sig
   let retained = false
   const release = () => { signal.removeEventListener("abort", abort); requests.delete(controller); abort() }
   const check = () => {
-    if (controller.signal.aborted || (local ? !standalone : source !== target || !target?.link?.alive())) throw new DOMException("Aborted", "AbortError")
+    if (controller.signal.aborted || state.epoch !== epoch || (owner === "pc" && (source?.link !== target?.link || !target?.link?.alive()))) throw new DOMException("Aborted", "AbortError")
   }
   try {
     let result: string | SpeechAudio
-    if (local) {
+    if (owner === "phone") {
       result = await localPhoneSpeechCall(operation, input, controller.signal)
-    } else if (speechRoute(speech!, operation === "transcribe" ? "input" : "output")?.execution === "gateway") {
+    } else if (owner === "gateway") {
       const session = loadGatewaySession()
       if (!session) throw new SpeechCallError("unavailable")
       result = await gatewaySpeechCall(speech!, session, operation, input, controller.signal)

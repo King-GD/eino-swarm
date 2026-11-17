@@ -12,23 +12,27 @@ and open the desktop app, sign in to the same gateway and keep it online. There
 is no direct gateway Chat fallback. Disconnecting returns to that page; the draft
 and history remain mounted for reconnection.
 
-Paired voice uses the selected PC's safe settings only while it is online and
-ready. Recognition and read aloud each follow their resolved service: unchanged
-Gateway defaults use direct phone-to-Gateway HTTP with this phone's session; a
-personal/custom PC binding uses the encrypted PC route. New PCs publish each
-direction's route explicitly; old snapshots keep their legacy routing. Gateway voice uses the phone's own same-origin credential. Cached status
-cannot enable offline calls. Both directions default off. Dictation creates an
-editable draft and never sends it; read aloud skips code blocks. LOCAL direct
-Chat can configure recognition and spoken-answer models independently under its
-personal model services, using only this phone's provider credentials.
+Voice input and read aloud automatically use this phone account’s authorized
+Gateway models, even if the PC has no voice configuration. Each direction follows
+its own advertised role and source. Missing role defaults are resolved from the
+source’s authorized typed model catalog; no model-name guessing is used. Calls
+use this phone’s same-origin Mobile Bearer and the source’s API base. Gateway
+voice does not need a live PC voice service. Account conversations still need a
+PC; dictation remains an editable draft and never sends automatically.
 
-Paired voice parameters come from the PC. Recognition and playback are enabled
-only when the PC advertises readiness and this phone's independently negotiated
-source permits the corresponding role. Each direction includes its source ID;
-the phone uses that source's own bootstrap API base and its own Bearer. Unknown
-or failed discovery closes Gateway features and keeps saved preferences; use
-**User center → Retry** to negotiate again. API access disabled does not sign out
-or disconnect account PCs. Personal LOCAL phone services remain independent.
+An enabled personal PC voice configuration overrides its direction while that
+PC is live and ready. LOCAL phone personal voice settings can also override each
+direction. Private PC credentials never enter the phone. Unknown Gateway grants
+keep its voice controls unavailable with **User center → Retry**; saved personal
+choices remain intact. Ordinary PC metadata polling and PC disconnection do not
+interrupt unchanged phone-owned Gateway speech.
+
+Multiple PCs share one physical WebSocket per phone public key and complete Hub
+endpoint. Every PC retains its own encrypted session, RPC waiters and lifetime.
+Closing or timing out one PC leaves the others connected; the final PC releases
+the socket. Background connection warming and 15-second heartbeats reuse that
+transport instead of replacing it. Only a real shared-socket failure starts
+recovery for its peers.
 
 Choose **PCM (streaming playback)** in Voice settings to start direct Gateway or
 personal-service playback as audio arrives. MP3/WAV retain complete-segment

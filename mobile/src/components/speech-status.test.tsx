@@ -34,13 +34,13 @@ describe("speech status displays each operation's actual execution route", () =>
   })
 
   it("keeps both standalone operations on the phone's own service", () => {
-    show(config, true, true)
+    show({ ...config, output: { ...config.output, execution: "pc_local", gateway_origin: undefined } }, true, true)
     for (const row of [screen.getByText(/^Voice input:/), screen.getByText(/^Read aloud:/)]) expect(row).toHaveTextContent("This phone uses its own model service")
   })
 
-  it("uses the Gateway offline explanation when only read aloud has a Gateway route", () => {
+  it("explains the disconnected personal PC route without disabling Gateway playback", () => {
     show(config, false)
-    expect(screen.getByRole("status")).toHaveTextContent("Connect to this PC before using its Gateway speech settings")
+    expect(screen.getByRole("status")).toHaveTextContent("Connect to this PC to use its local speech models.")
   })
 
   it("retains the legacy global route for an old host's output", () => {

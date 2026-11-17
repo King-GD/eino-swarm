@@ -24,7 +24,7 @@ export function useEngineStartup(link: RemoteLink | null): EngineStartup | undef
             data_generation: typeof r.data_generation === "number" ? r.data_generation : undefined,
           }
           if (r.product_mode === "fofa" || r.product_mode === "local") value.product_mode = r.product_mode
-          setSnapshot({ link, value })
+          setSnapshot(previous => previous?.link === link && JSON.stringify(previous.value) === JSON.stringify(value) ? previous : { link, value })
         }
       } catch {
         // Loss of metadata is not readiness. Keep the last acknowledged state.

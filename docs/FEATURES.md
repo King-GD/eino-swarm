@@ -52,7 +52,7 @@ This is the current user-facing capability map. The code and tests named below a
 ### F-148 Voice input and spoken answers
 
 - 目的：在桌面、Web、iOS 和 Android 听写可编辑草稿并朗读完成回复。入口：PC Settings → Models、Send 左侧麦克风及 Copy 旁 Read aloud；输入：录音或完成回复正文；输出：草稿文本或音频；前置条件：对应开关开启且配置就绪；失败表现：保留草稿、显示可重试错误。Input and output are independently off by default. Dictation never sends automatically or overwrites text edited while recognition was pending. Read aloud skips fenced code and diagrams and sequences long prose in order. The PC selection menu uses that same player for settled prose when spoken output is enabled and ready (`F-181`).
-- Paired phones synchronize the explicitly selected PC's non-secret voice settings and execute only while its exact link is live and engine ready. Gateway audio uses the phone's current same-origin Mobile login; PC-local audio uses encrypted RPC. Disconnect cancels owned audio requests and Account mode returns to PC guidance. LOCAL direct Chat has independent voice selections referencing personal providers. Missing configuration, authorization or microphone capability leaves the affected control unavailable; failures never select another PC or service.
+- Phone recognition and playback automatically use the account’s authorized Gateway defaults, independently of PC voice configuration. Personal PC overrides require that PC’s live link; LOCAL phone personal overrides remain independent. Only the phone’s own Mobile login authorizes Gateway audio. A PC metadata refresh or disconnection does not retire unchanged phone-owned speech. Account conversations still require a PC. Model discovery is typed, source-specific and credential-scoped. Evidence: `mobile/src/lib/phone-gateway-voice.test.tsx`, `mobile/src/lib/gateway-speech.test.ts`.
 - Audio format **PCM (streaming playback)** starts PC/Web and direct phone playback as synthesis arrives. Raw PCM and OpenAI speech SSE share the cancelable player; MP3/WAV and PC-local encrypted RPC retain buffered playback.
 - Recognition and playback independently use direct phone-to-Gateway requests when their resolved models are the Gateway defaults. Personal PC overrides retain PC audio RPC; matching names or URLs do not change source identity. Updated PCs publish explicit routes for both directions. Evidence: `internal/speech/input_route_test.go`, `mobile/src/lib/phone-speech.test.ts`.
 - Automatic capture normalizes iPhone MP4/AAC to WAV for ASR compatibility. Paired-PC dictation and complete-answer playback survive unrelated phone model-catalog refreshes. Evidence: `mobile/e2e/speech-mp4.spec.ts`, `mobile/src/lib/phone-speech.test.ts`.
@@ -364,6 +364,7 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-210 Pair a phone with a PC
 
+- 多 PC 共用同一 Hub 的手机物理长连接，各自保留独立加密会话、RPC 与任务视图；周期心跳及后台补连不会挤掉当前 PC。未变化的启动元数据不触发整页状态更新。关闭或超时一台 PC 只释放其逻辑会话。关联契约：`C-006`；实现与回归用例：`mobile/src/lib/hub-socket.ts`、`mobile/src/lib/client.ts`、`mobile/src/lib/multi-pc-link.test.ts`。
 - 目的：安全绑定手机和 PC；使用者：手机用户；入口：手机登录同一账号后选择这台电脑；输入：账号授权和选中的在线 PC；输出：加密连接和设备列表；前置条件：hub 和 PC 在线；失败表现：网络、过期或 host offline；关联契约：`C-006`；实现证据：`internal/remote`, `mobile/src/components/gateway-account-screen.tsx`, `mobile/src/lib/link.ts`。Settings → Phone 不展示配对 QR。
 - PC 的 hub 注册在受控后台生命周期内执行；网络迟缓只影响手机连接，不阻塞本地程序启动。Stop／Reload 可取消注册，旧结果不得重新启用已停止或已替换的 host。证据：`internal/remote/host.go`、`internal/remote/host_start.go`、`internal/remote/host_start_test.go`、`internal/app/startup_remote_test.go`。
 
@@ -459,7 +460,7 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-230 Direct model chat
 
-- 直连 Chat 在手机 LOCAL 调试模式使用个人模型，并分别获取登录账号已授权的第三方预置和额外网关目录，按来源分组。同名模型保留不同路由，无权限或空目录不显示该组；撤权不退出登录。Account 等待 PC；历史账号直连记录按同账号来源隔离。LOCAL 语音单独引用个人 provider，凭据不进语音偏好。证据：`mobile/src/components/gateway-account-shell.tsx`、`mobile/src/lib/local-speech.test.ts`、`mobile/e2e/gateway-account.spec.ts`；关联 C-013／C-048。
+- 直连 Chat 在手机 LOCAL 调试模式使用个人模型，并分别获取登录账号已授权的第三方预置和额外网关目录，按来源分组。同名模型保留不同路由，无权限或空目录不显示该组；撤权不退出登录。Account 等待 PC；历史账号直连记录按同账号来源隔离。LOCAL 语音默认使用手机账号获准的网关模型，也可按方向引用个人 provider 覆盖，凭据不进语音偏好。证据：`mobile/src/components/gateway-account-shell.tsx`、`mobile/src/lib/local-speech.test.ts`、`mobile/e2e/gateway-account.spec.ts`；关联 C-013／C-048。
 
 - 新旧 Chat Completions 推理字段兼容沿用 `F-170`／`C-009`；通过直连的同一思考区块显示，字段名称不影响正文。证据：`mobile/src/lib/openai-wire.ts`、`mobile/e2e/direct-chat-reasoning.spec.ts`。
 - 用户与流式回答复用 `F-220` 的手机 Markdown 代码围栏渲染及原文复制，遵守 `C-032`；证据：`mobile/src/components/direct-chat-screen.tsx`, `mobile/e2e/markdown-highlight.spec.ts`。
