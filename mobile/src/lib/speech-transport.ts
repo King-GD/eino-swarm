@@ -9,7 +9,7 @@ import { putFrames } from "./put-chunks"
 import { OpAudioCancel, OpAudioChunk, OpAudioSpeech, OpAudioTranscribe, type RemoteResponse } from "./rpc"
 
 export class SpeechCallError extends Error {
-  constructor(readonly code: "unavailable" | "failed" | "network" | "timeout" | "too_large" | "invalid_audio" | "empty" | "permission" = "failed") { super(code); this.name = "SpeechCallError" }
+  constructor(readonly code: "unavailable" | "failed" | "network" | "timeout" | "too_large" | "invalid_audio" | "empty" | "permission" = "failed", readonly httpStatus?: number) { super(code); this.name = "SpeechCallError" }
 }
 
 /** A response retains timeout and authority through queued playback. Successful
@@ -140,7 +140,7 @@ export async function endpointSpeechCall(snapshot: SpeechSnapshot, baseURL: stri
     if (!response.ok) {
       await response.body?.cancel().catch(() => undefined)
       if (authority) notifyGatewayRefusal(authority, response.status)
-      throw new SpeechCallError(response.status === 401 || response.status === 403 ? "permission" : "failed")
+      throw new SpeechCallError(response.status === 401 || response.status === 403 ? "permission" : "failed", response.status)
     }
     if (operation === "speak" && snapshot.output.format === "pcm") {
       const audio = await speechAudioResponse(response, aborter.signal, snapshot.limits.output_bytes, true)

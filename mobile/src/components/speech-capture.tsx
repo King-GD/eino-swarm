@@ -17,6 +17,7 @@ export function speechFailureMessage(error: unknown): string {
     if (error.code === "timeout") return t("speech.timeout")
     if (error.code === "empty") return t("speech.empty")
     if (error.code === "too_large") return t("speech.tooLarge")
+    if (error.httpStatus) return t("speech.serviceFailed", { status: error.httpStatus })
   }
   return t("speech.failed")
 }

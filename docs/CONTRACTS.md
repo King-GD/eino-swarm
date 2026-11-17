@@ -4,6 +4,8 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 
 ## C-048 Voice configuration follows the execution source
 
+- Phone voice HTTP errors retain the response status for the retryable UI message. Upstream response bodies and credentials stay out of that message. Network, timeout, empty recognition and size errors keep their distinct categories. Evidence: `mobile/src/lib/speech-transport.test.ts`, `mobile/src/components/speech-errors.test.ts`.
+
 - PC/Web and phone dictation remove only a complete leading `language …<asr_text>` decoder envelope before draft insertion. Plain text, incomplete prefixes and literal tags elsewhere remain unchanged; metadata-only results are empty recognition, never a draft. Raw provider responses remain unchanged. Evidence: `frontend/src/lib/transcription-text.test.ts`, `mobile/src/lib/phone-transcription-text.test.ts`.
 
 - Status: active. Scope: PC/Web voice settings, editable dictation, finished-answer playback, phone configuration synchronization and audio transport. Feature: `F-148`.

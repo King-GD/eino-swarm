@@ -21,6 +21,11 @@ it("reports an unreadable WebView response as a transport failure without exposi
     async () => { throw new TypeError("private network diagnostic") })).rejects.toMatchObject({ name: "SpeechCallError", code: "network", message: "network" })
 })
 
+it("retains the speech service HTTP status without exposing its private error body", async () => {
+  await expect(endpointSpeechCall(config, "https://voice.test/v1", "private-fixture", "speak", "Read this.", new AbortController().signal,
+    async () => new Response("private upstream failure", { status: 500 }))).rejects.toMatchObject({ code: "failed", httpStatus: 500, message: "failed" })
+})
+
 describe("phone speech calls follow the PC's execution mode", () => {
   it("uses the explicit Gateway output with the phone credential while ASR keeps its legacy PC route", async () => {
     const mixed = { ...config, execution: "pc_local" as const, gateway_origin: undefined,

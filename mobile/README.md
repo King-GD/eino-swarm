@@ -5,6 +5,8 @@ Automatic voice capture converts MP4/AAC, WebM/Opus and Ogg recordings to
 recordings use the same conversion instead of uploading an unsupported container.
 Recognition results remove a complete leading `language …<asr_text>` envelope
 before inserting the transcript into the draft; ordinary text remains intact.
+Voice service failures show the returned HTTP status without exposing upstream
+error bodies, separately from network and microphone-permission failures.
 
 Gateway model catalogs refresh after the selected PC acknowledges a mode change
 and when account model permissions change. Older PCs that omit model capability

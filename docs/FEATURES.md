@@ -51,6 +51,8 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-148 Voice input and spoken answers
 
+- Phone voice errors identify the service's HTTP status without exposing its raw error body; transport and microphone permission failures remain distinct. Evidence: `mobile/src/lib/speech-transport.test.ts`, `mobile/src/components/speech-errors.test.ts`.
+
 - Dictation inserts transcript prose without a leading ASR language/control envelope. Plain text and literal markers elsewhere are preserved; metadata-only responses show empty recognition. Evidence: `frontend/src/lib/transcription-text.test.ts`, `mobile/src/lib/phone-transcription-text.test.ts`.
 
 - 目的：在桌面、Web、iOS 和 Android 听写可编辑草稿并朗读完成回复。入口：PC Settings → Models、Send 左侧麦克风及 Copy 旁 Read aloud；输入：录音或完成回复正文；输出：草稿文本或音频；前置条件：对应开关开启且配置就绪；失败表现：保留草稿、显示可重试错误。Input and output are independently off by default. Dictation never sends automatically or overwrites text edited while recognition was pending. Read aloud skips fenced code and diagrams and sequences long prose in order. The PC selection menu uses that same player for settled prose when spoken output is enabled and ready (`F-181`).

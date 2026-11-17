@@ -8,6 +8,9 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Phone voice service failures show their HTTP status instead of only a generic
+  error; private upstream error bodies remain hidden. (`F-148`, `C-048`)
+
 - Automatic voice capture now normalizes WebM/Opus and Ogg as well as MP4/AAC
   to WAV, fixing ASR format rejection on newer iPhones that record WebM.
   Recognition drafts also omit a complete leading ASR language/control envelope.
