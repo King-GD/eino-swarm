@@ -86,6 +86,14 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Added
 
+- An EASM tab beside the conversation panel draws one fixed local asset-portrait
+  result (`frontend/public/easm-data.json`, gitignored because it is real
+  enterprise data): relationship graph with kind filters, local view, search and
+  per-node details, an asset-heat trend, and the third-party supply table with
+  tag evidence. The result shape is documented in
+  [docs/EASM_PROTOCOL.md](docs/EASM_PROTOCOL.md); there is no publish endpoint,
+  event or stored copy — the tab is a viewer for that file.
+
 - Desktop and phone negotiate independent preset/Gateway capabilities with
   schema 1 and ten-role defaults. Features and selectors follow actual grants,
   retain preferences while unavailable, and offer discovery retry. Voice direct

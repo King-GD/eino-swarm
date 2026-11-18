@@ -62,6 +62,15 @@ for the compact count against this model's window, plus this-turn billed
 in/out. The numbers come from the endpoint. Until a window is set, the arc
 still grows and the label stays a count.
 
+The right panel's tabs are Agents, Files, Trace, Memory, and — when
+`frontend/public/easm-data.json` exists — the subject named by that file. The
+EASM tab draws one fixed asset portrait: a relationship graph you can filter by
+node kind, search, restrict to the selected node's neighbourhood, hover for a
+name, and click for details; an asset-heat trend; and the third-party components with their tag
+evidence. **Expand** opens the same graph beside the trend and the table. The
+file is local and gitignored, so a checkout without a real portrait simply has
+no EASM tab. [EASM_PROTOCOL.md](EASM_PROTOCOL.md) describes the format.
+
 Drag the conversation list or the right panel to resize them. Conversations
 and projects sort by last update; drag a row to pin a custom order. On the
 desktop window, drag the title bar to move it; double-click to zoom or

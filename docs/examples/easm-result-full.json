@@ -1,0 +1,379 @@
+{
+  "schema_version": 1,
+  "title": "EASM",
+  "nodes": [
+    {
+      "id": "root:example",
+      "kind": "root",
+      "label": "示例集团",
+      "ip_count": 40000,
+      "detail": {
+        "description": "示例集团是一家虚构企业，用于说明 EASM 数据结构。",
+        "logo": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+        "website": "https://www.example.test/",
+        "region": "中国 / 示例省",
+        "industry": [
+          "信息技术/软件开发",
+          "信息技术/云服务"
+        ],
+        "organizations": [
+          {
+            "name": "示例研究院",
+            "count": 12
+          },
+          {
+            "name": "示例未入图组织",
+            "count": 3
+          }
+        ],
+        "features": [
+          {
+            "kind": "org",
+            "value": "示例集团证书组织",
+            "node_id": "feature:cert-org"
+          },
+          {
+            "kind": "domain",
+            "value": "example.test",
+            "node_id": "domain:example.test"
+          }
+        ]
+      }
+    },
+    {
+      "id": "company:sub",
+      "kind": "company",
+      "label": "示例云服务有限公司",
+      "ip_count": 9000,
+      "detail": {
+        "description": "示例集团的虚构子公司。",
+        "reason": "工商信息显示该公司由示例集团全资控股。",
+        "features": [
+          {
+            "kind": "domain",
+            "value": "example-cloud.test",
+            "node_id": "domain:example-cloud.test"
+          }
+        ]
+      }
+    },
+    {
+      "id": "org:lab",
+      "kind": "org",
+      "label": "示例研究院",
+      "detail": {
+        "reason": "证书组织字段与示例集团一致。"
+      }
+    },
+    {
+      "id": "domain:example.test",
+      "kind": "domain",
+      "label": "example.test",
+      "ip_count": 2500,
+      "detail": {
+        "reason": "example.test 的证书和备案信息均指向示例集团。",
+        "features": [
+          {
+            "kind": "cert",
+            "value": "0A1B2C3D4E5F60718293",
+            "node_id": "feature:cert"
+          },
+          {
+            "kind": "mx",
+            "value": "mx.example.test",
+            "node_id": "feature:mx"
+          }
+        ]
+      }
+    },
+    {
+      "id": "domain:example-cloud.test",
+      "kind": "domain",
+      "label": "example-cloud.test",
+      "detail": {
+        "reason": "example-cloud.test 的证书和备案信息均指向示例集团。",
+        "features": [
+          {
+            "kind": "cert",
+            "value": "0A1B2C3D4E5F60718293",
+            "node_id": "feature:cert"
+          },
+          {
+            "kind": "mx",
+            "value": "mx.example.test",
+            "node_id": "feature:mx"
+          }
+        ]
+      }
+    },
+    {
+      "id": "domain:example-lab.test",
+      "kind": "domain",
+      "label": "example-lab.test",
+      "detail": {
+        "reason": "example-lab.test 的证书和备案信息均指向示例集团。",
+        "features": [
+          {
+            "kind": "cert",
+            "value": "0A1B2C3D4E5F60718293",
+            "node_id": "feature:cert"
+          },
+          {
+            "kind": "mx",
+            "value": "mx.example.test",
+            "node_id": "feature:mx"
+          }
+        ]
+      }
+    },
+    {
+      "id": "feature:cert-org",
+      "kind": "feature",
+      "featureKind": "org",
+      "label": "示例集团证书组织"
+    },
+    {
+      "id": "feature:cert",
+      "kind": "feature",
+      "featureKind": "cert",
+      "label": "*.example.test",
+      "ip_count": 1600,
+      "detail": {
+        "serial": "0A1B2C3D4E5F60718293",
+        "issuer": "Example Test CA",
+        "not_before": "2026-01-01",
+        "not_after": "2027-01-01",
+        "names": [
+          "*.example.test",
+          "example.test",
+          "example-cloud.test"
+        ]
+      }
+    },
+    {
+      "id": "feature:mx",
+      "kind": "feature",
+      "featureKind": "mx",
+      "label": "mx.example.test"
+    },
+    {
+      "id": "feature:asn",
+      "kind": "feature",
+      "featureKind": "asn",
+      "label": "AS64500"
+    },
+    {
+      "id": "feature:icp",
+      "kind": "feature",
+      "featureKind": "icp",
+      "label": "示ICP备00000000号",
+      "detail": {
+        "subject_name": "示例集团"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "root:example",
+      "target": "company:sub",
+      "confirmed": true
+    },
+    {
+      "source": "root:example",
+      "target": "org:lab",
+      "confirmed": true
+    },
+    {
+      "source": "root:example",
+      "target": "domain:example.test",
+      "confirmed": true
+    },
+    {
+      "source": "company:sub",
+      "target": "domain:example-cloud.test",
+      "confirmed": true
+    },
+    {
+      "source": "org:lab",
+      "target": "domain:example-lab.test"
+    },
+    {
+      "source": "domain:example.test",
+      "target": "feature:cert-org",
+      "confirmed": true
+    },
+    {
+      "source": "domain:example-cloud.test",
+      "target": "feature:cert-org",
+      "confirmed": true
+    },
+    {
+      "source": "domain:example.test",
+      "target": "feature:cert",
+      "confirmed": true
+    },
+    {
+      "source": "domain:example-cloud.test",
+      "target": "feature:cert",
+      "confirmed": true
+    },
+    {
+      "source": "domain:example-lab.test",
+      "target": "feature:cert",
+      "confirmed": true
+    },
+    {
+      "source": "domain:example.test",
+      "target": "feature:mx",
+      "confirmed": true
+    },
+    {
+      "source": "domain:example-cloud.test",
+      "target": "feature:mx",
+      "confirmed": true
+    },
+    {
+      "source": "domain:example-cloud.test",
+      "target": "feature:asn",
+      "confirmed": true
+    },
+    {
+      "source": "domain:example-lab.test",
+      "target": "feature:asn",
+      "confirmed": true
+    },
+    {
+      "source": "domain:example.test",
+      "target": "feature:icp",
+      "confirmed": true
+    }
+  ],
+  "summary": {
+    "clues": 11,
+    "fofa_assets": 2350,
+    "fofa_ips": 410
+  },
+  "heat": [
+    {
+      "date": "2026-08-30",
+      "value": 1200
+    },
+    {
+      "date": "2026-09-06",
+      "value": 1350
+    },
+    {
+      "date": "2026-09-13",
+      "value": 1310
+    },
+    {
+      "date": "2026-09-20",
+      "value": 1480
+    },
+    {
+      "date": "2026-09-27",
+      "value": 1420
+    },
+    {
+      "date": "2026-10-04",
+      "value": 0
+    },
+    {
+      "date": "2026-10-11",
+      "value": 1530
+    },
+    {
+      "date": "2026-10-18",
+      "value": 1610
+    },
+    {
+      "date": "2026-10-25",
+      "value": 1580
+    },
+    {
+      "date": "2026-11-01",
+      "value": 1720
+    },
+    {
+      "date": "2026-11-08",
+      "value": 1690
+    },
+    {
+      "date": "2026-11-15",
+      "value": 1880
+    }
+  ],
+  "components": [
+    {
+      "name": "OpenSSH",
+      "count": 64,
+      "tags": [
+        {
+          "type": "cve",
+          "summary": "该组件有近 30 天公开的漏洞。",
+          "evidence": [
+            {
+              "title": "CVE-2099-0002 · 示例说明",
+              "date": "2026-10-28"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "nginx",
+      "display_name": "NGINX",
+      "count": 120,
+      "hot_days": 2,
+      "tags": [
+        {
+          "type": "hot",
+          "summary": "近 30 天出现在 FOFA 产品热搜日榜。",
+          "evidence": [
+            {
+              "title": "FOFA 产品热搜日榜",
+              "date": "2026-10-20"
+            },
+            {
+              "title": "FOFA 产品热搜日榜",
+              "date": "2026-11-02"
+            }
+          ]
+        },
+        {
+          "type": "kev",
+          "summary": "该组件有近 30 天加入 KEV 目录的漏洞，不代表资产已确认受影响。",
+          "evidence": [
+            {
+              "title": "CVE-2099-0001 · 示例说明",
+              "date": "2026-11-05",
+              "url": "https://www.example.test/advisories/CVE-2099-0001",
+              "detail": "虚构的漏洞记录。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Apache-Tomcat",
+      "count": 31,
+      "hot_days": 1,
+      "tags": [
+        {
+          "type": "hot",
+          "summary": "近 30 天出现在 FOFA 产品热搜日榜。",
+          "evidence": [
+            {
+              "title": "FOFA 产品热搜日榜",
+              "date": "2026-11-10"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "jQuery",
+      "count": 18
+    }
+  ]
+}

@@ -28,6 +28,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.4",
+    "force-graph": "1.49.6",
     "katex": "^0.18.7",
     "lucide-react": "^0.469.0",
     "mdast-util-from-markdown": "^2.0.3",

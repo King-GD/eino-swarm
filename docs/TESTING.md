@@ -859,6 +859,22 @@ own server port, data directory and output directory. Do not rebuild its served
 `dist` during a run. Browser results do not substitute for candidate-specific
 native macOS acceptance in `ci-macOS`.
 
+## EASM asset portrait
+
+`frontend/e2e/easm.spec.ts` answers `/easm-data.json` with its own small
+fixture; real enterprise portraits never enter the repository. It checks the
+tab only appears for an acceptable file, that the graph opens fitted with every
+node inside the canvas and no names until hover, that no painted frame shows the
+graph before its first fit (the stage stays transparent until then, sampled once
+per animation frame), that hovering the heat curve names the date without a
+value, that a real click on a node other than the initial selection opens its
+card without rebuilding the graph (`data-layouts` stays the same, in the panel
+and in the enlarged dialog; a rebuild restarts the layout and blanks the
+canvas), that the root card links its site, that the enlarged dialog keeps
+graph, heat trend and supply table together, that a legend filter reports
+`aria-pressed`, and that a component row explains its tags. The pure view math
+and the file guard are unit tests in `frontend/src/lib/easm/`.
+
 ## Original project-history SQL and source reports (`F-410`, `C-036`)
 
 `internal/history` uses real temporary WAL databases for single-statement
