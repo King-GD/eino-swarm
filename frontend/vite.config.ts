@@ -15,6 +15,8 @@ function keepEmbedSentinel() {
 }
 
 export default defineConfig({
+  // Local copies of asset portraits may still be under the old public path.
+  publicDir: false,
   plugins: [react(), taskPanelBuild(__dirname, build), keepEmbedSentinel()],
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },

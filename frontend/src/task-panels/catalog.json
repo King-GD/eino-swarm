@@ -215,5 +215,392 @@
         "additionalProperties": false
       }
     }
+  },
+  {
+    "id": "easm-asset-portrait",
+    "version": "1",
+    "name": "EASM",
+    "description": "Display an enterprise asset portrait with its relationship graph, heat trend and supply-chain components. Open during an asset-portrait task and publish a cumulative snapshot after each batch of observed results, keeping node IDs stable across batches.",
+    "entry": "",
+    "schema": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "title",
+        "nodes",
+        "edges",
+        "heat",
+        "components"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "title": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/node"
+          },
+          "anyOf": [
+            {
+              "maxItems": 0
+            },
+            {
+              "contains": {
+                "properties": {
+                  "kind": {
+                    "const": "root"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            }
+          ]
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/edge"
+          }
+        },
+        "summary": {
+          "$ref": "#/$defs/summary"
+        },
+        "heat": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/heat"
+          }
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/component"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "$defs": {
+        "nonempty": {
+          "type": "string",
+          "minLength": 1
+        },
+        "nonnegative": {
+          "type": "number",
+          "minimum": 0
+        },
+        "summary": {
+          "type": "object",
+          "required": [],
+          "properties": {
+            "clues": {
+              "$ref": "#/$defs/nonnegative"
+            },
+            "fofa_assets": {
+              "$ref": "#/$defs/nonnegative"
+            },
+            "fofa_ips": {
+              "$ref": "#/$defs/nonnegative"
+            }
+          },
+          "additionalProperties": false
+        },
+        "detail": {
+          "type": "object",
+          "required": [],
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "logo": {
+              "type": "string",
+              "pattern": "^(data:image/|https://)"
+            },
+            "website": {
+              "type": "string",
+              "pattern": "^https?://"
+            },
+            "region": {
+              "type": "string"
+            },
+            "industry": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "organizations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "$ref": "#/$defs/nonempty"
+                  },
+                  "count": {
+                    "$ref": "#/$defs/nonnegative"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "reason": {
+              "type": "string"
+            },
+            "features": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "value"
+                ],
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "org",
+                      "cert",
+                      "mx",
+                      "asn",
+                      "icp",
+                      "icon_hash",
+                      "ipc",
+                      "fid",
+                      "domain"
+                    ]
+                  },
+                  "value": {
+                    "$ref": "#/$defs/nonempty"
+                  },
+                  "node_id": {
+                    "$ref": "#/$defs/nonempty"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "serial": {
+              "type": "string"
+            },
+            "issuer": {
+              "type": "string"
+            },
+            "not_before": {
+              "type": "string"
+            },
+            "not_after": {
+              "type": "string"
+            },
+            "names": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "subject_name": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "node": {
+          "type": "object",
+          "required": [
+            "id",
+            "kind",
+            "label"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/nonempty"
+            },
+            "kind": {
+              "enum": [
+                "root",
+                "company",
+                "org",
+                "domain",
+                "feature"
+              ]
+            },
+            "featureKind": {
+              "enum": [
+                "org",
+                "cert",
+                "mx",
+                "asn",
+                "icp",
+                "icon_hash",
+                "ipc",
+                "fid"
+              ]
+            },
+            "label": {
+              "$ref": "#/$defs/nonempty"
+            },
+            "ip_count": {
+              "$ref": "#/$defs/nonnegative"
+            },
+            "detail": {
+              "$ref": "#/$defs/detail"
+            }
+          },
+          "additionalProperties": false,
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "feature"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "featureKind"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "featureKind"
+              ]
+            }
+          }
+        },
+        "edge": {
+          "type": "object",
+          "required": [
+            "source",
+            "target"
+          ],
+          "properties": {
+            "source": {
+              "$ref": "#/$defs/nonempty"
+            },
+            "target": {
+              "$ref": "#/$defs/nonempty"
+            },
+            "confirmed": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "heat": {
+          "type": "object",
+          "required": [
+            "date",
+            "value"
+          ],
+          "properties": {
+            "date": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        "component": {
+          "type": "object",
+          "required": [
+            "name",
+            "count"
+          ],
+          "properties": {
+            "name": {
+              "$ref": "#/$defs/nonempty"
+            },
+            "display_name": {
+              "type": "string"
+            },
+            "count": {
+              "$ref": "#/$defs/nonnegative"
+            },
+            "hot_days": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/tag"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "tag": {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "hot",
+                "kev",
+                "cve"
+              ]
+            },
+            "summary": {
+              "type": "string"
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/evidence"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "evidence": {
+          "type": "object",
+          "required": [
+            "title"
+          ],
+          "properties": {
+            "title": {
+              "$ref": "#/$defs/nonempty"
+            },
+            "date": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string",
+              "pattern": "^https://"
+            },
+            "detail": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "initial_state": {
+      "schema_version": 1,
+      "title": "EASM",
+      "nodes": [],
+      "edges": [],
+      "heat": [],
+      "components": []
+    }
   }
 ]

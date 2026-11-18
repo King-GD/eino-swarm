@@ -1,7 +1,11 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
+import { isEasmResult } from "@/lib/easm/data"
 import { useT } from "@/lib/use-t"
 import { useTaskPanels } from "@/store/task-panels"
+import { panelDefinitionCompatible } from "@/task-panels/definition"
 import { panelText } from "@/task-panels/messages"
+import type { TaskPanel } from "@/task-panels/types"
+import { EasmPanel } from "./easm/easm-panel"
 import { TaskPanelFrame } from "./task-panel-frame"
 
 export function TaskPanels({ threadId, visible }: { threadId: string; visible: boolean }) {
@@ -15,7 +19,24 @@ export function TaskPanels({ threadId, visible }: { threadId: string; visible: b
     {!connected && panels.length ? <p role="status" className="border-b border-border px-3 py-1 text-xs text-muted-foreground">{panelText(t.locale, "disconnected")}</p> : null}
     {owner === threadId && error ? <p role="alert" className="p-2 text-xs text-destructive">{error}</p> : null}
     {panels.map((panel) => <div key={panel.id} className={panel.id === current?.id ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
-      <TaskPanelFrame panel={panel} change={changes[panel.id]} visible={visible && current?.id === panel.id} locale={t.locale} />
+      {panel.plugin_id === "easm-asset-portrait" && !panel.definition.entry ? (
+        <EasmTaskPanel panel={panel} visible={visible && current?.id === panel.id} locale={t.locale} />
+      ) : (
+        <TaskPanelFrame panel={panel} change={changes[panel.id]} visible={visible && current?.id === panel.id} locale={t.locale} />
+      )}
     </div>)}
   </section>
+}
+
+function EasmTaskPanel({ panel, visible, locale }: { panel: TaskPanel; visible: boolean; locale: string }) {
+  const compatible = useMemo(
+    () => panelDefinitionCompatible(panel),
+    [panel.definition, panel.plugin_id, panel.plugin_version],
+  )
+  const result = useMemo(() => isEasmResult(panel.state) ? panel.state : undefined, [panel.state])
+  if (!compatible) return <p role="alert" className="p-3 text-sm">{panelText(locale, "incompatible")}</p>
+  if (!result) return <p role="alert" className="p-3 text-sm">EASM 快照包含无效的资产数据</p>
+  return <div className="min-h-0 flex-1" data-testid="easm-task-panel" data-revision={panel.revision}>
+    <EasmPanel result={result} visible={visible} />
+  </div>
 }

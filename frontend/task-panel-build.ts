@@ -8,7 +8,8 @@ const csp = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-i
 /** Produce self-contained plugin documents; opaque iframe origins need no CORS. */
 export function taskPanelBuild(root: string, build: typeof viteBuild, directory = path.join(root, "src/task-panels")): Plugin {
   async function definitions(): Promise<Definition[]> {
-    return JSON.parse(await readFile(path.join(directory, "catalog.json"), "utf8")) as Definition[]
+    const catalog: Definition[] = JSON.parse(await readFile(path.join(directory, "catalog.json"), "utf8"))
+    return catalog.filter((definition) => definition.entry)
   }
   async function document(definition: Definition): Promise<string> {
     if (!/^[a-z0-9-]+$/.test(definition.id) || definition.entry !== `task-panels/${definition.id}.html`) throw new Error("Invalid task panel build entry")

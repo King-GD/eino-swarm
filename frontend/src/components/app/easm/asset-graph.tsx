@@ -52,10 +52,11 @@ function MaskIcon({ src }: { src: string }) {
 
 const toolButton = "grid size-7 place-items-center rounded-md border bg-card/95 text-muted-foreground shadow-sm hover:border-primary hover:text-primary"
 
-export function AssetGraph({ result, index, expanded = false, onExpand }: {
+export function AssetGraph({ result, index, expanded = false, visible: active = true, onExpand }: {
   result: EasmResult
   index: EasmIndex
   expanded?: boolean
+  visible?: boolean
   onExpand?: () => void
 }) {
   const [hidden, setHidden] = useState<Set<DisplayKind>>(() => new Set())
@@ -64,6 +65,7 @@ export function AssetGraph({ result, index, expanded = false, onExpand }: {
   const [focus, setFocus] = useState<Focus>(null)
   const [cardId, setCardId] = useState<string | null>(null)
   const [query, setQuery] = useState("")
+  const currentSelection = selected && index.byId.has(selected) ? selected : index.rootId ?? result.nodes[0]?.id ?? null
 
   const sectionRef = useRef<HTMLElement>(null)
   const stageRef = useRef<GraphElement>(null)
@@ -79,17 +81,21 @@ export function AssetGraph({ result, index, expanded = false, onExpand }: {
   const viewKeyRef = useRef("")
   const labelTimer = useRef(0)
   const lastLabels = useRef(0)
-  // Set when new data arrives; cleared once the view has been fitted to it.
+  const retainedViewport = useRef<{ zoom: number; x: number; y: number } | null>(null)
+  const activeRef = useRef(active)
+  activeRef.current = active
+  const fitOnStop = useRef(false)
+  // First data and an explicitly changed scope are fitted before they appear.
   const pendingFit = useRef(false)
   // The settled layout is fitted again unless the user has panned or zoomed.
   const userMoved = useRef(false)
-  focusRef.current = { selected, cardId }
+  focusRef.current = { selected: currentSelection, cardId }
 
   // Large graphs only show direct neighbours in the local view, as in the reference.
   const hops = result.nodes.length > 500 ? 1 : 2
   // A click in the full view must not rebuild the graph: that restarts the
   // layout and the canvas goes blank. Only the local view depends on selection.
-  const scope = local ? selected : null
+  const scope = local ? currentSelection : null
   const view = useMemo(() => {
     const scoped = scope ? localView(result.nodes, result.edges, scope, hops) : result
     return layoutOrder(scoped.nodes, scoped.edges, index.rootId)
@@ -97,6 +103,14 @@ export function AssetGraph({ result, index, expanded = false, onExpand }: {
   const visible = useMemo(() => visibleIds(view.nodes, view.edges, hidden), [view, hidden])
   const stats = summaryStats(result.summary)
   const legend = index.legend.filter((kind) => kind !== "root")
+
+  useEffect(() => {
+    setSelected(currentSelection)
+    setFocus((current) => current && index.byId.has(current.id) ? current : null)
+    setCardId((current) => current && index.byId.has(current) ? current : null)
+    drawState.current.rootId = index.rootId
+    if (stageRef.current) stageRef.current.dataset.selectedId = currentSelection ?? ""
+  }, [currentSelection, index.byId, index.rootId])
 
   const repositionCard = useCallback(() => {
     const graph = graphRef.current
@@ -139,6 +153,7 @@ export function AssetGraph({ result, index, expanded = false, onExpand }: {
   const fit = useCallback((duration = 0) => {
     const graph = graphRef.current
     if (!graph || !nodesRef.current.length || !Number.isFinite(nodesRef.current[0].x)) return
+    retainedViewport.current = null
     graph.zoomToFit(duration, 40, (n) => visibleRef.current.has(n.id))
     if (graph.zoom() > 1) graph.zoom(1, duration)
     queueLabels()
@@ -167,6 +182,7 @@ export function AssetGraph({ result, index, expanded = false, onExpand }: {
     const graph = graphRef.current
     const node = nodesRef.current.find((n) => n.id === id)
     if (locate && !local && graph && node && visibleRef.current.has(id)) {
+      retainedViewport.current = null
       userMoved.current = true
       graph.centerAt(node.x, node.y, 1000).zoom(MAX_ZOOM, 1000)
     }
@@ -186,7 +202,7 @@ export function AssetGraph({ result, index, expanded = false, onExpand }: {
       drawState.current.icons.set(kind as DisplayKind, image)
     }
     const palette = () => paletteRef.current ?? readPalette(stage)
-    const moved = () => { userMoved.current = true }
+    const moved = () => { retainedViewport.current = null; userMoved.current = true }
     stage.addEventListener("wheel", moved, { passive: true })
     stage.addEventListener("pointerdown", moved)
     const graph = new ForceGraph<GraphNode, GraphLink>(stage)
@@ -203,7 +219,19 @@ export function AssetGraph({ result, index, expanded = false, onExpand }: {
       .onNodeClick((n) => selectRef.current(n.id, true, false))
       .onBackgroundClick(() => { setCardId(null); setFocus(null) })
       .onNodeHover((n) => { hoveredRef.current = n?.id ?? null; stage.style.cursor = n ? "pointer" : "grab"; queueLabels() })
-      .onZoom(() => { stage.dataset.viewportMoving = "true"; queueLabels(160); repositionCard() })
+      .onZoom(({ k }) => {
+        // ForceGraph auto-scales some graphData updates before painting.
+        const retained = retainedViewport.current
+        if (retained && graphRef.current) {
+          retainedViewport.current = null
+          graphRef.current.zoom(retained.zoom).centerAt(retained.x, retained.y)
+          return
+        }
+        stage.dataset.zoom = String(k)
+        stage.dataset.viewportMoving = "true"
+        queueLabels(160)
+        repositionCard()
+      })
       .onZoomEnd(() => { delete stage.dataset.viewportMoving; queueLabels(160) })
       .onNodeDrag(() => repositionCard())
       .onEngineTick(() => {
@@ -214,26 +242,29 @@ export function AssetGraph({ result, index, expanded = false, onExpand }: {
       .onEngineStop(() => {
         stage.dataset.layoutMoving = "false"
         positions.current.set(viewKeyRef.current, new Map(nodesRef.current.map(({ id, x, y, vx, vy }) => [id, { x: x ?? 0, y: y ?? 0, vx, vy }])))
-        if (pendingFit.current || !userMoved.current) settleFit()
+        if (pendingFit.current || (fitOnStop.current && !userMoved.current)) settleFit()
+        fitOnStop.current = false
         updateLabels()
       })
     graph.d3Force("charge")?.strength(-300)
     graph.d3Force("link")?.distance(150)
     graph.d3Force("center")?.strength(0.1)
     graphRef.current = graph
+    stage.dataset.zoom = String(graph.zoom())
     stage.__easmNodePoint = (id) => { const n = nodesRef.current.find((node) => node.id === id); return n && graph.graph2ScreenCoords(n.x ?? 0, n.y ?? 0) }
     // The tab or dialog can lay out after mount; refit whenever the canvas size changes.
     const resize = new ResizeObserver(() => {
-      if (graph.width() === stage.clientWidth && graph.height() === stage.clientHeight) return
+      if (!stage.clientWidth || !stage.clientHeight || (graph.width() === stage.clientWidth && graph.height() === stage.clientHeight)) return
       graph.width(stage.clientWidth).height(stage.clientHeight)
-      settleFit()
+      if (pendingFit.current || (fitOnStop.current && !userMoved.current)) settleFit()
     })
     resize.observe(stage)
     // Theme switches change the tokens the canvas resolved at mount.
     const theme = new MutationObserver(() => { paletteRef.current = readPalette(stage); graph.backgroundColor(paletteRef.current.background) })
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-palette"] })
-    const pause = () => (document.hidden ? graph.pauseAnimation() : graph.resumeAnimation())
+    const pause = () => (document.hidden || !activeRef.current ? graph.pauseAnimation() : graph.resumeAnimation())
     document.addEventListener("visibilitychange", pause)
+    pause()
     return () => {
       document.removeEventListener("visibilitychange", pause)
       stage.removeEventListener("wheel", moved)
@@ -249,31 +280,62 @@ export function AssetGraph({ result, index, expanded = false, onExpand }: {
 
   useEffect(() => {
     const graph = graphRef.current
+    if (graph) document.hidden || !active ? graph.pauseAnimation() : graph.resumeAnimation()
+  }, [active])
+
+  useEffect(() => {
+    const graph = graphRef.current
     const stage = stageRef.current
     if (!graph || !stage) return
     const key = scope ? `local:${scope}` : "global"
+    const previousNodes = nodesRef.current
+    const changedScope = viewKeyRef.current !== key
+    if (changedScope && viewKeyRef.current) {
+      positions.current.set(viewKeyRef.current, new Map(previousNodes.map(({ id, x, y, vx, vy }) => [id, { x: x ?? 0, y: y ?? 0, vx, vy }])))
+    }
+    const previousById = new Map(changedScope ? [] : previousNodes.map((node) => [node.id, node] as const))
     viewKeyRef.current = key
     const cached = positions.current.get(key)
     const nodes: GraphNode[] = view.nodes.map((node) => {
       const lines = wrapLabel(graphLabel(node), measure, MAX_LABEL_WIDTH)
-      return { id: node.id, node, kind: displayKind(node), radius: nodeRadius(node.ip_count), lines, labelWidth: Math.max(...lines.map(measure)), degree: index.degree.get(node.id) ?? 0, ...cached?.get(node.id) }
+      return Object.assign(previousById.get(node.id) ?? { ...cached?.get(node.id) }, {
+        id: node.id, node, kind: displayKind(node), radius: nodeRadius(node.ip_count), lines,
+        labelWidth: Math.max(...lines.map(measure)), degree: index.degree.get(node.id) ?? 0,
+      })
     })
     const byId = new Map(nodes.map((n) => [n.id, n]))
-    const links = view.edges.map((edge) => ({ source: byId.get(edge.source)!, target: byId.get(edge.target)!, confirmed: !!edge.confirmed }))
+    const previousLinks = graph.graphData().links
+    const changedTopology = changedScope ||
+      nodes.length !== previousNodes.length || nodes.some((node, i) => node !== previousNodes[i]) ||
+      view.edges.length !== previousLinks.length ||
+      view.edges.some((edge, i) => previousLinks[i].source.id !== edge.source || previousLinks[i].target.id !== edge.target)
     nodesRef.current = nodes
     drawState.current.labels = new Map()
-    delete stage.dataset.ready
-    stage.style.opacity = "0"
-    pendingFit.current = true
-    userMoved.current = false
-    // Tests count rebuilds: a selection in the full view must not cause one.
-    stage.dataset.layouts = String(Number(stage.dataset.layouts ?? 0) + 1)
-    graph.warmupTicks(cached ? 0 : 300).graphData({ nodes, links })
-    // Warmup has already placed every node, so the fit can run now. The
-    // microtask is still before the next paint, and after the effects that
-    // publish this view's visible set.
-    queueMicrotask(settleFit)
-  }, [view, scope, index.degree, settleFit])
+    fitOnStop.current = changedScope || !previousNodes.length
+    pendingFit.current = fitOnStop.current && nodes.length > 0
+    if (pendingFit.current) {
+      delete stage.dataset.ready
+      stage.style.opacity = "0"
+      userMoved.current = false
+    }
+    if (changedTopology) {
+      retainedViewport.current = pendingFit.current ? null : { zoom: graph.zoom(), ...graph.centerAt() }
+      const links = view.edges.map((edge) => ({ source: byId.get(edge.source)!, target: byId.get(edge.target)!, confirmed: !!edge.confirmed }))
+      stage.dataset.layouts = String(Number(stage.dataset.layouts ?? 0) + 1)
+      graph.warmupTicks(pendingFit.current && !cached ? 300 : 0).graphData({ nodes, links })
+    } else {
+      previousLinks.forEach((link, i) => { link.confirmed = !!view.edges[i].confirmed })
+      graph.nodeCanvasObject(graph.nodeCanvasObject()).linkCanvasObject(graph.linkCanvasObject())
+    }
+    if (!nodes.length) {
+      pendingFit.current = false
+      stage.style.opacity = "1"
+      stage.dataset.ready = "true"
+      stage.dataset.visibleLabels = "0"
+    } else if (pendingFit.current) queueMicrotask(settleFit)
+    queueLabels()
+    if (document.hidden || !activeRef.current) graph.pauseAnimation()
+  }, [view, scope, index.degree, settleFit, queueLabels])
 
   useEffect(() => {
     visibleRef.current = visible
@@ -297,7 +359,7 @@ export function AssetGraph({ result, index, expanded = false, onExpand }: {
     else next.add(kind)
     setHidden(next)
     const stillVisible = visibleIds(view.nodes, view.edges, next)
-    if (selected && !stillVisible.has(selected)) { setFocus(null); setCardId(null) }
+    if (currentSelection && !stillVisible.has(currentSelection)) { setFocus(null); setCardId(null) }
   }
 
   const search = () => {
@@ -308,6 +370,7 @@ export function AssetGraph({ result, index, expanded = false, onExpand }: {
   const zoomBy = (step: number) => {
     const graph = graphRef.current
     if (!graph) return
+    retainedViewport.current = null
     userMoved.current = true
     graph.zoom(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, graph.zoom() + step)), 500)
   }
@@ -346,6 +409,7 @@ export function AssetGraph({ result, index, expanded = false, onExpand }: {
               between mount and fit would otherwise paint whatever node sits at
               the origin. */}
           <div ref={stageRef} data-testid="easm-graph" role="group" aria-label="资产与具体特征网络" className="absolute inset-0" style={{ opacity: 0 }} />
+          {!result.nodes.length ? <p className="pointer-events-none absolute inset-0 m-0 grid place-items-center text-sm text-muted-foreground">等待资产数据</p> : null}
           <div role="toolbar" aria-label="关联网络操作" className="absolute top-3 left-3 z-10 flex gap-1.5">
             <button type="button" className={toolButton} aria-label="放大关联网络" title="放大" onClick={() => zoomBy(0.3)}><MaskIcon src={enlargeIcon} /></button>
             <button type="button" className={toolButton} aria-label="缩小关联网络" title="缩小" onClick={() => zoomBy(-0.3)}><MaskIcon src={shrinkIcon} /></button>

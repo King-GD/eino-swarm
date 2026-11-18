@@ -56,6 +56,11 @@ The Vite task-panel builder bundles scripts/styles/data into one HTML document. 
 
 后端验收使用隔离数据，经真实工具入口覆盖首次打开、幂等重试、版本冲突；专用 producer 另外覆盖输入拒绝、运行进度、取消和失败。端到端检查见 [Validation](#validation)。
 
+The [EASM asset portrait](EASM_PROTOCOL.md) uses this tool-based route. One
+panel receives cumulative snapshots as the asset task produces each batch.
+Its empty catalog entry path selects the desktop and Web host's React
+renderer. Bundled HTML plugins continue to declare a file entry.
+
 ## Protocol v1
 
 The agent tools are `open_task_panel`, `read_panel_state`, `publish_panel_update` and `run_panel_source`. Open and write receipts carry identity and version rather than bulk state. Complete reads respect the ordinary tool-result budget; excessive data remains accessible in the panel rather than silently clipped into a malformed tool result.

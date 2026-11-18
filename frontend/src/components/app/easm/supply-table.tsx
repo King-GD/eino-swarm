@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react"
+import { useEffect, useId, useMemo, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { TAG_LABELS, formatCount, hotDays, isSafeLink, sortComponents, type ComponentRow } from "@/lib/easm/model"
@@ -43,8 +43,10 @@ function TagEvidence({ row }: { row: ComponentRow }) {
 /** Third-party components with their aggregate counts; a row opens its tag evidence. */
 export function SupplyTable({ components, className }: { components: EasmResult["components"]; className?: string }) {
   const rows = useMemo(() => sortComponents(components), [components])
-  const [open, setOpen] = useState<ComponentRow | null>(null)
+  const [openName, setOpenName] = useState<string | null>(null)
+  const open = rows.find((row) => row.name === openName)
   const titleId = useId()
+  useEffect(() => { if (openName && !open) setOpenName(null) }, [openName, open])
   return (
     <section aria-labelledby={titleId} className={cn("flex min-h-0 flex-col rounded-xl border bg-card p-3", className)}>
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -68,7 +70,7 @@ export function SupplyTable({ components, className }: { components: EasmResult[
               return (
                 <tr key={row.name} className="border-b hover:bg-accent">
                   <td className="h-[43px] px-1.5">
-                    <button type="button" title={row.name} aria-label={`查看${name}标签依据`} onClick={() => setOpen(row)}
+                    <button type="button" title={row.name} aria-label={`查看${name}标签依据`} onClick={() => setOpenName(row.name)}
                       className="block w-full truncate py-1 text-left hover:text-primary">{name}</button>
                   </td>
                   <td className="pr-3 pl-1.5 text-right tabular-nums">{formatCount(row.count)}</td>
@@ -83,7 +85,7 @@ export function SupplyTable({ components, className }: { components: EasmResult[
           </tbody>
         </table>
       </div>
-      <Dialog open={!!open} onOpenChange={(value) => { if (!value) setOpen(null) }}>
+      <Dialog open={!!open} onOpenChange={(value) => { if (!value) setOpenName(null) }}>
         <DialogContent className="max-h-[80dvh] overflow-y-auto">
           <DialogTitle>{open ? open.display_name || open.name : ""}</DialogTitle>
           <DialogDescription className="sr-only">该组件的热搜和漏洞标签依据</DialogDescription>

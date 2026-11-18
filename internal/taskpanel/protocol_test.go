@@ -18,7 +18,7 @@ func TestDefinitionRefusesUnsafeEntryAndInvalidState(t *testing.T) {
 	if err := ValidateDefinition(good); err != nil {
 		t.Fatal(err)
 	}
-	for _, entry := range []string{"", "../a", "/a", "a/../b", "a\\b", "a?x", "a#x"} {
+	for _, entry := range []string{"../a", "/a", "a/../b", "a\\b", "a?x", "a#x"} {
 		t.Run(entry, func(t *testing.T) {
 			d := good
 			d.Entry = entry
@@ -54,6 +54,17 @@ func TestDefinitionRefusesUnsafeEntryAndInvalidState(t *testing.T) {
 	d.InitialState = nil
 	if err := ValidateDefinition(d); err != nil {
 		t.Fatal(err)
+	}
+}
+func TestDefinitionAcceptsHostRendererWithStateValidation(t *testing.T) {
+	d := definition()
+	d.Entry = ""
+	if err := ValidateDefinition(d); err != nil {
+		t.Fatal(err)
+	}
+	d.InitialState = json.RawMessage(`{"count":"invalid"}`)
+	if !errors.Is(ValidateDefinition(d), ErrInvalid) {
+		t.Fatal("host-rendered panel bypassed its state Schema")
 	}
 }
 func TestStateSchemaAndSizeAreEnforced(t *testing.T) {

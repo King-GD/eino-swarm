@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react"
 
 import { AgentPromptButton } from "@/components/app/agent-prompt"
 import { AgentFailure } from "@/components/app/agent-failure"
-import { EasmPanel } from "@/components/app/easm/easm-panel"
 import { ConversationSchedules } from "@/components/app/conversation-schedules"
 import { FilesTab } from "@/components/app/files-tab"
 import { MemoryPanel, type MemoryPanelProps } from "@/components/app/memory-panel"
@@ -37,11 +36,10 @@ import {
 import { useT, type Translate } from "@/lib/use-t"
 import { chromeTypeClass } from "@/lib/chrome-type"
 import { cn } from "@/lib/utils"
-import { useEasmData } from "@/lib/easm/data"
 import { useTraceFocus } from "@/store/trace-focus"
 import { useApp } from "@/store/app"
 
-export type PanelTab = "agents" | "files" | "trace" | "memory" | "easm" | RegisteredInspectorTab
+export type PanelTab = "agents" | "files" | "trace" | "memory" | RegisteredInspectorTab
 
 /** The right-hand panel: who is working, what they produced, and what
  *  happened — the three questions the transcript alone cannot answer. */
@@ -93,7 +91,6 @@ export function RightPanel({
   nuwaProject?: Project
 }) {
   const t = useT()
-  const easm = useEasmData()
   const storedTaskPanels = useTaskPanels((state) => state.panels)
   const taskPanelThread = useTaskPanels((state) => state.threadId)
   const registeredPanels = resolveInspectorPanels({
@@ -101,8 +98,7 @@ export function RightPanel({
     project: nuwaProject,
     taskPanels: { threadId: taskPanelThread, panels: storedTaskPanels },
   })
-  const visibleTab = (tab === "easm" && !easm) ||
-    (isRegisteredInspectorTab(tab) && !registeredPanels.some((panel) => panel.id === tab)) ? "agents" : tab
+  const visibleTab = isRegisteredInspectorTab(tab) && !registeredPanels.some((panel) => panel.id === tab) ? "agents" : tab
   const traceFocus = useTraceFocus()
   const previousThread = useRef(threadId)
   const changeTab = useRef(onTabChange)
@@ -169,12 +165,10 @@ export function RightPanel({
                 ) : null}
               </TabsTrigger>
             ) : null}
-            {easm ? <TabsTrigger value="easm" className={chromeTypeClass}>{easm.title}</TabsTrigger> : null}
           </TabsList>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {easm ? <TabsContent value="easm" className="flex min-h-0 flex-1 flex-col overflow-hidden"><EasmPanel result={easm} /></TabsContent> : null}
           {registeredPanels.map((panel) => (
             <TabsContent
               key={panel.id}

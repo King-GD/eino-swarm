@@ -84,6 +84,7 @@ on the PC. Progress and asset points update through the existing encrypted
 connection; reconnecting reads saved results without restarting collection.
 Conversations without a panel keep their ordinary header. An incompatible
 plugin reports an update requirement rather than loading different code.
+The EASM asset portrait opens in the desktop or Web conversation.
 See [Task panels](../docs/TASK_PANELS.md) for plugin authoring and data rules.
 
 Conversation Mermaid fences open as fit-to-width/height diagrams with touch zoom,

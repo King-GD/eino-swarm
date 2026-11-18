@@ -8,6 +8,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
+- EASM asset portraits now use a conversation task panel. Cumulative snapshots update the graph, heat trend and supply-chain table, with zoom and selected nodes preserved across live updates. Refresh restores the latest saved portrait.
+
 - Nuwa collaboration paints tasks, facts and results with different backgrounds, so a fact is no longer the same surface as a result. (`F-136`)
 - The desktop and Web inspector registers project collaboration and conversation task panels through one entry point. If a selected entry disappears, the inspector shows Agents without changing the requested tab. (`F-136`, `F-137`)
 

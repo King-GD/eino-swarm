@@ -1,41 +1,43 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
-import { isEasmResult, loadEasmData, resetEasmData } from "./data"
+import { describe, expect, it } from "vitest"
+import { isEasmResult } from "./data"
 import type { EasmResult } from "./types"
 
 const fixture: EasmResult = {
   schema_version: 1, title: "示例资产画像",
-  nodes: [{ id: "root|x", kind: "root", label: "x" }], edges: [], heat: [], components: [],
+  nodes: [
+    { id: "root|x", kind: "root", label: "x" },
+    { id: "domain|x.test", kind: "domain", label: "x.test" },
+  ],
+  edges: [{ source: "root|x", target: "domain|x.test" }],
+  heat: [{ date: "2026-01-01", value: 1 }, { date: "2026-01-02", value: 2 }],
+  components: [{ name: "nginx", count: 1, tags: [{ type: "hot" }, { type: "cve" }] }],
 }
 
-const response = (body: unknown, ok = true) => Promise.resolve({ ok, json: () => Promise.resolve(body) } as Response)
-
-afterEach(() => resetEasmData())
-
-describe("EASM data", () => {
-  it("accepts only a schema_version 1 result with the four collections", () => {
+describe("EASM snapshot relationships", () => {
+  it("accepts a valid empty state and cumulative snapshots", () => {
+    expect(isEasmResult({ ...fixture, nodes: [], edges: [], heat: [], components: [] })).toBe(true)
+    expect(isEasmResult({ ...fixture, nodes: fixture.nodes.slice(0, 1), edges: [] })).toBe(true)
     expect(isEasmResult(fixture)).toBe(true)
-    // The tab is hidden rather than drawn from a document this build cannot read.
     expect(isEasmResult({ ...fixture, schema_version: 2 })).toBe(false)
-    expect(isEasmResult({ ...fixture, schema_version: "1" })).toBe(false)
     expect(isEasmResult({ ...fixture, title: "" })).toBe(false)
-    expect(isEasmResult({ ...fixture, edges: undefined })).toBe(false)
     expect(isEasmResult(null)).toBe(false)
   })
 
-  it("loads the fixed dataset once and shares it with every caller", async () => {
-    const fetcher = vi.fn(() => response(fixture))
-    const [first, second] = await Promise.all([loadEasmData(fetcher), loadEasmData(fetcher)])
-    expect(first).toEqual(fixture)
-    expect(second).toEqual(fixture)
-    expect(fetcher).toHaveBeenCalledTimes(1)
-    expect(fetcher).toHaveBeenCalledWith("/easm-data.json")
+  it("rejects duplicate IDs, invalid roots and dangling references", () => {
+    expect(isEasmResult({ ...fixture, nodes: [...fixture.nodes, fixture.nodes[1]] })).toBe(false)
+    expect(isEasmResult({ ...fixture, nodes: fixture.nodes.slice(1) })).toBe(false)
+    expect(isEasmResult({ ...fixture, nodes: [...fixture.nodes, { ...fixture.nodes[0], id: "root|two" }] })).toBe(false)
+    expect(isEasmResult({ ...fixture, edges: [{ source: "root|x", target: "missing" }] })).toBe(false)
+    const nodes = [{ ...fixture.nodes[0], detail: { features: [{ kind: "domain", value: "x.test", node_id: "missing" }] } }]
+    expect(isEasmResult({ ...fixture, nodes, edges: [] })).toBe(false)
+    nodes[0].detail.features[0].node_id = "root|x"
+    expect(isEasmResult({ ...fixture, nodes, edges: [] })).toBe(true)
   })
 
-  it("stays hidden on a missing, unreadable or malformed file", async () => {
-    await expect(loadEasmData(() => response({}, false))).resolves.toBeNull()
-    resetEasmData()
-    await expect(loadEasmData(() => response({ schema_version: 1 }))).resolves.toBeNull()
-    resetEasmData()
-    await expect(loadEasmData(() => Promise.reject(new Error("offline")))).resolves.toBeNull()
+  it("rejects invalid or unsorted dates and repeated component tag types", () => {
+    expect(isEasmResult({ ...fixture, heat: [...fixture.heat].reverse() })).toBe(false)
+    expect(isEasmResult({ ...fixture, heat: [fixture.heat[0], fixture.heat[0]] })).toBe(false)
+    expect(isEasmResult({ ...fixture, heat: [{ date: "2026-02-30", value: 1 }] })).toBe(false)
+    expect(isEasmResult({ ...fixture, components: [{ name: "nginx", count: 1, tags: [{ type: "hot" }, { type: "hot" }] }] })).toBe(false)
   })
 })

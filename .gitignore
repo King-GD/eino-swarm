@@ -77,5 +77,5 @@ mobile/android/app/.cxx/
 *.keystore
 mobile/android/keystore.properties
 
-# Local EASM dataset drawn by the EASM tab; real enterprise data is never committed
+# Local EASM data from the former static tab
 frontend/public/easm-data.json

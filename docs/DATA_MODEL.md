@@ -1244,3 +1244,10 @@ preference/default route and its local receipt state; it is neither persisted
 account authority nor proof of live server grants. Direct tool transcripts keep
 bounded previews rather than complete fetched pages; model continuation retains
 its bounded working tool output in memory.
+
+### EASM task panel state
+
+The task panel projection stores the latest conversation-owned EASM snapshot.
+Its existing revision and delivery records retain accepted updates. The
+catalog pins the business Schema for the panel. The [EASM field reference and
+example](EASM_PROTOCOL.md) describe the graph, trend and component records.

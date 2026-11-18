@@ -56,6 +56,11 @@ and are not written into `config.yaml`. Any OpenAI-compatible endpoint works,
 including a local one; the API key may be empty when the endpoint does not
 need one.
 
+Open **Task panels → EASM** in a conversation with an active asset portrait.
+For example, ask the task to publish a first snapshot with the subject and
+update the portrait as each batch of results arrives. See the
+[EASM schema and example](docs/EASM_PROTOCOL.md).
+
 ```bash
 export OPENAI_BASE_URL=https://your-endpoint/v1
 export OPENAI_API_KEY=sk-...

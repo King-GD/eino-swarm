@@ -892,19 +892,20 @@ native macOS acceptance in `ci-macOS`.
 
 ## EASM asset portrait
 
-`frontend/e2e/easm.spec.ts` answers `/easm-data.json` with its own small
-fixture; real enterprise portraits never enter the repository. It checks the
-tab only appears for an acceptable file, that the graph opens fitted with every
-node inside the canvas and no names until hover, that no painted frame shows the
-graph before its first fit (the stage stays transparent until then, sampled once
-per animation frame), that hovering the heat curve names the date without a
-value, that a real click on a node other than the initial selection opens its
-card without rebuilding the graph (`data-layouts` stays the same, in the panel
-and in the enlarged dialog; a rebuild restarts the layout and blanks the
-canvas), that the root card links its site, that the enlarged dialog keeps
-graph, heat trend and supply table together, that a legend filter reports
-`aria-pressed`, and that a component row explains its tags. The pure view math
-and the file guard are unit tests in `frontend/src/lib/easm/`.
+`frontend/e2e/easm.spec.ts` uses a synthetic loopback model to run the real
+task panel tools. It publishes three cumulative snapshots in one conversation,
+checks changes on the same canvas in the host page, and verifies that EASM
+does not mount an iframe. It also verifies zoom and node selection during live
+updates and recovery of the latest saved state after page reload.
+
+```sh
+cd frontend
+ZWAI_E2E_EASM=1 npm run e2e -- easm.spec.ts
+```
+
+Use an isolated port, data directory and output directory when another E2E run
+is active. The plugin catalog test validates the empty state and the complete
+example with the production Schema validator.
 
 ## Original project-history SQL and source reports (`F-410`, `C-036`)
 

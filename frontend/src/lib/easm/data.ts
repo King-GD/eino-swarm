@@ -1,35 +1,45 @@
-import { useEffect, useState } from "react"
 import type { EasmResult } from "./types"
 
-/** The EASM tab draws one fixed local dataset. The file is gitignored (real
- *  enterprise data is never committed); without it the tab stays hidden. */
-export const EASM_DATA_URL = "/easm-data.json"
-
+/** The host validates field types against the catalog Schema. These checks
+ *  cover relationships between records before a snapshot reaches the graph. */
 export function isEasmResult(value: unknown): value is EasmResult {
-  const v = value as Partial<EasmResult> | null
-  return !!v && v.schema_version === 1 && typeof v.title === "string" && !!v.title &&
-    Array.isArray(v.nodes) && Array.isArray(v.edges) && Array.isArray(v.heat) && Array.isArray(v.components)
-}
+  const result = value as Partial<EasmResult> | null
+  if (!result || result.schema_version !== 1 || typeof result.title !== "string" || !result.title ||
+    !Array.isArray(result.nodes) || !Array.isArray(result.edges) ||
+    !Array.isArray(result.heat) || !Array.isArray(result.components)) return false
 
-let pending: Promise<EasmResult | null> | null = null
+  const ids = new Set<string>()
+  let roots = 0
+  for (const node of result.nodes) {
+    if (!node || typeof node.id !== "string" || !node.id || ids.has(node.id)) return false
+    ids.add(node.id)
+    if (node.kind === "root") roots++
+  }
+  if (roots !== (result.nodes.length ? 1 : 0)) return false
+  for (const edge of result.edges) {
+    if (!edge || !ids.has(edge.source) || !ids.has(edge.target)) return false
+  }
+  for (const node of result.nodes) {
+    const features = node.detail?.features
+    if (features !== undefined && (!Array.isArray(features) || features.some(
+      (feature) => !feature || (feature.node_id !== undefined && !ids.has(feature.node_id)),
+    ))) return false
+  }
 
-export function loadEasmData(fetcher: typeof fetch = fetch): Promise<EasmResult | null> {
-  pending ??= fetcher(EASM_DATA_URL)
-    .then((response) => (response.ok ? response.json() : null))
-    .then((value) => (isEasmResult(value) ? value : null))
-    .catch(() => null)
-  return pending
-}
-
-/** Test seam: forget the cached load. */
-export function resetEasmData() { pending = null }
-
-export function useEasmData(): EasmResult | null {
-  const [data, setData] = useState<EasmResult | null>(null)
-  useEffect(() => {
-    let live = true
-    void loadEasmData().then((value) => { if (live) setData(value) })
-    return () => { live = false }
-  }, [])
-  return data
+  let previousDate = ""
+  for (const point of result.heat) {
+    if (!point || typeof point.date !== "string" || point.date <= previousDate) return false
+    const date = new Date(`${point.date}T00:00:00Z`)
+    if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== point.date) return false
+    previousDate = point.date
+  }
+  for (const component of result.components) {
+    if (!component || (component.tags !== undefined && !Array.isArray(component.tags))) return false
+    const types = new Set<string>()
+    for (const tag of component.tags ?? []) {
+      if (!tag || types.has(tag.type)) return false
+      types.add(tag.type)
+    }
+  }
+  return true
 }

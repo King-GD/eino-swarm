@@ -3,6 +3,7 @@ import { bytesToHex } from "./bytes"
 import type { RemoteLink } from "./link"
 import { OpTaskPanelCancel, OpTaskPanelRead, OpTaskPanels, type TaskPanelManifest, type TaskPanelTransfer } from "./rpc"
 import type { PanelChange, TaskPanel } from "../../../frontend/src/task-panels/types"
+import catalog from "../../../frontend/src/task-panels/catalog.json"
 
 // Match the protocol ceiling, including the pinned definition and envelope.
 // The PC still enforces its configured, potentially smaller state budget.
@@ -35,7 +36,9 @@ export async function listTaskPanels(link: RemoteLink, threadId: string, signal?
   const result = await link.rpc({ op: OpTaskPanels, thread_id: threadId }, { signal, dropOnTimeout: false })
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
   if (!result.ok) throw new TaskPanelReadError(result.code ?? "panel_read_failed", result.error ?? "Could not load task panels")
-  return validatePanelManifest(result.task_panels, threadId)
+  return validatePanelManifest(result.task_panels, threadId).filter(
+    (panel) => catalog.find((definition) => definition.id === panel.plugin_id)?.entry !== "",
+  )
 }
 
 function validateChunk(chunk: TaskPanelTransfer | undefined, expected: { threadId: string; panelId: string; offset: number; first?: TaskPanelTransfer }) {

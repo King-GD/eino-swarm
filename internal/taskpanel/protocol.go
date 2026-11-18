@@ -48,10 +48,11 @@ type SourceDefinition struct {
 
 // Definition is a bundled plugin's immutable code and state contract.
 type Definition struct {
-	ID           string            `json:"id"`
-	Version      string            `json:"version"`
-	Name         string            `json:"name"`
-	Description  string            `json:"description"`
+	ID          string `json:"id"`
+	Version     string `json:"version"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	// An empty entry uses the host renderer owned by the bundled definition.
 	Entry        string            `json:"entry"`
 	Schema       json.RawMessage   `json:"schema"`
 	InitialState json.RawMessage   `json:"initial_state,omitempty"`
@@ -108,7 +109,10 @@ type Change struct {
 
 // ValidateDefinition refuses invalid state contracts and executable path ambiguity.
 func ValidateDefinition(d Definition) error {
-	if d.ID == "" || len(d.ID) > 128 || strings.ContainsAny(d.ID, "/\\\x00") || d.Version == "" || d.Name == "" || d.Entry == "" || path.IsAbs(d.Entry) || path.Clean(d.Entry) != d.Entry || strings.HasPrefix(d.Entry, "../") || strings.ContainsAny(d.Entry, "\\?#\x00") {
+	if d.ID == "" || len(d.ID) > 128 || strings.ContainsAny(d.ID, "/\\\x00") || d.Version == "" || d.Name == "" {
+		return fmt.Errorf("%w: definition identity or entry", ErrInvalid)
+	}
+	if d.Entry != "" && (path.IsAbs(d.Entry) || path.Clean(d.Entry) != d.Entry || strings.HasPrefix(d.Entry, "../") || strings.ContainsAny(d.Entry, "\\?#\x00")) {
 		return fmt.Errorf("%w: definition identity or entry", ErrInvalid)
 	}
 	raw, err := json.Marshal(d)

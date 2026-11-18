@@ -1,24 +1,23 @@
 # EASM 数据结构与字段说明
 
-本说明定义 EASM 页签需要的数据：资产关系图、资产热力趋势、供应链组件表，以及点击节点后的详情卡片。示例为虚构数据：
+本说明定义 EASM 资产关系图、热力趋势和供应链组件表共用的数据。示例使用虚构数据。
 
 - [easm-result-full.json](examples/easm-result-full.json)：完整示例。
 
 ## 数据来源
 
-EASM 页签只读一份固定的本地结果，不经过接口、事件或数据库：
+EASM 是会话级任务面板。资产画像任务用 `open_task_panel` 打开 `easm-asset-portrait`，再通过 `publish_panel_update` 按批发布 `snapshot`。每批的 `state` 包含截至当前的完整结果，保留之前仍有效的节点和连线。同一个节点跨批次使用同一个 ID。
 
-- 文件是 `frontend/public/easm-data.json`，构建后按 `/easm-data.json` 提供。
-- 文件不入库：真实企业数据不提交到仓库，`.gitignore` 已忽略该路径。
-- 没有文件、请求失败或内容不符合本说明时，页签不显示。
-- 三个视图的数据放在**同一个 JSON** 里，整体替换，不与旧数据合并。
+第一批使用打开回执里的 `panel_id` 和 `revision`，后续使用上一批回执中的版本作为 `base_revision`。每个新快照使用新的 `operation_id`，重试同一个快照沿用原 ID 和请求。遇到版本冲突时，先重新读取面板版本并确认最新状态，再发布。宿主按 [catalog.json](../frontend/src/task-panels/catalog.json) 注册的 Schema 校验快照并保存，刷新后恢复会话的最新版本。[任务面板协议](TASK_PANELS.md#protocol-v1)
+
+已有 EASM JSON 可以作为累计快照的内容。真实资产数据由任务提交到自己的会话。源代码和构建包只使用虚构测试数据。
 
 ## 1. 外层结构
 
 | 字段 | 类型 | 必要性 | 说明 |
 | --- | --- | --- | --- |
 | `schema_version` | integer | 必填 | 固定为 `1` |
-| `title` | string | 必填 | 右侧页签上显示的文字，通常填 `EASM` |
+| `title` | string | 必填 | 画像标题，根节点缺失时用作面板内容标题 |
 | `nodes` | array | 必填 | 关系图节点，见第 2 节；没有时填 `[]` |
 | `edges` | array | 必填 | 节点间连线，见第 3 节；没有时填 `[]` |
 | `summary` | object | 可选 | 顶部统计数字，见第 5 节 |
@@ -77,7 +76,7 @@ EASM 页签只读一份固定的本地结果，不经过接口、事件或数据
 | 字段 | 类型 | 适用节点 | 卡片显示为 |
 | --- | --- | --- | --- |
 | `description` | string | root、company、org | 简介 |
-| `logo` | string | root、company、org | 标识图片地址；页面能直接加载的 `data:` 或 `https` 地址 |
+| `logo` | string | root、company、org | 标识图片地址，支持 `data:image/…` 和 `https` |
 | `website` | string | root | 官网，`http` 或 `https` 地址 |
 | `region` | string | root | 国家 / 地区，如“中国 / 北京市” |
 | `industry` | string[] | root | 行业列表 |

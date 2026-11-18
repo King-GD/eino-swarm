@@ -1,6 +1,7 @@
 import { expect, it, vi } from "vitest"
 import { sha256 } from "@noble/hashes/sha2.js"
 import { bytesToHex } from "./bytes"
+import catalog from "../../../frontend/src/task-panels/catalog.json"
 import type { RemoteLink } from "./link"
 import { listTaskPanels, maxTaskPanelTransferBytes, readTaskPanel } from "./remote-task-panels"
 import { OpTaskPanelCancel, OpTaskPanelRead, PROTOCOL_V, type RemoteRequest, type RemoteResponse, type TaskPanelTransfer } from "./rpc"
@@ -78,4 +79,14 @@ it("keeps an unknown older host separate from an empty manifest", async () => {
   expect(await listTaskPanels(link, "t")).toEqual([])
   await expect(listTaskPanels(link, "t")).rejects.toMatchObject({ code: "unknown_op" })
   await expect(listTaskPanels(link, "t")).rejects.toThrow("manifest")
+})
+
+it("offers embedded panels while leaving host-rendered portraits on the PC", async () => {
+  const portrait = { id: "portrait", thread_id: "t", plugin_id: "easm-asset-portrait", plugin_version: "1", revision: 1 }
+  const embedded = { id: "embedded", thread_id: "t", plugin_id: catalog[0].id, plugin_version: catalog[0].version, revision: 1 }
+  const rpc = vi.fn().mockResolvedValueOnce({ ...base, task_panels: [portrait] })
+    .mockResolvedValueOnce({ ...base, task_panels: [portrait, embedded] })
+  const link = { rpc } as unknown as RemoteLink
+  expect(await listTaskPanels(link, "t")).toEqual([])
+  expect(await listTaskPanels(link, "t")).toEqual([embedded])
 })
