@@ -2884,6 +2884,16 @@ in [current contracts](docs/CONTRACTS.md).
 
 ## Bundled task panels
 
+The desktop and Web inspector resolves registered entries against the active
+project or conversation and uses the result to render both the tab and its
+content. Nuwa is a project-owned React entry gated by mode or retained history;
+it uses the existing project GET/SSE and mounts when selected. The conversation
+Task panels entry groups agent-opened iframe instances and keeps them mounted
+behind other tabs. The host registry controls presentation; the embedded
+HTML/JS plugin catalog remains the source for builds and Agent tools. The paired
+phone continues to use its conversation panel surface and does not register the
+Nuwa graph.
+
 `internal/taskpanel` defines the versioned state protocol; `internal/store/task_panels.go` persists conversation-owned projections and a separate delivery journal. Runtime tools provide trusted provenance and bounded producer publication. Repository HTML/JS plugins under `frontend/src/task-panels` own their layout and run in dedicated opaque-origin iframes through an acknowledged SDK channel. The FOFA example producer uses CLI batches and locally owned HTTP checks; no asset fields enter the generic host protocol. See [Task panels](docs/TASK_PANELS.md), `F-137` and `C-050`.
 
 The paired phone bundles the same plugin documents and `TaskPanelFrame` host.

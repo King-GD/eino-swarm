@@ -1,6 +1,4 @@
-import { TaskPanels } from "./task-panels"
 import { useTaskPanels } from "@/store/task-panels"
-import { panelText } from "@/task-panels/messages"
 import { ArrowDownNarrowWide, ArrowLeft, ArrowUpNarrowWide, ChevronDown } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
@@ -11,7 +9,7 @@ import { FilesTab } from "@/components/app/files-tab"
 import { MemoryPanel, type MemoryPanelProps } from "@/components/app/memory-panel"
 import { ResizeHandle } from "@/components/app/resize-handle"
 import { TraceTab } from "@/components/app/trace-tab"
-import { NuwaPanel } from "@/components/app/nuwa-panel"
+import { isRegisteredInspectorTab, resolveInspectorPanels, type RegisteredInspectorTab } from "./inspector-panels"
 import { AgentTranscript } from "@/components/app/agent-transcript"
 import { StatusDot } from "@/components/app/transcript"
 import { MarqueeText } from "@/components/app/marquee"
@@ -41,7 +39,7 @@ import { cn } from "@/lib/utils"
 import { useTraceFocus } from "@/store/trace-focus"
 import { useApp } from "@/store/app"
 
-export type PanelTab = "agents" | "files" | "trace" | "memory" | "nuwa" | "task-panels"
+export type PanelTab = "agents" | "files" | "trace" | "memory" | RegisteredInspectorTab
 
 /** The right-hand panel: who is working, what they produced, and what
  *  happened — the three questions the transcript alone cannot answer. */
@@ -95,7 +93,12 @@ export function RightPanel({
   const t = useT()
   const storedTaskPanels = useTaskPanels((state) => state.panels)
   const taskPanelThread = useTaskPanels((state) => state.threadId)
-  const taskPanels = taskPanelThread === threadId ? storedTaskPanels : []
+  const registeredPanels = resolveInspectorPanels({
+    threadId,
+    project: nuwaProject,
+    taskPanels: { threadId: taskPanelThread, panels: storedTaskPanels },
+  })
+  const visibleTab = isRegisteredInspectorTab(tab) && !registeredPanels.some((panel) => panel.id === tab) ? "agents" : tab
   const traceFocus = useTraceFocus()
   const previousThread = useRef(threadId)
   const changeTab = useRef(onTabChange)
@@ -108,7 +111,6 @@ export function RightPanel({
     if (traceFocus.turnId) changeTab.current("trace")
   }, [traceFocus.request, traceFocus.turnId])
   const [width, setWidth] = useState(352)
-  const showNuwa = Boolean(nuwaProject && (nuwaProject.nuwa_enabled || (nuwaProject.nuwa_revision ?? 0) > 0))
   const latestTurn = transcript.turns.at(-1) ?? turns.at(-1)
   const [rosterSort, setRosterSort] = useState<AgentRosterSort>(defaultAgentRosterSort)
   return (
@@ -127,7 +129,7 @@ export function RightPanel({
       />
       <ConversationSchedules key={threadId ?? ""} threadId={threadId} />
       <Tabs
-        value={tab === "nuwa" && !showNuwa ? "agents" : tab}
+        value={visibleTab}
         onValueChange={(v) => {
           if (v === "trace") useTraceFocus.getState().clear()
           onTabChange(v as PanelTab)
@@ -136,8 +138,9 @@ export function RightPanel({
       >
         <div className="thin-scrollbar flex items-center gap-2 overflow-x-auto border-b border-border px-3 py-2">
           <TabsList className="shrink-0">
-            {taskPanels.length ? <TabsTrigger value="task-panels" className={chromeTypeClass}>{panelText(t.locale, "tab")}</TabsTrigger> : null}
-            {showNuwa ? <TabsTrigger value="nuwa" className={chromeTypeClass}>{t("nuwa.tab")}</TabsTrigger> : null}
+            {registeredPanels.map((panel) => (
+              <TabsTrigger key={panel.id} value={panel.id} className={chromeTypeClass}>{panel.label(t)}</TabsTrigger>
+            ))}
             <TabsTrigger value="agents" className={chromeTypeClass}>
               {t("panel.agents")}
               {countRunning(transcript) > 0 ? (
@@ -166,24 +169,24 @@ export function RightPanel({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {taskPanels.length ? <TabsContent value="task-panels" forceMount className="flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"><TaskPanels visible={tab === "task-panels"} /></TabsContent> : null}
-          {showNuwa && nuwaProject ? (
-            <TabsContent value="nuwa" className="flex min-h-0 flex-1 flex-col overflow-hidden bg-card">
-              <NuwaPanel
-                project={nuwaProject}
-                threadId={threadId}
-                activity={threadId && latestTurn ? {
-                  id: latestTurn.id,
-                  status: latestTurn.status,
-                  onOpenFiles: () => onTabChange("files"),
-                } : undefined}
-                onSelectAgent={(id) => {
+          {registeredPanels.map((panel) => (
+            <TabsContent
+              key={panel.id}
+              value={panel.id}
+              forceMount={panel.mount === "retained" ? true : undefined}
+              className={cn("flex min-h-0 flex-1 flex-col overflow-hidden", panel.mount === "retained" ? "data-[state=inactive]:hidden" : "bg-card")}
+            >
+              {panel.render({
+                visible: visibleTab === panel.id,
+                latestTurn,
+                openFiles: () => onTabChange("files"),
+                selectAgent: (id) => {
                   onSelectAgent(id)
                   onTabChange("agents")
-                }}
-              />
+                },
+              })}
             </TabsContent>
-          ) : null}
+          ))}
           <TabsContent
             value="agents"
             className="flex min-h-0 flex-1 flex-col overflow-hidden bg-card"

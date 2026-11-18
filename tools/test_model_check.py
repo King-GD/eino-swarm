@@ -143,6 +143,16 @@ class RegistrationGuards(unittest.TestCase):
             with self.subTest(case=name):
                 self.assert_case_table_fails("test_every_safety_invariant_is_shown_to_catch_something", remaining)
 
+    def test_inspector_registry_keeps_observed_faults_and_focus_witnesses(self):
+        for name in ("fallback", "project-status", "foreign-row", "signal-owner", "signal-replaced", "signal-deleted", "signal-replayed"):
+            with self.subTest(case=name):
+                remaining = [c for c in mc.CASES if c.name != "inspector-registry-" + name]
+                self.assert_case_table_fails("test_every_safety_invariant_is_shown_to_catch_something", remaining)
+        for name in ("filtered", "open", "stale-owner", "superseded", "deleted", "replay"):
+            with self.subTest(witness=name):
+                remaining = [c for c in mc.CASES if c.name != "inspector-registry-reach-" + name]
+                self.assert_case_table_fails("test_every_witness_is_checked_alone_on_the_current_design", remaining)
+
     def assert_case_table_fails(self, method, cases):
         result = unittest.TestResult()
         with mock.patch.object(mc, "CASES", tuple(cases)):

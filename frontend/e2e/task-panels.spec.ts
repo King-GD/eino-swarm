@@ -31,6 +31,8 @@ test("HTML map plugin applies patches without replacing its frame, zoom or exist
   const title = `Map protocol ${Date.now()}`
   const created = await (await page.request.post("/api/threads", { data: { title } })).json()
   const thread = created.thread.id as string
+  const emptyTitle = `${title} without a panel`
+  expect((await page.request.post("/api/threads", { data: { title: emptyTitle } })).ok()).toBe(true)
   const asset = { id: "a", ip: "192.0.2.1", port: 443, protocol: "https", host: "one.example", country: "CN", region: "", city: "", longitude: 116.4, latitude: 39.9, url: "https://one.example/", status: "running" }
   let saved = {
     id: "map-protocol", thread_id: thread, plugin_id: definition.id, plugin_version: definition.version, definition, revision: 1,
@@ -93,6 +95,16 @@ test("HTML map plugin applies patches without replacing its frame, zoom or exist
   await expect(map.locator("#counters")).toContainText("1 interrupted")
   await expect(map.locator(".points circle")).toHaveClass("interrupted")
   expect(await map.locator("#map").getAttribute("data-zoom")).toBe(zoomBefore)
+
+  saved = { ...saved, revision: 4, state: stopped }
+  await page.getByRole("button", { name: emptyTitle, exact: true }).click()
+  await expect(page.getByRole("tab", { name: "Agents", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(page.getByRole("tab", { name: "Task panels", exact: true })).toHaveCount(0)
+  await expect(iframe).toHaveCount(0)
+
+  await page.getByRole("button", { name: title, exact: true }).click()
+  await expect(page.getByRole("tab", { name: "Task panels", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(map.locator("body")).toHaveAttribute("data-revision", "4")
 })
 
 test("two map windows leave HTTP connections available for durable draft saves", async ({ page, context, request }) => {

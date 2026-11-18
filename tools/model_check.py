@@ -123,6 +123,12 @@ MODELS = {
         Model("mobile-panel", ROOT / "models" / "panels" / "MobileTaskPanel.tla",
               ("MixTransferRevision", "AcceptLateVisit", "ApplyPartialBody", "CloseOtherTransfer", "UsePanelCursorForChat", "RefreshCancelsTransfer"),
               ("TypeOK", "FrozenTransferRevision", "CurrentVisitOwnsApply", "CompleteBodyBeforeApply", "ValidatedBodyBeforeApply", "OldCloseKeepsSuccessor", "PanelCursorKeepsChatSeq", "ManifestKeepsActiveTransfer"), ()),
+        Model("inspector-registry", ROOT / "models" / "panels" / "InspectorRegistry.tla",
+              ("BorrowSidebarProject", "IgnoreThreadScope", "ExposeForeignTaskRows", "ForgetHistory", "BlankFallback", "UnmountHiddenFrame",
+               "ExposeForeignProjectStatus", "IgnoreSignalOwner", "IgnoreSupersededSignal", "AcceptDeletedSignal", "ReplayStealsFocus"),
+              ("TypeOK", "ProjectScopeCorrect", "ThreadScopeCorrect", "EveryMountedRowIsOwned", "HistoryRemainsVisible", "FallbackSelectsAvailable",
+               "HiddenFrameRetained", "ProjectStatusOwned", "AutoOpenOwnerMatches", "AutoOpenUsesLatestSignal",
+               "AutoOpenRequiresPresentInstance", "ReplayDoesNotOpen"), ()),
         Model(
             "speech-capture", ROOT / "models" / "mobile" / "SpeechCapture.tla",
             ("AutoMP4Unchanged", "SnapshotBeforeTail", "SkipConvertedLimit", "IgnoreCancelledConversion"),
@@ -453,6 +459,27 @@ CASES: tuple[Case, ...] = (
     *(_case("mobile-panel-reach-" + name, "mobile snapshot, patch and visit recovery reachability", witness=witness, model="mobile-panel")
       for name, witness in (("snapshot", "NeverSnapshotApplied"), ("patch", "NeverPatchApplied"),
                             ("visit", "NeverVisitRecovered"), ("refresh", "NeverRefreshCompleted"))),
+    _case("inspector-registry-current", "owned registered tabs, mounted iframe, and fresh automatic intent",
+          model="inspector-registry"),
+    *(_case("inspector-registry-" + name, source, (switch,), invariant, model="inspector-registry")
+      for name, source, switch, invariant in (
+          ("sidebar", "seeded: a standalone conversation borrows the sidebar project", "BorrowSidebarProject", "ProjectScopeCorrect"),
+          ("thread", "seeded: a task tab binds to another conversation's projection", "IgnoreThreadScope", "ThreadScopeCorrect"),
+          ("foreign-row", "seeded: an eligible tab renders another conversation's row along with its own", "ExposeForeignTaskRows", "EveryMountedRowIsOwned"),
+          ("history", "seeded: disabling Nuwa hides the recorded project", "ForgetHistory", "HistoryRemainsVisible"),
+          ("fallback", "observed: a selected task tab disappeared without selecting Agents", "BlankFallback", "FallbackSelectsAvailable"),
+          ("frame", "seeded: switching to Collaboration destroys the mounted task frame", "UnmountHiddenFrame", "HiddenFrameRetained"),
+          ("project-status", "observed: a new project briefly committed the previous project's error and connection status", "ExposeForeignProjectStatus", "ProjectStatusOwned"),
+          ("signal-owner", "seeded: a captured signal focuses its tab after conversation selection changed", "IgnoreSignalOwner", "AutoOpenOwnerMatches"),
+          ("signal-replaced", "seeded: an older captured signal focuses a tab after another instance was discovered", "IgnoreSupersededSignal", "AutoOpenUsesLatestSignal"),
+          ("signal-deleted", "seeded: the only signaled instance was removed before the callback", "AcceptDeletedSignal", "AutoOpenRequiresPresentInstance"),
+          ("signal-replayed", "seeded: restoring a known instance focuses the task tab again", "ReplayStealsFocus", "ReplayDoesNotOpen"))),
+    *(_case("inspector-registry-reach-" + name, "registered render and focus reachability",
+            witness="Never" + witness, model="inspector-registry")
+      for name, witness in (("both", "BothAvailable"), ("history", "HistorySelected"), ("fallback", "SafeFallback"),
+                            ("retained", "HiddenIframe"), ("filtered", "FilteredForeignRow"),
+                            ("open", "AutoOpened"), ("stale-owner", "RefusedStaleOwner"),
+                            ("superseded", "RefusedSuperseded"), ("deleted", "RefusedDeleted"), ("replay", "Replayed"))),
     _case("speech-capture-current", "auto MP4 normalizes after the final chunk; cancellation and limits remain active",
           model="speech-capture"),
     *(_case(name, source, (switch,), invariant, model="speech-capture")

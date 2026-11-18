@@ -8,7 +8,7 @@ The paired mobile app bundles the same plugin HTML/JS and iframe host. A PC conv
 
 Install/configure a compatible local `fofa` CLI using its own credential mechanism, then set **Settings → Tools → Task panels**. Provide the query and request geographic collection and HTTP(S) checks in the conversation. The agent can open `fofa-world-map`, then invoke its registered source with `{ "query": "<task-supplied query>", "max_assets": 1000 }`. There is no default query and opening the panel alone performs no collection. Nuwa planners can open/read/publish panels; execution remains on workers. Planning mode exposes only reads.
 
-The first matching panel appears automatically. Later updates retain the iframe and map zoom; choosing another inspector tab suppresses repeated automatic focus. Local map filters, zoom and tooltips do not start tools. Closing the inspector does not stop the task; Stop cancels the task-owned collector and HTTP requests. The current implementation bundles plugins with the app rather than accepting external ZIPs or generated HTML at runtime.
+The inspector opens when it first discovers a new panel instance in the current conversation. Updates to known instances and reconnect replays do not switch the selected tab. Switching tabs keeps the iframe and map zoom. Local map filters, zoom and tooltips do not start tools. Closing the inspector does not stop the task; Stop cancels the task-owned collector and HTTP requests. The current implementation bundles plugins with the app rather than accepting external ZIPs or generated HTML at runtime.
 
 The example uses the local client's `dump --format=json` batch stream, then probes discovered Web endpoints while later batches are still being collected. The adapter supports the installed LubyRuffy/gofofa v0.2.22 behavior, including string-valued NDJSON fields and exit-zero collection errors. Client identity/capability should be revalidated after changing executable. The client path is configurable; credentials are neither passed in argv nor sent to the renderer.
 
@@ -20,13 +20,41 @@ HTTP checks connect directly to the recorded IP:port, preserving the logical Hos
 
 During collection the display reports discovered and processed counts. A fixed completion percentage is available after collection ends and applies only to imported eligible targets. Collection completeness is separate: a process exiting is not proof that all FOFA data was obtained. Quota/error/output uncertainty retains partial or unknown status. The import cap is enforced against raw rows, including duplicates; discovered counts are deduplicated.
 
-## Authoring a plugin
+## 开发者接入
 
-Add a directory under `frontend/src/task-panels/` with `index.html`, `main.ts`, styles and local assets. Register it in `catalog.json` using a stable ID, version, relative `task-panels/<id>.html` entry, state JSON Schema and valid `initial_state`. Optional `source` advertises a registered producer ID and its input schema. The frontend and Go host consume this same catalog. Bump the plugin version for incompatible code or state changes. Historical incompatible definitions are refused rather than passed to new code.
+### 宿主注册表与插件目录
+
+桌面和 Web 的右侧栏通过[宿主注册表](../frontend/src/components/app/inspector-panels.tsx)判断入口是否可用，并生成标签和内容。`scope` 决定从哪个项目或会话读取数据，`activation` 决定入口何时出现，`renderer` 决定用哪个组件渲染。
+
+| 注册项 | `scope` | `activation` | `renderer` |
+| --- | --- | --- | --- |
+| `nuwa` | `project` | `project_mode`：项目启用女娲或已有历史；不自动切换标签 | `react`：选中时挂载女娲协作组件，使用现有项目数据流 |
+| `task-panels` | `thread` | `agent_open`：当前会话有实例才显示入口，首次发现新实例时自动打开 | `iframe`：同一标签内可切换多个实例，其他标签选中时保留 iframe |
+
+解析注册项时会绑定具体的项目或会话 ID。当前标签因归属变化或实例移除而不可用时，右侧栏暂时显示 Agents，不覆盖原选项。女娲从会话所属项目读取；只在没有活动会话时使用侧栏所选项目。任务面板实例归会话，采集执行归启动它的任务，两者有各自的生命周期。
+
+按下文编写 HTML/JS 插件后，把定义加到 [catalog.json](../frontend/src/task-panels/catalog.json) 即可共用 `task-panels` 入口，无须改宿主注册表。新增宿主面板类型时，在宿主注册表中声明归属、激活、渲染和挂载规则，并验证切换作用域时不会带入旧面板。`catalog.json` 是构建和 Agent 共用的插件目录；女娲的宿主注册项不进入该目录，也不出现在 Agent 提示词的可用任务面板列表中，不能用 `open_task_panel` 打开。配对手机继续使用会话级任务面板的现有入口，不展示女娲协作图。
+
+先约定面板状态：记录的稳定 ID、进度和错误字段，以及空状态。`schema` 校验输出状态，`initial_state` 是首次打开时的有效空状态；专用数据源的输入由 `source.input_schema` 另行约定。现有工具已能提供所需结果时，可以只新增前端插件，复用宿主的发布工具。
+
+### 前端开发：布局、交互和渲染
+
+1. 在 `frontend/src/task-panels/<id>/` 放入 `index.html`、`main.ts`、样式和本地资源。插件自己管理 DOM、D3 或 Canvas。保留 HTML 的 `<head>`、`</head>` 和 `</body>`，构建器在这些位置插入 CSP、样式和脚本。
+2. 在 [catalog.json](../frontend/src/task-panels/catalog.json) 注册 `id`、`version`、`name`、`description`、`entry: "task-panels/<id>.html"`、`schema` 和 `initial_state`。`description` 写清插件适合哪些任务；引擎把描述提供给 Agent，由 Agent 判断是否调用 `open_task_panel`。仅注册插件不会显示面板。前端和 Go 宿主使用同一份目录；不兼容的代码或状态变更应递增 `version`，历史不兼容实例会拒绝加载。
+3. 从 [SDK](../frontend/src/task-panels/sdk.ts) 调用 `createTaskPanel({ onSnapshot, onPatch?, onHostContextChanged?, onDispose? })`。先实现 `onSnapshot`，能从完整状态正确绘制；需要增量渲染时再实现 `onPatch(operations, nextState, context)`，用稳定 ID 更新变化的图元。不实现 `onPatch` 时，SDK 先应用补丁，再交付完整状态。两种方式都不重载 iframe。通过上下文适配尺寸、主题和可见性，在 `onDispose` 清理资源。
+4. 同一份插件进入桌面、Web 和配对手机的构建。验证窄屏、触摸、旋转及空状态；在同一实例上连续送入 patch 和 snapshot，检查数据及缩放等交互状态。增加依赖时，验证前端和手机都能独立构建。
 
 The Vite task-panel builder bundles scripts/styles/data into one HTML document. Executable code is repository-owned. Each document runs in an opaque-origin `sandbox="allow-scripts"` iframe with a restrictive CSP: no application DOM/storage, external network, nested frames or workers. The existing workspace HTML-preview policy is separate. Runtime data is delivered only over the dedicated host channel.
 
-Use `createTaskPanel({ onSnapshot, onPatch?, onHostContextChanged?, onDispose? })` from `sdk.ts`. `onSnapshot` must render a complete state. `onPatch` may update only changed objects and receives RFC 6902 operations plus the resulting state. A snapshot-only plugin receives the resulting complete state after SDK patch application. Neither update mode reloads the iframe. Host context contains panel/thread IDs, revision, theme, locale, size, visibility and source lifecycle status. Release owned timers/listeners in `onDispose`. Never interpret tool data as executable HTML or instructions.
+宿主上下文包含面板和会话 ID、版本、主题、语言、尺寸、可见性和数据源状态。工具结果始终按数据处理，不作为可执行 HTML 或指令。
+
+### 后端开发：选择数据入口并发布状态
+
+**复用现有工具结果。** Agent 调用 `open_task_panel({plugin_id})` 拿到 `panel_id`，再用 `read_panel_state({panel_id})` 读取当前版本和 Schema。把已有结构化结果经 `publish_panel_update` 发布：全量用 `snapshot`，局部变化用 JSON Patch。请求带当前 `base_revision` 和唯一 `operation_id`；相同请求重试保留原 ID 和请求体，版本冲突时重新读状态、按新版本生成新操作。此路径不配置 `source`，无需新增 Go producer。
+
+**注册 Go producer。** 需要程序直接持续发布进度时，在 catalog 中声明 `source.id` 和 `source.input_schema`，并在 [panelProducerFor](../internal/engine/task_panel_sources.go) 注册同一 source ID 的适配器。Agent 打开面板后调用 `run_panel_source({panel_id,input})`。producer 校验业务输入，遵守任务的 `context`、取消和资源限制；将每批结果折叠为符合 Schema 的完整状态，串行调用 `publish(ctx, state)` 并处理错误。引擎比较状态生成 patch，补丁比完整状态大或操作过多时改用 snapshot，并负责身份、版本、持久化和通知。producer 不直接操作 SQLite、SSE 或 Pairlink；配对手机只读同步同一份已提交状态。
+
+后端验收使用隔离数据，经真实工具入口覆盖首次打开、幂等重试、版本冲突；专用 producer 另外覆盖输入拒绝、运行进度、取消和失败。端到端检查见 [Validation](#validation)。
 
 ## Protocol v1
 

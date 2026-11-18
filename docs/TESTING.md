@@ -9274,6 +9274,21 @@ identity check and rejects failed, absent, relative or ambiguous cwd results.
 
 ## Task panels and the FOFA example
 
+Inspector coverage in `frontend/src/components/app/nuwa-project-mode.test.tsx`
+exercises both registered tabs together, including a hidden iframe, project and
+conversation isolation, and fallback to Agents without changing the requested
+tab. The task-panel browser spec runs in the default suite and checks frame and
+zoom retention across tabs and scope changes to a conversation without a
+panel. The dedicated Nuwa browser fixture above covers history after disabling
+the mode and opening the tab without automatic focus. These are browser
+checks, separate from native acceptance.
+
+`InspectorRegistry.tla` checks finite render combinations and delayed
+automatic-open signals. The `nuwa-panel-ownership.test.tsx` regression uses a
+layout effect to inspect the first committed DOM for the next project before
+its passive reconnect; the previous project's Live indicator and alert cannot
+appear there. See the [panel model bounds](../models/panels/README.md).
+
 Protocol and source tests use versioned state plus actual Registry/model HTTP, CLI and local HTTP boundaries. `internal/panelplugins/fofaworld` tests the installed compatible CLI only against a loopback fake API, with fictional credentials and no public targets. Two-batch blocking verifies actual overlap; counters and accepted receipts distinguish errors/unknown/cancellation from completion. `frontend/e2e/task-panels.spec.ts` verifies the actual bundled iframe and map without reloading on data updates. See [Task panels](TASK_PANELS.md) for the protocol and remaining native acceptance gate.
 
 The task-panel [formal model map](../models/panels/README.md) states finite bounds and the exact implementation boundaries. Current cases and guard-removal counterexamples cover operation digests/CAS, running source ownership, recovery failure isolation, overlapping GET/SSE per-panel revisions/deletions, hidden iframe resynchronization and observed HTTP result delivery before join. Every model has reachable witness cases. The independent audit regressions preserve the original failing order; protocol model success is not a SQLite atomicity, cancelled final-flush durability, wall-clock or native presentation proof.

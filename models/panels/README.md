@@ -15,6 +15,7 @@ silently lose a guard, invariant or witness.
 | `PanelFrameDelivery.tla` | One iframe, two desired revisions, one outstanding callback and a bounded automatic resynchronization | `task-panel-frame.tsx` and `sdk.ts`: sent, applied and acknowledged versions have distinct meanings; hidden failed updates retain a snapshot retry; incompatible code does not run; timeout is visible. |
 | `PanelProducer.tla` | Two HTTP targets plus equivalent/duplicate input identities, separate observation/submission/reduction/join stages | `fofaworld.Run` and `startWorkersUsing`: deduplication prevents duplicate requests; cancellation cannot drop an already observed response before the reducer; returning requires the owned collector/workers and preceding receipts to join. |
 | `MobileTaskPanel.tla` | Two chunks, two transfers/revisions, three visits including A→B→A | `internal/remote/task_panels.go`, `remote-task-panels.ts` and `use-task-panels.ts`: a transfer stays immutable across manifest refresh, complete validated bodies belong to the current visit, old cleanup cannot close a successor, and chat seq remains independent. |
+| `InspectorRegistry.tla` | Two projects, two conversations and a standalone conversation for render eligibility; two instance names, one captured callback and up to six actions for automatic focus | `AppPanel`, `RightPanel`, `NuwaPanel` and `useRegisteredInspectorAutoOpen`: project and conversation scope, recorded history, available-tab fallback, retained hidden iframe, project-owned connection status, and rejection of stale, superseded, deleted or replayed automatic-open signals. |
 
 `models/lifecycle/EngineLifecycle.tla` also includes a panel-recovery refusal
 before runtime occupation under the existing restoration/Stop ordering.
@@ -44,6 +45,19 @@ classes without claiming that the final guarded implementation contains those
 defects. Real sealed-RPC tests cover immutable large bodies, patch fallback,
 scope/token binding and cleanup. Browser tests separately cover the shipped map
 with phone touch/rotation and version/error presentation.
+
+The inspector model re-finds the observed unavailable-tab fallback defect and
+the cross-project status defect. `nuwa-panel-ownership.test.tsx` uses the real
+Nuwa panel and store and observes the first DOM commit for a new project before
+its passive subscription reconnects. It failed with the prior project's alert
+and Live status still present and passes with project-owned display metadata.
+`nuwa-project-mode.test.tsx` exercises the missing-tab fallback on the actual
+right panel; `inspector-panels.test.tsx` checks automatic-open guards. The render
+branch enumerates one committed view from independent inputs; the focus branch
+models store changes between signal capture and delivery, not React scheduling.
+An isolated TypeScript control passes all three test files; removing the
+metadata ownership, available-tab fallback and instance presence guards causes
+the three corresponding assertions to fail.
 
 ## Limits
 

@@ -23,7 +23,7 @@ import { ExternalSkillsDialog } from "@/components/app/external-skills-dialog"
 import { FindBar, useFindController } from "@/components/app/find-bar"
 import type { PanelTab } from "@/components/app/panel"
 import { AppPanel } from "@/components/app/app-panel"
-import { useTaskPanelConnection } from "@/store/task-panels"
+import { useRegisteredInspectorAutoOpen } from "@/components/app/inspector-panels"
 import { ProjectDialog } from "@/components/app/project-dialog"
 import { SelectionMenu } from "@/components/app/selection-menu"
 import { SideChat } from "@/components/app/side-chat"
@@ -202,10 +202,7 @@ function AppShell() {
     setPanelOpen(true)
     setPanelTab(tab)
   }, [])
-  const taskPanelState = useTaskPanelConnection(activeId)
-  useEffect(() => {
-    if (taskPanelState.automaticPanelId && taskPanelState.threadId === activeId) showInspector("task-panels")
-  }, [taskPanelState.automaticPanelId, taskPanelState.threadId, activeId, showInspector])
+  useRegisteredInspectorAutoOpen(activeId, showInspector)
   const traceRequest = useTraceFocus((s) => s.request)
   useEffect(() => useTraceFocus.getState().clear(), [activeId])
   useEffect(() => {

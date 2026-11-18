@@ -203,6 +203,8 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-136 Nuwa project collaboration
 
+- 桌面和 Web 的 Collaboration 是宿主注册的项目面板。项目启用女娲或已有协作历史时显示入口，出现时不切换标签。有当前会话时按其所属项目读取，独立会话不显示侧栏所选项目的数据。配对手机可以配置模式，但没有协作图入口。见 [Nuwa](NUWA.md)。
+
 失效模型恢复：桌面错误行提供“使用当前所选模型修复恢复配置”，仅显式迁移已移除的提供商；保存后继续／重试，保留 worker 身份、历史和工具范围。空闲／无 parked Registry 才可操作；失败不部分更新。契约 `C-037`；证据 `internal/engine/worker_model_recovery_http_test.go`、`frontend/src/components/app/worker-model-recovery.test.tsx`。
 
 - 目的：由模型基于目标与事实选择计划和分工，项目保存规划模型与执行模型，并让项目内共享任务、事实报告、成果及依赖可检查；使用者：PC 用户；入口：项目创建／编辑的 Nuwa collaboration、Instruction、右侧 Collaboration、`list_models`／`read_work`／`record_work` 及项目 Nuwa GET／SSE；输入：项目提示词、已配置资源、实际事件证据及已有成果文件；输出：动态 worker 树、实际模型绑定、有版本和来源的共享记录与依赖图；前置条件：项目启用模式，资源已接入；失败表现：不可用模型、跨子树控制、无效引用、过期版本及存储失败明确拒绝；关联契约：`C-037`、`C-019`、`C-027`、`C-012`；实现证据：`internal/engine/nuwa_models.go`、`internal/engine/nuwa_tools.go`、`internal/store/nuwa.go`、`internal/server/nuwa.go`、`delegation.go`、`worker_config.go`、`model_binding.go`、`frontend/src/components/app/nuwa-panel.tsx`；验证：`internal/engine/nuwa_engine_http_test.go`、`internal/store/nuwa_test.go`、`internal/server/nuwa_stream_test.go`、`delegation_http_test.go`、`model_binding_http_test.go`、`frontend/e2e/nuwa.spec.ts`。
@@ -628,5 +630,7 @@ This is the current user-facing capability map. The code and tests named below a
 语音设置按当前来源协商到的 transcription／speech 能力分别显示；LOCAL 个人配置保留自身能力。可配置网关来源在 Models 显示获准角色的模型选择，固定来源仅在 Speech 显示已获准的语音参数。缺失或失败的能力清单不能由旧 configurable 布尔值重新开放控件；保存的选择保留，重试后恢复。
 
 ### F-137 HTML/JS task panels
+
+- 桌面和 Web 通过宿主注册表显示当前会话的 Task panels 标签，多个实例共用一个入口。首次发现新实例时自动打开，数据更新不抢焦点；切换标签保留 iframe。切换会话或移除实例使所选标签不可用时，暂时显示 Agents。插件目录继续只列可由 Agent 打开的 HTML/JS 定义。见 [开发者接入](TASK_PANELS.md#开发者接入)。
 
 - 目的：将任务的结构化结果持续呈现在插件自定义界面；入口：会话右侧任务面板、配对手机会话的全屏面板、Settings → Tools、Agent通用面板工具；输入：已安装插件定义、带来源的快照或增量；输出：持久状态、地图与本地/触摸交互；前置条件：插件版本兼容，数据源执行由当前任务拥有，手机通过Pairlink读取PC投影；失败表现：协议/版本/加载错误保留旧状态，取消与重启显示中断，旧PC不展示入口；关联契约：`C-050`。实现证据：`internal/taskpanel`、`internal/store/task_panels.go`、`internal/engine/task_panels.go`、`internal/remote/task_panels.go`、`internal/panelplugins/fofaworld`、`frontend/src/task-panels`、`frontend/src/components/app/task-panel-frame.tsx`、`mobile/src/components/task-panels.tsx`；说明：[Task panels](TASK_PANELS.md)。

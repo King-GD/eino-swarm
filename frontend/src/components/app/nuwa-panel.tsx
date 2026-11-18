@@ -32,7 +32,7 @@ export function NuwaPanel({
   onSelectAgent: (id: string) => void
 }) {
   const t = useT()
-  const { projectId, snapshot, loading, connected, error, connect, refresh } = useNuwa()
+  const { projectId, snapshot, loading: snapshotLoading, connected: streamConnected, error: snapshotError, connect, refresh } = useNuwa()
   const [scope, setScope] = useState<"project" | "thread">("project")
   const [selected, setSelected] = useState<string>()
   const [graphOpen, setGraphOpen] = useState(false)
@@ -41,7 +41,11 @@ export function NuwaPanel({
     setGraphOpen(false)
     return connect(project.id)
   }, [project.id, connect])
-  const current = projectId === project.id ? snapshot : undefined
+  const ownsProjection = projectId === project.id
+  const current = ownsProjection ? snapshot : undefined
+  const loading = !ownsProjection || snapshotLoading
+  const connected = ownsProjection && streamConnected
+  const error = ownsProjection ? snapshotError : undefined
   const nodes = useMemo(
     () => scopeNuwaNodes(current?.nodes ?? [], scope === "thread" ? threadId : undefined),
     [current, scope, threadId]
@@ -144,7 +148,7 @@ export function NuwaPanel({
           </Button>
         </div>
       ) : null}
-      {loading || projectId !== project.id ? (
+      {loading ? (
         <p role="status" className="py-6 text-center text-xs text-muted-foreground">
           {t("nuwa.loading")}
         </p>
