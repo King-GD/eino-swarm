@@ -98,11 +98,12 @@ public class AccountLoginTest {
         waitBrowser("Authorize test device"); click("Authorize test device");
         waitFor("Device authorized. Return to zwai."); foreground();
         waitFor("Waiting for a computer");
-        assertFalse("Account requires a computer before chat", present("Message"));
-        assertEquals("Account cannot discover phone-direct models", 0, count("models"));
+        assertFalse("The waiting PC surface has no composer", present("Message"));
+        waitFor("Chat");
         assertEquals(0, count("model_calls"));
         save("01-signed-in-account-waits-for-computer");
         click("Native test account"); click("Native test account"); click("Native test account");
+        click("Close");
         waitFor("Message");
         assertFalse("LOCAL keeps the same login", present("Sign in"));
         assertEquals("Gateway · Native gateway", chooseChatModel("native-fixture-model", "Gateway · Native gateway"));
@@ -110,14 +111,25 @@ public class AccountLoginTest {
         save("02-local-retains-authorized-source");
         click("User center");
         click("Native test account"); click("Native test account"); click("Native test account");
-        waitFor("Waiting for a computer");
-        assertFalse(present("Message"));
-        assertEquals(0, count("model_calls"));
-        control("pc=show"); click("Refresh account");
-        waitFor("Connect Native PC"); click("Connect Native PC");
+        click("Close");
+        waitFor("Message");
+        assertFalse("Account Chat hides personal model selection", present("Model"));
+        send("Native Account Chat routing probe");
+        waitFor("Native account answer");
+        assertEquals("No-PC Account Chat sends one request through the phone gateway", 1, count("model_successes"));
+        assertEquals("No PC is needed for direct inference", 0, count("connect"));
+        save("03-account-direct-reply-without-pc");
+
+        control("pc=show");
+        click("User center"); click("Refresh account");
+        waitFor("Connect Native PC");
+        click("Close");
+        waitFor("Native account answer");
+        click("Back");
+        waitFor("Native PC"); click("Native PC");
         waitContaining("Native PC conversation");
         assertTrue(count("peer_messages") > 0);
-        save("03-account-requires-owned-ready-pc");
+        save("04-explicitly-opened-owned-ready-pc");
         write("fixture-state.json", state().toString(2));
     }
 

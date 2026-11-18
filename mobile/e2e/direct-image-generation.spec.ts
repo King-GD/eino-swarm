@@ -18,17 +18,20 @@ function defer() {
   return { wait, release }
 }
 
-async function signedImageFixture(page: Page, { api = "chat", held, invalidResponse = false, imageAllowed = true, explicitDefault = true }: {
-  api?: "responses" | "chat"; held?: ReturnType<typeof defer>; invalidResponse?: boolean; imageAllowed?: boolean; explicitDefault?: boolean
+async function signedImageFixture(page: Page, { api = "chat", held, invalidResponse = false, imageAllowed = true, explicitDefault = true, fixedAccount = false }: {
+  api?: "responses" | "chat"; held?: ReturnType<typeof defer>; invalidResponse?: boolean; imageAllowed?: boolean; explicitDefault?: boolean; fixedAccount?: boolean
 } = {}) {
   let chats = 0
   let catalogs = 0
   const images: unknown[] = []
-  await page.addInitScript(({ origin, token, user, device }) => {
+  const conversationModel = fixedAccount ? "conversation" : "chat-model"
+  const imageModel = fixedAccount ? "image" : "image-a"
+  await page.addInitScript(({ origin, token, user, device, fixedAccount }) => {
+    if (fixedAccount) localStorage.removeItem("zwai.phone.mode")
     localStorage.setItem("zwai.phone.gateway.origin", origin)
     localStorage.setItem("zwai.phone.gateway.session", JSON.stringify({ origin, token, user, device }))
     localStorage.setItem("zwai.phone.locale", "zh")
-  }, { origin, token, user, device })
+  }, { origin, token, user, device, fixedAccount })
   await page.route(origin + "/**", async route => {
     const request = route.request()
     if (request.method() === "OPTIONS") { await route.fulfill({ headers: cors }); return }
@@ -42,18 +45,22 @@ async function signedImageFixture(page: Page, { api = "chat", held, invalidRespo
         user, device, capabilities_url: origin + "/client/models/v1/capabilities",
         models: {
           source_id: "gateway:image", source_kind: "gateway", label: "测试网关", execution: "phone",
-          api_base_url: origin + "/v1", catalog_url: origin + "/v1/models", api_access_enabled: true, configurable: true,
-          defaults: { conversation: "chat-model", ...(explicitDefault ? { image: "image-a" } : {}) },
+          api_base_url: origin + "/v1", catalog_url: origin + "/v1/models", api_access_enabled: true, configurable: !fixedAccount,
+          defaults: { conversation: conversationModel, ...(explicitDefault ? { image: imageModel } : {}) },
+          ...(fixedAccount ? { roles: [
+            { id: "conversation", enabled: true, label: "企业对话" },
+            { id: "image", enabled: true, label: "企业生图" },
+          ] } : {}),
         },
         pairlink: { enabled: false, hub_url: origin, redeem_url: origin + "/pairlink/v1/pairings/redeem",
           websocket_url: origin.replace("https:", "wss:") + "/pairlink/v1/ws", info_url: origin + "/pairlink/v1/info" },
         heartbeat_interval: 30, presence_ttl: 90,
       })
     } else if (path === "/client/models/v1/capabilities") {
-      const cap = (endpoints: string[], available = true) => ({ supported: available, available, configurable: available, endpoints })
+      const cap = (endpoints: string[], available = true) => ({ supported: available, available, configurable: available && !fixedAccount, endpoints })
       await respond({
         version: 1, model_roles_version: 3, sources: {
-          preset: { authorized: true, available: true, configurable: true, capabilities: {
+          preset: { authorized: true, available: true, configurable: !fixedAccount, capabilities: {
             conversation: cap([api === "chat" ? "chat_completions" : "responses"]),
             image: cap(imageAllowed ? ["images"] : [], imageAllowed),
           } },
@@ -64,10 +71,10 @@ async function signedImageFixture(page: Page, { api = "chat", held, invalidRespo
       await respond({})
     } else if (path === "/v1/models") {
       catalogs++
-      await respond([{ id: "image-z", model_type: "image" }, { id: "chat-model", model_type: "chat" }, { id: "image-a", model_type: "image" }])
+      await respond([{ id: "image-z", model_type: "image" }, { id: conversationModel, model_type: "chat" }, { id: imageModel, model_type: "image" }])
     } else if (path === "/v1/images/generations") {
       const body = request.postDataJSON()
-      expect(body).toEqual({ model: "image-a", prompt: expect.any(String), n: 1 })
+      expect(body).toEqual({ model: imageModel, prompt: expect.any(String), n: 1 })
       images.push(body)
       await held?.wait
       await respond([{ b64_json: invalidResponse ? "Tm90IGFuIGltYWdl" : png }]).catch(() => undefined)
@@ -100,7 +107,13 @@ async function signedImageFixture(page: Page, { api = "chat", held, invalidRespo
     }
   })
   await page.goto("/")
-  await expect(page.getByRole("tab", { name: "对话" })).toHaveAttribute("aria-selected", "true")
+  const chat = page.getByRole("tab", { name: "对话", exact: true })
+  if (fixedAccount) {
+    await expect(page.getByTestId("pc-wait")).toBeVisible()
+    await expect(page.getByLabel("消息", { exact: true })).toHaveCount(0)
+    await chat.click()
+  }
+  await expect(chat).toHaveAttribute("aria-selected", "true")
   await expect(page.getByLabel("消息")).toBeEnabled()
   if (!explicitDefault) await expect.poll(() => catalogs).toBeGreaterThanOrEqual(2)
   return { images, chats: () => chats }
@@ -202,4 +215,13 @@ test("reloading a pending call shows unknown without a second paid request", asy
     expect(calls.images).toHaveLength(1)
     expect(calls.chats()).toBe(0)
   } finally { held.release() }
+})
+
+test("Account Chat uses its fixed image role when no PC is connected", async ({ page }) => {
+  const calls = await signedImageFixture(page, { fixedAccount: true })
+  await expect(page.getByRole("button", { name: "模型", exact: true })).toHaveCount(0)
+  await sendText(page, "/image 两色图案")
+  await expect(page.getByTestId("generated-image-result").getByRole("img")).toBeVisible()
+  expect(calls.images).toEqual([{ model: "image", prompt: "两色图案", n: 1 }])
+  expect(calls.chats()).toBe(0)
 })
