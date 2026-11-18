@@ -76,3 +76,25 @@ func TestCatalogGroupSurvivesListingAndInvalidatesChangedMetadata(t *testing.T) 
 		}
 	}
 }
+
+func TestManagedConversationLabelDoesNotRenameTheModel(t *testing.T) {
+	const name = "conversation"
+	src, err := NewAccountSource("gateway:test", "Partner", "https://gateway.invalid/v1", "private", Catalog{Names: []string{name}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, label := range []string{"Partner chat", ""} {
+		src.SetRoles([]AccountRole{
+			{ID: "title", Enabled: true, Label: "Naming"},
+			{ID: name, Enabled: true, Label: label},
+		})
+		want := label
+		if want == "" {
+			want = name
+		}
+		rows := src.rows(true, "")
+		if len(rows) != 1 || rows[0].Model != name || rows[0].Label != want || rows[0].ProviderLabel != "Partner" {
+			t.Fatalf("model projection for label %q: %+v", label, rows)
+		}
+	}
+}

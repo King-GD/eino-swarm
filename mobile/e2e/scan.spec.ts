@@ -61,8 +61,8 @@ test("a saved ticket shows host tabs and connecting, not the scan form", async (
   })
   await page.goto("/")
   await expect(page.getByRole("tablist", { name: "电脑" })).toBeVisible()
-  // The corner is New chat; Add a PC is a menu row, not a second control.
-  await expect(page.getByTestId("new-chat-top")).toBeVisible()
+  await expect(page.getByRole("button", { name: "新建对话", exact: true })).toHaveCount(1)
+  await expect(page.getByTestId("new-chat")).toBeVisible()
   await expect(page.getByRole("button", { name: "添加 PC" })).toHaveCount(0)
   await expect(page.getByRole("heading", { name: "扫码绑定这台 PC" })).toHaveCount(0)
   await expect(page.getByLabel("配对 URI")).toHaveCount(0)

@@ -150,9 +150,6 @@ func (e *Engine) failureRetryModel(ctx context.Context, th *store.Thread, turn *
 	selection := recoveredWorkerBinding(turn, swarm.ModelBinding{
 		ProviderID: providerID, Model: turn.Model, ReasoningEffort: turn.ReasoningEffort,
 	})
-	if _, err := e.pool.ResolveModel(selection.ProviderID, selection.Model); err != nil {
-		return nil, err
-	}
 	effort := selection.ReasoningEffort
 	if _, recovered := turn.WorkerModelRecovery[providerID]; effort == "" && !recovered {
 		effort = th.ReasoningEffort
@@ -161,7 +158,7 @@ func (e *Engine) failureRetryModel(ctx context.Context, th *store.Thread, turn *
 	if _, recovered := turn.WorkerModelRecovery[providerID]; recovered {
 		return e.pool.RestoreWorkerModel(ctx, selection, recorder)
 	}
-	return e.pool.ModelBuilder(ctx, selection.ProviderID, selection.Model, effort, recorder)
+	return e.pool.ResumeModelBuilder(ctx, selection.ProviderID, selection.Model, effort, recorder)
 }
 
 // failureRetryMessages is the prior conversation plus this turn's stored

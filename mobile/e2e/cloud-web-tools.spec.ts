@@ -197,7 +197,7 @@ test("a signed-in phone inherits an anonymous PC and keeps direct-chat tools ind
   await page.getByLabel("电脑会话联网工具", { exact: true }).selectOption("cloud")
   await expect(center.getByTestId("pc-web-status")).toContainText("请在这台电脑登录")
   await center.getByRole("button", { name: "关闭", exact: true }).click()
-  await page.getByTestId("new-chat-top").click()
+  await page.getByTestId("new-chat").click()
   await expect(page.getByRole("heading", { name: "新建对话", exact: true })).toBeVisible()
   await expectNoWebSettingsBanner(page)
   await page.screenshot({ path: info.outputPath("phone-account-anonymous-PC.png") })

@@ -162,7 +162,6 @@ describe("VersionCheck", () => {
         path="relay"
         onSelect={vi.fn()}
         onAdd={vi.fn()}
-        onNewChat={vi.fn()}
         onUnlink={vi.fn()}
       />,
     )

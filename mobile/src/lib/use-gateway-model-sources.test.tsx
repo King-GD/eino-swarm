@@ -2,9 +2,10 @@ import { fixtureCapabilities } from "@/test/capabilities"
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { clearGatewaySession, loadGatewaySession, saveGatewaySession, type GatewayBootstrap } from "./gateway-account"
-import { useLocalModelSources } from "./use-local-model-sources"
+import { useGatewayModelSources } from "./use-gateway-model-sources"
 import { setLocale } from "./i18n"
 import { streamCompletion } from "./openai-client"
+import { providerChoices } from "./direct-provider"
 
 const origin="https://sources.invalid"
 const session={origin,token:"agm_"+"a".repeat(64),user:{id:"owner",username:"Owner",approval_status:"approved"},device:{id:"phone",expires_at:"2099-01-01T00:00:00Z"}}
@@ -12,7 +13,21 @@ const bootstrap:GatewayBootstrap={capabilities:fixtureCapabilities(),capability_
 const response=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{"Content-Type":"application/json"}})
 beforeEach(()=>{setLocale("en");saveGatewaySession(session)})
 
-describe("LOCAL account model sources",()=>{
+describe("phone Gateway model sources",()=>{
+ it("keeps only the preset conversation binding even when auxiliary aliases use chat",async()=>{
+  const preset = [
+   {id:"title",model_type:"chat"}, {id:"compact",model_type:"chat"},
+   {id:"translation",model_type:"chat"}, {id:"conversation",model_type:"chat"},
+  ]
+  const global = [{id:"general-chat",model_type:"chat"}, {id:"voice",model_type:"speech"}]
+  vi.stubGlobal("fetch",vi.fn(async(input:RequestInfo|URL)=>response({data:String(input).includes("/preset/") ? preset : global})))
+  const view=renderHook(()=>useGatewayModelSources("authorized",session,bootstrap))
+  await waitFor(()=>expect(view.result.current.providers).toHaveLength(2))
+  expect(providerChoices(view.result.current.providers).map(({provider_id,model,label})=>[provider_id,model,label])).toEqual([
+   ["gateway:preset","conversation","Partner chat"],
+   ["gateway:global","general-chat",undefined],
+  ])
+ })
  it("aggregates identical model names without merging their routes or groups",async()=>{
   const calls:{url:string;body?:unknown}[]=[]
   vi.stubGlobal("fetch",vi.fn(async(input,init)=>{
@@ -20,7 +35,7 @@ describe("LOCAL account model sources",()=>{
    expect((init?.headers as Record<string,string>).Authorization).toBe("Bearer "+session.token)
    return url.endsWith("/models")?response({data:[{id:"conversation"}]}):response({choices:[{message:{content:"routed reply"}}]})
   }))
-  const hook=renderHook(()=>useLocalModelSources("local","authorized",session,bootstrap))
+  const hook=renderHook(()=>useGatewayModelSources("authorized",session,bootstrap))
   await waitFor(()=>expect(hook.result.current.providers).toHaveLength(2))
   expect(hook.result.current.providers.map(row=>[row.id,row.label])).toEqual([["gateway:preset","Partner"],["gateway:global","Gateway · Main"]])
   for(const provider of hook.result.current.providers){
@@ -32,7 +47,7 @@ describe("LOCAL account model sources",()=>{
  it("hides an independently forbidden source without expiring the login or retrying forever",async()=>{
   const fetcher=vi.fn(async(input:RequestInfo|URL)=>String(input).includes("/gateway/")?response({error:{message:"denied"}},403):response({data:[{id:"conversation"}]}))
   vi.stubGlobal("fetch",fetcher)
-  const hook=renderHook(()=>useLocalModelSources("local","authorized",session,bootstrap))
+  const hook=renderHook(()=>useGatewayModelSources("authorized",session,bootstrap))
   await waitFor(()=>expect(hook.result.current.busy).toBe(false))
   expect(hook.result.current.providers.map(row=>row.id)).toEqual(["gateway:preset"])
   expect(hook.result.current.error).toBe(false)
@@ -42,7 +57,7 @@ describe("LOCAL account model sources",()=>{
  it("refreshes only model sources after Gateway inference loses its grant",async()=>{
   let denied=false
   vi.stubGlobal("fetch",vi.fn(async(input:RequestInfo|URL)=>String(input).includes("/gateway/")&&denied?response({error:{message:"denied"}},403):response({data:[{id:"conversation"}]})))
-  const hook=renderHook(()=>useLocalModelSources("local","authorized",session,bootstrap))
+  const hook=renderHook(()=>useGatewayModelSources("authorized",session,bootstrap))
   await waitFor(()=>expect(hook.result.current.providers).toHaveLength(2))
   const provider=hook.result.current.providers[1];denied=true
   await act(async()=>{await expect(streamCompletion({provider,model:"conversation",reasoning:"",turns:[{role:"user",parts:[{kind:"text",text:"revocation fixture"}]}],signal:new AbortController().signal,onDelta:()=>undefined})).rejects.toMatchObject({ status: 403 })})
@@ -52,27 +67,25 @@ describe("LOCAL account model sources",()=>{
  it("retains same-account models through a transient discovery failure and accepts an empty source",async()=>{
   let code=200
   vi.stubGlobal("fetch",vi.fn(async(input:RequestInfo|URL)=>String(input).includes("/gateway/")?response(code===200?{data:[{id:"global-model"}]}:{error:{message:"unavailable"}},code):response({data:[]})))
-  const hook=renderHook(()=>useLocalModelSources("local","authorized",session,bootstrap))
+  const hook=renderHook(()=>useGatewayModelSources("authorized",session,bootstrap))
   await waitFor(()=>expect(hook.result.current.providers).toHaveLength(1))
   code=503;act(()=>hook.result.current.refresh())
   await waitFor(()=>expect(hook.result.current.error).toBe(true))
   expect(hook.result.current.providers[0].catalog).toEqual(["global-model"])
  })
- it("drops granted models immediately on mode change, revocation and logout",async()=>{
+ it("drops granted models immediately on revocation and logout",async()=>{
   const fetcher=vi.fn(async()=>response({data:[{id:"conversation"}]}));vi.stubGlobal("fetch",fetcher)
-  const hook=renderHook(({mode,boot,account})=>useLocalModelSources(mode,"authorized",account,boot),{initialProps:{mode:"local" as "local"|"account",boot:bootstrap,account:session as typeof session|null}})
+  const hook=renderHook(({boot,account})=>useGatewayModelSources("authorized",account,boot),{initialProps:{boot:bootstrap,account:session as typeof session|null}})
   await waitFor(()=>expect(hook.result.current.providers).toHaveLength(2))
-  hook.rerender({mode:"local",boot:{...bootstrap,capabilities:{...bootstrap.capabilities!,sources:{...bootstrap.capabilities!.sources,gateway:{...bootstrap.capabilities!.sources.gateway!,authorized:false}}}},account:session})
+  hook.rerender({boot:{...bootstrap,capabilities:{...bootstrap.capabilities!,sources:{...bootstrap.capabilities!.sources,gateway:{...bootstrap.capabilities!.sources.gateway!,authorized:false}}}},account:session})
   expect(hook.result.current.providers.map(row=>row.id)).toEqual(["gateway:preset"])
-  hook.rerender({mode:"account",boot:bootstrap,account:session})
-  expect(hook.result.current.providers).toEqual([])
-  clearGatewaySession();hook.rerender({mode:"local",boot:bootstrap,account:null})
+  clearGatewaySession();hook.rerender({boot:bootstrap,account:null})
   expect(hook.result.current.providers).toEqual([])
  })
  it("keeps the Gateway catalog when the preset is denied and never retries the refusal",async()=>{
   const fetcher=vi.fn(async(input:RequestInfo|URL)=>String(input).includes("/preset/")?response({},403):response({data:[{id:"global-model"}]}))
   vi.stubGlobal("fetch",fetcher)
-  const hook=renderHook(()=>useLocalModelSources("local","authorized",session,bootstrap))
+  const hook=renderHook(()=>useGatewayModelSources("authorized",session,bootstrap))
   await waitFor(()=>expect(hook.result.current.providers.map(row=>row.id)).toEqual(["gateway:global"]))
   expect(hook.result.current.error).toBe(false)
   expect(fetcher).toHaveBeenCalledTimes(2)
@@ -81,7 +94,7 @@ describe("LOCAL account model sources",()=>{
  it("fetches an authorized Gateway source even when the primary preset has no API access",async()=>{
   const fetcher=vi.fn(async()=>response({data:[{id:"global-model"}]}));vi.stubGlobal("fetch",fetcher)
   const deniedPreset={...bootstrap,capabilities:{...bootstrap.capabilities!,sources:{...bootstrap.capabilities!.sources,preset:{...bootstrap.capabilities!.sources.preset!,authorized:false}}}}
-  const hook=renderHook(()=>useLocalModelSources("local","authorized",session,deniedPreset))
+  const hook=renderHook(()=>useGatewayModelSources("authorized",session,deniedPreset))
   await waitFor(()=>expect(hook.result.current.providers.map(row=>row.id)).toEqual(["gateway:global"]))
   expect(fetcher).toHaveBeenCalledTimes(1)
  })

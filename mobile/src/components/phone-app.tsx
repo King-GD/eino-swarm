@@ -103,7 +103,7 @@ export function PhoneApp() {
   const [personalProviders, setProviders] = useState(() => loadProviders())
   const providers = account.officialOnly ? account.providers : [...account.providers, ...personalProviders]
   const [surface, setSurface] = useState<"hosts" | "chat">(() =>
-    loadProviders().length > 0 && savedHosts().length === 0 ? "chat" : "hosts",
+    !account.officialOnly && loadProviders().length > 0 && savedHosts().length === 0 ? "chat" : "hosts",
   )
   const [modelsOpen, setModelsOpen] = useState(false)
   const [activeFp, setActiveFp] = useState(
@@ -131,7 +131,8 @@ export function PhoneApp() {
   const [loadingMore, setLoadingMore] = useState(false)
   const startup = useEngineStartup(link)
   const { policy: catalogPolicy, models, levels, catalogBusy, refreshModels, refreshBusy, refreshError, webExecutionStatus, predictionsEnabled } = useModelCatalog(link, `${startup?.product_mode ?? ""}:${startup?.model_policy?.scope ?? ""}`)
-  usePhoneSpeechSync(startup?.startup === "ready" ? link : null, hosts.find((host) => host.fingerprint === activeFp), hosts, surface === "chat" && account.mode !== "account", providers)
+  const speechHost = surface === "chat" && account.officialOnly ? undefined : hosts.find((host) => host.fingerprint === activeFp)
+  usePhoneSpeechSync(speechHost && startup?.startup === "ready" ? link : null, speechHost, hosts, surface === "chat" && !account.officialOnly, providers)
   const currentPolicy = catalogPolicy?.scope === startup?.model_policy?.scope ? catalogPolicy : startup?.model_policy ?? catalogPolicy
   const hidePcModel = currentPolicy?.mode === "gateway" && !currentPolicy.capabilities?.capabilities.conversation?.configurable
   const restoring = startup?.startup === "restoring"
@@ -657,8 +658,8 @@ export function PhoneApp() {
     setBusy(false)
   }
 
-  const selectHost = (fp: string, preserveView = false) => {
-    if (!preserveView) setSurface("hosts")
+  const selectHost = (fp: string, preserveView = false, background = false) => {
+    if (!preserveView && !background) setSurface("hosts")
     const saved = savedHosts().find((row) => row.fingerprint === fp)
     if (!saved) return
     const paused = saved && gatewayUpgradePending(saved)
@@ -681,7 +682,10 @@ export function PhoneApp() {
   }
 
   useEffect(() => {
-    const select = (event: Event) => { setHosts(savedHosts()); selectHost((event as CustomEvent<string>).detail) }
+    const select = (event: Event) => {
+      setHosts(savedHosts())
+      selectHost((event as CustomEvent<string>).detail, false, event.type === "zwai.gateway.auto-connect")
+    }
     const sync = () => {
       const next = savedHosts()
       setHosts(next)
@@ -694,19 +698,18 @@ export function PhoneApp() {
         if (saved && (gatewayUpgradePending(saved) || !sameLinkAuthority(saved, authorityRef.current))) selectHost(saved.fingerprint, true)
       }
     }
-    const chat = () => { if (account.mode !== "account") setSurface("chat") }
     const scan = () => { if (account.mode !== "account") setAdding(true) }
     const models = () => { if (account.mode !== "account") setModelsOpen(true) }
-    window.addEventListener("zwai.gateway.chat", chat)
     window.addEventListener("zwai.gateway.scan", scan)
     window.addEventListener("zwai.gateway.models", models)
     window.addEventListener("zwai.gateway.connect", select)
+    window.addEventListener("zwai.gateway.auto-connect", select)
     window.addEventListener("zwai.gateway.account", sync)
     return () => {
-      window.removeEventListener("zwai.gateway.chat", chat)
       window.removeEventListener("zwai.gateway.scan", scan)
       window.removeEventListener("zwai.gateway.models", models)
       window.removeEventListener("zwai.gateway.connect", select)
+      window.removeEventListener("zwai.gateway.auto-connect", select)
       window.removeEventListener("zwai.gateway.account", sync)
     }
   }, [])
@@ -722,14 +725,13 @@ export function PhoneApp() {
   }
 
   const openChat = () => {
-    if (account.mode === "account") return
     setSurface("chat")
     setComposing(false)
   }
 
   useEffect(() => {
-    if (account.providers.length > 0 && hosts.length === 0) setSurface("chat")
-  }, [account.providers.length, hosts.length])
+    if (!account.officialOnly && account.providers.length > 0 && hosts.length === 0) setSurface("chat")
+  }, [account.officialOnly, account.providers.length, hosts.length])
 
   const modelSheet = modelsOpen && account.mode !== "account" ? (
     <ProviderSheet
@@ -755,7 +757,8 @@ export function PhoneApp() {
   ) : null
 
   const gate = (children: ReactNode) => <PcConnectionGate hosts={hosts} activeFingerprint={activeFp} connecting={busy || reconnecting}
-    connected={Boolean(link?.alive())} ready={startup?.startup === "ready"} error={error} onRetry={() => void recover(true)}>{children}</PcConnectionGate>
+    connected={Boolean(link?.alive())} ready={startup?.startup === "ready"} error={error} onRetry={() => void recover(true)}
+    onSelectHost={selectHost} onOpenChat={openChat}>{children}</PcConnectionGate>
 
   if (account.mode !== "account" && phoneShell(hosts.length, providers.length) === "scan" && !(surface === "chat" && account.gatewaySourceID)) {
     if (account.empty) return <>{account.empty}{sheet}{modelSheet}</>
@@ -893,7 +896,7 @@ export function PhoneApp() {
     )
   }
 
-  if (surface === "chat" && account.mode !== "account") {
+  if (surface === "chat") {
     return (
       <ChatSurface
         locale={locale}
@@ -903,7 +906,7 @@ export function PhoneApp() {
         connected={Boolean(link?.alive())}
         reconnecting={reconnecting}
         providers={providers}
-        banner={link ? banner : null}
+        banner={!account.officialOnly && link ? banner : null}
         sheet={sheet}
         modelSheet={modelSheet}
         onSelectHost={selectHost}
@@ -978,7 +981,7 @@ export function PhoneApp() {
           onClientRead={(id, before) => readClientTask(linkRef.current, id, before)}
           onUnlink={unlink}
           onToggleLocale={flipLocale}
-          showChat={providers.length > 0 || Boolean(account.gatewaySourceID)}
+          showChat={account.officialOnly || providers.length > 0 || Boolean(account.gatewaySourceID)}
           onSelectChat={openChat}
           onModels={() => setModelsOpen(true)}
           onOpenAccount={openPcAccount}

@@ -23,6 +23,89 @@ function setup(mode: "local" | "fofa", onChange = vi.fn(), onFlush = vi.fn(async
 }
 
 describe("Speech settings", () => {
+  it("explains why speech tests are disabled and enables them after the corresponding switch", () => {
+    vi.stubGlobal("navigator", { mediaDevices: { getUserMedia: vi.fn() } })
+    vi.stubGlobal("MediaRecorder", vi.fn())
+    setup("local")
+    const recording = screen.getByRole("button", { name: "Test voice input" })
+    const reading = screen.getByRole("button", { name: "Test reading" })
+    expect(recording).toBeDisabled()
+    expect(reading).toBeDisabled()
+    expect(screen.getByText("Enable Voice input above before testing the microphone.")).toBeVisible()
+    expect(screen.getByText("Enable Read aloud above before testing playback.")).toBeVisible()
+    expect(recording).toHaveAccessibleDescription("Enable Voice input above before testing the microphone.")
+    expect(reading).toHaveAccessibleDescription("Enable Read aloud above before testing playback.")
+    fireEvent.click(screen.getAllByLabelText("Enabled")[0])
+    expect(recording).toBeEnabled()
+    fireEvent.click(screen.getAllByLabelText("Enabled")[1])
+    expect(reading).toBeDisabled()
+    expect(screen.getByText("Enter text to test playback.")).toBeVisible()
+    fireEvent.change(screen.getByLabelText("Text for the reading test"), { target: { value: "Playback fixture" } })
+    expect(reading).toBeEnabled()
+    act(() => useApp.setState(state => ({ meta: { ...state.meta, speech: {
+      input: { ready: false }, output: { ready: false },
+    } } as Meta })))
+    expect(recording).toBeDisabled()
+    expect(reading).toBeDisabled()
+    expect(screen.getAllByText("The speech service is not ready. Check the speech configuration or gateway account status.")).toHaveLength(2)
+  })
+
+  it("explains when the environment cannot record audio", () => {
+    vi.stubGlobal("MediaRecorder", undefined)
+    setup("local")
+    fireEvent.click(screen.getAllByLabelText("Enabled")[0])
+    expect(screen.getByRole("button", { name: "Test voice input" })).toBeDisabled()
+    expect(screen.getByText("Microphone recording is not supported in this environment.")).toBeVisible()
+  })
+
+  it("keeps Stop reading available when a setting is disabled during playback", () => {
+    vi.spyOn(speechPlayback, "getSnapshot").mockReturnValue({ key: "settings:speech", state: "playing" })
+    const stop = vi.spyOn(speechPlayback, "stop").mockImplementation(() => {})
+    setup("local")
+    const button = screen.getByRole("button", { name: "Stop reading" })
+    expect(button).toBeEnabled()
+    fireEvent.click(button)
+    expect(stop).toHaveBeenCalledOnce()
+  })
+
+  it("hides fixed gateway parameters and keeps recording settings collapsed until opened or searched", () => {
+    const model_policy = gatewayVoicePolicy()
+    const speech = defaultSpeechSettings()
+    useApp.setState({ meta: { product_mode: "fofa", model_policy, speech: {
+      ...speech,
+      input: { ...speech.input, execution: "gateway", ready: true, model: "", label: "", audio: {
+        version: 1, status: "configured", scope: "input", overrides: {}, parameters: {
+          response_format: { values: ["json"], default: "json", configurable: false },
+          max_file_bytes: 25 * 1024 * 1024,
+        },
+      } },
+      output: { ...speech.output, execution: "gateway", ready: true, model: "", label: "", audio: {
+        version: 1, status: "configured", scope: "output", overrides: {}, parameters: {
+          voice: { values: ["calm", "bright"], default: "calm", configurable: true },
+          response_format: { values: ["pcm"], default: "pcm", configurable: false },
+          speed: { min: 1, max: 1, default: 1, configurable: false },
+        },
+      } },
+    } } as unknown as Meta })
+    const onChange = vi.fn()
+    const settings = { speech, models: { default: "", providers: [] }, model_policy } as unknown as Settings
+    const { rerender } = render(<SpeechSettings settings={settings} onChange={onChange} onFlush={async () => {}} />)
+    const voice = screen.getByRole("combobox", { name: "Voice ID" })
+    expect(voice.closest("[data-settings-row]")).not.toBeNull()
+    fireEvent.click(voice)
+    fireEvent.click(screen.getByRole("option", { name: "bright" }))
+    expect(onChange.mock.lastCall![0].speech.gateway_parameters).toEqual({ output: { voice: "bright" } })
+    expect(screen.queryByText("Audio format")).toBeNull()
+    expect(screen.queryByText("Speech speed")).toBeNull()
+    expect(screen.getByText("Advanced settings").closest("details")?.open).toBe(false)
+    rerender(<SpeechSettings settings={settings} onChange={onChange} onFlush={async () => {}} query="Voice ID" />)
+    expect(screen.getByRole("combobox", { name: "Voice ID" })).toBeVisible()
+    expect(screen.queryByRole("combobox", { name: "Microphone" })).toBeNull()
+    rerender(<SpeechSettings settings={settings} onChange={onChange} onFlush={async () => {}} query="Recording format" />)
+    expect(screen.getByText("Advanced settings").closest("details")?.open).toBe(true)
+    expect(screen.getByRole("combobox", { name: "Recording format" })).toBeVisible()
+  })
+
   it("distinguishes generating from playing in the reading test", () => {
     let snapshot: ReturnType<typeof speechPlayback.getSnapshot> = { key: "settings:speech", state: "loading" }
     let changed: (() => void) | undefined
@@ -34,6 +117,22 @@ describe("Speech settings", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Playing audio")
     act(() => { snapshot = { state: "idle" }; changed?.() })
     expect(screen.queryByRole("status")).toBeNull()
+  })
+
+  it("saves a physical microphone and can return to the system default", async () => {
+    const enumerateDevices = vi.fn(async () => [
+      { kind: "audioinput", deviceId: "default", label: "Default - MacBook Pro Microphone" },
+      { kind: "audioinput", deviceId: "camera", label: "Camera 100-Audio" },
+      { kind: "audiooutput", deviceId: "speakers", label: "Speakers" },
+    ])
+    vi.stubGlobal("navigator", { mediaDevices: { enumerateDevices, addEventListener: vi.fn(), removeEventListener: vi.fn() } })
+    const { onChange } = setup("local")
+    fireEvent.click(await screen.findByRole("combobox", { name: "Microphone" }))
+    fireEvent.click(await screen.findByRole("option", { name: "Camera 100-Audio" }))
+    expect(onChange.mock.lastCall![0].speech.input.device_id).toBe("camera")
+    fireEvent.click(screen.getByRole("combobox", { name: "Microphone" }))
+    fireEvent.click(await screen.findByRole("option", { name: "System default" }))
+    expect(onChange.mock.lastCall![0].speech.input.device_id).toBe("")
   })
 
   it("configures local speech independently and preserves a saved secret until explicitly cleared", () => {
@@ -57,14 +156,29 @@ describe("Speech settings", () => {
     expect(onChange.mock.lastCall![0].speech.output).toMatchObject({ source: "account", speed: 1.2 })
   })
 
-  it("uses gateway-managed roles without exposing endpoint or credential configuration", () => {
+  it("defaults on only for configured gateway roles and remembers an independent opt-out", () => {
     const { onChange } = setup("fofa", vi.fn(), vi.fn(async () => {}), gatewayVoicePolicy())
+    const defaults = defaultSpeechSettings()
+    act(() => useApp.setState(state => ({ meta: { ...state.meta, speech: {
+      ...defaults, execution: "gateway",
+      input: { ...defaults.input, ready: false, label: "" },
+      output: { ...defaults.output, enabled: true, ready: true, model: "voice", label: "Voice", execution: "gateway" },
+    } } as Meta })))
     expect(screen.queryByLabelText("API base URL")).toBeNull()
     expect(screen.queryByLabelText("API key")).toBeNull()
     expect(screen.getByRole("heading", { name: "Voice input" })).toBeVisible()
-    fireEvent.click(screen.getAllByLabelText("Enabled")[1])
-    expect(onChange.mock.lastCall![0].speech.output).toMatchObject({ enabled: true, source: "account" })
-    expect(onChange.mock.lastCall![0].speech.input.enabled).toBe(false)
+    const [input, output] = screen.getAllByRole("switch", { name: "Enabled" })
+    expect(input).toBeDisabled()
+    expect(input).not.toBeChecked()
+    expect(output).toBeChecked()
+    expect(onChange).not.toHaveBeenCalled()
+    fireEvent.click(output)
+    expect(output).not.toBeChecked()
+    expect(onChange.mock.lastCall![0].speech.output).toMatchObject({ enabled: false, gateway_disabled: true, source: "account" })
+    expect(onChange.mock.lastCall![0].speech.input.gateway_disabled).toBeUndefined()
+    fireEvent.click(output)
+    expect(output).toBeChecked()
+    expect(onChange.mock.lastCall![0].speech.output.gateway_disabled).toBe(false)
   })
 
   it("does not infer Gateway voice permission from product mode alone", () => {

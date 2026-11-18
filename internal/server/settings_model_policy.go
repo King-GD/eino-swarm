@@ -24,8 +24,8 @@ func (s *Server) currentSettingsView() settingsView {
 	v.Swarm.TitleProvider, v.Swarm.TitleModel = "", ""
 	v.Swarm.CompactProvider, v.Swarm.CompactModel = "", ""
 	v.Search.EmbeddingProvider, v.Search.EmbeddingModel = "", ""
-	v.Speech.Input.SpeechEndpoint = config.SpeechEndpoint{Source: config.SpeechSourceAccount}
-	v.Speech.Output.SpeechEndpoint = config.SpeechEndpoint{Source: config.SpeechSourceAccount}
+	v.Speech.Input.SpeechEndpoint = config.SpeechEndpoint{Enabled: cfg.Speech.Input.Enabled, Source: config.SpeechSourceAccount}
+	v.Speech.Output.SpeechEndpoint = config.SpeechEndpoint{Enabled: cfg.Speech.Output.Enabled, Source: config.SpeechSourceAccount}
 	v.Speech.Input.HasAPIKey, v.Speech.Output.HasAPIKey = false, false
 	return v
 }
@@ -55,11 +55,19 @@ func validatePresetSettings(old, next *config.Config, policy provider.ModelPolic
 		*pin[0] = *pin[1]
 	}
 	for _, pair := range [][2]*config.SpeechEndpoint{{&next.Speech.Input.SpeechEndpoint, &old.Speech.Input.SpeechEndpoint}, {&next.Speech.Output.SpeechEndpoint, &old.Speech.Output.SpeechEndpoint}} {
-		empty := *pair[0] == (config.SpeechEndpoint{Source: config.SpeechSourceAccount})
-		if !empty && *pair[0] != *pair[1] {
+		incoming, previous := *pair[0], *pair[1]
+		enabled := incoming.Enabled
+		// Enablement belongs to the user's speech preference, not model selection.
+		incoming.Enabled, previous.Enabled = false, false
+		// mergeSpeechSettings retains an omitted write-only key. A sanitized
+		// account placeholder may therefore contain the unchanged private key.
+		empty := incoming == (config.SpeechEndpoint{Source: config.SpeechSourceAccount}) ||
+			incoming == (config.SpeechEndpoint{Source: config.SpeechSourceAccount, APIKey: previous.APIKey})
+		if !empty && incoming != previous {
 			return errCustomModelsDisabled
 		}
 		*pair[0] = *pair[1]
+		pair[0].Enabled = enabled
 	}
 	if !reflect.DeepEqual(old.Models.Bindings, next.Models.Bindings) {
 		return errCustomModelsDisabled

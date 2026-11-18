@@ -91,10 +91,13 @@ type builder func(ctx context.Context, p config.Provider) (model.BaseChatModel, 
 // pool instead of a dozen.
 type Pool struct {
 	policyUse sync.RWMutex
-	cfg       *config.Config
-	build     builder
-	mock      bool
-	mockDelay time.Duration
+	// Chat checks finish synchronously. A source save can wait for them
+	// without waiting for an audio or other typed request's response.
+	chatPolicyUse sync.RWMutex
+	cfg           *config.Config
+	build         builder
+	mock          bool
+	mockDelay     time.Duration
 	// Fixed at construction, shared by every endpoint gate in this pool.
 	backoffClock timing.Clock
 
@@ -493,7 +496,7 @@ func wrap(m model.BaseChatModel, agentID string, p config.Provider, effort strin
 		// Admission and telemetry must surround the same request. Wrapping the
 		// gate again would count a cancelled wait as a completed model call.
 		r.inner, r.gate, r.policyUse = shared.inner, shared.gate, shared.policyUse
-		r.onResult = shared.onResult
+		r.onResult, r.roleSource = shared.onResult, shared.roleSource
 	}
 	return r
 }
@@ -505,6 +508,7 @@ func wrap(m model.BaseChatModel, agentID string, p config.Provider, effort strin
 // client cached instead of one instance per thinking level.
 type recordingModel struct {
 	policyUse  func() (func(), error)
+	roleSource func() *AccountSource
 	onResult   func(error)
 	inner      model.BaseChatModel
 	gate       *backoffGate

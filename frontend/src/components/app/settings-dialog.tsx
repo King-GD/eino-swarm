@@ -59,6 +59,7 @@ const settingsScrollTab =
   "thin-scrollbar relative flex min-h-0 flex-1 flex-col overflow-auto pb-1"
 
 function sections(t: Translate) {
+  const speechKeys = `${speechSettingsSearch} ${t("speech.advanced")} ${t("speech.recordingFormat")} ${t("speech.duration")} ${t("speech.inputTimeout")} ${t("speech.outputTimeout")} ${t("speech.outputFormat")} ${t("speech.streamFormat")} ${t("speech.speed")}`
   return [
     {
       id: "general",
@@ -76,13 +77,13 @@ function sections(t: Translate) {
       id: "models",
       label: t("settings.nav.models"),
       icon: Cpu,
-      keys: `provider endpoint api key base url responses cloud builtin tools discover auxiliary title compact context window timeout first byte model embedding semantic search 模型 提供商 云端 内置 工具 嵌入 语义 搜索 首字节 等待 超时 ${speechSettingsSearch}`,
+      keys: `provider endpoint api key base url responses cloud builtin tools discover auxiliary title compact context window timeout first byte model embedding semantic search 模型 提供商 云端 内置 工具 嵌入 语义 搜索 首字节 等待 超时 ${speechKeys}`,
     },
     {
       id: "speech",
       label: t("settings.nav.speech"),
       icon: Mic,
-      keys: "speech voice microphone audio asr tts transcription read aloud 语音 麦克风 录音 识别 朗读 音色",
+      keys: speechKeys,
     },
     {
       id: "swarm",
@@ -573,7 +574,9 @@ export function SettingsDialog({
                       focusKey={focusKey}
                     />
                   ) : null}
-                  {page === "speech" ? <SpeechTab settings={{ ...settings, model_policy: modelPolicy ?? settings.model_policy }} onChange={apply} query={query} onFlush={() => persistRef.current!.flush()} /> : null}
+                  {page === "speech" ? <SettingsPage title={t("speech.title")}>
+                    <SpeechTab settings={{ ...settings, model_policy: modelPolicy ?? settings.model_policy }} onChange={apply} query={query} onFlush={() => persistRef.current!.flush()} />
+                  </SettingsPage> : null}
                   {page === "swarm" ? (
                     <SwarmTab
                       settings={settings}

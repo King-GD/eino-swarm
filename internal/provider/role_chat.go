@@ -40,12 +40,12 @@ func (p *Pool) CompleteFixedChat(ctx context.Context, providerID, role, system, 
 		if err != nil {
 			return "", err
 		}
-		release, err := p.BeginModelUse()
+		release, err := p.beginChatAdmission()
 		if err != nil {
 			return "", err
 		}
-		defer release()
 		chat, err := p.build(ctx, prov)
+		release()
 		if err != nil {
 			return "", err
 		}

@@ -28,9 +28,7 @@ export function SpeechStatus() {
         const route = speechRoute(speech,kind)
         if (route?.execution !== "gateway" || !session) return null
         const view = currentGatewayAudioView(session,speech,kind)
-        return <details key={kind}><summary className="text-xs">{t(kind === "input" ? "speech.input" : "speech.output")}</summary>
-          <AudioParameterControls view={view} role={kind === "input" ? "transcription" : "speech"} value={view?.overrides ?? {}} onChange={value => { if (view) saveGatewayAudioPreference(view,value) }} labels={{voice:t("speech.voice"),response_format:t("speech.outputFormat"),stream_format:t("speech.streamFormat"),language:t("speech.language"),speed:t("speech.speed"),instructions:t("speech.instructions"),prompt:t("speech.prompt"),follow:t("speech.audioFollow"),invalid:t("speech.audioInvalid"),unavailable:t("speech.audioUnavailable"),max_input_characters:t("speech.textLimit"),max_file_bytes:t("speech.fileLimit")}} />
-        </details>
+        return <AudioParameterControls key={kind} title={t(kind === "input" ? "speech.input" : "speech.output")} view={view} role={kind === "input" ? "transcription" : "speech"} value={view?.overrides ?? {}} onChange={value => { if (view) saveGatewayAudioPreference(view,value) }} labels={{voice:t("speech.voice"),response_format:t("speech.outputFormat"),stream_format:t("speech.streamFormat"),language:t("speech.language"),speed:t("speech.speed"),instructions:t("speech.instructions"),prompt:t("speech.prompt"),follow:t("speech.audioFollow"),invalid:t("speech.audioInvalid"),unavailable:t("speech.audioUnavailable")}} />
       })}
       {state.syncedAt ? <p className="text-xs text-muted-foreground">{t("speech.synced", { time: new Date(state.syncedAt).toLocaleString() })}</p> : null}
     </> : <p className="text-xs text-muted-foreground">{t("speech.noConfig")}</p>}

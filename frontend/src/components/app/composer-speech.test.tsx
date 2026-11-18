@@ -37,6 +37,17 @@ describe("Composer speech", () => {
     expect(screen.getByLabelText("Read aloud")).toBeVisible()
   })
 
+  it("opens the selected microphone instead of the system default", async () => {
+    enabled()
+    const speech = snapshot()
+    speech.input.device_id = "camera-mic"
+    act(() => useApp.setState({ meta: { speech } as Meta }))
+    const start = vi.spyOn(media, "startSpeechRecording").mockResolvedValue({ stop: async () => new Blob(), cancel: vi.fn() })
+    render(element())
+    fireEvent.click(screen.getByLabelText("Start voice input"))
+    await waitFor(() => expect(start).toHaveBeenCalledWith(expect.objectContaining({ deviceId: "camera-mic" })))
+  })
+
   it("keeps edits made during recognition and never sends automatically", async () => {
     enabled()
     const stop = vi.fn(async () => new Blob(["captured"], { type: "audio/wav" }))

@@ -184,10 +184,6 @@ func (e *Engine) resumeTurn(restoreCtx context.Context, turn *store.Turn, snapsh
 		providerID = th.ProviderID
 	}
 	selection := recoveredWorkerBinding(turn, swarm.ModelBinding{ProviderID: providerID, Model: turn.Model, ReasoningEffort: turn.ReasoningEffort})
-	_, err = e.pool.ResolveModel(selection.ProviderID, selection.Model)
-	if err != nil {
-		return err
-	}
 	effort := selection.ReasoningEffort
 	if _, recovered := turn.WorkerModelRecovery[providerID]; effort == "" && !recovered {
 		effort = th.ReasoningEffort
@@ -196,7 +192,7 @@ func (e *Engine) resumeTurn(restoreCtx context.Context, turn *store.Turn, snapsh
 	if _, recovered := turn.WorkerModelRecovery[providerID]; recovered {
 		builder, err = e.pool.RestoreWorkerModel(restoreCtx, selection, e.callRecorder(turn.ThreadID, turn.ID))
 	} else {
-		builder, err = e.pool.ModelBuilder(restoreCtx, selection.ProviderID, selection.Model, effort, e.callRecorder(turn.ThreadID, turn.ID))
+		builder, err = e.pool.ResumeModelBuilder(restoreCtx, selection.ProviderID, selection.Model, effort, e.callRecorder(turn.ThreadID, turn.ID))
 	}
 	if err != nil {
 		return err

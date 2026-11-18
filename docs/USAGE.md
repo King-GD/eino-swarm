@@ -7,20 +7,28 @@ behavior boundaries in [FEATURES](FEATURES.md) and [CONTRACTS](CONTRACTS.md).
 
 ## Voice input and read aloud
 
-Configure **Settings → Models** on the PC. Voice input and spoken answers have
-separate switches, both initially off. Managed gateway mode reuses the account's
-enabled recognition/speech roles; editable gateways allow functional overrides. In local mode, voice source account uses the signed-in account's enabled recognition or speech role. You can instead choose a service and its voice
-model, or configure a separate OpenAI-compatible endpoint. Select the recognition
-language, recording limit and, for playback, voice, speed and audio format.
-Try recording or playback in Settings to check the selected service.
+Open **Settings → Models** or **Settings → Speech** on the PC. Gateway sign-in
+enables Voice input and Read aloud independently as their models become available.
+Each PC switch remembers a manual opt-out. The speech page shows the selected
+gateway model's editable audio choices. Open **Advanced settings** to change
+recording format, timeouts or client limits.
 
-Choose **PCM (streaming playback)** for a Gateway or compatible service that
-supports streaming speech. Desktop/Web and direct phone requests start playing
+In LOCAL mode, choose a signed-in account role, personal service or custom
+OpenAI-compatible endpoint and turn on the direction you want. Try recording
+or playback in Settings to check the selected service.
+
+For a compatible service with editable audio format, choose **PCM (streaming
+playback)**. Desktop/Web and direct phone requests start playing
 as audio arrives. MP3/WAV keep complete-segment playback for compatibility.
 The encrypted PC-local phone route downloads a completed segment, including PCM;
 it does not provide live synthesis streaming.
 
 The microphone appears beside Send only when recognition is enabled and ready.
+Settings → Voice chooses the input device. System default follows the operating
+system's current input, which is the right choice when a laptop lid is closed
+and an external microphone should take over. A named device is used exactly;
+if it disappears, recording stops instead of silently switching microphones.
+
 On PC, click to record, click again to finish, or press Escape to cancel.
 On the phone, tap to open the recording panel and choose Finish or Cancel.
 Recognition inserts editable text; it never sends the message. If you edited

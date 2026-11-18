@@ -18,7 +18,7 @@ import (
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 )
 
-func TestGatewaySpeechHTTPRequestsSSEAndReleasesTheHeldUpstreamOnStop(t *testing.T) {
+func TestGatewaySpeechHTTPDefaultsOnAndReleasesTheHeldUpstreamOnStop(t *testing.T) {
 	first := []byte("event: speech.audio.delta\ndata: {\"type\":\"speech.audio.delta\",\"audio\":\"AQI=\"}\n\n")
 	canceled := make(chan struct{})
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -40,7 +40,7 @@ func TestGatewaySpeechHTTPRequestsSSEAndReleasesTheHeldUpstreamOnStop(t *testing
 		t.Fatal(err)
 	}
 	if err := cfg.Update(func(c *config.Config) error {
-		c.Speech.Output.Enabled, c.Speech.Output.Format = true, "pcm"
+		c.Speech.Output.Format = "pcm"
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -93,6 +93,20 @@ func TestGatewaySpeechHTTPRequestsSSEAndReleasesTheHeldUpstreamOnStop(t *testing
 	for time.Now().Before(deadline) {
 		if release, ok := pool.TryHoldModelPolicy(); ok {
 			release()
+			if err := cfg.Update(func(c *config.Config) error {
+				c.Speech.Output.GatewayDisabled = true
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			response, err := client.Post(httpServer.URL+"/api/audio/speech", "application/json", strings.NewReader(`{"text":"answer"}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			if response.StatusCode != http.StatusForbidden {
+				t.Fatalf("gateway opt-out returned HTTP %d", response.StatusCode)
+			}
 			return
 		}
 		time.Sleep(time.Millisecond)

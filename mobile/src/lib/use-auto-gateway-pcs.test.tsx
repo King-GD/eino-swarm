@@ -9,6 +9,7 @@ it("provisions every online PC on a returning session without replacing a manual
   const opened: string[] = []
   const observe = (event: Event) => opened.push((event as CustomEvent<string>).detail)
   window.addEventListener("zwai.gateway.connect", observe)
+  window.addEventListener("zwai.gateway.auto-connect", observe)
   let finish!: () => void
   const connectHost = vi.fn(async (id: string, options?: { select?: boolean }) => {
     if (id === "second") await new Promise<void>(resolve => { finish = resolve })
@@ -28,5 +29,9 @@ it("provisions every online PC on a returning session without replacing a manual
     expect(loadActiveFingerprint()).toBe("first")
     expect(loadSavedLinks()).toHaveLength(2)
     expect(opened).toEqual(["first", "first"])
-  } finally { view.unmount(); window.removeEventListener("zwai.gateway.connect", observe) }
+  } finally {
+    view.unmount()
+    window.removeEventListener("zwai.gateway.connect", observe)
+    window.removeEventListener("zwai.gateway.auto-connect", observe)
+  }
 })

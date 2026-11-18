@@ -5,7 +5,7 @@ def provider_admission_cases(root, model_type, case):
     model = model_type(
         "capability-admission", root / "models" / "provider" / "CapabilityAdmission.tla",
         ("NestedCapabilityWrapper", "GuardNilObserverOnly", "SkipCapabilityCheck",
-         "DropSourcePolicy", "ReleaseStreamHoldEarly"),
+         "DropSourcePolicy", "SkipFinalAdmission"),
         ("TypeOK", "NoPanic", "ObserverOwnsGate", "CallsRequireHTTP",
          "CapabilityRequired", "SourcePolicyRespected"), (("MaxRequests", 2),),
     )
@@ -13,7 +13,7 @@ def provider_admission_cases(root, model_type, case):
         return case("capability-admission-" + name, source, switches, violates, witness, model.name)
 
     cases = (
-        check("current", "one tracked admission owns capability, gate, policy hold and recorder"),
+        check("current", "one request owns the same gate and recorder across admission"),
         check("known-nil-gate", "historical f6e9a9a: gate-less capability wrapper observer panics",
               ("NestedCapabilityWrapper",), "NoPanic"),
         check("detached-observer", "historical f6e9a9a: observer captures the outer nil gate",
@@ -24,13 +24,13 @@ def provider_admission_cases(root, model_type, case):
               ("SkipCapabilityCheck",), "CapabilityRequired"),
         check("drop-policy", "seeded: clone gate without retaining trackedModel.policyUse",
               ("DropSourcePolicy",), "SourcePolicyRespected"),
-        check("early-stream-release", "seeded: release source hold when Stream returns headers",
-              ("ReleaseStreamHoldEarly",), "SourcePolicyRespected"),
+        check("skip-final-admission", "seeded: reuse a pre-wait policy check during a source save",
+              ("SkipFinalAdmission",), "SourcePolicyRespected"),
         *(check(name, "witness", witness=witness) for name, witness in (
             ("reach-wait", "NeverCooldownWait"),
             ("reach-cancel-wait", "NeverCancelledWait"),
             ("reach-success", "NeverSuccessfulCall"),
-            ("reach-stream", "NeverLiveStream"),
+            ("reach-stream", "NeverSwitchDuringStream"),
             ("reach-denial", "NeverPermissionRefusal"),
             ("reach-frozen-source", "NeverSourceRefusal"),
             ("reach-concurrent", "NeverConcurrentRequests"),

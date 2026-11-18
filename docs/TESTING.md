@@ -21,6 +21,30 @@ retain only explicit preferences from the PC; the phone's own declaration author
 These are protocol/UI fixture checks, not proof that the online gateway deployed the
 new declaration or that a physical device played audio.
 
+`frontend/src/components/app/settings-audio-parameters.test.tsx` and
+`frontend/e2e/gateway-speech-settings.spec.ts` cover the managed-account Speech
+page. They check centered content, fixed-value hiding, collapsed recording settings,
+negotiated stream and speed controls, stale preference reset, keyboard selection
+and persisted manual opt-out. The
+browser fixture supplies the verified policy/audio declaration; it does not test
+third-party authentication or native playback. Its settings PUTs now reach the
+real managed-mode HTTP handler and assert switch persistence and reload readback;
+the fixture does not synthesize successful saves. The Go regression
+`internal/server/settings_managed_speech_test.go` adds an actual managed account
+profile, round-trips sanitized GET bodies with and without retained private
+credentials, checks durable switches and refuses hidden endpoint/model/key edits
+without partial writes. `internal/speech/input_route_test.go` checks independent
+role admission and retained opt-out after reconnect.
+`internal/server/speech_gateway_stream_http_test.go` exercises default-on synthesis
+and explicit refusal through the real HTTP route and a loopback Gateway.
+
+The settings trial in `frontend/e2e/speech.spec.ts` asserts disabled reasons,
+enables each speech direction, captures actual fake-device microphone chunks,
+checks the WAV upload and transcription field, then decodes and schedules the
+loopback provider's playback samples. Unit tests also keep Stop available when
+settings change during playback. This is browser/loopback validation, not native
+microphone or online gateway acceptance.
+
 `internal/config/speech_test.go` and `internal/speech/service_test.go` cover
 independent switches, private settings, typed model discovery, Gateway role
 resolution, exact multipart/audio bytes, request limits and real HTTP
@@ -8756,12 +8780,12 @@ malformed successful streams and delayed/cancelled header reconnects. Cancelled
 account-model waits exercise negotiated capability checks through the same
 factory and must record no extra HTTP call. `internal/provider/capability_backoff_test.go`
 checks account recovery through Chat Completions and Responses, both Generate
-and Stream, preserving gate/caller identity, source-policy holds and revocation.
+and Stream, preserving gate/caller identity, source-policy checks and revocation.
 `models/provider/CapabilityAdmission.tla` retrospectively captures the nil-gate
 composition fault and the incomplete nil-guard-only repair. Its 15 registered
 checks cover five safety invariants, the known fault, seeded guard removals and
-eight reachability witnesses. Real HTTP regressions also retain an account
-stream's source hold and refuse a removed role while the source remains healthy.
+eight reachability witnesses. Real HTTP regressions allow switching during
+an already-admitted stream and refuse a removed role while the source remains healthy.
 See [the provider model mapping and bounds](../models/provider/README.md).
 After an
 initial 503 and cooldown, a probe remains open: before its first decoded nonempty
@@ -9120,22 +9144,36 @@ packaged desktop window acceptance.
 `go test -race ./internal/config ./internal/provider ./internal/remote ./internal/server`
 covers scoped bindings, account renewal/isolation, managed catalog/settings
 projection and direct mutation refusal. `internal/engine/model_policy_test.go`
-covers a running turn leaving the source switch free, an in-flight model call
-still refusing it, an embedding request that has reached its endpoint leaving
-the switch free (`TestEmbeddingBackfillDoesNotBlockDebugSourceSwitch`), backup
-and restart still refusing it, and managed project choices. `internal/provider/model_policy_admission_test.go` proves a stream holds
-the gate until upstream completion, and that an already opened client keeps its
-endpoint after the switch while a new lookup uses the new source.
+covers a running turn leaving the source switch free, a source admission
+holding the save, embedding backfill, backup, restart and managed project
+choices. The provider regression checks that the write lock still refuses a
+new call while an old HTTP stream drains. The paired-phone RPC regression
+holds the old upstream reply, switches the PC, and verifies the next lookup
+uses the Gateway before releasing the reply on its original source.
 
 `make model-check` includes `ModelModeAdmission`: the current protocol is safe,
-`SampleThenCommit` must violate `SwitchIsIdle`, and a witness reaches an idle
-switch. This proves the abstract ordering, not Go concurrency or storage atomicity.
+`SampleThenCommit` must violate `SwitchIsIdle` by overlapping the source check.
+A witness reaches a switch while an already-bound request is running. This proves the abstract ordering, not Go concurrency or storage atomicity.
+Mode-switch recovery regressions: `internal/remote/account_local_sources_test.go`
+refreshes both catalogs after LOCAL → Gateway and rebuilds a cold pool before
+calling the original source over HTTP. `internal/provider/resume_model_test.go`
+checks Generate/Stream, missing sources, removed models, discovery failure and
+revoked cached clients. `internal/engine/model_mode_recovery_test.go` asserts the
+resumed manager's actual request identity and the next turn's preset.
+`cmd/zwai/engine_mode_restart_test.go` kills an isolated real engine after the
+switch and starts a new process with delayed catalog discovery; the same turn
+must recover on its original source before a new turn adopts the preset.
+`models/lifecycle/ModelModeAdmission.tla` retains the catalog and model-binding
+invariants, with counterexamples for dropping a bound catalog, rewriting a
+recovered binding, recovering before discovery and ignoring real revocation.
+These checks do not constitute native window acceptance.
+
 Browser tests include `frontend/e2e/model-policy.spec.ts`, the dedicated FOFA
 `product-mode.spec.ts`, and phone account/waiting/voice regressions. Use separate
 source/build copies, ports, data directories and output directories concurrently.
 Native acceptance and gateway producer deployment are separate from these checks.
 
-手机 LOCAL 登录后的双目录授权回归：`mobile/src/lib/use-local-model-sources.test.tsx` 覆盖分组聚合、同名模型 HTTP 选路、单来源撤权、短暂故障缓存和模式／账号隔离；`mobile/src/lib/gateway-account.test.ts` 拒绝非同源目录与畸形元数据。`mobile/e2e/local-model-sources.spec.ts` 在 Chromium 与 WebKit 上验证三个分组、真实发送对应接口、刷新撤权及凭据不写入个人设置。Account 等待 PC 的回归仍由 `phone-account-mode.spec.ts` 负责。
+手机 LOCAL 登录后的双目录授权回归：`mobile/src/lib/use-gateway-model-sources.test.tsx` 覆盖分组聚合、同名模型 HTTP 选路、单来源撤权、短暂故障缓存和账号隔离；`mobile/src/lib/gateway-account.test.ts` 拒绝非同源目录与畸形元数据。`mobile/e2e/local-model-sources.spec.ts` 在 Chromium 与 WebKit 上验证三个分组、真实发送对应接口、刷新撤权及凭据不写入个人设置。`phone-account-mode.spec.ts` 验证 PC 等待期间仍可进入直聊，并确认手机用自己的授权向网关发送及接收流式回复。
 
 
 ### Phone PC connection retention

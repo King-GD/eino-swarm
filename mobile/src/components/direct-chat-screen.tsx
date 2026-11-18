@@ -143,9 +143,10 @@ export function DirectChatScreen({
   const send = async (text: string, extra?: ComposerExtra) => {
     if (busyRef.current) throw new Error("busy")
     const providerId = extra?.providerId || pick.providerId
-    const model = extra?.model || pick.model
+    const requestedModel = extra?.model || pick.model
     const reasoning = extra?.reasoning ?? pick.reasoning
     const provider = findProvider(providers, providerId)
+    const model = account.officialOnly && provider && !provider.catalog.includes(requestedModel) ? provider.model : requestedModel
     if (!provider || !model) throw new Error("no-model")
     busyRef.current = true
     setPending(true)
@@ -268,7 +269,6 @@ export function DirectChatScreen({
           onSelect={onSelectHost}
           onSelectChat={() => setOpenID(null)}
           onAdd={onAddHost}
-          onNewChat={() => setOpenID(null)}
           onUnlink={onUnlink}
           onModels={onModels}
           onToggleLocale={onToggleLocale}
@@ -287,7 +287,7 @@ export function DirectChatScreen({
           {visibleThreads.length === 0 ? (
             <div className="px-1">
               <p className="text-sm font-medium">{t("chat.emptyTitle")}</p>
-              <p className="pt-1 text-[13px] text-muted-foreground">{t("chat.emptyHint")}</p>
+              <p className="pt-1 text-[13px] text-muted-foreground">{t(account.officialOnly ? "chat.gatewayHint" : "chat.emptyHint")}</p>
             </div>
           ) : (
             <ul className="flex flex-col gap-2">
@@ -315,7 +315,14 @@ export function DirectChatScreen({
               ))}
             </ul>
           )}
-          {models.length === 0 ? (
+          {models.length === 0 && account.officialOnly ? (
+            <div className="px-1 pt-3 text-[13px] text-muted-foreground">
+              <p role="status">{t(account.modelsBusy ? "account.modelsLoading" : account.modelsError ? "account.modelsFailed" : "chat.noGatewayModel")}</p>
+              {account.modelsError && account.refreshModels ? (
+                <Button variant="outline" className="mt-2" onClick={() => void account.refreshModels?.()}>{t("account.retry")}</Button>
+              ) : null}
+            </div>
+          ) : models.length === 0 ? (
             <p className="px-1 pt-3 text-[13px] text-muted-foreground">{t("chat.needModel")}</p>
           ) : null}
         </div>
@@ -324,7 +331,7 @@ export function DirectChatScreen({
         key={openID ?? "new"}
         label={t("thread.message")}
         sendLabel={t("thread.send")}
-        disabled={models.length === 0}
+        disabled={models.length === 0 || Boolean(account.officialOnly && selectedUnavailable)}
         pending={pending}
         stopLabel={t("thread.stop")}
         onStop={pending ? stop : undefined}

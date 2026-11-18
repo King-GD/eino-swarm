@@ -69,6 +69,8 @@ func TestSpeechRejectsInvalidSettingsWithoutPublishingThem(t *testing.T) {
 		"URL credentials":   func(s *SpeechConfig) { s.Output.BaseURL = "https://user:pass@example.invalid/v1" },
 		"format":            func(s *SpeechConfig) { s.Output.Format = "executable" },
 		"recording":         func(s *SpeechConfig) { s.Input.RecordingFormat = "unknown" },
+		"device id":         func(s *SpeechConfig) { s.Input.DeviceID = strings.Repeat("d", 257) },
+		"device break":      func(s *SpeechConfig) { s.Input.DeviceID = "mic\nid" },
 		"speed":             func(s *SpeechConfig) { s.Output.Speed = 8 },
 		"nonfinite speed":   func(s *SpeechConfig) { s.Output.Speed = math.NaN() },
 		"duration":          func(s *SpeechConfig) { s.Input.MaxDurationSeconds = -1 },
@@ -92,6 +94,29 @@ func TestSpeechRejectsInvalidSettingsWithoutPublishingThem(t *testing.T) {
 				t.Fatal("a failed update changed live voice configuration")
 			}
 		})
+	}
+}
+
+func TestSpeechInputDeviceSurvivesReloadAndBlankMeansTheSystemDefault(t *testing.T) {
+	cfg, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Speech.Input.DeviceID != "" {
+		t.Fatal("a new install must follow the system input")
+	}
+	if err = cfg.Update(func(next *Config) error {
+		next.Speech.Input.DeviceID = " camera-mic "
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Snapshot().Speech.Input.DeviceID != "camera-mic" {
+		t.Fatalf("device=%q", cfg.Snapshot().Speech.Input.DeviceID)
+	}
+	reloaded, err := Load(cfg.DataDir())
+	if err != nil || reloaded.Speech.Input.DeviceID != "camera-mic" {
+		t.Fatalf("device did not reload: %v %+v", err, reloaded.Speech.Input.DeviceID)
 	}
 }
 

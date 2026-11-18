@@ -10,7 +10,7 @@ import { t } from "@/lib/i18n"
 import type { GatewayHost } from "@/lib/gateway-account"
 import { type SavedLink } from "@/lib/store"
 import { useAutoGatewayPCs } from "@/lib/use-auto-gateway-pcs"
-import { useLocalModelSources } from "@/lib/use-local-model-sources"
+import { useGatewayModelSources } from "@/lib/use-gateway-model-sources"
 import { useGatewayAccount } from "@/lib/use-gateway-account"
 import { PcModeSwitchError, type BindPcModeSwitch } from "@/lib/use-pc-mode-switch"
 
@@ -42,6 +42,7 @@ export function GatewayAccountShell({ children }: { children: ReactNode }) {
   const account = useGatewayAccount()
   useAutoGatewayPCs(account)
   const [mode, setMode] = useState(loadPhoneMode)
+  const [dialog, setDialog] = useState<{ pcWeb?: PcWebSnapshot }>()
   const pcSwitch = useRef<((mode: PhoneMode) => Promise<void>) | null>(null)
   const bindPcModeSwitch: BindPcModeSwitch = useCallback(switcher => {
     pcSwitch.current = switcher
@@ -61,7 +62,9 @@ export function GatewayAccountShell({ children }: { children: ReactNode }) {
       savePhoneMode(next)
       setMode(next)
       setModeError("")
-      setDialog(undefined)
+      // The embedded sign-in or waiting screen can disappear after switching.
+      // Keep it as an overlay so the user still decides when to leave.
+      if (!dialog) setDialog(current => current ?? {})
     }
     if (!pcSwitch.current) { commit(); return }
     switching.current = true
@@ -72,16 +75,10 @@ export function GatewayAccountShell({ children }: { children: ReactNode }) {
         ? `account.mode.${error.reason}` : "account.mode.failed"))
     }).finally(() => { switching.current = false; setModeBusy(false) })
   }
-  const [dialog, setDialog] = useState<{ pcWeb?: PcWebSnapshot }>()
-  useEffect(() => {
-    const selected = () => setDialog(undefined)
-    window.addEventListener("zwai.gateway.connect", selected)
-    return () => window.removeEventListener("zwai.gateway.connect", selected)
-  }, [])
   const open = Boolean(dialog)
-  const localModels = useLocalModelSources(mode, account.status, account.session, account.bootstrap)
-  const providers = localModels.providers
-  const modelBusy = localModels.busy, modelError = localModels.error
+  const gatewayModels = useGatewayModelSources(account.status, account.session, account.bootstrap)
+  const providers = gatewayModels.providers
+  const modelBusy = gatewayModels.busy, modelError = gatewayModels.error
   const presentation = "official" as const
   const officialOnly = mode === "account"
   const restricted = mode === "account" && account.status !== "authorized"
@@ -89,21 +86,20 @@ export function GatewayAccountShell({ children }: { children: ReactNode }) {
     if (!open || restricted) return
     return installAndroidBack(() => { setDialog(undefined); return true })
   }, [open, restricted])
-  const refresh = async () => { await account.refresh(); localModels.refresh() }
+  const refresh = async () => { await account.refresh(); gatewayModels.refresh() }
   const connect = async (id: string) => {
     const saved = await account.connectHost(id)
     setDialog(undefined)
     window.dispatchEvent(new CustomEvent("zwai.gateway.connect", { detail: saved.fingerprint }))
   }
   useEffect(() => { if (open && !restricted) void account.refresh() }, [open, restricted])
-  const openChat = mode === "local" ? () => { setDialog(undefined); window.dispatchEvent(new Event("zwai.gateway.chat")) } : undefined
   const otherWays = {
     scan: () => window.dispatchEvent(new Event("zwai.gateway.scan")),
     addModel: () => window.dispatchEvent(new Event("zwai.gateway.models")),
   }
   useEffect(() => { window.dispatchEvent(new Event("zwai.gateway.account")) }, [account.hosts])
   const screen = <GatewayAccountScreen account={account} onToggleMode={toggleMode} modeBusy={modeBusy} modeError={modeError} providers={providers} modelBusy={modelBusy}
-    modelError={modelError} pcRequired={mode === "account"} pcWeb={dialog?.pcWeb} onClose={restricted ? undefined : () => setDialog(undefined)} onConnect={connect} onRefresh={refresh} onOpenChat={openChat} />
+    modelError={modelError} pcRequired={mode === "account"} pcWeb={dialog?.pcWeb} onClose={restricted ? undefined : () => setDialog(undefined)} onConnect={connect} onRefresh={refresh} />
   return (
     <PhoneAccountContext.Provider value={{
       bindPcModeSwitch,
@@ -114,14 +110,14 @@ export function GatewayAccountShell({ children }: { children: ReactNode }) {
       mode,
       user: account.session ? { name: gatewayUserDisplayName(account.session.user), avatar: account.session.user.avatar_url } : undefined,
       providers, hasProfile: false, officialOnly, presentation,
-      gatewaySourceID: mode === "local" && account.status === "authorized" ? account.bootstrap?.models.source_id : "",
-      gatewaySourceIDs: mode === "local" && account.status === "authorized" ? [account.bootstrap?.models.source_id, account.bootstrap?.gateway_models?.source_id].filter((id): id is string => Boolean(id)) : [],
+      gatewaySourceID: account.status === "authorized" ? account.bootstrap?.models.source_id : "",
+      gatewaySourceIDs: account.status === "authorized" ? [account.bootstrap?.models.source_id, account.bootstrap?.gateway_models?.source_id].filter((id): id is string => Boolean(id)) : [],
       refreshModels: refresh, modelsBusy: modelBusy, modelsError: modelError,
       openAccount: (pcWeb) => setDialog({ pcWeb }),
       empty: account.status === "authorized" ? <GatewayAccountScreen account={account} onToggleMode={toggleMode}
         modeBusy={modeBusy} modeError={modeError}
         providers={providers} modelBusy={modelBusy} modelError={modelError} pcRequired={mode === "account"} onConnect={connect}
-        onRefresh={refresh} onOpenChat={openChat} onOtherWays={mode === "local" ? otherWays : undefined} /> : undefined,
+        onRefresh={refresh} onOtherWays={mode === "local" ? otherWays : undefined} /> : undefined,
       pcs: account.status === "authorized" ? { hosts: account.hosts, origin: account.session?.origin, connect } : undefined,
     }}>
       {restricted ? screen : <div key={`${mode}:${account.session?.origin ?? ""}:${account.session?.user.id ?? ""}:${account.session?.device.id ?? ""}`} className="h-full min-h-0" inert={open || undefined} aria-hidden={open || undefined}>{children}</div>}

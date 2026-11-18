@@ -20,8 +20,8 @@ export function speechBinding(pc: SavedLink): string {
 const text = (value: unknown, max = 8192): string | undefined => typeof value === "string" && new TextEncoder().encode(value).length <= max ? value : undefined
 const count = (value: unknown, maximum: number): value is number => typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value <= maximum
 
-/** Copy an explicit allowlist; credentials and custom endpoint fields must
- * never be persisted on the phone even if a future PC accidentally adds them. */
+/** Copy an explicit allowlist. Credentials, endpoint paths and the PC browser's
+ * microphone id stay off the phone; the phone uses its own microphone. */
 export function safeSpeechSnapshot(raw: unknown): SpeechSnapshot | undefined {
   if (!raw || typeof raw !== "object") return
   const source = raw as Record<string, unknown>

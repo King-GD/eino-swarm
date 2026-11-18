@@ -60,6 +60,12 @@ func (p *Pool) sameLocalAccounts(sources []*AccountSource) bool {
 // in. LOCAL also searches the extra server catalogs. A missing source stays
 // account_login_required and is not replaced by a personal provider.
 func (p *Pool) accountForExecution(id string) *AccountSource {
+	return p.accountSourceByID(id, p.localExecution())
+}
+
+// accountSourceByID may include hidden, independently authorized catalogs only
+// for a model already bound to a durable turn or worker.
+func (p *Pool) accountSourceByID(id string, includeHidden bool) *AccountSource {
 	if p == nil {
 		return nil
 	}
@@ -67,7 +73,7 @@ func (p *Pool) accountForExecution(id string) *AccountSource {
 	if !strings.HasPrefix(id, config.AccountSourcePrefix) {
 		return nil
 	}
-	if p.localExecution() {
+	if includeHidden {
 		for _, src := range p.localAccountSources() {
 			if src != nil && src.ID() == id {
 				return src

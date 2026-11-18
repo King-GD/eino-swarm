@@ -216,6 +216,15 @@ func (p *Pool) RoleSelection(role, fallbackProvider, fallbackModel string) (conf
 		if name := src.defaults[role]; name != "" {
 			return config.ModelRef{ProviderID: src.id, Model: name}, true
 		}
+		// An editable Gateway may publish typed audio models without naming a
+		// default. Use the first authorized role match, as the phone does.
+		if src.negotiated && !p.localExecution() && (role == "transcription" || role == "speech") {
+			for _, name := range src.names {
+				if src.types[name] == role {
+					return config.ModelRef{ProviderID: src.id, Model: name}, true
+				}
+			}
+		}
 	}
 	return config.ModelRef{ProviderID: fallbackProvider, Model: fallbackModel}, false
 }

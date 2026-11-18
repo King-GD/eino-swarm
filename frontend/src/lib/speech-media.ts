@@ -15,11 +15,64 @@ export interface SpeechRecording {
   cancel(): void
 }
 
+export interface AudioInputDevice {
+  id: string
+  label: string
+}
+
+const syntheticInputs = new Set(["default", "communications"])
+
+/** Real inputs only. The browser's default alias stays the separate system choice. */
+export function audioInputChoices(devices: Array<{ kind: string; deviceId: string; label: string }>): AudioInputDevice[] {
+  const seen = new Set<string>()
+  const choices: AudioInputDevice[] = []
+  for (const device of devices) {
+    const id = device.deviceId.trim()
+    if (device.kind !== "audioinput" || !id || syntheticInputs.has(id) || seen.has(id) || id.length > 256) continue
+    seen.add(id)
+    choices.push({ id, label: device.label.trim() })
+  }
+  return choices
+}
+
+const releaseStream = (stream?: MediaStream) => stream?.getTracks().forEach((track) => track.stop())
+
+/** WebKit hides every device id until a capture is granted. The permission
+ * promise has to be created in the click that opened the menu; starting it
+ * after enumeration loses that gesture and the list stays empty. */
+export async function listAudioInputDevices(permission?: Promise<MediaStream>): Promise<AudioInputDevice[]> {
+  const media = globalThis.navigator?.mediaDevices
+  if (!media?.enumerateDevices) {
+    void permission?.then(releaseStream).catch(() => undefined)
+    return []
+  }
+  const read = async () => audioInputChoices(await media.enumerateDevices())
+  let choices = await read()
+  if (choices.some((device) => device.label !== "")) {
+    void permission?.then(releaseStream).catch(() => undefined)
+    return choices
+  }
+  if (!permission && media.getUserMedia) permission = media.getUserMedia({ audio: true, video: false })
+  if (!permission) return choices
+  let stream: MediaStream | undefined
+  try {
+    stream = await permission
+    choices = await read()
+  } catch {
+    return choices
+  } finally {
+    releaseStream(stream)
+  }
+  if (!choices.some((device) => device.label !== "")) choices = await read()
+  return choices
+}
+
 export interface SpeechRecordingOptions {
   signal: AbortSignal
   maxDurationSeconds: number
   maxBytes: number
   format: "auto" | "wav"
+  deviceId?: string
   onLevel?: (level: number) => void
   onDuration?: (seconds: number) => void
   onLimit?: () => void
@@ -75,7 +128,9 @@ export async function startSpeechRecording(options: SpeechRecordingOptions): Pro
   claimAudio(cancel)
   options.signal.addEventListener("abort", cancel, { once: true })
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+    // exact avoids falling back to a closed lid's built-in microphone.
+    const deviceId = options.deviceId?.trim()
+    stream = await navigator.mediaDevices.getUserMedia({ audio: deviceId ? { deviceId: { exact: deviceId } } : true, video: false })
     if (cancelled || options.signal.aborted) throw aborted()
     const mime = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm", "audio/ogg;codecs=opus"]
       .find((type) => typeof MediaRecorder.isTypeSupported === "function" && MediaRecorder.isTypeSupported(type))

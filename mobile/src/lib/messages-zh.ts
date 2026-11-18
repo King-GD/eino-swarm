@@ -371,6 +371,8 @@ export const zh: Record<MessageKey, string> = {
   "chat.edit": "编辑模型",
   "chat.emptyTitle": "还没有对话",
   "chat.emptyHint": "选好模型和思考强度再发送。这台手机会直接请求所选的模型服务。",
+  "chat.gatewayHint": "手机直接连接网关聊天。",
+  "chat.noGatewayModel": "当前账号没有可用的网关对话模型。",
   "chat.needModel": "先选一个模型，才能发送。",
   "chat.name": "名称",
   "chat.baseUrl": "接口地址",

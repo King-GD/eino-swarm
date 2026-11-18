@@ -15,6 +15,84 @@ function wave(): Buffer {
   return bytes
 }
 
+test("speech settings explain disabled tests and record and play after enabling", async ({ page, request }, testInfo) => {
+  const previous = (await (await request.get("/api/settings")).json()).settings.speech
+  let recordedBytes = 0
+  const spoken: string[] = []
+  const upstream = createServer((req, res) => {
+    void (async () => {
+      const chunks: Buffer[] = []
+      for await (const chunk of req) chunks.push(Buffer.from(chunk))
+      const bytes = Buffer.concat(chunks)
+      if (req.url === "/v1/audio/transcriptions") {
+        const form = await new Request("http://fixture.invalid/", { method: "POST", headers: { "Content-Type": req.headers["content-type"]! }, body: bytes }).formData()
+        const file = form.get("file") as File
+        const audio = Buffer.from(await file.arrayBuffer())
+        expect(audio.subarray(0, 4).toString()).toBe("RIFF")
+        recordedBytes = audio.length
+        res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify({ text: "fixture transcription" }))
+      } else if (req.url === "/v1/audio/speech") {
+        spoken.push(JSON.parse(bytes.toString()).input)
+        res.writeHead(200, { "Content-Type": "audio/wav" }); res.end(wave())
+      } else { res.writeHead(404); res.end() }
+    })().catch(() => { res.writeHead(500); res.end() })
+  })
+  await new Promise<void>(resolve => upstream.listen(0, "127.0.0.1", resolve))
+  const address = upstream.address()
+  if (!address || typeof address === "string") throw new Error("Speech fixture did not listen")
+  try {
+    expect((await request.put("/api/settings", { data: { speech: {
+      input: { enabled: false, source: "custom", base_url: `http://127.0.0.1:${address.port}/v1`, model: "fixture-asr", recording_format: "wav" },
+      output: { enabled: false, source: "custom", base_url: `http://127.0.0.1:${address.port}/v1`, model: "fixture-tts", format: "wav" },
+    } } })).ok()).toBe(true)
+    await page.addInitScript(() => {
+      const originalStart = MediaRecorder.prototype.start
+      MediaRecorder.prototype.start = function (...args) {
+        this.addEventListener("dataavailable", event => {
+          if (event.data.size) (window as typeof window & { recordingChunk?: boolean }).recordingChunk = true
+        })
+        return Reflect.apply(originalStart, this, args)
+      }
+      const originalPlay = AudioBufferSourceNode.prototype.start
+      AudioBufferSourceNode.prototype.start = function (...args) {
+        if (this.buffer?.length) (window as typeof window & { playedSamples?: number }).playedSamples = this.buffer.length
+        return Reflect.apply(originalPlay, this, args)
+      }
+    })
+    await page.goto("/")
+    await page.getByRole("button", { name: "Settings", exact: true }).click()
+    const settings = page.getByRole("dialog")
+    await settings.getByRole("tab", { name: "Models", exact: true }).click()
+    const record = settings.getByRole("button", { name: "Test voice input", exact: true })
+    const play = settings.getByRole("button", { name: "Test reading", exact: true })
+    await expect(record).toBeDisabled()
+    await expect(play).toBeDisabled()
+    await expect(settings.getByText("Enable Voice input above before testing the microphone.")).toBeVisible()
+    await expect(settings.getByText("Enable Read aloud above before testing playback.")).toBeVisible()
+    const section = play.locator("xpath=ancestor::section[1]")
+    await section.screenshot({ path: testInfo.outputPath("disabled-test-reasons.png") })
+    await settings.getByLabel("Text for the reading test").fill("Playback diagnostic")
+    await expect(play).toBeDisabled()
+    await settings.getByLabel("Enabled", { exact: true }).first().click()
+    await expect(record).toBeEnabled()
+    await record.click()
+    await expect.poll(() => page.evaluate(() => (window as typeof window & { recordingChunk?: boolean }).recordingChunk)).toBe(true)
+    await settings.getByRole("button", { name: "Finish and transcribe", exact: true }).click()
+    await expect(settings.getByLabel("Recognized text")).toHaveValue("fixture transcription")
+    expect(recordedBytes).toBeGreaterThan(44)
+    await settings.getByLabel("Enabled", { exact: true }).nth(1).click()
+    await expect(play).toBeEnabled()
+    await play.click()
+    await expect.poll(() => spoken).toEqual(["Playback diagnostic"])
+    await expect.poll(() => page.evaluate(() => (window as typeof window & { playedSamples?: number }).playedSamples ?? 0)).toBeGreaterThan(0)
+    await expect(play).toBeVisible()
+  } finally {
+    await request.put("/api/settings", { data: { speech: previous } })
+    upstream.closeAllConnections()
+    await new Promise<void>(resolve => upstream.close(() => resolve()))
+  }
+})
+
 for (const recordingFormat of ["auto", "wav"] as const) {
 test(`speech ${recordingFormat} settings gate real recording, preserve edits and read a completed answer`, async ({ page, request }) => {
   const previous = (await (await request.get("/api/settings")).json()).settings.speech

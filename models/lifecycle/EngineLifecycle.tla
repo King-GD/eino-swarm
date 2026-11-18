@@ -278,7 +278,11 @@ HumanCancelsLaunch ==
                    checkpoint, restorePhase, snapshot, stopped, stopAcked, gate, turns, successor>>
 
 -----------------------------------------------------------------------------
-(* The replacement publishes and restores (serveEngine, Engine.Restore). *)
+(* The replacement publishes and restores (serveEngine, Engine.Restore).
+   While restoration is in its read phase, ResumeModelBuilder may await the
+   owned account discovery loop before occupying a runtime. The engine stays
+   restoring and counted as ActiveWork; Stop and cancellation keep this gate.
+   ModelModeAdmission refines catalog readiness and original model identity. *)
 
 RestoringHere == IF RestoreBeforeListen THEN "booting" ELSE "restoring"
 

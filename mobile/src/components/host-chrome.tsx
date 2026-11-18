@@ -1,7 +1,7 @@
 import { AccountButton } from "@/components/account-button"
 import { usePhoneAccount } from "@/components/gateway-account-shell"
 import { Capacitor } from "@capacitor/core"
-import { Menu, MessageSquare, Monitor, SquarePen } from "lucide-react"
+import { Menu, MessageSquare, Monitor } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -22,7 +22,6 @@ export function HostChrome({
   reconnecting = false,
   onSelect,
   onAdd,
-  onNewChat,
   onUnlink,
   onToggleLocale,
   showChat = false,
@@ -39,9 +38,8 @@ export function HostChrome({
   connected?: boolean
   reconnecting?: boolean
   onSelect: (fingerprint: string) => void
-  onAdd: () => void
-  onNewChat: () => void
-  onUnlink: () => void
+  onAdd?: () => void
+  onUnlink?: () => void
   onToggleLocale?: () => void
   /** A saved endpoint. The tab stays off until one exists. */
   showChat?: boolean
@@ -96,7 +94,7 @@ export function HostChrome({
             className="absolute left-2 top-12 z-30 w-56 rounded-xl border border-border bg-card p-1 shadow-lg"
           >
             {openAccount ? <MenuRow onClick={() => { setMenu(false); openAccount() }}>{t("account.title")}</MenuRow> : null}
-            {account.mode !== "account" ? <MenuRow
+            {account.mode !== "account" && onAdd ? <MenuRow
               onClick={() => {
                 setMenu(false)
                 onAdd()
@@ -116,7 +114,7 @@ export function HostChrome({
                 {t("chat.models")}
               </MenuRow>
             ) : null}
-            {account.mode !== "account" ? <MenuRow
+            {account.mode !== "account" && onUnlink ? <MenuRow
               onClick={() => {
                 setMenu(false)
                 onUnlink()
@@ -157,10 +155,9 @@ export function HostChrome({
       {versionCheck ? <VersionCheck onClose={() => setVersionCheck(false)} /> : null}
       <h1 className="sr-only">{t("home.app")}</h1>
       <div
-        ref={rail}
         role="tablist"
         aria-label={showChat ? t("home.nav") : t("home.hosts")}
-        className="rail flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+        className="flex min-w-0 flex-1 items-center gap-1"
       >
         {showChat ? (
           <button
@@ -180,70 +177,60 @@ export function HostChrome({
             <span className="max-w-28 truncate">{t("chat.tab")}</span>
           </button>
         ) : null}
-        {phonePCChoices(hosts, account.pcs?.hosts, account.pcs?.origin).map((host) => {
-          const selected = !chatSelected && Boolean(host.fingerprint) && host.fingerprint === activeFingerprint
-          const label = host.label || t("account.unnamedPC")
-          return (
-            <button
-              key={host.id}
-              type="button"
-              role="tab"
-              aria-label={label}
-              aria-selected={selected}
-              className={cn(
-                "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-medium",
-                selected
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground",
-              )}
-              disabled={!host.enabled || host.online === false}
-              onClick={() => {
-                if (host.fingerprint) onSelect(host.fingerprint)
-                else if (host.hostID) void account.pcs?.connect(host.hostID).catch(() => undefined)
-              }}
-            >
-              <Monitor className="size-3.5 shrink-0" aria-hidden />
-              <span className="max-w-28 truncate">{label}</span>
-              {selected || host.online !== undefined ? (
-                // Color is liveness. Path stays on the title; gray on this chip reads as down.
-                <span
-                  className={cn(
-                    "size-1.5 shrink-0 rounded-full",
-                    selected && reconnecting
-                      ? "animate-pulse bg-destructive"
-                      : selected ? connected ? "bg-[hsl(var(--online))]" : "bg-muted-foreground" : host.online
-                        ? "bg-[hsl(var(--online))]"
-                        : "bg-muted-foreground",
-                  )}
-                  title={
-                    !selected ? t(host.online ? "account.online" : "account.offline") : reconnecting
-                      ? t("home.reconnecting")
-                      : !connected
-                        ? t("home.offline")
-                        : path === "direct"
-                          ? t("home.direct")
-                          : t("home.relay")
-                  }
-                  aria-label={selected ? `path=${pathKind}` : t(host.online ? "account.online" : "account.offline")}
-                />
-              ) : null}
-            </button>
-          )
-        })}
+        <div ref={rail} className="rail flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+          {phonePCChoices(hosts, account.pcs?.hosts, account.pcs?.origin).map((host) => {
+            const selected = !chatSelected && Boolean(host.fingerprint) && host.fingerprint === activeFingerprint
+            const label = host.label || t("account.unnamedPC")
+            return (
+              <button
+                key={host.id}
+                type="button"
+                role="tab"
+                aria-label={label}
+                aria-selected={selected}
+                className={cn(
+                  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-medium",
+                  selected
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground",
+                )}
+                disabled={!host.enabled || host.online === false}
+                onClick={() => {
+                  if (host.fingerprint) onSelect(host.fingerprint)
+                  else if (host.hostID) void account.pcs?.connect(host.hostID).catch(() => undefined)
+                }}
+              >
+                <Monitor className="size-3.5 shrink-0" aria-hidden />
+                <span className="max-w-28 truncate">{label}</span>
+                {selected || host.online !== undefined ? (
+                  // Color is liveness. Path stays on the title; gray on this chip reads as down.
+                  <span
+                    className={cn(
+                      "size-1.5 shrink-0 rounded-full",
+                      selected && reconnecting
+                        ? "animate-pulse bg-destructive"
+                        : selected ? connected ? "bg-[hsl(var(--online))]" : "bg-muted-foreground" : host.online
+                          ? "bg-[hsl(var(--online))]"
+                          : "bg-muted-foreground",
+                    )}
+                    title={
+                      !selected ? t(host.online ? "account.online" : "account.offline") : reconnecting
+                        ? t("home.reconnecting")
+                        : !connected
+                          ? t("home.offline")
+                          : path === "direct"
+                            ? t("home.direct")
+                            : t("home.relay")
+                    }
+                    aria-label={selected ? `path=${pathKind}` : t(host.online ? "account.online" : "account.offline")}
+                  />
+                ) : null}
+              </button>
+            )
+          })}
+        </div>
       </div>
       {openAccount ? <AccountButton onClick={openAccount} /> : null}
-      {/* Add a PC is on the menu at the other end of this row; the corner
-          belongs to the thing you reach for every time you pick up the phone. */}
-      <Button
-        type="button"
-        variant="ghost"
-        data-testid="new-chat-top"
-        className="size-9 shrink-0 px-0"
-        aria-label={t("home.newChat")}
-        onClick={onNewChat}
-      >
-        <SquarePen className="size-5" aria-hidden />
-      </Button>
     </header>
   )
 }

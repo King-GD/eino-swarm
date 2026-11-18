@@ -36,17 +36,24 @@ empty value from the archive.
 ## Voice settings
 
 The PC's **Settings → Models** controls input/output switches, recording and
-playback parameters and limits. Both directions default off. **Models → Functional
+playback parameters and limits. Gateway mode defaults each direction on when
+the signed-in normal or third-party Gateway resolves a model for that role.
+Each direction stores its opt-out in `gateway_disabled`. Legacy configurations
+without this field follow model availability in Gateway mode. LOCAL and personal
+services continue to use `enabled`, which defaults to false. **Models → Functional
 models** selects recognition and spoken-answer models independently of conversation.
 LOCAL and an editable gateway allow personal providers. A managed third-party
-gateway supplies the models and hides model/endpoint controls; ordinary voice
-parameters remain editable. In LOCAL, `source: account` uses the signed-in
+gateway supplies the models and hides model and endpoint controls. Voice
+parameters follow the model's declared permissions. In LOCAL, `source: account` uses the signed-in
 account's enabled recognition or speech role when no functional binding
 overrides that direction. A personal binding, provider, or custom endpoint
 remains the request target. Without that login or role, the direction stays
 not ready.
 
-`speech.input.recording_format` accepts `auto` and `wav`. Automatic recording
+`speech.input.device_id` selects the PC or Web microphone. Empty follows the operating-system default. A saved id is the browser's audio input id, not a device name. If that device is unplugged, recording fails and the saved id stays until another choice is made. Phones ignore this field and use the phone microphone.
+
+Under **Advanced settings**, `speech.input.recording_format` accepts `auto`
+and `wav`. Automatic recording
 normalizes MP4/AAC, WebM/Opus and Ogg recordings to 16 kHz mono PCM WAV for ASR
 interoperability, including newer iPhones that record WebM. Explicit WAV also
 converts other containers. The input byte limit applies after conversion too.
@@ -58,9 +65,8 @@ Select **PCM (streaming playback)** to play a response while it is generated.
 The service must return mono 24 kHz signed 16-bit little-endian PCM, either as
 audio chunks or OpenAI speech SSE events. MP3/WAV remain complete-segment
 playback. Phone PC-local RPC remains buffered.
-Gateway account PCM streaming requests use SSE; personal services retain the
-audio streaming request. The resolved spoken-output source controls this choice,
-including editable gateway model bindings. Paired phones route that output independently
+Gateway PCM streaming follows the declared stream format, with SSE as the legacy
+account behavior. Personal services use the audio streaming request. Paired phones route that output independently
 of recognition, with their own same-origin gateway login.
 
 Paired phones use the selected PC's safe projection only while that PC is online
@@ -1071,6 +1077,12 @@ This signing configuration is managed outside the application Settings; see
 语音设置入口随模型配置权限显示：LOCAL 和可配置的普通网关账号在 Settings → Models 编辑功能模型及语音参数；托管第三方账号隐藏 Models，只在 Speech 入口显示语音开关、音色和资源参数，不显示模型、Provider 或凭据配置。
 
 旧版 LOCAL 设置没有 `model_policy` 时，明确的本地产品模式仍允许编辑原有语音配置；网关模式缺少已验证的能力清单时不推断语音权限，也不显示语音控制。
+
+语音页面只显示网关声明可编辑的音色、识别语言、音频格式、流式格式、朗读语速等参数。网关固定值和上限继续用于请求和校验。已失效的个人参数仍有警告和恢复网关默认值入口。录音格式、最长录音、超时和客户端资源限制位于默认折叠的「高级设置」。
+
+试录和试听使用已保存的配置，需先开启对应的语音输入或语音朗读；试听还需填写文字。按钮不可用时，设置行说明对应开关关闭、录音环境不支持、服务未就绪或文字为空。已有播放期间保留“停止朗读”操作，即使开关关闭或试听文字清空。
+
+托管账号也可保存语音开关、麦克风、超时和资源限制。读取设置时返回手动关闭偏好，运行时元数据返回按模型可用性解析后的开关状态。保存语音偏好时保护隐藏的模型来源、Provider、接口地址和凭据，也保留切换账号前存储的私人连接配置。
 
 ## Task panels
 
