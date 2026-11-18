@@ -168,7 +168,7 @@ func (f *fixture) setupSpeech(ctx context.Context) error {
 	if err != nil || origin.Scheme != "http" || origin.Hostname() != "127.0.0.1" || origin.Port() == "" || origin.Path != "" || origin.RawQuery != "" || origin.Fragment != "" {
 		return fmt.Errorf("speech fixture: account source requires its owned loopback origin")
 	}
-	source, err := provider.NewAccountProfile(config.AccountSourcePrefix+strings.Repeat("a", 32), f.origin+"/client/desktop/v1", desktopSpeechToken, provider.AccountProfile{Label: "Native speech gateway", ContextWindow: 32768})
+	source, err := provider.NewAccountProfile(fixtureModelSourceID, f.origin+"/client/desktop/v1", desktopSpeechToken, provider.AccountProfile{Label: "Native speech gateway", ContextWindow: 32768})
 	if err != nil {
 		return fmt.Errorf("speech fixture: account source: %w", err)
 	}

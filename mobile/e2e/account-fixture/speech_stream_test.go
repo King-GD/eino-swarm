@@ -55,7 +55,7 @@ func TestNativeSpeechSetupProjectsRealPCGatewayPCMWithoutLeakingDesktopCredentia
 		}
 	}
 	view := speech.New(f.engine.Config(), f.engine.Providers()).Snapshot()
-	if view.Execution != "gateway" || view.GatewayOrigin != server.URL || !view.Output.Ready || view.Output.Model != "speech" || view.Output.Format != "pcm" {
+	if view.Execution != "gateway" || view.GatewayOrigin != server.URL || !view.Output.Ready || view.Output.Model != "speech" || view.Output.Format != "pcm" || view.Output.SourceID != fixtureModelSourceID {
 		t.Fatalf("real speech_config projection: %+v", view)
 	}
 	raw, _ := json.Marshal(view)

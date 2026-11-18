@@ -106,13 +106,13 @@ public class AccountLoginTest {
         click("Close");
         waitFor("Message");
         assertFalse("LOCAL keeps the same login", present("Sign in"));
-        assertEquals("Gateway · Native gateway", chooseChatModel("native-fixture-model", "Gateway · Native gateway"));
+        assertEquals("Native gateway", chooseChatModel("native-fixture-model", "Native gateway"));
         assertEquals(0, count("connect"));
         save("02-local-retains-authorized-source");
         click("User center");
         click("Native test account"); click("Native test account"); click("Native test account");
         click("Close");
-        waitFor("Message");
+        openAccountChatFromPCWait();
         assertFalse("Account Chat hides personal model selection", present("Model"));
         send("Native Account Chat routing probe");
         waitFor("Native account answer");
@@ -219,15 +219,18 @@ public class AccountLoginTest {
             waitFor("Device authorized. Return to zwai.");
             assertEquals(1, state().getJSONObject("counts").optInt("browser_authorize"));
             foreground();
+            waitFor("Your computers");
+            if (present("Close")) click("Close");
+            openAccountChatFromPCWait();
             waitFor("Could not load server models. Refresh to try again.");
+            assertFalse("A refused catalog cannot enable the phone composer", domEntry("Message").getBoolean("enabled"));
             assertEquals("Managed model discovery must refuse redirects", 0, state().getJSONObject("counts").optInt("redirect_target"));
             assertTrue(state().getJSONObject("counts").optInt("catalog_redirect_sent") > 0);
             save("04b-native-catalog-redirect-refused");
             control("catalog=normal");
             click("Refresh account");
-            waitFor("native-fixture-model");
-            click("Close");
-            waitFor("Message");
+            waitForAccountComposer();
+            assertFalse("The account preset model stays hidden", present("Model"));
             control("model=redirect");
             fill("Message", "Native redirect acceptance");
             click("Send");
@@ -664,6 +667,23 @@ public class AccountLoginTest {
         MotionEvent finish = MotionEvent.obtain(at, at + 270, MotionEvent.ACTION_UP, x, end, 0); finish.setSource(InputDevice.SOURCE_TOUCHSCREEN); assertTrue(ui.injectInputEvent(finish, true)); finish.recycle();
         nativeActions.put(new JSONObject().put("action", "native_transcript_swipe").put("start_y", cssStart).put("end_y", cssEnd));
         SystemClock.sleep(150);
+    }
+
+    private void openAccountChatFromPCWait() throws Exception {
+        waitFor("Waiting for a computer");
+        assertFalse("The waiting PC surface has no composer", present("Message"));
+        click("Chat");
+        waitFor("Message");
+    }
+
+    private void waitForAccountComposer() throws Exception {
+        long deadline = SystemClock.uptimeMillis() + 10000;
+        while (SystemClock.uptimeMillis() < deadline) {
+            JSONObject input = domEntry("Message");
+            if (input != null && input.getBoolean("enabled")) return;
+            SystemClock.sleep(50);
+        }
+        throw new AssertionError("The authorized account catalog did not enable the phone composer");
     }
 
     private void send(String text) throws Exception { fill("Message", text); click("Send"); }

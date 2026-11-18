@@ -40,7 +40,11 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const clientPrefix = "/client/api/v1"
+const (
+	clientPrefix          = "/client/api/v1"
+	modelCapabilitiesPath = clientPrefix + "/capabilities"
+	fixtureModelSourceID  = config.AccountSourcePrefix + "native-owner"
+)
 
 type flow struct {
 	DeviceCode, PublicCode, Candidate, Challenge, DevicePub string
@@ -52,6 +56,7 @@ type flow struct {
 
 type fixture struct {
 	speech                            speechFixture
+	speechStreaming                   bool
 	mu                                sync.Mutex
 	origin, anonymous                 string
 	review                            string
@@ -344,7 +349,34 @@ func (f *fixture) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch path {
 	case clientPrefix + "/bootstrap":
 		f.counts["bootstrap"]++
-		data(w, map[string]any{"user": f.user(), "device": f.device(), "models": map[string]any{"source_id": "gateway:native-owner", "source_kind": "gateway", "label": "Native gateway", "execution": "phone", "api_base_url": f.origin + "/v1", "catalog_url": f.origin + "/v1/models", "api_access_enabled": f.api}, "pairlink": map[string]any{"enabled": true, "hub_url": f.origin, "redeem_url": f.origin + "/pairlink/v1/pairings/redeem", "websocket_url": "ws" + strings.TrimPrefix(f.origin, "http") + "/pairlink/v1/ws", "info_url": f.origin + "/pairlink/v1/info"}, "heartbeat_interval": 30, "presence_ttl": 90})
+		models := map[string]any{
+			"source_id": fixtureModelSourceID, "source_kind": "gateway", "label": "Native gateway", "execution": "phone",
+			"api_base_url": f.origin + "/v1", "catalog_url": f.origin + "/v1/models", "api_access_enabled": f.api,
+		}
+		if f.speechStreaming {
+			models["defaults"] = map[string]string{"speech": "speech"}
+		}
+		data(w, map[string]any{
+			"user": f.user(), "device": f.device(), "models": models, "capabilities_url": f.origin + modelCapabilitiesPath,
+			"pairlink": map[string]any{"enabled": true, "hub_url": f.origin, "redeem_url": f.origin + "/pairlink/v1/pairings/redeem",
+				"websocket_url": "ws" + strings.TrimPrefix(f.origin, "http") + "/pairlink/v1/ws", "info_url": f.origin + "/pairlink/v1/info"},
+			"heartbeat_interval": 30, "presence_ttl": 90,
+		})
+	case modelCapabilitiesPath:
+		if r.Method != http.MethodGet {
+			http.Error(w, "capability discovery requires GET", http.StatusMethodNotAllowed)
+			return
+		}
+		roles := map[string]provider.RoleCapability{
+			"conversation": {Supported: true, Available: f.api, Configurable: f.api, Endpoints: []string{"chat_completions"}},
+		}
+		if f.speechStreaming {
+			roles["speech"] = provider.RoleCapability{Supported: true, Available: f.api, Endpoints: []string{"audio_speech"}}
+		}
+		data(w, provider.ClientCapabilities{Version: 1, ModelRolesVersion: 3, Sources: map[string]*provider.SourceCapabilities{
+			"preset":  {Authorized: f.api, Available: f.api, Configurable: f.api, Capabilities: roles},
+			"gateway": {Capabilities: map[string]provider.RoleCapability{}},
+		}})
 	case clientPrefix + "/heartbeat":
 		f.counts["heartbeat"]++
 		data(w, map[string]any{"ok": true, "heartbeat_interval": 30, "presence_ttl": 90})
@@ -521,7 +553,7 @@ func main() {
 		panic(err)
 	}
 	defer anonymous.Close()
-	f := &fixture{origin: "http://" + listener.Addr().String(), anonymous: "http://" + anonymous.Addr().String(), review: "pending", api: true, counts: map[string]int{}, bindings: newFixtureBindings()}
+	f := &fixture{origin: "http://" + listener.Addr().String(), anonymous: "http://" + anonymous.Addr().String(), review: "pending", api: true, counts: map[string]int{}, bindings: newFixtureBindings(), speechStreaming: *speechStream}
 	hub := relay.New(f.bindings)
 	f.relay = hub
 	f.hub = hub.Handler()

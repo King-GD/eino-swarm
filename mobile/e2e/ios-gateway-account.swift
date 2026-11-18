@@ -40,6 +40,12 @@ final class BindFlowTests: XCTestCase {
     XCTAssertTrue(portrait.waitForExistence(timeout: 5))
     portrait.tap(withNumberOfTaps: 3, numberOfTouches: 1)
     app.buttons["Close"].firstMatch.tap()
+    XCTAssertTrue(waiting.waitForExistence(timeout: 15), "Returning to Account opens the PC surface")
+    XCTAssertFalse(app.textViews["Message"].exists, "The PC surface stays waiting without a computer")
+    let chat = app.buttons["Chat"].firstMatch
+    XCTAssertTrue(chat.waitForExistence(timeout: 10))
+    XCTAssertTrue(chat.isHittable)
+    chat.tap()
     XCTAssertTrue(app.textViews["Message"].waitForExistence(timeout: 15))
     XCTAssertFalse(app.buttons["Model"].exists)
     try send(app, "Native Account Chat routing probe")
