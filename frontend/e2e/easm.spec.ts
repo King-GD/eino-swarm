@@ -1,7 +1,7 @@
 import { expect, test, type Locator } from "@playwright/test"
 
-import { easmSnapshots, startEasmFixture } from "./easm-fixture"
-import { composer, freshConversation, reloadOpenConversation, waitForIdle } from "./session"
+import { easmCompletion, easmPrompt, easmSnapshots, startEasmFixture } from "./easm-fixture"
+import { freshConversation, reloadOpenConversation, send, statusBadge, waitForIdle } from "./session"
 
 type GraphStage = HTMLDivElement & { __easmNodePoint?: (id: string) => { x: number; y: number } | undefined }
 
@@ -27,7 +27,7 @@ async function waitForViewport(stage: Locator, id: string) {
   }), id)
 }
 
-test("three cumulative tool snapshots update one portrait and restore the latest data after reload", async ({ page, request }, info) => {
+test("the Tsinghua exposure inventory opens EASM and shows each batch before the conversation finishes", async ({ page, request }, info) => {
   test.skip(process.env.ZWAI_E2E_EASM !== "1", "requires the keyless loopback model fixture")
   test.setTimeout(120_000)
   const { settings } = await (await request.get("/api/settings")).json()
@@ -42,12 +42,12 @@ test("three cumulative tool snapshots update one portrait and restore the latest
     await freshConversation(page)
     threadId = (await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id")) ?? ""
     expect(threadId).toBeTruthy()
-    await composer(page).fill("Publish the available portrait results as they arrive.")
-    await composer(page).press("Enter")
-
     const panel = page.getByTestId("easm-task-panel")
+    await expect(panel).toHaveCount(0)
+    await send(page, easmPrompt)
     await expect(page.getByRole("tab", { name: "Task panels", exact: true })).toHaveAttribute("aria-selected", "true")
     await expect(panel).toHaveAttribute("data-revision", /\d+/)
+    await expect(panel.getByText("等待资产数据")).toBeVisible()
     await expect(page.getByTestId("task-panel-frame")).toHaveCount(0)
     await expect.poll(() => fixture.state().receipts["easm-read"]?.revision).toBeGreaterThan(0)
     const initialRevision = fixture.state().receipts["easm-read"].revision
@@ -61,10 +61,12 @@ test("three cumulative tool snapshots update one portrait and restore the latest
     await expect(panel).toHaveAttribute("data-revision", String(initialRevision + 1))
     await expect(stage).toHaveAttribute("data-ready", "true")
     await expect(stage).toHaveAttribute("data-selected-id", "root|sample")
-    await expect(panel.getByText("示例集团", { exact: true })).toBeVisible()
+    await expect(panel.getByText("清华大学", { exact: true })).toBeVisible()
+    await expect(statusBadge(page)).toContainText("Working")
     await stage.locator("canvas").first().evaluate((canvas) => Object.assign(window, { originalEasmCanvas: canvas }))
     fixture.releaseBatch(2)
     await expect(panel).toHaveAttribute("data-revision", String(initialRevision + 2))
+    await expect(statusBadge(page)).toContainText("Working")
     await expect(stage).toHaveAttribute("data-layout-moving", "false", { timeout: 20_000 })
     await expect.poll(() => stage.evaluate((element) => Boolean((element as GraphStage).__easmNodePoint?.("domain|example.test")))).toBe(true)
     await panel.getByRole("button", { name: "适配视图", exact: true }).first().click()
@@ -87,13 +89,18 @@ test("three cumulative tool snapshots update one portrait and restore the latest
     await expect(stage).toHaveAttribute("data-zoom", zoom!)
     await expect.poll(() => stage.evaluate((element) => Boolean((element as GraphStage).__easmNodePoint?.("feature|certificate")))).toBe(true)
     expect(await stage.locator("canvas").first().evaluate((canvas) => canvas === (window as unknown as { originalEasmCanvas: HTMLCanvasElement }).originalEasmCanvas)).toBe(true)
+    await expect(statusBadge(page)).toContainText("Working")
+    await expect(page.getByText(easmCompletion, { exact: true })).toHaveCount(0)
+    await page.screenshot({ path: info.outputPath("easm-third-snapshot.png") })
+    fixture.finish()
     await waitForIdle(page)
+    await expect(page.getByText(easmCompletion, { exact: true })).toBeVisible()
+    await expect(panel).toHaveAttribute("data-revision", String(initialRevision + 3))
 
     const saved = await (await request.get(`/api/threads/${threadId}/panels/${panelId}`)).json()
     expect(saved).toMatchObject({ id: panelId, revision: initialRevision + 3, state: easmSnapshots[2] })
     expect(Object.keys(fixture.state().receipts).filter((id) => id.startsWith("easm-batch-"))).toHaveLength(3)
     expect(fixture.errors).toEqual([])
-    await page.screenshot({ path: info.outputPath("easm-third-snapshot.png") })
 
     await card.getByRole("button", { name: "关闭节点卡片" }).click()
     const heat = panel.getByTestId("easm-heat")
@@ -107,7 +114,7 @@ test("three cumulative tool snapshots update one portrait and restore the latest
     await expect(evidence).toContainText("已列入 KEV")
     await evidence.getByRole("button", { name: "Close", exact: true }).click()
     await panel.getByRole("button", { name: "展开资产图", exact: true }).first().click()
-    const expanded = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "示例集团 · 资产图谱" }) })
+    const expanded = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "清华大学 · 资产图谱" }) })
     await expect(expanded.getByTestId("easm-graph")).toBeVisible()
     await expect(expanded.getByTestId("easm-heat")).toBeVisible()
     await expect(expanded.getByTestId("easm-supply").getByRole("row")).toHaveCount(3)
@@ -117,7 +124,7 @@ test("three cumulative tool snapshots update one portrait and restore the latest
     await reloadOpenConversation(page)
     await page.getByRole("tab", { name: "Task panels", exact: true }).click()
     await expect(panel).toHaveAttribute("data-revision", String(initialRevision + 3))
-    await expect(panel.getByText("示例集团", { exact: true })).toBeVisible()
+    await expect(panel.getByText("清华大学", { exact: true })).toBeVisible()
     await expect(panel.getByTestId("easm-supply").getByRole("row")).toHaveCount(3)
     await expect.poll(() => stage.evaluate((element) => Boolean((element as GraphStage).__easmNodePoint?.("feature|certificate")))).toBe(true)
     const recovered = await (await request.get(`/api/threads/${threadId}/panels/${panelId}`)).json()

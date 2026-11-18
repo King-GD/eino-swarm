@@ -1,9 +1,12 @@
 import { createServer, type ServerResponse } from "node:http"
 import type { EasmResult } from "../src/lib/easm/types"
 
+export const easmPrompt = "帮我梳理清华大学的暴露面数据"
+export const easmCompletion = "清华大学暴露面模拟测试已完成，三批结果已更新到 EASM。"
+
 const root = {
-  id: "root|sample", kind: "root" as const, label: "示例集团", ip_count: 12,
-  detail: { website: "https://example.test", region: "北京", industry: ["软件"] },
+  id: "root|sample", kind: "root" as const, label: "清华大学", ip_count: 12,
+  detail: { website: "https://example.test", description: "本地模拟数据", region: "北京" },
 }
 const company = { id: "company|sample", kind: "company" as const, label: "示例科技" }
 const domain = { id: "domain|example.test", kind: "domain" as const, label: "example.test", detail: { reason: "示例域名归属依据" } }
@@ -70,6 +73,8 @@ export async function startEasmFixture() {
   const receipts = new Map<string, Receipt>()
   const releases: (() => void)[] = []
   const gates = easmSnapshots.map(() => new Promise<void>((resolve) => releases.push(resolve)))
+  let finish!: () => void
+  const finalReply = new Promise<void>((resolve) => { finish = resolve })
   let requests = 0
   const endpoint = createServer(async (incoming, response) => {
     try {
@@ -98,6 +103,9 @@ export async function startEasmFixture() {
         reply(response, input, { role: "assistant", tool_calls: [{ index: 0, id, type: "function", function: { name, arguments: JSON.stringify(args) } }] }, "tool_calls")
       }
       if (!receipts.has("easm-open")) {
+        if (!input.messages.some((message) => message.role === "user" && message.content?.includes(easmPrompt))) {
+          throw new Error("The model did not receive the exposure inventory request")
+        }
         call("easm-open", "open_task_panel", { plugin_id: "easm-asset-portrait" })
         return
       }
@@ -125,7 +133,8 @@ export async function startEasmFixture() {
         })
         return
       }
-      reply(response, input, { role: "assistant", content: "The three portrait batches have been published." })
+      await finalReply
+      if (!response.destroyed) reply(response, input, { role: "assistant", content: easmCompletion })
     } catch (error) {
       errors.push(String(error))
       if (!response.headersSent) response.writeHead(400, { "Content-Type": "application/json" })
@@ -139,9 +148,11 @@ export async function startEasmFixture() {
     url: `http://127.0.0.1:${address.port}`,
     errors,
     releaseBatch: (batch: number) => releases[batch - 1](),
+    finish,
     state: () => ({ requests, receipts: Object.fromEntries(receipts) }),
     close: () => new Promise<void>((resolve, reject) => {
       for (const release of releases) release()
+      finish()
       endpoint.close((error) => error ? reject(error) : resolve())
       endpoint.closeAllConnections()
     }),

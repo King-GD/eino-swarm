@@ -893,10 +893,12 @@ native macOS acceptance in `ci-macOS`.
 ## EASM asset portrait
 
 `frontend/e2e/easm.spec.ts` uses a synthetic loopback model to run the real
-task panel tools. It publishes three cumulative snapshots in one conversation,
-checks changes on the same canvas in the host page, and verifies that EASM
-does not mount an iframe. It also verifies zoom and node selection during live
-updates and recovery of the latest saved state after page reload.
+task panel tools. A request for a Tsinghua University exposure inventory opens
+the EASM panel before the first synthetic batch arrives. The case observes
+three cumulative snapshots on the same canvas while the turn is still working,
+then releases the final model reply and checks that the latest state persists
+through completion and page reload. It also verifies zoom and node selection
+during live updates and direct rendering in the host page.
 
 ```sh
 cd frontend
