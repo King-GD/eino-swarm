@@ -1,3 +1,4 @@
+import { TaskPanelSettings } from "./settings-task-panels"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { SelectItem } from "@/components/ui/select"
@@ -151,6 +152,7 @@ export function ToolsTab({
       </SettingsSection>
       )}
 
+      <TaskPanelSettings query={query} />
       <SettingsSection title={tr("settings.tools.limits")}>
         <Field
           query={query}

@@ -274,7 +274,9 @@ test("Add to chat stays beside a phone selection below the native text menu", as
 })
 
 test("Add to chat gets its own row below a bottom transcript selection", async ({ page }) => {
-  await page.setViewportSize({ width: 375, height: 812 })
+  // Keep this transcript overflowing: a taller viewport legitimately has
+  // enough space for the floating toolbar below the selected paragraph.
+  await page.setViewportSize({ width: 375, height: 560 })
   await page.goto(WALKTHROUGH)
   await page.getByRole("button", { name: "返回" }).click()
   await page.getByRole("button", { name: /^打开 Sweep the unused exports$/ }).click()

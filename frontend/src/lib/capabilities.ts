@@ -1,7 +1,7 @@
 /** Public capability identifiers; this list describes implemented adapters. */
 export const roles = ["conversation", "title", "compact", "translation", "embedding", "ocr", "decisions", "transcription", "speech", "image"] as const
 export type CapabilityRole = typeof roles[number]
-export type RoleCapability = { supported: boolean; available: boolean; configurable: boolean; endpoints: string[]; reason?: string }
+export type RoleCapability = { audio_parameters_version?: number; supported: boolean; available: boolean; configurable: boolean; endpoints: string[]; reason?: string }
 export type SourceCapabilities = { authorized: boolean; available: boolean; configurable: boolean; capabilities: Partial<Record<CapabilityRole, RoleCapability>> }
 export type ClientCapabilities = { version: 1; model_roles_version: 3; sources: { preset?: SourceCapabilities; gateway?: SourceCapabilities } }
 const endpoints: Record<CapabilityRole, string[]> = {
@@ -27,7 +27,7 @@ export function parseCapabilities(data: unknown): ClientCapabilities | undefined
       const c = value.capabilities[role]
       if (c === undefined) continue
       if (!record(c) || [c.supported, c.available, c.configurable].some(v => typeof v !== "boolean") || !Array.isArray(c.endpoints) || c.endpoints.length > 16 || c.endpoints.some(e => typeof e !== "string" || e.length > 64) || c.reason !== undefined && (typeof c.reason !== "string" || c.reason.length > 256)) return
-      capabilities[role] = { supported: c.supported as boolean, available: c.available as boolean, configurable: c.configurable as boolean, endpoints: c.endpoints as string[], ...(typeof c.reason === "string" ? { reason: c.reason } : {}) }
+      capabilities[role] = { ...(typeof c.audio_parameters_version === "number" ? { audio_parameters_version: c.audio_parameters_version } : {}), supported: c.supported as boolean, available: c.available as boolean, configurable: c.configurable as boolean, endpoints: c.endpoints as string[], ...(typeof c.reason === "string" ? { reason: c.reason } : {}) }
     }
     sources[kind] = { authorized: value.authorized as boolean, available: value.available as boolean, configurable: value.configurable as boolean, capabilities }
   }

@@ -104,6 +104,7 @@ func (s *Server) postRemoteLogin(c *gin.Context) {
 		NewDevice     bool `json:"new_device"`
 		Confirmed     bool `json:"confirmed"`
 		EnableAccount bool `json:"enable_account"`
+		OpenBrowser   bool `json:"open_browser"`
 	}
 	decoder := json.NewDecoder(http.MaxBytesReader(c.Writer, c.Request.Body, 1024))
 	decoder.DisallowUnknownFields()
@@ -116,11 +117,15 @@ func (s *Server) postRemoteLogin(c *gin.Context) {
 		badRequest(c, "new device login requires explicit confirmation")
 		return
 	}
+	var openBrowser func(string) error
+	if request.OpenBrowser {
+		openBrowser = s.opts.OpenURL
+	}
 	var err error
 	if request.EnableAccount {
-		err = s.remote.StartAccountLogin(s.opts.OpenURL, request.NewDevice)
+		err = s.remote.StartAccountLogin(openBrowser, request.NewDevice)
 	} else {
-		err = s.remote.StartLogin(s.opts.OpenURL, request.NewDevice)
+		err = s.remote.StartLogin(openBrowser, request.NewDevice)
 	}
 	if err != nil {
 		if errors.Is(err, remote.ErrAccountEnableUnavailable) {

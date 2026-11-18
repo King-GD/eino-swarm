@@ -39,6 +39,7 @@ func testEngineWithPool(t *testing.T, scripted bool) *engine.Engine {
 	t.Cleanup(func() { _ = st.Close() })
 	pool := provider.New(cfg)
 	if scripted {
+		cfg.Product.Mode = config.ProductModeLocal
 		pool = provider.NewMock(cfg)
 	}
 	e := engine.New(cfg, st, pool, slog.New(slog.NewTextHandler(io.Discard, nil)))

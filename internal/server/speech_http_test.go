@@ -157,9 +157,27 @@ func TestSpeechHTTPUploadsRecordingAndReturnsAudioWithoutCreatingATurn(t *testin
 	if err := h.app.Config.Update(func(c *config.Config) error { c.Speech.Output.Source = "account"; return nil }); err != nil {
 		t.Fatal(err)
 	}
-	h.json("POST", "/api/audio/models", map[string]any{"kind": "output"}, 400)
+	denied := h.json("POST", "/api/audio/models", map[string]any{"kind": "output"}, 401)
+	if denied["code"] != "speech_login_required" {
+		t.Fatalf("signed-out account discovery=%v", denied["code"])
+	}
 	listed := h.json("GET", "/api/threads", nil, 200)
 	if strings.Contains(string(mustJSON(t, listed)), "dictated words") {
 		t.Fatal("dictation created durable chat content")
+	}
+}
+
+func TestGatewayAudioSettingsRoundTripRetainsScopedInvalidPreferences(t *testing.T) {
+	h := newHarness(t)
+	h.json("PUT", "/api/settings", map[string]any{"speech": map[string]any{"gateway_parameters": map[string]any{"audio:one": map[string]any{"voice": "saved-invalid-voice", "speed": 8, "instructions": ""}}}}, 200)
+	h.json("PUT", "/api/settings", map[string]any{"speech": map[string]any{"output": map[string]any{"enabled": false}}}, 200)
+	settings := h.json("GET", "/api/settings", nil, 200)["settings"].(map[string]any)["speech"].(map[string]any)
+	preferences := settings["gateway_parameters"].(map[string]any)["audio:one"].(map[string]any)
+	if preferences["voice"] != "saved-invalid-voice" || preferences["speed"] != float64(8) || preferences["instructions"] != "" {
+		t.Fatal("settings discarded explicit preferences")
+	}
+	h.json("PUT", "/api/settings", map[string]any{"speech": map[string]any{"gateway_parameters": map[string]any{}}}, 200)
+	if len(h.app.Config.Snapshot().Speech.GatewayParameters) != 0 {
+		t.Fatal("explicit preference reset was ignored")
 	}
 }

@@ -54,6 +54,9 @@ test("a legacy server catalog is a selectable default beside an own provider", a
   await page.route("**/api/meta", async (route) => {
     const response = await route.fetch()
     const body = await response.json()
+    // A legacy server omits the policy from both snapshots, rather than
+    // publishing contradictory legacy Settings and current Meta.
+    delete body.model_policy
     await route.fulfill({
       response,
       json: { ...body, account_models: { state: "ready", models: 2, username: "account", display_name: "Account" } },

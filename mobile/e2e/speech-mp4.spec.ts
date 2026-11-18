@@ -1,3 +1,4 @@
+import { fixtureCapabilities } from "../src/test/capabilities"
 import { readFileSync } from "node:fs"
 import { createServer, request as proxyRequest } from "node:http"
 import { expect, test } from "@playwright/test"
@@ -40,8 +41,8 @@ test("automatic iPhone MP4 capture reaches ASR as complete decodable WAV", async
     const url = new URL(route.request().url())
     const user = { id: "voice-owner", username: "voice-owner", approval_status: "approved", enabled: true }
     const device = { id: "voice-mobile", expires_at: "2099-01-01T00:00:00Z" }
-    const data = url.pathname.endsWith("/auth/me") ? { user, device }
-      : url.pathname.endsWith("/bootstrap") ? { user, device, models: { source_id: "gateway:voice", source_kind: "gateway", label: "Voice", execution: "phone", api_base_url: url.origin + "/v1", catalog_url: url.origin + "/v1/models", api_access_enabled: true }, pairlink: { enabled: false }, heartbeat_interval: 30, presence_ttl: 90 } : []
+    const data = url.pathname.endsWith("/capabilities") ? fixtureCapabilities() : url.pathname.endsWith("/auth/me") ? { user, device }
+      : url.pathname.endsWith("/bootstrap") ? { user, device, capabilities_url: url.origin + "/client/api/v1/capabilities", models: { source_id: "gateway:voice", source_kind: "gateway", label: "Voice", defaults: { speech: "speech", transcription: "transcription" }, execution: "phone", api_base_url: url.origin + "/v1", catalog_url: url.origin + "/v1/models", api_access_enabled: true }, pairlink: { enabled: false, hub_url: url.origin, redeem_url: url.origin + "/pairlink/v1/pairings/redeem", info_url: url.origin + "/pairlink/v1/info", websocket_url: url.origin.replace(/^http/, "ws") + "/pairlink/v1/ws" }, heartbeat_interval: 30, presence_ttl: 90 } : []
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ data }) })
   })
   await page.route("**/v1/models", route => route.fulfill({ json: { data: [{ id: "chat", model_type: "chat" }] } }))

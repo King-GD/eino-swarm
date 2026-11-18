@@ -36,9 +36,14 @@ Accept the result using the workers' evidence against the acceptance criteria.
 For shared findings and results, record their sources and artifact paths.
 ```
 
-During the turn, open **Collaboration**. Use **Expand graph** when work has
+On desktop or Web, open **Collaboration** in the right inspector. The host
+shows the tab when the conversation's project has Nuwa enabled or has recorded
+collaboration history. With no conversation open, the tab follows the selected
+project. A standalone conversation does not show that project's records.
+The tab does not take focus when it appears. Use **Expand graph** when work has
 been recorded, then select a node and open **Details and evidence** to inspect
-its sources.
+its sources. The paired phone can configure a project's Nuwa mode but does not
+show the collaboration graph. See the [host registration guide](TASK_PANELS.md#宿主注册表与插件目录).
 
 ## Planning, models and delegation
 
@@ -203,9 +208,10 @@ and downstream. The graph frame stays as tall as the path instead of stretching 
 panel. A collapsed row shows how many records share each status. Opening it
 lists the newest records first, and a list longer than eight records can be
 filtered by title or summary. The index below the graph does not repeat those
-grouped records. The graph card shows kind, title and status. Who recorded a
-result, in which turn, and with which model stays in the detail and in the
-opened kind list, not on a separate graph node. Worker
+grouped records. The graph card shows kind, title and status. Tasks, facts and results use
+different background colors on the summary, graph cards, unlinked groups,
+lists and detail. Who recorded a result, in which turn, and with which model
+stays in the detail and in the opened kind list, not on a separate graph node. Worker
 rows show durable lifecycle status and recorded model bindings. Source links open the source conversation and, when a
 turn is given, its Trace; results use the existing file API.
 

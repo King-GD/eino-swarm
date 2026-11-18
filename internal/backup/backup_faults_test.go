@@ -273,7 +273,7 @@ func TestSequenceRepairAndRejectedThreadIDs(t *testing.T) {
 
 	seq := rawSQLite(t)
 	for _, table := range autoincTables {
-		if _, err := seq.Exec(`CREATE TABLE ` + table + `(id INTEGER PRIMARY KEY AUTOINCREMENT)`); err != nil {
+		if _, err := seq.Exec(`CREATE TABLE ` + table + `(` + autoincColumn(table) + ` INTEGER PRIMARY KEY AUTOINCREMENT)`); err != nil {
 			t.Fatal(err)
 		}
 	}

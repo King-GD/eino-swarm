@@ -1,0 +1,219 @@
+[
+  {
+    "id": "fofa-world-map",
+    "version": "1",
+    "name": "FOFA world map",
+    "description": "Show collected network assets by country and update their geographic markers as local HTTP(S) liveness checks finish. Use for tasks that request a geographic collection and liveness view. Collection uses the configured local FOFA client.",
+    "entry": "task-panels/fofa-world-map.html",
+    "schema": {
+      "type": "object",
+      "required": [
+        "collection",
+        "assets_by_id",
+        "probe",
+        "results_by_id"
+      ],
+      "properties": {
+        "collection": {
+          "type": "object",
+          "required": [
+            "phase",
+            "received",
+            "discovered",
+            "completeness"
+          ],
+          "properties": {
+            "phase": {
+              "type": "string"
+            },
+            "received": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "discovered": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "reported_total": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "completeness": {
+              "enum": [
+                "unknown",
+                "partial",
+                "complete"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            }
+          }
+        },
+        "assets_by_id": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "id",
+              "ip",
+              "port",
+              "protocol",
+              "host",
+              "country",
+              "region",
+              "city",
+              "status"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ip": {
+                "type": "string"
+              },
+              "protocol": {
+                "type": "string"
+              },
+              "host": {
+                "type": "string"
+              },
+              "country": {
+                "type": "string"
+              },
+              "region": {
+                "type": "string"
+              },
+              "city": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "port": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "longitude": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              },
+              "latitude": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              }
+            }
+          }
+        },
+        "probe": {
+          "type": "object",
+          "required": [
+            "pending",
+            "running",
+            "responded",
+            "no_response",
+            "skipped",
+            "interrupted"
+          ],
+          "properties": {
+            "pending": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "running": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "responded": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "no_response": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "skipped": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "interrupted": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "results_by_id": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "status",
+              "finished_at"
+            ],
+            "properties": {
+              "status": {
+                "type": "string"
+              },
+              "status_code": {
+                "type": "integer"
+              },
+              "elapsed_ms": {
+                "type": "number",
+                "minimum": 0
+              },
+              "error": {
+                "type": "string"
+              },
+              "finished_at": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "initial_state": {
+      "collection": {
+        "phase": "collecting",
+        "received": 0,
+        "discovered": 0,
+        "completeness": "unknown"
+      },
+      "assets_by_id": {},
+      "probe": {
+        "pending": 0,
+        "running": 0,
+        "responded": 0,
+        "no_response": 0,
+        "skipped": 0,
+        "interrupted": 0
+      },
+      "results_by_id": {}
+    },
+    "source": {
+      "id": "fofa-world-map",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "max_assets": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+]

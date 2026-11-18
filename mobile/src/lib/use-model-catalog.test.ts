@@ -5,8 +5,8 @@ import type { RemoteLink } from "./link"
 import { OpCatalog, OpRefreshCatalog, OpRefreshCapabilities, type ModelChoice, type RemoteResponse } from "./rpc"
 import { useModelCatalog } from "./use-model-catalog"
 
-const old = [{ provider_id: "p", model: "old-model", default: true }]
-const fresh = [{ provider_id: "p", model: "new-model", default: true }]
+const old = [{ provider_id: "p", model: "old-model", default: true, locked: false }]
+const fresh = [{ provider_id: "p", model: "new-model", default: true, locked: false }]
 const ok = (models: ModelChoice[]): RemoteResponse => ({ v: 1, id: "r", ok: true, models, reasoning_levels: ["low"] })
 function deferred() {
   let resolve!: (v: RemoteResponse) => void
@@ -47,12 +47,14 @@ describe("model catalog ownership", () => {
   it("clears PC Web execution on link replacement and ignores the previous PC's late status", async () => {
     const stale = deferred(), next = deferred()
     const status = { preference: "local", execution: "local", cloud_account: "sign_in_required" } as const
-    const first = link(vi.fn().mockResolvedValueOnce({ ...ok(old), web_execution_status: status }).mockReturnValueOnce(stale.promise))
+    const firstRPC = vi.fn().mockResolvedValueOnce({ ...ok(old), web_execution_status: status }).mockReturnValueOnce(stale.promise)
+    const first = link(firstRPC)
     const second = link(vi.fn().mockReturnValueOnce(next.promise))
     const { result, rerender } = renderHook(({ target }) => useModelCatalog(target), { initialProps: { target: first } })
     await waitFor(() => expect(result.current.webExecutionStatus).toEqual(status))
     let job!: Promise<void>
     act(() => { job = result.current.refreshModels() })
+    await waitFor(() => expect(firstRPC).toHaveBeenCalledTimes(2))
     rerender({ target: second })
     expect(result.current.webExecutionStatus).toBeUndefined()
     await act(async () => { stale.resolve({ ...ok(old), web_execution_status: status }); await job })
@@ -120,15 +122,21 @@ describe("model catalog ownership", () => {
 
   it.each(["success", "failure", "rejection"])("ignores old-link %s and finally after reconnect, including a new in-flight job", async (kind) => {
     const stale = deferred(), nextRefresh = deferred()
-    const first = link(vi.fn().mockResolvedValueOnce(ok(old)).mockReturnValueOnce(stale.promise))
-    const second = link(vi.fn().mockResolvedValueOnce(ok(fresh)).mockReturnValueOnce(nextRefresh.promise))
+    const firstRPC = vi.fn().mockResolvedValueOnce(ok(old)).mockReturnValueOnce(stale.promise)
+    const secondRPC = vi.fn().mockResolvedValueOnce(ok(fresh)).mockReturnValueOnce(nextRefresh.promise)
+    const first = link(firstRPC)
+    const second = link(secondRPC)
     const { result, rerender } = renderHook(({ target }) => useModelCatalog(target), { initialProps: { target: first } })
     await waitFor(() => expect(result.current.models).toEqual(old))
     let firstJob!: Promise<void>, secondJob!: Promise<void>
     act(() => { firstJob = result.current.refreshModels() })
+    // Capability discovery precedes the legacy catalog request. Reconnect only
+    // after that request exists, so its late rejection reaches the real owner.
+    await waitFor(() => expect(firstRPC).toHaveBeenCalledTimes(2))
     rerender({ target: second })
     await waitFor(() => expect(result.current.models).toEqual(fresh))
     act(() => { secondJob = result.current.refreshModels() })
+    await waitFor(() => expect(secondRPC).toHaveBeenCalledTimes(2))
     await act(async () => {
       if (kind === "rejection") stale.reject(new Error("old link"))
       else stale.resolve(kind === "success" ? ok(old) : { v: 1, id: "old", ok: false, code: "unknown_op" })

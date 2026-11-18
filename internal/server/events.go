@@ -67,6 +67,7 @@ func (s *Server) streamEvents(c *gin.Context) {
 	if !catchUp() {
 		return
 	}
+	panels := s.startTaskPanelDelivery(c, th.ID)
 	// Tell the client the replay is over so it can stop showing a loading
 	// state and start rendering streamed text.
 	writeSSE(c, "ready", gin.H{
@@ -88,6 +89,9 @@ func (s *Server) streamEvents(c *gin.Context) {
 		case <-ctx.Done():
 			return
 		case <-lagTicker.C:
+			if s.pollTaskPanelDelivery(c, panels) {
+				w.Flush()
+			}
 			if sub.Lagged() {
 				if !catchUp() {
 					return

@@ -1,6 +1,9 @@
 import { MockProjects } from "./mock-projects"
 import { MockProductMode } from "./mock-product-mode"
 import { MockSpeech } from "./mock-speech"
+import { MOCK_FLAG, mockTickMs, mockPauseOpenMs, mockPauseClientsMs } from "./mock-link-timing"
+import { mockTaskPanelRPC, releaseMockTaskPanels, resetMockTaskPanels } from "./mock-task-panels"
+export { wantsMock, mockTickMs, mockPauseOpenMs } from "./mock-link-timing"
 import { mockFileChunk, mockListedFiles, mockOutputFiles } from "./mock-files"
 import { iterationLimitHistory, iterationSnapshotOnly, mockAwaitingContinue, mockContinueIteration } from "./mock-iteration-limit"
 import { restartAskHistory } from "./mock-ask-restart"
@@ -63,30 +66,7 @@ import { stopReplayEnd, stopReplayStart } from "./mock-stop-replay"
  *  Conversations live on the host, not on a link, because one PC seen down
  *  two sockets is still one PC — and React's strict mode opens two. */
 
-const MOCK_FLAG = "mock"
 const MOCK_HOST = "Walkthrough PC"
-/** Playwright drives the script; a human wants to watch it arrive. */
-const DEFAULT_TICK_MS = 420
-
-export function wantsMock(search = location.search): boolean {
-  return new URLSearchParams(search).get(MOCK_FLAG) === "1"
-}
-
-export function mockTickMs(search = location.search): number {
-  const raw = new URLSearchParams(search).get("tick")
-  const n = raw ? Number(raw) : NaN
-  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_TICK_MS
-}
-
-/** Holds open long enough for a loading status to be visible. The default
- *  walkthrough does not wait. */
-export function mockPauseOpenMs(search = location.search): number {
-  return new URLSearchParams(search).get("pause") === "open" ? 1200 : 0
-}
-
-function mockPauseClientsMs(search = location.search): number {
-  return new URLSearchParams(search).get("pause") === "clients" ? 1200 : 0
-}
 
 type MockThread = MockGoalFields & {
   id: string
@@ -741,6 +721,7 @@ export function mockHost(): MockHost {
 export function resetMockHost() {
   host?.stop()
   host = null
+  resetMockTaskPanels()
 }
 
 /** One socket onto the walkthrough host. */
@@ -763,6 +744,7 @@ export class MockLink {
 
   close() {
     this.speech.close()
+    releaseMockTaskPanels(this)
     this.closed = true
     if (this.watcher) this.host.unwatch(this.watcher)
     this.watcher = null
@@ -782,6 +764,8 @@ export class MockLink {
     if (mode) return this.ok({ id, ...mode })
     if (this.speech.accepts(req)) return this.ok({ id, ...await this.speech.handle(req) })
     const thread = () => this.host.find(req.thread_id ?? "")
+    const panel = mockTaskPanelRPC(this, req, Boolean(thread()))
+    if (panel) return this.ok({ id, ...panel })
     if (req.op.startsWith("project_")) return this.host.projects.handle(req)
     switch (req.op) {
       case "translate_selection":
@@ -844,7 +828,7 @@ export class MockLink {
         if (scenario === "legacy") return this.ok({ id, ok: false, code: "unknown_op" })
         if (scenario === "slow") await new Promise((resolve) => setTimeout(resolve, 1200))
         if (this.host.takeCatalogFailure()) return this.ok({ id, ok: false, code: "refresh_failed" })
-        return this.ok({ id, models: scenario === "empty" ? [] : [{ provider_id: "walkthrough", provider_label: "Walkthrough", model: "scripted-next", default: true }], reasoning_levels: ["low", "medium", "high"], web_execution_status: { preference: "auto", execution: "local", cloud_account: "sign_in_required" } })
+        return this.ok({ id, model_policy: { mode: "local", configurable: true, ready: true, scope: "local" }, models: scenario === "empty" ? [] : [{ provider_id: "walkthrough", provider_label: "Walkthrough", model: "scripted-next", default: true }], reasoning_levels: ["low", "medium", "high"], web_execution_status: { preference: "auto", execution: "local", cloud_account: "sign_in_required" } })
       }
       case OpGetTimeouts:
       case OpSetTimeouts: {
@@ -857,6 +841,7 @@ export class MockLink {
       }
       case OpCatalog:
         return this.ok({
+          model_policy: { mode: "local", configurable: true, ready: true, scope: "local" },
           memory_available: true,
           composer_predictions: new URLSearchParams(location.search).get("prediction") !== "off",
           id,

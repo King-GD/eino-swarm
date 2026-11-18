@@ -224,6 +224,24 @@ class HostValidationLeaseTests(unittest.TestCase):
             self.assertNotIn("argv", text)
             self.assertNotIn("PRIVATE_LEASE_FIXTURE_SECRET", text)
 
+    def test_cwd_probe_avoids_blocking_probes_and_rejects_unknown_paths(self):
+        command = ["/usr/sbin/lsof", "-b", "-nP", "-a", "-p", "123", "-d", "cwd", "-Fn"]
+        for code, output, valid in [
+            (0, "p123\nn" + str(self.first) + "\n", True),
+            (1, "n" + str(self.first) + "\n", False),
+            (0, "p123\n", False), (0, "nrelative\n", False),
+            (0, "n/one\nn/two\n", False),
+        ]:
+            with self.subTest(code=code, output=output), \
+                 mock.patch.object(lease_module.sys, "platform", "darwin"), \
+                 mock.patch.object(lease_module.subprocess, "run", return_value=subprocess.CompletedProcess(command, code, output)) as run:
+                if valid:
+                    self.assertEqual(lease_module.process_cwd(123), self.first)
+                else:
+                    with self.assertRaises(RuntimeError):
+                        lease_module.process_cwd(123)
+                run.assert_called_once_with(command, capture_output=True, text=True, timeout=2)
+
     def test_same_module_real_unittest_discovery_is_detected_from_another_copy(self):
         tests = self.first / "owned_tests"
         tests.mkdir()

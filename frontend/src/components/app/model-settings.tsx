@@ -179,7 +179,7 @@ export function ModelsTab({
     >
       <AccountModelsCard settings={settings} onChange={onChange} query={query} />
       {officialOnly ? null : settings.model_policy ? <FunctionalModels settings={settings} onChange={onChange} query={query} /> : <AuxiliaryModels settings={settings} onChange={onChange} query={query} />}
-      {officialOnly ? null : <SearchSettingsPanel settings={settings} onChange={onChange} query={query} />}
+      {officialOnly || settings.model_policy ? null : <SearchSettingsPanel settings={settings} onChange={onChange} query={query} />}
 
       {officialOnly ? null : <SettingsSection
         title={t("accountModels.ownTitle")}

@@ -40,6 +40,9 @@ export const OpClients = "clients"
 export const OpClientRead = "client_read"
 export const OpFiles = "files"
 export const OpFileChunk = "file_chunk"
+export const OpTaskPanels = "task_panels"
+export const OpTaskPanelRead = "task_panel_read"
+export const OpTaskPanelCancel = "task_panel_cancel"
 export const OpTranslateSelection = "translate_selection"
 export const OpCancelTranslation = "cancel_translation"
 export const OpSpeechConfig = "speech_config"
@@ -83,6 +86,9 @@ export type RemoteRequest = {
   followup_id?: string
   task_id?: string
   file_path?: string
+  panel_id?: string
+  base_revision?: number
+  transfer_id?: string
   /** OpFiles: one workspace directory. Empty or omitted is the root. */
   directory?: string
   project_patch?: ProjectPatch
@@ -298,9 +304,34 @@ export type RemoteResponse = EngineStartup & {
   timeout_settings?: TimeoutSettings
   files?: WorkspaceFile[]
   file_chunk?: FileChunk
+  task_panels?: TaskPanelManifest[]
+  panel_transfer?: TaskPanelTransfer
   translation?: string
   speech?: import("../../../frontend/src/lib/speech-types").SpeechSnapshot
   audio?: { audio_id: string; text?: string; mime?: string; size?: number; offset?: number; next?: number; data?: string; more?: boolean }
+}
+
+/** A small discovery view; plugin definitions and data use a frozen transfer. */
+export type TaskPanelManifest = {
+  id: string
+  thread_id: string
+  plugin_id: string
+  plugin_version: string
+  revision: number
+  source_status?: string
+}
+
+export type TaskPanelTransfer = {
+  id: string
+  thread_id: string
+  panel_id: string
+  revision: number
+  size: number
+  sha256: string
+  offset: number
+  next_offset: number
+  data: string
+  more: boolean
 }
 
 export type WorkspaceFile = {

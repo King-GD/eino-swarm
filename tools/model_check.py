@@ -18,7 +18,7 @@ decisions, asynchronous classification and exact-ID cancellation deduplication.
 models/stream/ManagerCommentary.tla checks the order and privacy of admitted
 manager commentary before it enters the event stream.
 models/account/DeviceLogin.tla checks validated public-link publication, manual
-headless authorization, terminal link clearing and required human approval.
+authorization, explicit browser launch intent, terminal link clearing and required human approval.
 models/release/LinuxRelease.tla checks both Linux architecture targets, name/machine
 agreement, exact runtime evidence for new uploads and immutable public bytes.
 models/account/AccountCatalog.tla checks that a published account catalog
@@ -79,6 +79,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
+from model_check_provider_admission import provider_admission_cases
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -104,6 +105,30 @@ class Model:
 MODELS = {
     m.name: m
     for m in (
+        Model("task-panel", ROOT / "models" / "panels" / "TaskPanel.tla",
+              ("IgnoreOwner", "DeliverBeforeCommit", "ApplyDuplicate", "IgnoreBaseRevision", "IgnoreOperationDigest", "CleanupOtherOwner", "SkipRecovery", "SeparatePanelConnection"),
+              ("TypeOK", "CommittedBeforeDelivery", "OwnerRequired", "Idempotent", "BaseRevisionRequired", "OperationBodyStable", "CleanupKeepsOwner", "NoOrphanAfterRestore", "SaveConnectionAvailable"), ()),
+        Model("panel-ownership", ROOT / "models" / "panels" / "PanelOwnership.tla",
+              ("StealRunningSource", "AbortAllRecovery"),
+              ("TypeOK", "RunningOwnerKept", "HealthyThreadsRecover"), ()),
+        Model("panel-frame", ROOT / "models" / "panels" / "PanelFrameDelivery.tla",
+              ("ForgetHiddenResync", "AckBeforeApply", "ExecuteIncompatible", "SilentTimeout"),
+              ("TypeOK", "AcknowledgedWasApplied", "RecoveryRemainsSendable", "OnlyCompatibleExecutes", "FailureIsVisible"), ()),
+        Model("panel-projection", ROOT / "models" / "panels" / "PanelProjection.tla",
+              ("RejectStaleCursor", "ForgetDelete", "OverwriteNewer", "IgnoreVisit", "KeepCoveredObservation"),
+              ("TypeOK", "EligibleSnapshotAdmitted", "DeletedNeverResurrects", "NewerRevisionRetained", "PreviousVisitIgnored", "CoveredAbsenceSettles"), ()),
+        Model("panel-producer", ROOT / "models" / "panels" / "PanelProducer.tla",
+              ("DropObservedResult", "FinishBeforeJoin", "NonCanonicalIdentity"),
+              ("TypeOK", "RequestsAtMostOnce", "ObservedResultsRetained", "ReturnWaitsForJoin", "ReturnedObservationsApplied"), ()),
+        Model("mobile-panel", ROOT / "models" / "panels" / "MobileTaskPanel.tla",
+              ("MixTransferRevision", "AcceptLateVisit", "ApplyPartialBody", "CloseOtherTransfer", "UsePanelCursorForChat", "RefreshCancelsTransfer"),
+              ("TypeOK", "FrozenTransferRevision", "CurrentVisitOwnsApply", "CompleteBodyBeforeApply", "ValidatedBodyBeforeApply", "OldCloseKeepsSuccessor", "PanelCursorKeepsChatSeq", "ManifestKeepsActiveTransfer"), ()),
+        Model("inspector-registry", ROOT / "models" / "panels" / "InspectorRegistry.tla",
+              ("BorrowSidebarProject", "IgnoreThreadScope", "ExposeForeignTaskRows", "ForgetHistory", "BlankFallback", "UnmountHiddenFrame",
+               "ExposeForeignProjectStatus", "IgnoreSignalOwner", "IgnoreSupersededSignal", "AcceptDeletedSignal", "ReplayStealsFocus"),
+              ("TypeOK", "ProjectScopeCorrect", "ThreadScopeCorrect", "EveryMountedRowIsOwned", "HistoryRemainsVisible", "FallbackSelectsAvailable",
+               "HiddenFrameRetained", "ProjectStatusOwned", "AutoOpenOwnerMatches", "AutoOpenUsesLatestSignal",
+               "AutoOpenRequiresPresentInstance", "ReplayDoesNotOpen"), ()),
         Model(
             "speech-capture", ROOT / "models" / "mobile" / "SpeechCapture.tla",
             ("AutoMP4Unchanged", "SnapshotBeforeTail", "SkipConvertedLimit", "IgnoreCancelledConversion"),
@@ -147,6 +172,14 @@ MODELS = {
             (("MaxProbes", 3), ("MaxReplacements", 2)),
         ),
         Model(
+            "diagram-paint", ROOT / "models" / "desktop" / "DiagramPaint.tla",
+            ("IgnoreEdge", "IgnorePixels", "IgnoreElements", "IgnoreText", "IgnoreBytes"),
+            ("TypeOK", "MountedEdge", "MountedPixels", "MountedElements",
+             "MountedText", "MountedBytes"),
+            (("MaxEdge", 4), ("MaxPixels", 6), ("MaxElements", 2),
+             ("MaxText", 2), ("MaxBytes", 2), ("Bound", 5)),
+        ),
+        Model(
             "installed-skills", ROOT / "models" / "skills" / "InstalledSkills.tla",
             ("PublishWithoutValidation", "PublishOverExisting", "CleanupBeforeHide",
              "ReadOtherProject", "LoadFallsBackToLearned", "ListIncludesBody", "ReviewTouchesInstall",
@@ -183,8 +216,8 @@ MODELS = {
         ),
         Model(
             "device-login", ROOT / "models" / "account" / "DeviceLogin.tla",
-            ("RequireBrowser", "PublishUnsafe", "RetainTerminalURL", "BypassApproval"),
-            ("TypeOK", "ManualLoginAvailable", "OnlyValidatedURL", "TerminalHidesURL", "ApprovalRequired"),
+            ("RequireBrowser", "PublishUnsafe", "RetainTerminalURL", "BypassApproval", "LaunchWithoutOptIn"),
+            ("TypeOK", "ManualLoginAvailable", "OnlyValidatedURL", "TerminalHidesURL", "ApprovalRequired", "BrowserLaunchRequiresOptIn"),
             (),
         ),
         Model(
@@ -229,8 +262,8 @@ MODELS = {
         ),
         Model(
             "stream", ROOT / "models" / "stream" / "EventStream.tla",
-            ("MarkerUnstored", "MarkerAfterUnlock", "BroadcastAfterUnlock", "DropWhenSlow"),
-            ("TypeOK", "ConvergedView", "SeqIdentity"),
+            ("MarkerUnstored", "MarkerAfterUnlock", "BroadcastAfterUnlock", "DropWhenSlow", "PanelCursorAsChatID"),
+            ("TypeOK", "ConvergedView", "SeqIdentity", "PanelCursorIsIndependent"),
             (("MaxSeq", 5), ("Cap", 1)),
         ),
         Model(
@@ -300,6 +333,11 @@ for _name, _kind, _outcome, _complete, _finish in (
 # other safety properties checked on every current input variant. Unlisted
 # models retain the original requirement to seed every non-TypeOK invariant.
 SEEDED_GUARD_OBLIGATIONS = {
+    ROOT / "models" / "panels" / "PanelProducer.tla": {
+        "DropObservedResult": ("ObservedResultsRetained", "ReturnedObservationsApplied"),
+        "FinishBeforeJoin": ("ReturnWaitsForJoin", "ReturnedObservationsApplied"),
+        "NonCanonicalIdentity": ("RequestsAtMostOnce",),
+    },
     ROOT / "models" / "generation" / "ModelGenerationRecovery.tla": {
         "NoJoin": ("RecoveredHistoryOwnsEpoch",),
     },
@@ -358,6 +396,90 @@ def _askpub(name: str, source: str, switches: tuple[str, ...] = (), violates: st
 
 
 CASES: tuple[Case, ...] = (
+    _case("task-panel-cleanup-owner", "seeded: old producer cleanup changes successor metadata", ("CleanupOtherOwner",), "CleanupKeepsOwner", model="task-panel"),
+    _case("task-panel-orphan", "seeded: startup leaves interrupted producer running", ("SkipRecovery",), "NoOrphanAfterRestore", model="task-panel"),
+    _case("task-panel-connection-budget", "observed two-window draft PUT starvation when separate panel SSE occupies all six H1 slots", ("SeparatePanelConnection",), "SaveConnectionAvailable", model="task-panel"),
+    _stream("stream-panel-cursor", "seeded: panel cursor emitted as chat SSE id", ("PanelCursorAsChatID",), "PanelCursorIsIndependent"),
+    _stream("stream-panel-reach", "named panel frame reaches shared SSE without a chat cursor", witness="NeverPanelFrame"),
+    _case("task-panel-current", "atomic owned publication and idempotent delivery", model="task-panel"),
+    _case("task-panel-late-owner", "seeded: deleted or stopped producer publishes", ("IgnoreOwner",), "OwnerRequired", model="task-panel"),
+    _case("task-panel-before-commit", "seeded: publish before durable commit", ("DeliverBeforeCommit",), "CommittedBeforeDelivery", model="task-panel"),
+    _case("task-panel-duplicate", "seeded: duplicate operation consumes another revision", ("ApplyDuplicate",), "Idempotent", model="task-panel"),
+    _case("task-panel-stale-base", "seeded: first writer commits its captured base after another writer", ("IgnoreBaseRevision",), "BaseRevisionRequired", model="task-panel"),
+    _case("task-panel-changed-body", "seeded: an operation identity is reused with a changed body", ("IgnoreOperationDigest",), "OperationBodyStable", model="task-panel"),
+    *(_case("task-panel-reach-" + name, "publication and lifecycle reachability", witness=witness, model="task-panel")
+      for name, witness in (("publication", "NeverPublished"), ("competing-writer", "NeverCompetingWriter"),
+                            ("restore", "NeverRestored"), ("two-windows", "NeverTwoWindows"))),
+    _case("panel-ownership-current", "owned running source and per-conversation recovery isolation", model="panel-ownership"),
+    _case("panel-ownership-steal", "observed: another publisher erased the live source owner and running marker", ("StealRunningSource",), "RunningOwnerKept", model="panel-ownership"),
+    _case("panel-ownership-recovery", "observed: one malformed optional panel aborted recovery of unrelated conversations", ("AbortAllRecovery",), "HealthyThreadsRecover", model="panel-ownership"),
+    *(_case("panel-ownership-reach-" + name, "owned source and independent recovery reachability", witness=witness, model="panel-ownership")
+      for name, witness in (("running", "NeverRunningSource"), ("refusal", "NeverRejectedOtherPublisher"),
+                            ("recovery", "NeverHealthyRecovery"))),
+    _case("panel-frame-current", "separate sent/applied/acknowledged revisions and retain hidden resynchronization", model="panel-frame"),
+    *(_case("panel-frame-" + name, source, (switch,), invariant, model="panel-frame")
+      for name, source, switch, invariant in (
+          ("hidden-resync", "observed: a hidden rejected callback lost its only snapshot retry", "ForgetHiddenResync", "RecoveryRemainsSendable"),
+          ("early-ack", "seeded: acknowledge a revision before the plugin applies it", "AckBeforeApply", "AcknowledgedWasApplied"),
+          ("incompatible", "seeded: execute an incompatible pinned definition", "ExecuteIncompatible", "OnlyCompatibleExecutes"),
+          ("silent-timeout", "seeded: a callback timeout has no visible failure", "SilentTimeout", "FailureIsVisible"))),
+    *(_case("panel-frame-reach-" + name, "iframe delivery reachability", witness=witness, model="panel-frame")
+      for name, witness in (("hidden-failure", "NeverHiddenFailure"), ("hidden-recovery", "NeverHiddenRecovery"),
+                            ("inflight", "NeverAdvanceInflight"), ("timeout", "NeverTimeout"))),
+    _case("panel-projection-current", "per-panel revision/tombstone merge of atomic snapshots across live updates", model="panel-projection"),
+    *(_case("panel-projection-" + name, source, (switch,), invariant, model="panel-projection")
+      for name, source, switch, invariant in (
+          ("stale-cursor", "observed: Q advancing caused P's only definition snapshot to be discarded", "RejectStaleCursor", "EligibleSnapshotAdmitted"),
+          ("delete", "seeded: an older GET resurrects a newer deletion", "ForgetDelete", "DeletedNeverResurrects"),
+          ("overwrite", "seeded: an older GET overwrites a newer applied revision", "OverwriteNewer", "NewerRevisionRetained"),
+          ("visit", "seeded: a previous conversation visit changes the selected projection", "IgnoreVisit", "PreviousVisitIgnored"),
+          ("omitted", "observed: authoritative reconnect absence left a missing observation causing endless GETs", "KeepCoveredObservation", "CoveredAbsenceSettles"))),
+    *(_case("panel-projection-reach-" + name, "snapshot/live stream crossing reachability", witness=witness, model="panel-projection")
+      for name, witness in (("known-update", "NeverCrossedKnownUpdate"), ("new-panel", "NeverNewPanelMerged"),
+                            ("delete", "NeverDeleteDuringGet"), ("visit", "NeverVisitDuringGet"),
+                            ("omitted", "NeverReconnectAbsence"))),
+    _case("panel-producer-current", "owned collector/workers join after reducing terminal HTTP observations", model="panel-producer"),
+    _case("panel-producer-stop", "observed: Stop discarded a real HTTP response before reducer delivery", ("DropObservedResult",), "ObservedResultsRetained", model="panel-producer"),
+    _case("panel-producer-stop-return", "observed cancellation branch cannot lose a response from the final reducer", ("DropObservedResult",), "ReturnedObservationsApplied", model="panel-producer"),
+    _case("panel-producer-early-return", "seeded: source returns before joining owned workers", ("FinishBeforeJoin",), "ReturnWaitsForJoin", model="panel-producer"),
+    _case("panel-producer-unapplied-return", "seeded: early return omits queued terminal observations", ("FinishBeforeJoin",), "ReturnedObservationsApplied", model="panel-producer"),
+    _case("panel-producer-origin-identity", "observed: omitted versus explicit default origin ports generated two checks for one asset", ("NonCanonicalIdentity",), "RequestsAtMostOnce", model="panel-producer"),
+    _case("panel-producer-reach-complete", "real observation and duplicate row reach the joined reducer", witness="NeverCompletedWitness", model="panel-producer"),
+    _case("panel-producer-reach-stop", "observed response survives cancellation before receipt delivery", witness="NeverCancelledObservationWitness", model="panel-producer"),
+    _case("mobile-panel-current", "immutable bounded transfers, current visit ownership and independent chat replay", model="mobile-panel"),
+    *(_case("mobile-panel-" + name, source, (switch,), invariant, model="mobile-panel")
+      for name, source, switch, invariant in (
+          ("mixed-revision", "seeded: a later manifest revision replaces bytes during a transfer", "MixTransferRevision", "FrozenTransferRevision"),
+          ("late-visit", "refinement of observed late-visit class: A to B to A accepts the first A's old reply", "AcceptLateVisit", "CurrentVisitOwnsApply"),
+          ("partial", "seeded: render after one of two chunks", "ApplyPartialBody", "CompleteBodyBeforeApply"),
+          ("unvalidated", "seeded: a partial body bypasses whole-body validation", "ApplyPartialBody", "ValidatedBodyBeforeApply"),
+          ("old-close", "seeded: a stale transfer cancellation deletes its successor", "CloseOtherTransfer", "OldCloseKeepsSuccessor"),
+          ("chat-seq", "seeded: panel delivery overwrites the conversation replay cursor", "UsePanelCursorForChat", "PanelCursorKeepsChatSeq"),
+          ("refresh", "seeded: newer manifest cancels an unfinished read", "RefreshCancelsTransfer", "ManifestKeepsActiveTransfer"))),
+    *(_case("mobile-panel-reach-" + name, "mobile snapshot, patch and visit recovery reachability", witness=witness, model="mobile-panel")
+      for name, witness in (("snapshot", "NeverSnapshotApplied"), ("patch", "NeverPatchApplied"),
+                            ("visit", "NeverVisitRecovered"), ("refresh", "NeverRefreshCompleted"))),
+    _case("inspector-registry-current", "owned registered tabs, mounted iframe, and fresh automatic intent",
+          model="inspector-registry"),
+    *(_case("inspector-registry-" + name, source, (switch,), invariant, model="inspector-registry")
+      for name, source, switch, invariant in (
+          ("sidebar", "seeded: a standalone conversation borrows the sidebar project", "BorrowSidebarProject", "ProjectScopeCorrect"),
+          ("thread", "seeded: a task tab binds to another conversation's projection", "IgnoreThreadScope", "ThreadScopeCorrect"),
+          ("foreign-row", "seeded: an eligible tab renders another conversation's row along with its own", "ExposeForeignTaskRows", "EveryMountedRowIsOwned"),
+          ("history", "seeded: disabling Nuwa hides the recorded project", "ForgetHistory", "HistoryRemainsVisible"),
+          ("fallback", "observed: a selected task tab disappeared without selecting Agents", "BlankFallback", "FallbackSelectsAvailable"),
+          ("frame", "seeded: switching to Collaboration destroys the mounted task frame", "UnmountHiddenFrame", "HiddenFrameRetained"),
+          ("project-status", "observed: a new project briefly committed the previous project's error and connection status", "ExposeForeignProjectStatus", "ProjectStatusOwned"),
+          ("signal-owner", "seeded: a captured signal focuses its tab after conversation selection changed", "IgnoreSignalOwner", "AutoOpenOwnerMatches"),
+          ("signal-replaced", "seeded: an older captured signal focuses a tab after another instance was discovered", "IgnoreSupersededSignal", "AutoOpenUsesLatestSignal"),
+          ("signal-deleted", "seeded: the only signaled instance was removed before the callback", "AcceptDeletedSignal", "AutoOpenRequiresPresentInstance"),
+          ("signal-replayed", "seeded: restoring a known instance focuses the task tab again", "ReplayStealsFocus", "ReplayDoesNotOpen"))),
+    *(_case("inspector-registry-reach-" + name, "registered render and focus reachability",
+            witness="Never" + witness, model="inspector-registry")
+      for name, witness in (("both", "BothAvailable"), ("history", "HistorySelected"), ("fallback", "SafeFallback"),
+                            ("retained", "HiddenIframe"), ("filtered", "FilteredForeignRow"),
+                            ("open", "AutoOpened"), ("stale-owner", "RefusedStaleOwner"),
+                            ("superseded", "RefusedSuperseded"), ("deleted", "RefusedDeleted"), ("replay", "Replayed"))),
     _case("speech-capture-current", "auto MP4 normalizes after the final chunk; cancellation and limits remain active",
           model="speech-capture"),
     *(_case(name, source, (switch,), invariant, model="speech-capture")
@@ -495,6 +617,27 @@ CASES: tuple[Case, ...] = (
         ("renderer-recovery-reach-replace", "NeverReplaced"),
         ("renderer-recovery-reach-unknown", "NeverUnknownHealthy"),
     )),
+    _case("diagram-paint-current",
+          "a Mermaid SVG becomes an image only when every paint axis is inside its budget",
+          model="diagram-paint"),
+    *(_case(name, source, (switch,), invariant, model="diagram-paint")
+      for name, source, switch, invariant in (
+        ("diagram-paint-ignore-edge", "seeded: an edge past the budget is still mounted",
+         "IgnoreEdge", "MountedEdge"),
+        ("diagram-paint-ignore-pixels", "seeded: a legal edge with too much area is still mounted",
+         "IgnorePixels", "MountedPixels"),
+        ("diagram-paint-ignore-elements", "seeded: an element tree past the budget is still mounted",
+         "IgnoreElements", "MountedElements"),
+        ("diagram-paint-ignore-text", "seeded: a text run past the budget is still mounted",
+         "IgnoreText", "MountedText"),
+        ("diagram-paint-ignore-bytes", "seeded: a document past the byte budget is still mounted",
+         "IgnoreBytes", "MountedBytes"),
+    )),
+    *(_case(name, "witness", witness=witness, model="diagram-paint")
+      for name, witness in (
+        ("diagram-paint-reach-mount", "NeverMounted"),
+        ("diagram-paint-reach-source", "NeverSource"),
+    )),
     _case("installed-skills-current", "validate, publish and detach whole project skill bundles",
           model="installed-skills"),
     *(_case(name, source, (switch,), invariant, model="installed-skills")
@@ -539,7 +682,7 @@ CASES: tuple[Case, ...] = (
           ("IgnoreActiveController",), "ActiveControllerBusy", model="peer-inventory"),
     _case("peer-inventory-reach-quiet", "witness", witness="NeverForeignQuiet", model="peer-inventory"),
     _case("peer-inventory-reach-refusal", "witness", witness="NeverUnresolvedRefused", model="peer-inventory"),
-    _case("device-login-current", "validated manual login survives absent or failed browser", model="device-login"),
+    _case("device-login-current", "validated manual login and explicit host browser launch", model="device-login"),
     _case("device-login-browser-required", "old browser gate refuses a headless login",
           ("RequireBrowser",), "ManualLoginAvailable", model="device-login"),
     _case("device-login-unsafe-url", "unvalidated Gateway URL reaches local status",
@@ -548,8 +691,13 @@ CASES: tuple[Case, ...] = (
           ("RetainTerminalURL",), "TerminalHidesURL", model="device-login"),
     _case("device-login-bypass", "credentials activate without human approval",
           ("BypassApproval",), "ApprovalRequired", model="device-login"),
+    _case("device-login-unrequested-launch", "observed: login invokes an available host launcher without launch intent",
+          ("LaunchWithoutOptIn",), "BrowserLaunchRequiresOptIn", model="device-login"),
     *(_case(name, "witness", witness=witness, model="device-login") for name, witness in (
         ("device-login-reach-manual", "NeverManualAuthorized"),
+        ("device-login-reach-default-with-launcher", "NeverDefaultAuthorizedWithLauncher"),
+        ("device-login-reach-opted-in-launch", "NeverOptedInLaunch"),
+        ("device-login-reach-opted-in-fallback", "NeverOptedInFallback"),
         ("device-login-reach-unsafe", "NeverUnsafeRejected"),
         ("device-login-reach-cancel", "NeverCancelledPending"),
     )),
@@ -662,6 +810,7 @@ CASES: tuple[Case, ...] = (
     _case("restore-owner-checked-late", "tagged project checked only after runtime occupation",
           ("RestoreOwnerCheckedLate",), "RestoreOwnsProject"),
     _case("reach-refused-foreign-runtime", "witness", witness="NeverRefusedForeignRuntime"),
+    _case("reach-refused-panel-recovery", "panel storage/identity failure refuses only this conversation before runtime occupancy", witness="NeverRefusedPanelRecovery"),
     # Historical: the shipped code before these commits had the behaviour.
     _case("pre-d77e8d4", "historical, before d77e8d4: the restart deadline bounded the replacement "
           "child, which restored every task before publishing its lease",
@@ -827,6 +976,10 @@ def render_config(case: Case) -> str:
         lines.append("PROPERTIES " + " ".join(model.properties))
     return "\n".join(lines) + "\n"
 
+
+_admission_model, _admission_cases = provider_admission_cases(ROOT, Model, _case)
+MODELS[_admission_model.name] = _admission_model
+CASES += _admission_cases
 
 @dataclass(frozen=True)
 class Outcome:

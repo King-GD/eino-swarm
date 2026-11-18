@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { AccountModels, Meta, ModelInfo, RemoteStatus, Settings } from "@/lib/types"
 import { useApp } from "@/store/app"
+import { gatewayVoicePolicy } from "@/test/gateway-policy"
 
 import { AccountModelsCard } from "./account-models-card"
 import { ModelsTab } from "./model-settings"
@@ -75,14 +76,14 @@ describe("server models on the Models page", () => {
     expect(screen.queryByRole("button", { name: "Add a provider" })).toBeNull()
     expect(screen.queryByRole("button", { name: "Endpoint details" })).toBeNull()
     expect(screen.queryByRole("heading", { name: "Auxiliary models" })).toBeNull()
-    expect(screen.getByRole("heading", { name: "Voice input" })).toBeVisible()
+    expect(screen.queryByRole("heading", { name: "Voice input" })).toBeNull()
     expect(screen.queryByLabelText("API base URL")).toBeNull()
   })
 
   it("keeps a full-profile FOFA account read-only while exposing gateway voice controls", () => {
     fake.status = signedIn
     useApp.setState({ meta: { ...meta({ state: "ready", models: 1, profile: { presentation: "full", instruction: true, restrict_tools: false, tools: [] } }), product_mode: "fofa" } })
-    render(<ModelsTab settings={settings()} onChange={vi.fn()} />)
+    render(<ModelsTab settings={{ ...settings(), model_policy: gatewayVoicePolicy() }} onChange={vi.fn()} />)
     expect(screen.getByTestId("account-models-card")).toBeVisible()
     expect(screen.queryByRole("combobox", { name: "Model list" })).toBeNull()
     expect(screen.queryByRole("combobox", { name: "New conversations start with" })).toBeNull()
@@ -223,7 +224,10 @@ describe("server models on the Models page", () => {
       },
       models: [],
     })
-    render(<AccountModelsCard settings={settings()} onChange={vi.fn()} />)
+    const policy = gatewayVoicePolicy()
+    policy.capabilities!.capabilities.title = { supported: true, available: true, configurable: false, endpoints: ["chat_completions"] }
+    policy.capabilities!.capabilities.decisions = { supported: true, available: true, configurable: false, endpoints: ["decisions"] }
+    render(<AccountModelsCard settings={{ ...settings(), model_policy: policy }} onChange={vi.fn()} />)
     expect(screen.getByText("Title")).toBeTruthy()
     expect(screen.queryByText("Decisions")).toBeNull()
   })

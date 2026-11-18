@@ -227,12 +227,15 @@ func TestLocalModeSwitchesAuthorizedServerCatalogs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	preset.SetCatalogGroup("third_party")
+	gateway.SetCatalogGroup("original")
+	gateway.SetModelPolicy(true, nil)
 	p.SetLocalAccountSources([]*AccountSource{preset, gateway})
 
 	got := map[string]string{}
 	personal := 0
 	for _, row := range p.List() {
-		if row.Model == "embedding" {
+		if row.Model == "embedding" || (row.ProviderID == primary.ID() && row.Model == "title") {
 			t.Fatal("non-conversation catalog row was selectable")
 		}
 		if row.Source == SourceAccount {
@@ -241,7 +244,7 @@ func TestLocalModeSwitchesAuthorizedServerCatalogs(t *testing.T) {
 		}
 		personal++
 	}
-	if personal == 0 || got[primary.ID()+"/conversation"] != "Partner" || got[primary.ID()+"/title"] != "Partner" || got[gatewayID+"/conversation"] != "服务器" || got[gatewayID+"/original"] != "服务器" {
+	if personal == 0 || got[primary.ID()+"/conversation"] != "Partner" || got[gatewayID+"/conversation"] != "服务器" || got[gatewayID+"/original"] != "服务器" {
 		t.Fatalf("LOCAL list personal=%d rows=%v", personal, got)
 	}
 	chosen, err := p.ResolveModel(gatewayID, "original")
@@ -286,5 +289,133 @@ func TestLocalModeKeepsASignedInCatalogBesidePersonalModels(t *testing.T) {
 	}
 	if p.DefaultProviderID() != cfg.Models.Default {
 		t.Fatal("LOCAL changed the default provider")
+	}
+}
+
+func TestLocalFunctionalBindingUsesTheAuthorizedCatalog(t *testing.T) {
+	cfg := config.Default()
+	cfg.Product.Mode = config.ProductModeLocal
+	cfg.Models.Providers[0].Model = "personal"
+	p := New(cfg)
+	const gatewayID = config.AccountSourcePrefix + "abcdefabcdefabcdefabcdefabcdefab"
+	gateway, err := NewAccountSource(gatewayID, "服务器", "https://gateway.invalid/client/models/v1/gateway", "still-signed-in", Catalog{
+		Names: []string{"translator"},
+		Types: map[string]string{"translator": "chat"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gateway.SetCatalogGroup("original")
+	p.SetLocalAccountSources([]*AccountSource{gateway})
+	cfg.Models.Bindings = map[string]map[string]config.ModelRef{
+		config.ProductModeLocal: {"translation": {ProviderID: gatewayID, Model: "translator"}},
+	}
+	target, on, err := p.RoleProvider("translation")
+	if err != nil || !on || target.ID != gatewayID || target.Model != "translator" || target.APIKey != "still-signed-in" {
+		t.Fatalf("translation=%+v on=%v err=%v", target, on, err)
+	}
+	if ref, configured := p.RoleSelection("title", "own", "personal"); configured || ref.Model != "personal" {
+		t.Fatal("an explicit translation binding became the title preset")
+	}
+	p.SetAccountSource(nil)
+	if _, on, err := p.RoleProvider("translation"); !on || !errors.Is(err, ErrAccountLoginRequired) {
+		t.Fatalf("signed-out binding on=%v err=%v", on, err)
+	}
+}
+
+func TestTaggedVoiceModelsStayOutOfTheComposerAndReachTheirCatalog(t *testing.T) {
+	cfg := config.Default()
+	cfg.Product.Mode = config.ProductModeLocal
+	p := New(cfg)
+	const gatewayID = config.AccountSourcePrefix + "abcdefabcdefabcdefabcdefabcdefab"
+	const primaryID = config.AccountSourcePrefix + "11111111111111111111111111111111"
+	preset, err := NewAccountSource(accountTestID, "Partner", "https://gateway.invalid/preset", "preset-token", Catalog{
+		Names: []string{"conversation"}, Types: map[string]string{"conversation": "chat"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	preset.SetCatalogGroup("third_party")
+	gateway, err := NewAccountSource(gatewayID, "服务器", "https://gateway.invalid/gateway", "gateway-token", Catalog{
+		Names: []string{"conversation-model", "recognizer", "speaker"},
+		Types: map[string]string{"conversation-model": "chat", "recognizer": "transcription", "speaker": "speech"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gateway.SetCatalogGroup("original")
+	gateway.SetCapabilities(&SourceCapabilities{Authorized: true, Available: true, Configurable: true, Capabilities: map[string]RoleCapability{
+		"conversation":  {Supported: true, Available: true, Configurable: true, Endpoints: []string{"chat_completions"}},
+		"transcription": {Supported: true, Available: true, Configurable: true, Endpoints: []string{"audio_transcriptions"}},
+		"speech":        {Supported: true, Available: true, Configurable: true, Endpoints: []string{"audio_speech"}},
+	}})
+	primary, err := NewAccountSource(primaryID, "Desktop", "https://gateway.invalid/desktop", "desktop-token", Catalog{
+		Names: []string{"desktop-recognizer"}, Types: map[string]string{"desktop-recognizer": "transcription"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unavailable := NewUnavailableAccountSource(config.AccountSourcePrefix+"22222222222222222222222222222222", "Gone", "https://gateway.invalid/v1", "gone-token", true)
+	p.SetAccountSource(primary)
+	p.SetLocalAccountSources([]*AccountSource{nil, unavailable, preset, gateway})
+
+	for _, row := range p.List() {
+		switch row.Model {
+		case "recognizer", "speaker", "desktop-recognizer":
+			t.Fatalf("voice model entered the composer: %+v", row)
+		}
+	}
+	var sawChat bool
+	for _, row := range p.List() {
+		if row.ProviderID == gatewayID && row.Model == "conversation-model" {
+			sawChat = true
+		}
+	}
+	if !sawChat {
+		t.Fatal("gateway conversation model disappeared")
+	}
+	policy := p.ModelPolicy()
+	if len(policy.FunctionalCatalogs) != 2 {
+		t.Fatalf("catalogs=%+v", policy.FunctionalCatalogs)
+	}
+	gatewayCatalog, primaryCatalog := policy.FunctionalCatalogs[0], policy.FunctionalCatalogs[1]
+	if gatewayCatalog.ProviderID != gatewayID || gatewayCatalog.CatalogGroup != "original" || gatewayCatalog.Label != "服务器" || len(gatewayCatalog.TranscriptionModels) != 1 || gatewayCatalog.TranscriptionModels[0] != "recognizer" || len(gatewayCatalog.SpeechModels) != 1 || gatewayCatalog.SpeechModels[0] != "speaker" || len(gatewayCatalog.EmbeddingModels) != 0 {
+		t.Fatalf("gateway catalog=%+v", gatewayCatalog)
+	}
+	if primaryCatalog.ProviderID != primaryID || len(primaryCatalog.TranscriptionModels) != 1 || primaryCatalog.TranscriptionModels[0] != "desktop-recognizer" {
+		t.Fatalf("primary catalog=%+v", primaryCatalog)
+	}
+	for _, cat := range policy.FunctionalCatalogs {
+		if cat.ProviderID == accountTestID {
+			t.Fatalf("chat-only catalog published typed names: %+v", cat)
+		}
+	}
+	cfg.Models.Bindings = map[string]map[string]config.ModelRef{
+		config.ProductModeLocal: {"transcription": {ProviderID: gatewayID, Model: "recognizer"}},
+	}
+	target, on, err := p.RoleProvider("transcription")
+	if err != nil || !on || target.ID != gatewayID || target.Model != "recognizer" || target.BaseURL != "https://gateway.invalid/gateway" {
+		t.Fatalf("transcription=%+v on=%v err=%v", target, on, err)
+	}
+}
+
+func TestGatewayFunctionalCatalogPublishesTypedVoiceNames(t *testing.T) {
+	p := New(config.Default())
+	src, err := NewAccountSource(accountTestID, "Server", "https://gateway.invalid/v1", "token", Catalog{
+		Names: []string{"chat-model", "recognizer"},
+		Types: map[string]string{"chat-model": "chat", "recognizer": "transcription"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.SetAccountSource(src)
+	policy := p.ModelPolicy()
+	if len(policy.FunctionalCatalogs) != 1 || policy.FunctionalCatalogs[0].ProviderID != accountTestID || len(policy.FunctionalCatalogs[0].TranscriptionModels) != 1 || policy.FunctionalCatalogs[0].TranscriptionModels[0] != "recognizer" {
+		t.Fatalf("catalogs=%+v", policy.FunctionalCatalogs)
+	}
+	for _, row := range p.List() {
+		if row.Model == "recognizer" {
+			t.Fatal("voice model entered the composer")
+		}
 	}
 }

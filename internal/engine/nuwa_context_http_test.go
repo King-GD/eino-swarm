@@ -23,6 +23,47 @@ type nuwaContextHTTPView struct {
 // Parse only the runtime System block. Human messages may legitimately quote
 // its heading; matching text alone must neither delete those messages nor
 // count them as host-supplied collaboration state.
+// runtimeSystemSection returns one runtime block inside the provider's single
+// leading system message. The block is a section of that message: a second
+// system role is rejected by endpoints that allow a system message only first.
+func runtimeSystemSection(t *testing.T, request scheduleCompletionRequest, header string) string {
+	t.Helper()
+	found := ""
+	count := 0
+	for _, message := range request.Messages {
+		if message == nil || message.Role != schema.System {
+			continue
+		}
+		rest := message.Content
+		for {
+			at := strings.Index(rest, header)
+			if at < 0 {
+				break
+			}
+			count++
+			found = rest[at:]
+			rest = rest[at+len(header):]
+		}
+	}
+	if count != 1 {
+		t.Errorf("model input has %d %q sections, want one", count, header)
+		return ""
+	}
+	return found
+}
+
+func decodeRuntimeJSON(t *testing.T, section string, dest any) {
+	t.Helper()
+	start := strings.Index(section, "{")
+	if start < 0 {
+		t.Errorf("runtime section has no JSON: %s", section)
+		return
+	}
+	if err := json.NewDecoder(strings.NewReader(section[start:])).Decode(dest); err != nil {
+		t.Errorf("runtime section JSON: %v", err)
+	}
+}
+
 func nuwaContextHTTPBlock(t *testing.T, request scheduleCompletionRequest, want bool) nuwaContextHTTPView {
 	t.Helper()
 	var blocks []string

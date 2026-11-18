@@ -42,7 +42,10 @@ test("a headless host is authorized through the user's browser and keeps private
     await page.getByRole("button", { name: "Settings", exact: true }).click()
     const dialog = page.getByRole("dialog")
     await dialog.getByRole("tab", { name: "Phone", exact: true }).click()
+    const loginRequest = page.waitForRequest((request) =>
+      request.method() === "POST" && new URL(request.url()).pathname === "/api/remote/login")
     await dialog.getByRole("button", { name: "Sign in", exact: true }).click()
+    expect((await loginRequest).postDataJSON()).toEqual({ enable_account: true })
     const link = dialog.getByRole("link", { name: "Open sign-in page" })
     await expect(link).toHaveAttribute("href", `${origin}/login?desktop_code=PUBLIC`)
     await expect(dialog.getByText("PUBLIC", { exact: true })).toBeVisible()

@@ -83,7 +83,7 @@ func Open(path string) (*Store, error) {
 	if err := s.dropThreadOwnership(); err != nil {
 		return nil, err
 	}
-	if err := db.AutoMigrate(&Project{}, &Thread{}, &Message{}, &Turn{}, &Event{}, &LLMCall{}, &Attachment{}, &Followup{}, &Schedule{}, &ScheduleRun{}, &RemoteDevice{}, &ThreadWakeDecision{}, &ComposerDraft{}, &ComposerDraftBlob{}, &PendingScheduleAnswer{}, &NuwaNode{}, &NuwaRevision{}, &NuwaVerifySlot{}); err != nil {
+	if err := db.AutoMigrate(&Project{}, &Thread{}, &Message{}, &Turn{}, &Event{}, &LLMCall{}, &Attachment{}, &Followup{}, &Schedule{}, &ScheduleRun{}, &RemoteDevice{}, &ThreadWakeDecision{}, &ComposerDraft{}, &ComposerDraftBlob{}, &PendingScheduleAnswer{}, &NuwaNode{}, &NuwaRevision{}, &NuwaVerifySlot{}, &TaskPanelRow{}, &TaskPanelMutation{}, &TaskPanelChangeRow{}); err != nil {
 		return nil, fmt.Errorf("store: migrate: %w", err)
 	}
 	if err := s.ensureThreadOwnership(); err != nil {
@@ -290,6 +290,9 @@ func (s *Store) DeleteThread(id string) error {
 		return err
 	}
 	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := deleteTaskPanels(tx, id); err != nil {
+			return err
+		}
 		if err := deleteNuwaThread(tx, id); err != nil {
 			return err
 		}

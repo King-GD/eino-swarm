@@ -6,6 +6,7 @@ import { toastError } from "@/store/toasts"
 import { speechPlayback } from "@/lib/speech-media"
 import { speechText } from "@/lib/speech-text"
 import { synthesizeSpeech } from "@/lib/speech-api"
+import { speechFailureMessage } from "@/lib/speech-error"
 import { useT } from "@/lib/use-t"
 
 export function SpeechReadButton({ id, text }: { id: string; text: string }) {
@@ -29,7 +30,10 @@ export function SpeechReadButton({ id, text }: { id: string; text: string }) {
       if (current) { speechPlayback.stop(); return }
       void speechPlayback.play(id, text, { chunkChars: speech.limits.chunk_chars,
         synthesize: (part, signal) => synthesizeSpeech(part, signal, speech.limits.output_bytes),
-      }).catch((error) => toastError(error instanceof Error ? error.message : t("speech.failed"), { title: t("speech.output") }))
+      }).catch((error) => {
+        const message = speechFailureMessage(error, t)
+        if (message) toastError(message, { title: t("speech.output") })
+      })
     }}>
     {current && playback.state === "loading" ? <Loader2 className="animate-spin" /> : current ? <Square className="fill-current" /> : <Volume2 />}
   </Button>

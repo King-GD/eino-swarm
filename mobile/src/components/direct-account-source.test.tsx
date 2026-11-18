@@ -1,3 +1,4 @@
+import { fixtureSourceCapabilities } from "@/test/capabilities"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { DirectChatScreen } from "./direct-chat-screen"
@@ -6,7 +7,7 @@ import type { streamCompletion } from "@/lib/openai-client"
 import { ModelCallError } from "@/lib/openai-wire"
 import { saveThreads, newThread } from "@/lib/direct-threads"
 
-const server: DirectProvider = { id: "gateway:owner", sourceKind: "gateway", label: "Server", baseURL: "https://server.invalid/v1", apiKey: "mobile-secret", api: "chat", model: "shared", catalog: ["shared"], timeoutSeconds: 300 }
+const server: DirectProvider = { id: "gateway:owner", capabilities: fixtureSourceCapabilities(), sourceKind: "gateway", label: "Server", baseURL: "https://server.invalid/v1", apiKey: "mobile-secret", api: "chat", model: "shared", catalog: ["shared"], timeoutSeconds: 300 }
 const personal: DirectProvider = { ...server, id: "p-personal", sourceKind: "phone", label: "Personal", apiKey: "private-secret", baseURL: "https://personal.invalid/v1" }
 const props = { hosts: [], activeFingerprint: "", path: "relay", onSelectHost: vi.fn(), onAddHost: vi.fn(), onUnlink: vi.fn(), onModels: vi.fn() }
 

@@ -13,12 +13,16 @@ const fake = vi.hoisted(() => ({
   unavailable: false,
   meta: vi.fn(),
   models: vi.fn(),
+  refreshCapabilities: vi.fn(async () => {}),
 }))
 
 vi.mock("@/lib/use-remote-status", () => ({
   useDesktopAccount: () => ({ status: fake.status, unavailable: fake.unavailable }),
 }))
 vi.mock("@/lib/api", () => ({ api: { meta: fake.meta, models: fake.models } }))
+// Capability discovery has its own request/refresh lifecycle. This suite counts
+// only the bounded stale-catalog poll, not that independent startup refresh.
+vi.mock("@/lib/refresh-capabilities", () => ({ refreshCapabilities: fake.refreshCapabilities }))
 
 const meta = (account: AccountModels): Meta => ({
   version: "test", mode: "desktop", mock: false, configured: account.state === "ready", default_provider: "",
@@ -39,6 +43,7 @@ beforeEach(() => {
   fake.unavailable = false
   fake.meta.mockReset()
   fake.models.mockReset()
+  fake.refreshCapabilities.mockClear()
   fake.models.mockResolvedValue({ models: [], default: "", mock: false })
 })
 afterEach(() => vi.useRealTimers())
@@ -53,6 +58,7 @@ describe("account model sync", () => {
     render(<Probe />)
     await act(async () => { await vi.advanceTimersByTimeAsync(0) })
     expect(fake.meta).toHaveBeenCalledTimes(1)
+    expect(fake.refreshCapabilities).toHaveBeenCalledOnce()
     await act(async () => { await vi.advanceTimersByTimeAsync(ACCOUNT_MODELS_POLL_MS) })
     expect(useApp.getState().meta?.account_models?.state).toBe("ready")
     const settled = fake.meta.mock.calls.length

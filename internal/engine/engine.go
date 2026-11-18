@@ -107,6 +107,10 @@ type Engine struct {
 	// composerPredictionsInTest opts one engine into the extra call.
 	// Production and go run stay on; ordinary go test stays off.
 	composerPredictionsInTest atomic.Bool
+	// remoteRoutes holds this turn's progressive catalog names until the
+	// manager run copies them into its context. They are not persisted.
+	remoteRoutes sync.Map
+	panelRuns    sync.Map // one registered source per panel instance
 
 	// now is the wall clock the ticker reads. Tests install a fake so a
 	// wait does not sleep a real cadence. Default is time.Now.

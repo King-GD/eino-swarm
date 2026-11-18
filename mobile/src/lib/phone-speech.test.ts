@@ -1,3 +1,5 @@
+import { publishGatewayCapabilities } from "./gateway-capabilities"
+import { gatewayAudioBootstrap } from "@/test/gateway-audio"
 import { speechPlayback } from "../../../frontend/src/lib/speech-media"
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -13,11 +15,17 @@ import { notifyGatewayRefusal } from "./gateway-authority"
 const pc: SavedLink = { fingerprint: "pc-a", hostPub: "host", hubURL: "https://hub.test", ticket: "ticket", sessionID: "session", gatewayOwnerID: "owner", gatewayMobileID: "mobile", gatewayOrigin: "https://gateway.test" }
 const speech: SpeechSnapshot = {
   execution: "gateway", gateway_origin: "https://gateway.test",
-  input: { enabled: true, ready: true, model: "transcription", label: "ASR", language: "", prompt: "", recording_format: "auto", max_duration_seconds: 120, timeout_seconds: 120 },
-  output: { enabled: false, ready: true, model: "speech", label: "TTS", voice: "", speed: 1, format: "mp3", instructions: "", timeout_seconds: 120 },
+  input: { enabled: true, ready: true, model: "transcription", source_id: "gateway:preset", label: "ASR", language: "", prompt: "", recording_format: "auto", max_duration_seconds: 120, timeout_seconds: 120 },
+  output: { enabled: false, ready: true, model: "speech", source_id: "gateway:preset", label: "TTS", voice: "", speed: 1, format: "mp3", instructions: "", timeout_seconds: 120 },
   limits: { input_bytes: 1024, output_bytes: 1024, chunk_chars: 1000, staging_ttl_seconds: 300 },
 }
-const signIn = (owner = "owner") => saveGatewaySession({ origin: speech.gateway_origin!, token: "agm_" + "a".repeat(64), user: { id: owner, username: owner, approval_status: "approved" }, device: { id: "mobile", expires_at: "2099-01-01T00:00:00Z" } })
+const signIn = (owner = "owner") => {
+  const session = { origin: speech.gateway_origin!, token: "agm_" + "a".repeat(64), user: { id: owner, username: owner, approval_status: "approved" }, device: { id: "mobile", expires_at: "2099-01-01T00:00:00Z" } }
+  saveGatewaySession(session)
+  const bootstrap = gatewayAudioBootstrap(session)
+  bootstrap.models.defaults = {}
+  publishGatewayCapabilities(session, bootstrap)
+}
 afterEach(() => { act(() => setPhoneSpeechSource(undefined, null)); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe("phone speech capability follows the selected PC", () => {
@@ -466,7 +474,7 @@ describe("phone speech capability follows the selected PC", () => {
     act(() => setPhoneSpeechSource(pc, { alive: () => true } as RemoteLink))
     expect(view.result.current.inputReady).toBe(true)
     act(() => setPhoneSpeechSource({ ...pc, fingerprint: "pc-b" }, null))
-    expect(view.result.current.snapshot).toBeUndefined()
+    expect(view.result.current).toMatchObject({ inputReady: false, outputReady: false })
     expect(view.result.current.inputReady).toBe(false)
   })
 
@@ -480,7 +488,7 @@ describe("phone speech capability follows the selected PC", () => {
     view.unmount()
     const old = { alive: () => true, rpc: vi.fn().mockResolvedValue({ ok: false, code: "unknown_op" }) } as unknown as RemoteLink
     const legacy = renderHook(() => { usePhoneSpeechSync(old, pc, [pc]); return usePhoneSpeech() })
-    await waitFor(() => expect(legacy.result.current.snapshot).toBeUndefined())
+    await waitFor(() => expect(legacy.result.current).toMatchObject({ inputReady: false, outputReady: false }))
   })
 
   it("revokes a cached executable snapshot when the live PC publishes invalid configuration", () => {
@@ -491,7 +499,7 @@ describe("phone speech capability follows the selected PC", () => {
     expect(view.result.current.inputReady).toBe(true)
     act(() => { expect(acceptPhoneSpeechConfig(pc, { ...speech, input: { ...speech.input, timeout_seconds: -1 } })).toBe(false) })
     expect(view.result.current.inputReady).toBe(false)
-    expect(view.result.current.snapshot).toBeUndefined()
+    expect(view.result.current).toMatchObject({ inputReady: false, outputReady: false })
     expect(loadSpeechCache(pc)).toBeUndefined()
   })
 
@@ -503,7 +511,7 @@ describe("phone speech capability follows the selected PC", () => {
     const link = { alive: () => true, rpc } as unknown as RemoteLink
     const view = renderHook(() => { usePhoneSpeechSync(link, pc, [pc]); return usePhoneSpeech() })
     await waitFor(() => expect(rpc).toHaveBeenCalled())
-    await waitFor(() => expect(view.result.current.snapshot).toBeUndefined())
+    await waitFor(() => expect(view.result.current).toMatchObject({ inputReady: false, outputReady: false }))
     expect(loadSpeechCache(pc)).toBeUndefined()
   })
 })

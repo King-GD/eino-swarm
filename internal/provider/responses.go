@@ -80,6 +80,14 @@ func (m *responsesModel) BindTools(tools []*schema.ToolInfo) error {
 }
 
 func (m *responsesModel) request(ctx context.Context, in []*schema.Message, stream bool, opts ...model.Option) (*http.Response, error) {
+	response, err := m.requestOnce(ctx, in, stream, opts...)
+	if retry, ok := systemOrderRetry(ctx, err, in); ok {
+		return m.requestOnce(ctx, retry, stream, opts...)
+	}
+	return response, err
+}
+
+func (m *responsesModel) requestOnce(ctx context.Context, in []*schema.Message, stream bool, opts ...model.Option) (*http.Response, error) {
 	m.mu.RLock()
 	bound := append([]*schema.ToolInfo(nil), m.tools...)
 	m.mu.RUnlock()

@@ -1,3 +1,4 @@
+import { fixtureSourceCapabilities } from "@/test/capabilities"
 import { fireEvent, render, screen, within } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest"
 import { DirectChatScreen } from "./direct-chat-screen"
@@ -6,7 +7,7 @@ import { setLocale } from "@/lib/i18n"
 import { saveGatewaySession, type GatewaySession } from "@/lib/gateway-account"
 
 const personal: DirectProvider = { id: "personal", label: "My endpoint", baseURL: "https://personal.invalid/v1", apiKey: "private-key", api: "chat", model: "shared-model", catalog: ["shared-model"], timeoutSeconds: 300 }
-const gateway: DirectProvider = { ...personal, id: "gateway:owner", sourceKind: "gateway", label: "Server · Team", baseURL: "https://gateway.invalid/v1", apiKey: "account-key" }
+const gateway: DirectProvider = { ...personal, id: "gateway:owner", capabilities: fixtureSourceCapabilities(), sourceKind: "gateway", label: "Server · Team", baseURL: "https://gateway.invalid/v1", apiKey: "account-key" }
 const session: GatewaySession = { origin: "https://gateway.invalid", token: "agm_" + "a".repeat(64), user: { id: "owner", username: "User", enabled: true, approval_status: "approved" }, device: { id: "phone", expires_at: "2099-01-01T00:00:00Z" } }
 
 beforeEach(() => setLocale("en"))

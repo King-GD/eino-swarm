@@ -15,6 +15,7 @@ import {
 import { englishSelection } from "@/lib/selection-language"
 import { speechPlayback } from "@/lib/speech-media"
 import { synthesizeSpeech } from "@/lib/speech-api"
+import { speechFailureMessage } from "@/lib/speech-error"
 import { speechText } from "@/lib/speech-text"
 import { useT } from "@/lib/use-t"
 import { TERMINAL_SELECTION_EVENT, type TerminalSelection } from "@/lib/terminal"
@@ -214,8 +215,8 @@ export function SelectionMenu({
       chunkChars: speech.limits.chunk_chars,
       synthesize: (part, signal) => synthesizeSpeech(part, signal, speech.limits.output_bytes),
     }).catch((error: unknown) => {
-      if (error instanceof DOMException && error.name === "AbortError") return
-      toastError(error instanceof Error ? error.message : t("speech.failed"), { title: t("speech.output") })
+      const message = speechFailureMessage(error, t)
+      if (message) toastError(message, { title: t("speech.output") })
     })
   }
   const translate = () => {

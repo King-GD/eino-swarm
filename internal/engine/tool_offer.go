@@ -34,6 +34,9 @@ func (e *Engine) toolOfferAllowed(name string) bool {
 		return true
 	}
 	snap := e.cfg.Snapshot()
+	if isTaskPanelTool(name) && !*snap.TaskPanels.WithDefaults().Enabled {
+		return false
+	}
 	return tools.Offered(snap.Tools, name) && e.mcpOffered(snap.MCP.Servers, name)
 }
 

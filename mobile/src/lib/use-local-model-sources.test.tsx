@@ -1,3 +1,4 @@
+import { fixtureCapabilities } from "@/test/capabilities"
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { clearGatewaySession, loadGatewaySession, saveGatewaySession, type GatewayBootstrap } from "./gateway-account"
@@ -7,7 +8,7 @@ import { streamCompletion } from "./openai-client"
 
 const origin="https://sources.invalid"
 const session={origin,token:"agm_"+"a".repeat(64),user:{id:"owner",username:"Owner",approval_status:"approved"},device:{id:"phone",expires_at:"2099-01-01T00:00:00Z"}}
-const bootstrap:GatewayBootstrap={user:session.user,device:session.device,models:{source_id:"gateway:preset",source_kind:"gateway",label:"Partner",execution:"phone",api_base_url:origin+"/v1",catalog_url:origin+"/v1/models",client_catalog_url:origin+"/client/models/v1/preset/models",api_access_enabled:true,configurable:false,roles:[{id:"conversation",enabled:true,label:"Partner chat"}]},gateway_models:{source_id:"gateway:global",source_kind:"gateway",label:"Main",execution:"phone",api_base_url:origin+"/client/models/v1/gateway",catalog_url:origin+"/client/models/v1/gateway/models",api_access_enabled:true},pairlink:{enabled:false,hub_url:origin,redeem_url:origin+"/pairlink/v1/pairings/redeem",websocket_url:origin.replace("https:","wss:")+"/pairlink/v1/ws",info_url:origin+"/pairlink/v1/info"},heartbeat_interval:30,presence_ttl:90}
+const bootstrap:GatewayBootstrap={capabilities:fixtureCapabilities(),capability_status:"ready",user:session.user,device:session.device,models:{source_id:"gateway:preset",source_kind:"gateway",label:"Partner",execution:"phone",api_base_url:origin+"/v1",catalog_url:origin+"/v1/models",client_catalog_url:origin+"/client/models/v1/preset/models",api_access_enabled:true,configurable:false,roles:[{id:"conversation",enabled:true,label:"Partner chat"}]},gateway_models:{source_id:"gateway:global",source_kind:"gateway",label:"Main",execution:"phone",api_base_url:origin+"/client/models/v1/gateway",catalog_url:origin+"/client/models/v1/gateway/models",api_access_enabled:true},pairlink:{enabled:false,hub_url:origin,redeem_url:origin+"/pairlink/v1/pairings/redeem",websocket_url:origin.replace("https:","wss:")+"/pairlink/v1/ws",info_url:origin+"/pairlink/v1/info"},heartbeat_interval:30,presence_ttl:90}
 const response=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{"Content-Type":"application/json"}})
 beforeEach(()=>{setLocale("en");saveGatewaySession(session)})
 
@@ -21,7 +22,7 @@ describe("LOCAL account model sources",()=>{
   }))
   const hook=renderHook(()=>useLocalModelSources("local","authorized",session,bootstrap))
   await waitFor(()=>expect(hook.result.current.providers).toHaveLength(2))
-  expect(hook.result.current.providers.map(row=>[row.id,row.label])).toEqual([["gateway:preset","Third-party · Partner"],["gateway:global","Gateway · Main"]])
+  expect(hook.result.current.providers.map(row=>[row.id,row.label])).toEqual([["gateway:preset","Partner"],["gateway:global","Gateway · Main"]])
   for(const provider of hook.result.current.providers){
    await streamCompletion({provider,model:"conversation",reasoning:"",turns:[{role:"user",parts:[{kind:"text",text:"routing fixture"}]}],signal:new AbortController().signal,onDelta:()=>undefined})
   }
@@ -61,7 +62,7 @@ describe("LOCAL account model sources",()=>{
   const fetcher=vi.fn(async()=>response({data:[{id:"conversation"}]}));vi.stubGlobal("fetch",fetcher)
   const hook=renderHook(({mode,boot,account})=>useLocalModelSources(mode,"authorized",account,boot),{initialProps:{mode:"local" as "local"|"account",boot:bootstrap,account:session as typeof session|null}})
   await waitFor(()=>expect(hook.result.current.providers).toHaveLength(2))
-  hook.rerender({mode:"local",boot:{...bootstrap,gateway_models:{...bootstrap.gateway_models!,api_access_enabled:false}},account:session})
+  hook.rerender({mode:"local",boot:{...bootstrap,capabilities:{...bootstrap.capabilities!,sources:{...bootstrap.capabilities!.sources,gateway:{...bootstrap.capabilities!.sources.gateway!,authorized:false}}}},account:session})
   expect(hook.result.current.providers.map(row=>row.id)).toEqual(["gateway:preset"])
   hook.rerender({mode:"account",boot:bootstrap,account:session})
   expect(hook.result.current.providers).toEqual([])
@@ -79,7 +80,7 @@ describe("LOCAL account model sources",()=>{
  })
  it("fetches an authorized Gateway source even when the primary preset has no API access",async()=>{
   const fetcher=vi.fn(async()=>response({data:[{id:"global-model"}]}));vi.stubGlobal("fetch",fetcher)
-  const deniedPreset={...bootstrap,models:{...bootstrap.models,api_access_enabled:false}}
+  const deniedPreset={...bootstrap,capabilities:{...bootstrap.capabilities!,sources:{...bootstrap.capabilities!.sources,preset:{...bootstrap.capabilities!.sources.preset!,authorized:false}}}}
   const hook=renderHook(()=>useLocalModelSources("local","authorized",session,deniedPreset))
   await waitFor(()=>expect(hook.result.current.providers.map(row=>row.id)).toEqual(["gateway:global"]))
   expect(fetcher).toHaveBeenCalledTimes(1)

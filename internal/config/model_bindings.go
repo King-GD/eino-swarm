@@ -44,12 +44,17 @@ func (c *Config) validateModelBindings() error {
 			return errors.New("config: invalid model binding scope")
 		}
 		for role, ref := range refs {
+			// An empty embedding reference explicitly disables semantic search,
+			// including a gateway default and any legacy search pin.
+			if role == "embedding" && ref == (ModelRef{}) {
+				continue
+			}
 			if !KnownModelRole(role) || strings.TrimSpace(ref.ProviderID) == "" || strings.TrimSpace(ref.Model) == "" {
 				return errors.New("config: a model binding needs a known role, provider_id and model")
 			}
-			if scope == ProductModeLocal && strings.HasPrefix(ref.ProviderID, AccountSourcePrefix) {
-				return errors.New("config: LOCAL cannot bind a gateway model")
-			}
+			// A gateway: id in the local scope names a signed-in catalog. It is
+			// not written into models.providers. Sign-out fails that binding
+			// closed instead of substituting a personal provider.
 		}
 	}
 	return nil

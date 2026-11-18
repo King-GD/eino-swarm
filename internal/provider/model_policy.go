@@ -16,16 +16,29 @@ var ErrModelPolicy = errors.New("model_selection_disabled: model is outside the 
 
 // ModelPolicy is the safe, account-scoped projection consumed by PC and phone.
 type ModelPolicy struct {
-	AccountSources   map[string]*SourceCapabilities `json:"account_sources,omitempty"`
-	Capabilities     *SourceCapabilities            `json:"capabilities,omitempty"`
-	CapabilityStatus string                         `json:"capability_status,omitempty"`
-	Mode             string                         `json:"mode"`
-	Configurable     bool                           `json:"configurable"`
-	Ready            bool                           `json:"ready"`
-	Scope            string                         `json:"scope"`
-	Defaults         map[string]config.ModelRef     `json:"defaults,omitempty"`
-	Bindings         map[string]config.ModelRef     `json:"bindings,omitempty"`
-	Roles            []AccountRole                  `json:"roles,omitempty"`
+	AccountSources     map[string]*SourceCapabilities `json:"account_sources,omitempty"`
+	Capabilities       *SourceCapabilities            `json:"capabilities,omitempty"`
+	CapabilityStatus   string                         `json:"capability_status,omitempty"`
+	Mode               string                         `json:"mode"`
+	Configurable       bool                           `json:"configurable"`
+	Ready              bool                           `json:"ready"`
+	Scope              string                         `json:"scope"`
+	Defaults           map[string]config.ModelRef     `json:"defaults,omitempty"`
+	Bindings           map[string]config.ModelRef     `json:"bindings,omitempty"`
+	Roles              []AccountRole                  `json:"roles,omitempty"`
+	FunctionalCatalogs []FunctionalCatalog            `json:"functional_catalogs,omitempty"`
+}
+
+// FunctionalCatalog is one signed-in catalog's non-conversation names.
+// The composer list omits them. Embedding, transcription and speech settings
+// read the names from the catalog that published them.
+type FunctionalCatalog struct {
+	ProviderID          string   `json:"provider_id"`
+	Label               string   `json:"label,omitempty"`
+	CatalogGroup        string   `json:"catalog_group,omitempty"`
+	EmbeddingModels     []string `json:"embedding_models,omitempty"`
+	TranscriptionModels []string `json:"transcription_models,omitempty"`
+	SpeechModels        []string `json:"speech_models,omitempty"`
 }
 
 // SetModelPolicy installs the server's edit permission and role defaults.
@@ -67,7 +80,7 @@ func (p *Pool) ModelPolicy() ModelPolicy {
 				status = "ready"
 			}
 		}
-		return ModelPolicy{CapabilityStatus: status, AccountSources: sources, Mode: "local", Configurable: true, Ready: true, Scope: config.ProductModeLocal, Bindings: p.cfg.ModelsSnapshot().Bindings[config.ProductModeLocal]}
+		return ModelPolicy{CapabilityStatus: status, AccountSources: sources, Mode: "local", Configurable: true, Ready: true, Scope: config.ProductModeLocal, Bindings: p.cfg.ModelsSnapshot().Bindings[config.ProductModeLocal], FunctionalCatalogs: p.functionalCatalogs()}
 	}
 	view := ModelPolicy{Mode: "gateway"}
 	src := p.account.Load()
@@ -99,7 +112,38 @@ func (p *Pool) ModelPolicy() ModelPolicy {
 	for role, name := range src.defaults {
 		view.Defaults[role] = config.ModelRef{ProviderID: src.id, Model: name}
 	}
+	view.FunctionalCatalogs = p.functionalCatalogs()
 	return view
+}
+
+// functionalCatalogs publishes typed names that the conversation list removes.
+// A switchable catalog owns its id when the signed-in projection reuses it.
+func (p *Pool) functionalCatalogs() []FunctionalCatalog {
+	seen := map[string]bool{}
+	var out []FunctionalCatalog
+	add := func(src *AccountSource) {
+		if src == nil || src.unavailable || src.id == "" || seen[src.id] {
+			return
+		}
+		seen[src.id] = true
+		kinds := src.Kinds()
+		if len(kinds.EmbeddingModels) == 0 && len(kinds.TranscriptionModels) == 0 && len(kinds.SpeechModels) == 0 {
+			return
+		}
+		out = append(out, FunctionalCatalog{
+			ProviderID: src.id, Label: strings.TrimSpace(src.label), CatalogGroup: src.catalogGroup,
+			EmbeddingModels: kinds.EmbeddingModels, TranscriptionModels: kinds.TranscriptionModels, SpeechModels: kinds.SpeechModels,
+		})
+	}
+	if p.localExecution() {
+		for _, src := range p.localAccountSources() {
+			add(src)
+		}
+		add(p.account.Load())
+		return out
+	}
+	add(p.activeAccount())
+	return out
 }
 
 // StoredConversationModel resolves the model a stored conversation runs.
@@ -152,7 +196,7 @@ func (p *Pool) RoleSelection(role, fallbackProvider, fallbackModel string) (conf
 				}
 				return config.ModelRef{ProviderID: src.id, Model: role}, true
 			}
-			if role == "title" || role == "compact" {
+			if role == "title" || role == "compact" || role == "translation" && !src.negotiated {
 				return config.ModelRef{ProviderID: src.id, Model: src.provider("").Model}, true
 			}
 			return config.ModelRef{}, true

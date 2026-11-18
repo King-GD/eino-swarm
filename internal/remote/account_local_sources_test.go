@@ -66,7 +66,7 @@ func TestLocalModeListsAuthorizedServerCatalogs(t *testing.T) {
 			"gateway_models": map[string]any{
 				"source_id": localGatewaySourceID, "source_kind": "gateway", "label": "服务器", "execution": "desktop",
 				"api_base_url": g.server.URL + "/client/models/v1/gateway", "catalog_url": g.server.URL + "/client/models/v1/gateway/models",
-				"api_access_enabled": true, "secret": "strip-me",
+				"api_access_enabled": true, "configurable": true, "secret": "strip-me",
 			},
 		}})
 	}
@@ -102,7 +102,7 @@ func TestLocalModeListsAuthorizedServerCatalogs(t *testing.T) {
 		t.Fatalf("state leaked a credential or endpoint: %s", encoded)
 	}
 	want := map[string]map[string]bool{
-		accountModelsSourceID: {"conversation": true, "title": true},
+		accountModelsSourceID: {"conversation": true},
 		localGatewaySourceID:  {"conversation": true, "original": true},
 	}
 	var personal bool
@@ -168,12 +168,12 @@ func TestLocalModeListsAuthorizedServerCatalogs(t *testing.T) {
 	}
 	gatewayStatus.Store(http.StatusServiceUnavailable)
 	kept := am.Refresh(context.Background())
-	if kept.State != AccountReady || !listedAccount(pool, localGatewaySourceID, "original") || !listedAccount(pool, accountModelsSourceID, "title") {
+	if kept.State != AccountReady || !listedAccount(pool, localGatewaySourceID, "original") || !listedAccount(pool, accountModelsSourceID, "conversation") || listedAccount(pool, accountModelsSourceID, "title") {
 		t.Fatalf("503 dropped a catalog: %+v", kept)
 	}
 	gatewayStatus.Store(http.StatusForbidden)
 	denied := am.Refresh(context.Background())
-	if denied.State != AccountReady || listedAccount(pool, localGatewaySourceID, "original") || !listedAccount(pool, accountModelsSourceID, "title") {
+	if denied.State != AccountReady || listedAccount(pool, localGatewaySourceID, "original") || !listedAccount(pool, accountModelsSourceID, "conversation") || listedAccount(pool, accountModelsSourceID, "title") {
 		t.Fatalf("403 removed the signed-in preset: %+v", denied)
 	}
 	if _, err := gatewayModel.Generate(t.Context(), []*schema.Message{schema.UserMessage("revoked fixture")}); err == nil {
@@ -291,7 +291,7 @@ func TestLocalExtraGatewayAccessIsIndependentOfDesktopModelAccess(t *testing.T) 
 	g.bootstrap = func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
 			"models":         map[string]any{"source_id": accountModelsSourceID, "source_kind": "gateway", "execution": "desktop", "api_access_enabled": false, "configurable": false},
-			"gateway_models": map[string]any{"source_id": localGatewaySourceID, "source_kind": "gateway", "execution": "desktop", "label": "Extra scope", "api_base_url": g.server.URL + "/client/models/v1/gateway", "catalog_url": g.server.URL + "/client/models/v1/gateway/models", "api_access_enabled": true},
+			"gateway_models": map[string]any{"source_id": localGatewaySourceID, "source_kind": "gateway", "execution": "desktop", "label": "Extra scope", "api_base_url": g.server.URL + "/client/models/v1/gateway", "catalog_url": g.server.URL + "/client/models/v1/gateway/models", "api_access_enabled": true, "configurable": true},
 		}})
 	}
 	am, pool, cfg := accountModelsFixture(t, g)

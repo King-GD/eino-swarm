@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	swarm "github.com/LubyRuffy/eino-swarm"
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/memory"
 	"github.com/LubyRuffy/eino-swarm/internal/provider"
@@ -15,7 +16,6 @@ import (
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -487,7 +487,7 @@ func (e *Engine) driveReviewer(run reviewRun, mu *sync.Mutex, outcome *reviewOut
 		Instruction: run.instruction,
 		Model:       &reviewStreamModel{inner: reviewer, completed: run.completed},
 		ToolsConfig: adk.ToolsConfig{
-			ToolsNodeConfig: compose.ToolsNodeConfig{Tools: run.tools, ExecuteSequentially: run.sequential},
+			ToolsNodeConfig: swarm.RegisteredToolsNode(run.tools, run.sequential),
 		},
 		MaxIterations: run.maxIter,
 	})

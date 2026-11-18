@@ -50,19 +50,17 @@ const base: Settings = {
 }
 
 describe("SearchSettingsPanel", () => {
-  it("hides the model picker while semantic search is off", () => {
+  it("shows the model field without a separate semantic-search switch", () => {
     render(<SearchSettingsPanel settings={base} onChange={vi.fn()} />)
-    expect(screen.getByLabelText("Semantic search")).toBeInTheDocument()
-    expect(screen.queryByLabelText("Embedding model")).toBeNull()
+    expect(screen.queryByRole("switch")).toBeNull()
+    expect(screen.getByLabelText("Embedding model")).toHaveValue("")
   })
 
-  it("turns semantic search on without inventing a model name", () => {
+  it("clears the model to disable search", () => {
     const onChange = vi.fn()
-    render(<SearchSettingsPanel settings={base} onChange={onChange} />)
-    fireEvent.click(screen.getByLabelText("Semantic search"))
-    const next = onChange.mock.calls[0][0] as Settings
-    expect(next.search?.embedding).toBe(true)
-    expect(next.search?.embedding_model).toBe("")
+    render(<SearchSettingsPanel settings={{ ...base, search: { embedding: true, embedding_provider: "default", embedding_model: "embed" } }} onChange={onChange} />)
+    fireEvent.click(screen.getByRole("button", { name: "Not configured (off)" }))
+    expect(onChange.mock.calls[0][0].search).toEqual({ embedding: false, embedding_provider: "", embedding_model: "" })
   })
 
   it("pins a server embedding model and hides the chat catalog", () => {
@@ -88,6 +86,7 @@ describe("SearchSettingsPanel", () => {
     fireEvent.click(screen.getByRole("option", { name: "named-embed" }))
     const next = onChange.mock.calls[0][0] as Settings
     expect(next.search?.embedding_model).toBe("named-embed")
+    expect(next.search?.embedding).toBe(true)
     expect(next.search?.embedding_provider).toBe("gateway:abc")
   })
 
@@ -116,5 +115,6 @@ describe("SearchSettingsPanel", () => {
     })
     const next = onChange.mock.calls[0][0] as Settings
     expect(next.search?.embedding_model).toBe("named-embed")
+    expect(next.search?.embedding).toBe(true)
   })
 })

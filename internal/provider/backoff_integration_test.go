@@ -86,66 +86,78 @@ func TestModelBackoffSurvivesRoleModelProviderAndCacheChanges(t *testing.T) {
 // The telemetry wrapper sits outside the shared gate. Canceling before that
 // gate admits HTTP must leave a wait event, rather than invent a second call.
 func TestModelBackoffCanceledBeforeHTTPRecordsOnlyTheWait(t *testing.T) {
-	for _, streaming := range []bool{false, true} {
-		name := "generate"
-		if streaming {
-			name = "stream"
-		}
-		t.Run(name, func(t *testing.T) {
-			var requests atomic.Int32
-			endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				requests.Add(1)
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusServiceUnavailable)
-				_, _ = io.WriteString(w, `{"error":{"message":"temporarily unavailable","type":"server_error"}}`)
-			}))
-			t.Cleanup(endpoint.Close)
-			pool := backoffPool(endpoint.URL)
-			var records []CallRecord
-			var mu sync.Mutex
-			build, err := pool.ModelBuilder(context.Background(), "fixture", "", "", func(record CallRecord) {
-				mu.Lock()
-				records = append(records, record)
-				mu.Unlock()
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := build("manager", "manager").Generate(context.Background(), backoffMessages()); err == nil {
-				t.Fatal("the initial service failure must reach the fixture")
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
-			defer cancel()
-			worker := build("worker", "waiting-worker")
+	for _, account := range []bool{false, true} {
+		for _, streaming := range []bool{false, true} {
+			name := "generate"
 			if streaming {
-				stream, streamErr := worker.Stream(ctx, backoffMessages())
-				err = streamErr
-				if stream != nil {
-					stream.Close()
+				name = "stream"
+			}
+			if account {
+				name = "account/" + name
+			}
+			t.Run(name, func(t *testing.T) {
+				var requests atomic.Int32
+				endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					requests.Add(1)
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusServiceUnavailable)
+					_, _ = io.WriteString(w, `{"error":{"message":"temporarily unavailable","type":"server_error"}}`)
+				}))
+				t.Cleanup(endpoint.Close)
+				pool := backoffPool(endpoint.URL)
+				providerID := "fixture"
+				if account {
+					src := accountSourceFor(t, endpoint.URL, "test-token")
+					src.SetCapabilities(roleManifest("conversation", "chat_completions", true))
+					pool.SetAccountSource(src)
+					providerID = src.id
 				}
-			} else {
-				_, err = worker.Generate(ctx, backoffMessages())
-			}
-			if !errors.Is(err, context.DeadlineExceeded) || requests.Load() != 1 {
-				t.Fatalf("canceling pre-request cooldown: err=%v requests=%d", err, requests.Load())
-			}
-			mu.Lock()
-			defer mu.Unlock()
-			calls, waits := 0, 0
-			for _, record := range records {
-				if record.Backoff == nil {
-					calls++
-					continue
+				var records []CallRecord
+				var mu sync.Mutex
+				build, err := pool.ModelBuilder(context.Background(), providerID, "", "", func(record CallRecord) {
+					mu.Lock()
+					records = append(records, record)
+					mu.Unlock()
+				})
+				if err != nil {
+					t.Fatal(err)
 				}
-				waits++
-				if record.AgentID != "waiting-worker" || record.Backoff.Attempt != 1 || record.Backoff.WaitMS <= 0 {
-					t.Errorf("cooldown lost the actual caller or delay: %+v", record)
+				if _, err := build("manager", "manager").Generate(context.Background(), backoffMessages()); err == nil {
+					t.Fatal("the initial service failure must reach the fixture")
 				}
-			}
-			if calls != 1 || waits != 1 {
-				t.Fatalf("one HTTP request and one canceled wait produced calls=%d waits=%d; records=%+v", calls, waits, records)
-			}
-		})
+				ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
+				defer cancel()
+				worker := build("worker", "waiting-worker")
+				if streaming {
+					stream, streamErr := worker.Stream(ctx, backoffMessages())
+					err = streamErr
+					if stream != nil {
+						stream.Close()
+					}
+				} else {
+					_, err = worker.Generate(ctx, backoffMessages())
+				}
+				if !errors.Is(err, context.DeadlineExceeded) || requests.Load() != 1 {
+					t.Fatalf("canceling pre-request cooldown: err=%v requests=%d", err, requests.Load())
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				calls, waits := 0, 0
+				for _, record := range records {
+					if record.Backoff == nil {
+						calls++
+						continue
+					}
+					waits++
+					if record.AgentID != "waiting-worker" || record.Backoff.Attempt != 1 || record.Backoff.WaitMS <= 0 {
+						t.Errorf("cooldown lost the actual caller or delay: %+v", record)
+					}
+				}
+				if calls != 1 || waits != 1 {
+					t.Fatalf("one HTTP request and one canceled wait produced calls=%d waits=%d; records=%+v", calls, waits, records)
+				}
+			})
+		}
 	}
 }
 

@@ -16,6 +16,7 @@ import { usePhoneVisibility } from "./phone-visibility"
 import { gatewayFetch } from "./gateway-fetch"
 import { accountHostLink, completeAccountHostLink, gatewayUpgradePending, sameGatewaySession, upgradeAnonymousGatewayLinks } from "./gateway-link-upgrade"
 import { sameGatewayAuthority, watchGatewayRefusal } from "./gateway-authority"
+import { sameLinkAuthority } from "./link-authority"
 
 export function useGatewayAccount() {
   const [origin, putOrigin] = useState(getGatewayOrigin)
@@ -294,9 +295,12 @@ export function useGatewayAccount() {
       completeAccountHostLink(current, id, saved)
       throw new GatewayError(401, "session_expired")
     }
-    try { saveLink(saved, select) } catch (error) { window.dispatchEvent(new Event("zwai.gateway.account")); throw error }
+    // Account refresh may already have upgraded this pairing while issuance
+    // was pending. Background preparation must retain its label and position.
+    const persisted = !select && loadSavedLinks().find(link => sameLinkAuthority(link, saved))
+    try { if (!persisted) saveLink(saved, select) } catch (error) { window.dispatchEvent(new Event("zwai.gateway.account")); throw error }
     completeAccountHostLink(current, id, saved)
-    return saved
+    return persisted || saved
   }, [failure, hosts, status])
 
   useEffect(() => {

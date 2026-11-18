@@ -1,5 +1,13 @@
 # zwai phone
 
+Automatic voice capture converts MP4/AAC, WebM/Opus and Ogg recordings to
+16 kHz mono PCM WAV before recognition. Newer iPhones may record WebM; those
+recordings use the same conversion instead of uploading an unsupported container.
+Recognition results remove a complete leading `language …<asr_text>` envelope
+before inserting the transcript into the draft; ordinary text remains intact.
+Voice service failures show the returned HTTP status without exposing upstream
+error bodies, separately from network and microphone-permission failures.
+
 Gateway model catalogs refresh after the selected PC acknowledges a mode change
 and when account model permissions change. Older PCs that omit model capability
 metadata show an update notice; the phone does not borrow its own grant to
@@ -41,13 +49,12 @@ the socket. Background connection warming and 15-second heartbeats reuse that
 transport instead of replacing it. Only a real shared-socket failure starts
 recovery for its peers.
 
-Choose **PCM (streaming playback)** in Voice settings to start direct Gateway or
-personal-service playback as audio arrives. MP3/WAV retain complete-segment
-playback. The encrypted PC-local route also waits for a completed segment.
-
-Choose **PCM (streaming playback)** as the audio format to start direct Gateway
-or personal-service playback as audio arrives. MP3/WAV retain complete-segment
-playback. The encrypted PC-local route also waits for a completed segment.
+The phone account’s automatic Gateway output uses **PCM (streaming playback)**
+with SSE and 200-character segments, allowing audio to play before a segment
+finishes. The speech service must provide mono signed-16 LE PCM at 24 kHz.
+Explicit PC or personal output settings retain their format and segment limits.
+Select PCM in those settings for incremental direct HTTP playback; MP3/WAV and
+the encrypted PC-local route wait for a completed segment.
 The PC snapshot declares read-aloud execution separately from dictation: an
 ordinary configurable Gateway output uses the phone's matching Mobile login
 directly, while personal PC outputs use encrypted PC RPC. Older PC snapshots
@@ -69,9 +76,19 @@ This requires a PC version supporting the project RPCs; older PCs show an update
 message. No project settings are stored in the phone's direct-model Chat scope.
 Recent desktop/mobile differences are tracked in [the parity audit](../docs/MOBILE_DESKTOP_PARITY.md).
 
+Paired PC conversations can show the same task panels as desktop. A matching
+panel opens once, and **Task panels** in the conversation header reopens it.
+The full-screen view supports touch zoom, rotation and switching between
+available panels. Closing keeps the map position and does not stop collection
+on the PC. Progress and asset points update through the existing encrypted
+connection; reconnecting reads saved results without restarting collection.
+Conversations without a panel keep their ordinary header. An incompatible
+plugin reports an update requirement rather than loading different code.
+See [Task panels](../docs/TASK_PANELS.md) for plugin authoring and data rules.
+
 Conversation Mermaid fences open as fit-to-width/height diagrams with touch zoom,
-actual size and copyable source. Incomplete, invalid or resource-bearing diagrams
-remain code. In paired PC conversations, an idle empty composer can show the
+actual size and copyable source. Incomplete, invalid, resource-bearing, or
+over-paint-budget diagrams remain code. In paired PC conversations, an idle empty composer can show the
 PC's latest next-step suggestion. Tap it or press Tab to edit it as a draft;
 Send remains explicit. The PC settings switch also controls this phone hint.
 Selected transcript text opens an opaque, high-contrast action panel in both
@@ -154,8 +171,8 @@ automatically open another browser or claim to cancel an OS action already sent.
 The selected PC publishes `model_policy`. An editable gateway permits the PC's
 model picker; a managed third-party preset hides it and project planner/executor
 selectors. After a connected-PC debug switch to LOCAL, the composer exposes
-**Original interface** and **Third-party interface** groups using that PC’s
-authorized catalogs. Identical model names retain their source IDs and routes.
+**Original interface** groups, and third-party groups titled with the name the
+gateway returned, using that PC’s authorized catalogs. Identical model names retain their source IDs and routes.
 The phone has no second Official/All models switch. LOCAL Chat
 shows third-party presets and Gateway models only when the server authorizes
 those sources. A source returning 403 disappears without signing out or hiding

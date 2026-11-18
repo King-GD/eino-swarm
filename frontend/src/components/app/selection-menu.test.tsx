@@ -30,7 +30,7 @@ function speechReady(): SpeechSnapshot {
 
 describe("SelectionMenu", () => {
   beforeEach(() => {
-    useApp.setState({ locale: "en", meta: undefined })
+    useApp.setState({ locale: "en", meta: { product_mode: "local", model_policy: { mode: "local", configurable: true, ready: true, scope: "local" } } as Meta })
   })
   afterEach(() => {
     act(() => {

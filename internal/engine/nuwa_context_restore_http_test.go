@@ -58,11 +58,9 @@ func testNuwaRestoredWorkerContextAtHTTP(t *testing.T, bound bool) {
 		var selection struct {
 			Omitted int `json:"omitted"`
 		}
-		for _, message := range request.Messages {
-			if message.Role == schema.System && strings.HasPrefix(message.Content, nuwaContextPrefix) {
-				if err := json.Unmarshal([]byte(strings.TrimPrefix(message.Content, nuwaContextPrefix)), &selection); err != nil {
-					t.Error(err)
-				}
+		if section := runtimeSystemSection(t, request, nuwaContextPrefix); section != "" {
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(section, nuwaContextPrefix)), &selection); err != nil {
+				t.Error(err)
 			}
 		}
 		if len(view.Nodes) == 0 || view.Nodes[0].ID != source.ID || selection.Omitted <= 0 {

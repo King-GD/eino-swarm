@@ -1,3 +1,5 @@
+import { AudioParameterControls } from "../shared/audio-parameters"
+import { refreshCapabilities } from "@/lib/refresh-capabilities"
 import { policyAllows, policyConfigurable } from "@/lib/model-policy"
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react"
 import { Button } from "@/components/ui/button"
@@ -10,6 +12,7 @@ import { toastError } from "@/store/toasts"
 import { defaultSpeechSettings, type SpeechInputSettings, type SpeechOutputSettings } from "@/lib/speech-types"
 import { speechPlayback, speechRecordingSupported, startSpeechRecording, type SpeechRecording } from "@/lib/speech-media"
 import { synthesizeSpeech, transcribeSpeech } from "@/lib/speech-api"
+import { speechFailureMessage } from "@/lib/speech-error"
 import type { Settings } from "@/lib/types"
 import { useT } from "@/lib/use-t"
 import { Field, SettingsChoice, SettingsRow, SettingsSection, settingsMatch } from "./settings-field"
@@ -25,9 +28,18 @@ export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery
   const t = useT()
   const query = settingsMatch(searchQuery, t("speech.title"), speechSettingsSearch) ? "" : searchQuery
   const local = useApp((store) => store.meta?.model_policy ? store.meta.model_policy.configurable : store.meta?.product_mode === "local")
+  const mode = useApp((store) => store.meta?.product_mode)
+  // Legacy LOCAL settings have no policy, but do have an explicit product
+  // mode. An absent Gateway manifest still grants no voice capability.
+  const legacyLocal = !settings.model_policy && mode === "local"
+  const inputAllowed = legacyLocal || policyAllows(settings.model_policy, "transcription")
+  const outputAllowed = legacyLocal || policyAllows(settings.model_policy, "speech")
   const snapshot = useApp((store) => store.meta?.speech)
   const raw = defaultSpeechSettings(settings.speech)
-  const speech = local ? { ...raw,
+  // The provider/custom form has no account choice. A model-policy page keeps
+  // source "account", which is the signed-in recognition or speech role.
+  const legacyEndpoint = local && !settings.model_policy
+  const speech = legacyEndpoint ? { ...raw,
     input: raw.input.source === "account" ? { ...raw.input, source: "custom" as const } : raw.input,
     output: raw.output.source === "account" ? { ...raw.output, source: "custom" as const } : raw.output,
   } : raw
@@ -41,7 +53,9 @@ export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery
     discovery.current?.abort(); discovery.current = undefined; setDiscovering(undefined); setModels({})
   }, [connectionIdentity])
   useEffect(() => () => discovery.current?.abort(), [])
-  if (!policyAllows(settings.model_policy, "transcription") && !policyAllows(settings.model_policy, "speech")) return null
+  const audioIdentity = JSON.stringify([snapshot?.input.source_id, snapshot?.input.model, snapshot?.output.source_id, snapshot?.output.model])
+  useEffect(() => { if (snapshot?.input.execution === "gateway" || snapshot?.output.execution === "gateway") void refreshCapabilities().catch(() => undefined) }, [audioIdentity])
+  if (!inputAllowed && !outputAllowed) return null
   const update = <K extends Kind>(kind: K, patch: Partial<(typeof speech)[K]>) => onChange({
     ...settings, speech: { ...speech, [kind]: { ...speech[kind], ...patch } },
   })
@@ -61,7 +75,7 @@ export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery
     finally { if (discovery.current === owner) { discovery.current = undefined; setDiscovering(undefined) } }
   }
   const connection = (kind: Kind, value: Connection) => settings.model_policy ? (
-    policyConfigurable(settings.model_policy, kind === "input" ? "transcription" : "speech") ? <SettingsRow label={t("speech.model")} hint={snapshot?.[kind].label || t("modelPolicy.default")} query={query} /> : null
+    policyConfigurable(settings.model_policy, kind === "input" ? "transcription" : "speech") ? <SettingsRow label={t("speech.model")} hint={snapshot?.[kind].ready ? (snapshot[kind].label || t("modelPolicy.default")) : t("speech.notReady")} query={query} /> : null
   ) : <>
     {local ? <>
       <SettingsChoice label={t("speech.source")} query={query} value={value.source} onValueChange={(source) => update(kind, { source: source as Connection["source"] })}>
@@ -85,27 +99,38 @@ export function SpeechSettings({ settings, onChange, onFlush, query: searchQuery
       <span className="text-sm text-muted-foreground">{snapshot?.[kind].label || t("speech.gateway")}</span>
     </SettingsRow>}
   </>
+  const gateway = (kind: Kind) => snapshot?.[kind].execution === "gateway" || !local
+  const parameters = (kind: Kind) => {
+    const view = snapshot?.[kind].audio
+    return <AudioParameterControls view={view} role={kind === "input" ? "transcription" : "speech"} value={view ? speech.gateway_parameters?.[view.scope] ?? {} : {}} onChange={value => {
+      if (view) onChange({ ...settings, speech: { ...speech, gateway_parameters: { ...speech.gateway_parameters, [view.scope]: value } } })
+    }} labels={{ voice: t("speech.voice"), response_format: t("speech.outputFormat"), stream_format: t("speech.streamFormat"), language: t("speech.language"), speed: t("speech.speed"), instructions: t("speech.instructions"), prompt: t("speech.prompt"), follow: t("speech.audioFollow"), invalid: t("speech.audioInvalid"), unavailable: t("speech.audioUnavailable"), max_input_characters: t("speech.chunkLimit"), max_file_bytes: t("speech.inputLimit") }} />
+  }
   return <>
-    {policyAllows(settings.model_policy, "transcription") ? <SettingsSection title={t("speech.input")} description={t("speech.description")}>
+    {inputAllowed ? <SettingsSection title={t("speech.input")} description={t("speech.description")}>
       <Field label={t("speech.enabled")} query={query}><Switch checked={speech.input.enabled} onCheckedChange={(enabled) => update("input", { enabled })} /></Field>
       {connection("input", speech.input)}
+      {gateway("input") ? parameters("input") : <>
       <Field label={t("speech.language")} query={query}><Input value={speech.input.language} placeholder={t("speech.autoLanguage")} onChange={(event) => update("input", { language: event.target.value })} /></Field>
       <Field label={t("speech.prompt")} query={query} wide><Input value={speech.input.prompt} onChange={(event) => update("input", { prompt: event.target.value })} /></Field>
+      </>}
       <SettingsChoice label={t("speech.recordingFormat")} query={query} value={speech.input.recording_format} onValueChange={(recording_format) => update("input", { recording_format: recording_format as "auto" | "wav" })}>
         <SelectItem value="auto">{t("speech.autoFormat")}</SelectItem><SelectItem value="wav">WAV</SelectItem>
       </SettingsChoice>
       <Field label={t("speech.duration")} query={query}><Input type="number" min={1} value={speech.input.max_duration_seconds} onChange={(event) => update("input", { max_duration_seconds: Number(event.target.value) })} /></Field>
       <Field label={t("speech.timeout")} query={query}><Input type="number" min={1} value={speech.input.timeout_seconds} onChange={(event) => update("input", { timeout_seconds: Number(event.target.value) })} /></Field>
     </SettingsSection> : null}
-    {policyAllows(settings.model_policy, "speech") ? <SettingsSection title={t("speech.output")}>
+    {outputAllowed ? <SettingsSection title={t("speech.output")}>
       <Field label={t("speech.enabled")} query={query}><Switch checked={speech.output.enabled} onCheckedChange={(enabled) => update("output", { enabled })} /></Field>
       {connection("output", speech.output)}
+      {gateway("output") ? parameters("output") : <>
       <Field label={t("speech.voice")} query={query}><Input value={speech.output.voice} placeholder={t("speech.modelDefault")} onChange={(event) => update("output", { voice: event.target.value })} /></Field>
       <Field label={t("speech.speed")} query={query}><Input type="number" step={0.1} min={0.25} max={4} value={speech.output.speed} onChange={(event) => update("output", { speed: Number(event.target.value) })} /></Field>
       <SettingsChoice label={t("speech.outputFormat")} query={query} value={speech.output.format} onValueChange={(format) => update("output", { format: format as SpeechOutputSettings["format"] })}>
         <SelectItem value="mp3">MP3</SelectItem><SelectItem value="wav">WAV</SelectItem><SelectItem value="pcm">{t("speech.pcmStreaming")}</SelectItem>
       </SettingsChoice>
       <Field label={t("speech.instructions")} query={query} wide><Input value={speech.output.instructions} onChange={(event) => update("output", { instructions: event.target.value })} /></Field>
+      </>}
       <Field label={t("speech.timeout")} query={query}><Input type="number" min={1} value={speech.output.timeout_seconds} onChange={(event) => update("output", { timeout_seconds: Number(event.target.value) })} /></Field>
     </SettingsSection> : null}
     <SettingsSection title={t("speech.limits")}>
@@ -127,6 +152,7 @@ function SpeechSettingsTest({ settings, onFlush }: { settings: Settings; onFlush
   const [text, setText] = useState("")
   const capture = useRef<SpeechRecording | undefined>(undefined)
   const controller = useRef<AbortController | undefined>(undefined)
+  const snapshot = useApp((store) => store.meta?.speech)
   const playback = useSyncExternalStore(speechPlayback.subscribe, speechPlayback.getSnapshot)
   const cancel = () => { controller.current?.abort(); capture.current?.cancel(); capture.current = undefined; setRecording(false); setBusy(false) }
   const cancelRef = useRef(cancel); cancelRef.current = cancel
@@ -141,7 +167,11 @@ function SpeechSettingsTest({ settings, onFlush }: { settings: Settings; onFlush
       await onFlush()
       const recognized = await transcribeSpeech(blob, owner.signal)
       if (!owner.signal.aborted) setResult(recognized)
-    } catch (error) { if (!owner.signal.aborted) toastError(error instanceof Error ? error.message : t("speech.failed")) }
+    } catch (error) {
+      if (owner.signal.aborted) return
+      const message = speechFailureMessage(error, t)
+      if (message) toastError(message)
+    }
     finally { if (controller.current === owner) setBusy(false) }
   }
   const start = async () => {
@@ -152,7 +182,11 @@ function SpeechSettingsTest({ settings, onFlush }: { settings: Settings; onFlush
       })
       if (owner.signal.aborted) { active.cancel(); return }
       capture.current = active; setRecording(true)
-    } catch (error) { if (!owner.signal.aborted) toastError(error instanceof Error ? error.message : t("speech.failed")) }
+    } catch (error) {
+      if (owner.signal.aborted) return
+      const message = speechFailureMessage(error, t)
+      if (message) toastError(message)
+    }
     finally { if (controller.current === owner) setBusy(false) }
   }
   return <SettingsSection description={t("speech.testHint")} title={t("speech.testReading")}>
@@ -163,13 +197,16 @@ function SpeechSettingsTest({ settings, onFlush }: { settings: Settings; onFlush
     {result ? <Field label={t("speech.testResult")}><Textarea value={result} readOnly /></Field> : null}
     <Field label={t("speech.testText")}><Textarea value={text} onChange={(event) => setText(event.target.value)} /></Field>
     <SettingsRow label={t("speech.testReading")}>
-      <Button type="button" variant="outline" size="sm" disabled={!speech.output.enabled || !text.trim()} onClick={() => {
+      <Button type="button" variant="outline" size="sm" disabled={!speech.output.enabled || snapshot?.output.ready === false || !text.trim()} onClick={() => {
         if (playback.key === "settings:speech") { speechPlayback.stop(); return }
         void speechPlayback.play("settings:speech", text, { chunkChars: speech.limits.chunk_chars, synthesize: async (part, signal) => {
           await onFlush(); return synthesizeSpeech(part, signal, speech.limits.output_bytes)
-        } }).catch((error) => toastError(error instanceof Error ? error.message : t("speech.failed")))
+        } }).catch((error) => {
+          const message = speechFailureMessage(error, t)
+          if (message) toastError(message)
+        })
       }}>{playback.key === "settings:speech" ? t("speech.stopReading") : t("speech.testReading")}</Button>
-      {playback.key === "settings:speech" ? <span role="status" aria-live="polite" className="text-xs text-muted-foreground">{t(playback.state === "loading" ? "speech.generating" : "speech.playing")}</span> : null}
+      {playback.key === "settings:speech" ? <span role="status" aria-live="polite" className="text-xs text-muted-foreground">{t(playback.state === "loading" ? "speech.generating" : "speech.playing")}</span> : speech.output.enabled && snapshot?.output.ready === false ? <span role="status" className="text-xs text-muted-foreground">{t("speech.notReady")}</span> : null}
     </SettingsRow>
   </SettingsSection>
 }

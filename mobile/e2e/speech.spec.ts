@@ -1,3 +1,4 @@
+import { fixtureCapabilities } from "../src/test/capabilities"
 import { expect, test, type Page } from "@playwright/test"
 
 test.use({ permissions: ["microphone"] })
@@ -60,11 +61,11 @@ test("Gateway speech uses the phone token directly even while viewing a PC conve
     localStorage.setItem("zwai.phone.gateway.session", JSON.stringify({ origin, token: "agm_" + "a".repeat(64), user: { id: "voice-owner", username: "voice-owner", approval_status: "approved", enabled: true }, device: { id: "voice-mobile", expires_at: "2099-01-01T00:00:00Z" } }))
   })
   await page.route("**/client/api/v1/**", async (route) => {
-    const path = new URL(route.request().url()).pathname
+    const url = new URL(route.request().url()), path = url.pathname
     const user = { id: "voice-owner", username: "voice-owner", approval_status: "approved", enabled: true }
     const device = { id: "voice-mobile", expires_at: "2099-01-01T00:00:00Z" }
-    const data = path.endsWith("/auth/me") ? { user, device }
-      : path.endsWith("/bootstrap") ? { user, device, models: { source_id: "gateway:voice", source_kind: "gateway", label: "Voice", execution: "phone", api_base_url: new URL(route.request().url()).origin + "/v1", catalog_url: new URL(route.request().url()).origin + "/v1/models", api_access_enabled: true }, pairlink: { enabled: false }, heartbeat_interval: 30, presence_ttl: 90 } : []
+    const data = path.endsWith("/capabilities") ? fixtureCapabilities() : path.endsWith("/auth/me") ? { user, device }
+      : path.endsWith("/bootstrap") ? { user, device, capabilities_url: url.origin + "/client/api/v1/capabilities", models: { source_id: "gateway:voice", source_kind: "gateway", label: "Voice", defaults: { speech: "speech", transcription: "transcription" }, execution: "phone", api_base_url: new URL(route.request().url()).origin + "/v1", catalog_url: new URL(route.request().url()).origin + "/v1/models", api_access_enabled: true }, pairlink: { enabled: false, hub_url: url.origin, redeem_url: url.origin + "/pairlink/v1/pairings/redeem", info_url: url.origin + "/pairlink/v1/info", websocket_url: url.origin.replace(/^http/, "ws") + "/pairlink/v1/ws" }, heartbeat_interval: 30, presence_ttl: 90 } : []
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ data }) })
   })
   await page.route("**/v1/models", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ data: [{ id: "chat", model_type: "chat" }] }) }))
@@ -90,12 +91,10 @@ test("Gateway speech uses the phone token directly even while viewing a PC conve
   await page.route("**/v1/audio/speech", async (route) => {
     synthesis += 1
     expect(route.request().headers().authorization).toBe("Bearer agm_" + "a".repeat(64))
-    expect(route.request().postDataJSON()).toMatchObject({ model: "speech", response_format: "wav" })
-    const data = Buffer.alloc(44 + 16000 * 2 * 2)
-    data.write("RIFF", 0); data.writeUInt32LE(data.length - 8, 4); data.write("WAVEfmt ", 8); data.writeUInt32LE(16, 16)
-    data.writeUInt16LE(1, 20); data.writeUInt16LE(1, 22); data.writeUInt32LE(16000, 24); data.writeUInt32LE(32000, 28); data.writeUInt16LE(2, 32); data.writeUInt16LE(16, 34)
-    data.write("data", 36); data.writeUInt32LE(data.length - 44, 40)
-    await route.fulfill({ contentType: "audio/wav", body: data })
+    expect(route.request().postDataJSON()).toMatchObject({ model: "speech", response_format: "pcm", stream_format: "sse" })
+    const data = Buffer.alloc(24000 * 2 * 4)
+    for (let index = 0; index < data.length; index += 2) data.writeInt16LE(Math.round(1200 * Math.sin(index / 2 * Math.PI * 2 * 440 / 24000)), index)
+    await route.fulfill({ contentType: "audio/pcm", body: data })
   })
   await page.goto("/?mock=1&tick=0&speech=gateway")
   await record(page)

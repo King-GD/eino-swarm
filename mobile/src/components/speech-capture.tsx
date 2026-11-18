@@ -13,10 +13,12 @@ export function speechFailureMessage(error: unknown): string {
   const name = error && typeof error === "object" && "name" in error ? String(error.name) : ""
   if (name === "NotAllowedError" || name === "SecurityError") return t("speech.permission")
   if (error instanceof SpeechCallError) {
+    if (error.code === "invalid_audio_parameter") return t("speech.audioInvalid")
     if (error.code === "network") return t("speech.network")
     if (error.code === "timeout") return t("speech.timeout")
     if (error.code === "empty") return t("speech.empty")
     if (error.code === "too_large") return t("speech.tooLarge")
+    if (error.httpStatus) return t("speech.serviceFailed", { status: error.httpStatus })
   }
   return t("speech.failed")
 }

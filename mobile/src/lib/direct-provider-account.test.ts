@@ -1,8 +1,9 @@
+import { fixtureSourceCapabilities } from "@/test/capabilities"
 import { beforeEach, describe, expect, it } from "vitest"
 import { loadProviders, providerChoices, saveProviders, type DirectProvider } from "./direct-provider"
 
 const privateProvider: DirectProvider = { id: "p-private", label: "Personal", baseURL: "https://private.invalid/v1", apiKey: "private-secret", api: "chat", model: "same-model", catalog: ["same-model"], timeoutSeconds: 300 }
-const managed = { ...privateProvider, id: "gateway:account-one", label: "Server", baseURL: "https://gateway.invalid/v1", apiKey: "mobile-secret", sourceKind: "gateway" as const }
+const managed = { ...privateProvider, id: "gateway:account-one", label: "Server", baseURL: "https://gateway.invalid/v1", apiKey: "mobile-secret", capabilities: fixtureSourceCapabilities(), sourceKind: "gateway" as const }
 
 beforeEach(() => localStorage.clear())
 

@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { MERMAID_PAINT_LIMITS } from "@/lib/markdown-mermaid"
 import { MemoMarkdown } from "./markdown"
 
 const mermaid = vi.hoisted(() => ({
@@ -32,6 +33,10 @@ describe("Mermaid markdown", () => {
     const image = await screen.findByRole("img", { name: "Mermaid" })
     expect(decodeURIComponent(image.getAttribute("src")!.split(",")[1])).toContain("Start → Finish")
     expect(mermaid.render).toHaveBeenCalledWith(expect.stringMatching(/^mermaid-/), SOURCE, expect.any(HTMLElement))
+    const measure = mermaid.render.mock.calls[0][2] as HTMLElement
+    expect(measure.style.visibility).toBe("hidden")
+    expect(measure.style.position).toBe("absolute")
+    expect(measure.getAttribute("aria-hidden")).toBe("true")
     fireEvent.click(screen.getByRole("button", { name: "Copy code" }))
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(SOURCE))
     expect(screen.getByTestId("markdown-mermaid").querySelector("details code")?.textContent).toBe(SOURCE)
@@ -59,6 +64,18 @@ describe("Mermaid markdown", () => {
     render(<MemoMarkdown text={fence().split("\n").map((line) => `> ${line}`).join("\n")} streaming />)
     expect(await screen.findByRole("img", { name: "Mermaid" })).toBeInTheDocument()
     expect(mermaid.render).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps a diagram outside the paint budget as source", async () => {
+    const { edge } = MERMAID_PAINT_LIMITS
+    mermaid.render.mockResolvedValueOnce({
+      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${edge + 1} 1"><text>wide</text></svg>`,
+    })
+    render(<MemoMarkdown text={fence()} />)
+    await waitFor(() => expect(mermaid.render).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(document.querySelector(".md-mermaid-measure")).toBeNull())
+    expect(screen.queryByRole("img", { name: "Mermaid" })).toBeNull()
+    expect(screen.getByTestId("markdown-code").textContent).toContain(SOURCE)
   })
 
   it("keeps invalid or undecodable diagrams copyable and removes measurement DOM", async () => {

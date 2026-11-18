@@ -2,6 +2,7 @@ package speech
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -187,6 +188,133 @@ func TestLocalSpeechRequiresAnExplicitLocalModelBinding(t *testing.T) {
 	}
 	if view := svc.Snapshot(); !view.Input.Ready || view.Input.Model != "selected-asr" {
 		t.Fatalf("provider selection=%+v", view)
+	}
+}
+
+func TestLocalAccountSpeechUsesTheSignedInRoleAndLeavesCustomEndpointsAlone(t *testing.T) {
+	accountHit := make(chan string, 1)
+	account := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/client/desktop/v1/audio/speech" || r.Header.Get("Authorization") != "Bearer private-host-token" {
+			t.Errorf("account request path=%s", r.URL.Path)
+		}
+		data, _ := io.ReadAll(r.Body)
+		accountHit <- string(data)
+		w.Header().Set("Content-Type", "audio/mpeg")
+		_, _ = w.Write(wavFixture())
+	}))
+	defer account.Close()
+	customHit := make(chan struct{}, 1)
+	custom := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		customHit <- struct{}{}
+		w.Header().Set("Content-Type", "audio/wav")
+		_, _ = w.Write(wavFixture())
+	}))
+	defer custom.Close()
+	cfg, svc := configuredSpeech(t, custom.URL+"/v1")
+	if err := cfg.Update(func(c *config.Config) error {
+		c.Speech.Output.Source = config.SpeechSourceAccount
+		c.Speech.Output.Model = ""
+		c.Speech.Output.BaseURL = ""
+		c.Speech.Output.APIKey = ""
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if view := svc.Snapshot(); view.Output.Ready || view.Output.Reason != "speech_login_required" {
+		t.Fatalf("signed-out local account source became ready: %+v", view.Output)
+	}
+	src, err := provider.NewAccountProfile("gateway:test", account.URL+"/client/desktop/v1", "private-host-token", provider.AccountProfile{Label: "chat-alias"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src.SetRoles([]provider.AccountRole{{ID: "speech", Enabled: false, Label: "Voice"}})
+	svc.pool.SetAccountSource(src)
+	if view := svc.Snapshot(); view.Output.Ready || view.Output.Reason != "speech_role_unavailable" {
+		t.Fatalf("disabled role became ready: %+v", view.Output)
+	}
+	src, err = provider.NewAccountProfile("gateway:test", account.URL+"/client/desktop/v1", "private-host-token", provider.AccountProfile{Label: "chat-alias"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src.SetRoles([]provider.AccountRole{{ID: "speech", Enabled: true, Label: "Voice"}})
+	svc.pool.SetAccountSource(src)
+	view := svc.Snapshot()
+	if !view.Output.Ready || view.Output.Execution != "gateway" || view.Output.Model != "speech" || view.Output.Label != "Voice" || view.Output.GatewayOrigin != account.URL {
+		t.Fatalf("local account speech=%+v", view.Output)
+	}
+	raw, err := json.Marshal(view)
+	if err != nil || strings.Contains(string(raw), "private-host-token") || strings.Contains(string(raw), "/client/desktop") {
+		t.Fatalf("snapshot leaked the account endpoint: %s %v", raw, err)
+	}
+	audio, err := svc.Synthesize(context.Background(), "answer")
+	if err != nil || audio.MIME != "audio/mpeg" {
+		t.Fatalf("audio=%+v %v", audio, err)
+	}
+	select {
+	case body := <-accountHit:
+		if !strings.Contains(body, `"model":"speech"`) || strings.Contains(body, "chat-alias") || strings.Contains(body, "speaker") {
+			t.Fatalf("role request=%s", body)
+		}
+	default:
+		t.Fatal("signed-in speech role was not called")
+	}
+	if err := cfg.Update(func(c *config.Config) error {
+		c.Speech.Output.Source = config.SpeechSourceCustom
+		c.Speech.Output.BaseURL = custom.URL + "/v1"
+		c.Speech.Output.Model = "speaker"
+		c.Speech.Output.APIKey = "private-key"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if view = svc.Snapshot(); !view.Output.Ready || view.Output.Execution != "pc_local" || view.Output.Model != "speaker" {
+		t.Fatalf("custom endpoint lost to the account role: %+v", view.Output)
+	}
+	if _, err := svc.Synthesize(context.Background(), "answer"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-customHit:
+	default:
+		t.Fatal("custom endpoint was not called")
+	}
+	if len(accountHit) != 0 {
+		t.Fatal("custom playback also called the account")
+	}
+}
+
+func TestLocalSpeechBindingOverridesTheSignedInRole(t *testing.T) {
+	personal := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data, _ := io.ReadAll(r.Body)
+		if !strings.Contains(string(data), `"model":"speaker"`) || r.Header.Get("Authorization") != "Bearer personal-key" {
+			t.Errorf("binding request=%s", data)
+		}
+		w.Header().Set("Content-Type", "audio/wav")
+		_, _ = w.Write(wavFixture())
+	}))
+	defer personal.Close()
+	cfg, svc := configuredSpeech(t, "http://must-not-use.invalid/v1")
+	src, err := provider.NewAccountProfile("gateway:test", "https://account.invalid/client/desktop/v1", "private-host-token", provider.AccountProfile{Label: "chat-alias"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src.SetRoles([]provider.AccountRole{{ID: "speech", Enabled: true, Label: "Voice"}})
+	svc.pool.SetAccountSource(src)
+	if err := cfg.Update(func(c *config.Config) error {
+		c.Speech.Output.Source = config.SpeechSourceAccount
+		c.Speech.Output.Model = ""
+		c.Models.Providers = append(c.Models.Providers, config.Provider{ID: "personal", BaseURL: personal.URL + "/v1", APIKey: "personal-key", Model: "speaker"})
+		c.Models.Bindings = map[string]map[string]config.ModelRef{config.ProductModeLocal: {"speech": {ProviderID: "personal", Model: "speaker"}}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	view := svc.Snapshot()
+	if !view.Output.Ready || view.Output.Execution != "pc_local" || view.Output.Model != "speaker" || view.Output.GatewayOrigin != "" {
+		t.Fatalf("binding did not replace the account role: %+v", view.Output)
+	}
+	if _, err := svc.Synthesize(context.Background(), "answer"); err != nil {
+		t.Fatal(err)
 	}
 }
 

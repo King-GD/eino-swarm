@@ -1,6 +1,25 @@
 # Testing
 
+Current phone regression fixtures declare negotiated source capabilities and paired
+LOCAL policy explicitly. Cached PC audio alone does not authorize Gateway audio;
+an unavailable cache may still leave a disabled Gateway snapshot. Connection tests
+wait until a dial has started before unmount and account for retained sockets when
+switching PCs; a reused valid ticket intentionally avoids another connect request.
+
 ## Voice input and spoken answers (F-148 / C-048)
+
+Versioned Gateway parameters have separate parser, publication and request-boundary regressions:
+`internal/audioparams/contract_test.go`, `internal/provider/audio_parameters_test.go`,
+`internal/remote/account_audio_parameters_test.go`, `internal/speech/audio_parameters_test.go`,
+`internal/server/speech_http_test.go`, `frontend/src/lib/audio-parameters.test.ts`,
+`frontend/src/components/shared/audio-parameters.test.tsx`, and
+`mobile/src/lib/gateway-audio-parameters.test.ts`. They cover a fixed model with editable
+voice, default omission, explicit empty values, an extended speed range, Unicode and
+actual file-byte limits, scoped persistence, source/account isolation, stale declarations,
+private catalog discovery and parameter-error refresh without replay. Phone cache tests
+retain only explicit preferences from the PC; the phone's own declaration authorizes them.
+These are protocol/UI fixture checks, not proof that the online gateway deployed the
+new declaration or that a physical device played audio.
 
 `internal/config/speech_test.go` and `internal/speech/service_test.go` cover
 independent switches, private settings, typed model discovery, Gateway role
@@ -85,6 +104,8 @@ recording controls, permission refusal/recovery and playback. Report physical
 device capture separately from simulator-generated media. Preserve first
 failures, audio MIME/byte evidence, target identity and cleanup receipts outside
 the checkout; never invoke a real model from an automated test.
+
+Offline PC catalogs advertise explicit Local or managed capability policy; synthetic gateway fixtures serve their same-origin capability discovery endpoint before model and voice calls. Permission-sensitive fixtures grant only the roles exercised by each case.
 
 The phone streaming case also runs in the iPhone WebKit project. Its real HTTP
 fixture answers real CORS preflights and asserts that WebKit made one before
@@ -640,6 +661,16 @@ stored `gateway:` id never falls back to a same-named private provider.
 reserved prefix; `internal/server/account_models_http_test.go` goes through HTTP
 for `configured`, model order, credential absence, `default_source` and
 `welcome_dismissed` surviving unrelated saves.
+
+Third-party conversation choices (`F-171`, `C-040`) use functional binding
+identity rather than the Chat Completions transport type.
+`internal/provider/account_catalog_group_test.go` covers unclassified and typed
+auxiliary aliases, explicit conversation defaults, absent conversations and
+unchanged original/legacy catalogs. `internal/remote/account_conversation_catalog_test.go`
+crosses real bootstrap/catalog HTTP, retained-cache refresh and the phone
+projection while preserving auxiliary resolution.
+`internal/server/account_conversation_catalog_test.go` checks the PC model
+picker's actual `/api/models` response.
 
 Frontend unit tests cover the pure rules (`account-models.test.ts`), the
 welcome gate and banner (`welcome-gate.test.tsx`, `configured-banner.test.tsx`),
@@ -5201,6 +5232,21 @@ these cases. The Go tests still own the sampled image and the real controller.
 python3 tools/model_check.py --fetch renderer-recovery-current renderer-recovery-ignore-presented renderer-recovery-unknown-as-flat renderer-recovery-skip-reload renderer-recovery-background-spends
 ```
 
+## Diagram paint admission (`C-005`)
+
+`models/desktop/DiagramPaint.tla` checks the decision in `mermaidSVGDataURL`,
+not WebKit's SVG painter or the product pixel caps. A diagram is mounted only
+when its edge, area, element count, text length and byte count are all inside
+the budget. Dropping any one check must be caught by that axis alone: a legal
+edge with too much area breaks `MountedPixels` and does not need to break
+`MountedEdge`. `diagram-paint-reach-mount` and `diagram-paint-reach-source`
+keep both outcomes reachable. The Vitest cases own the real caps, including a
+value that is legal on every other axis.
+
+```bash
+python3 tools/model_check.py --fetch diagram-paint-current diagram-paint-ignore-edge diagram-paint-ignore-pixels diagram-paint-ignore-elements diagram-paint-ignore-text diagram-paint-ignore-bytes diagram-paint-reach-mount diagram-paint-reach-source
+```
+
 ## iOS startup prompt model (opt-in, `C-045`)
 
 `models/mobile/IOSStartupPrompt.tla` checks the shell's document-start decision,
@@ -8722,7 +8768,18 @@ after progress, and the current reconnect ticket under `testing/synctest`.
 `backoff_integration_test.go` uses the
 real Pool/SDK boundary with keyless loopback HTTP fixtures to verify
 cross-role/model/provider and cache-invalidated calls, independent origins,
-malformed successful streams and delayed/cancelled header reconnects. After an
+malformed successful streams and delayed/cancelled header reconnects. Cancelled
+account-model waits exercise negotiated capability checks through the same
+factory and must record no extra HTTP call. `internal/provider/capability_backoff_test.go`
+checks account recovery through Chat Completions and Responses, both Generate
+and Stream, preserving gate/caller identity, source-policy holds and revocation.
+`models/provider/CapabilityAdmission.tla` retrospectively captures the nil-gate
+composition fault and the incomplete nil-guard-only repair. Its 15 registered
+checks cover five safety invariants, the known fault, seeded guard removals and
+eight reachability witnesses. Real HTTP regressions also retain an account
+stream's source hold and refuse a removed role while the source remains healthy.
+See [the provider model mapping and bounds](../models/provider/README.md).
+After an
 initial 503 and cooldown, a probe remains open: before its first decoded nonempty
 body, reasoning or tool-call delta, a sibling role/model request must not reach
 the server; after that delta, it must arrive before the probe finishes. Headers,
@@ -9080,8 +9137,9 @@ packaged desktop window acceptance.
 covers scoped bindings, account renewal/isolation, managed catalog/settings
 projection and direct mutation refusal. `internal/engine/model_policy_test.go`
 covers a running turn leaving the source switch free, an in-flight model call
-still refusing it, backup and restart still refusing it, and managed project
-choices. `internal/provider/model_policy_admission_test.go` proves a stream holds
+still refusing it, an embedding request that has reached its endpoint leaving
+the switch free (`TestEmbeddingBackfillDoesNotBlockDebugSourceSwitch`), backup
+and restart still refusing it, and managed project choices. `internal/provider/model_policy_admission_test.go` proves a stream holds
 the gate until upstream completion, and that an already opened client keeps its
 endpoint after the switch while a new lookup uses the new source.
 
@@ -9128,17 +9186,25 @@ credential activation only after approval. `internal/server/remote_manual_login_
 crosses the real local HTTP adapter: explicit enable, validated public URL,
 unsafe-response refusal, cancellation and manual-token refusal.
 `frontend/e2e/headless-login.spec.ts` runs an offline loopback Gateway and opens
-its confirmation page in the user's browser; no native host browser is available.
+its confirmation page in the user's browser. It asserts the Web request omits
+`open_browser`, even on the loopback engine that can serve desktop windows.
+`TestSharedEngineLoginLaunchesHostBrowserOnlyOnExplicitRequest` uses a real local
+HTTP handler with an instrumented launcher: default and explicit false requests
+leave authorization in the initiating browser, while explicit true with a
+launcher opens exactly the validated link. Opt-in with no launcher still polls.
 It does not establish physical NAS support or live Gateway availability.
 
 `models/account/DeviceLogin.tla` maps Start to `startAccountLogin`/`startLogin`,
-Response to `verifyLoginResponse` then `publishLogin`, HumanApproves/Activate to
+Response to `verifyLoginResponse` then `publishLogin`, OpenHostBrowser to the
+explicit launch intent at the HTTP boundary and the optional Host callback,
+HumanApproves/Activate to
 the Gateway's authorized poll plus private receipt activation, and CancelOrExpire
 to replacement of local terminal status. One attempt ranges over safe/unsafe
 responses and missing/failed/working launchers. TLC checks manual admission,
 validated-only URL publication, terminal link clearing and approval before
-activation; the original browser gate and three seeded missing guards must fail.
-Manual authorization, unsafe refusal and cancellation witnesses establish
+activation and explicit launcher opt-in; the old browser gate and
+unconditional-launch behavior plus the seeded missing guards must fail.
+Manual authorization, explicit launch, unsafe refusal and cancellation witnesses establish
 reachability. No fairness or eventual remote approval is assumed. This bounded
 protocol does not prove URL parser correctness, Go/storage atomicity, cross-attempt
 ownership or unbounded network liveness; the HTTP/race regressions cover those
@@ -9193,3 +9259,70 @@ evidence, not accepted by a later green retry.
 0.1.80 的原生 Account／LOCAL 验收：iOS `testNativeSignedInAccountWaitsForPCThenLocalKeepsLogin` 和 Android `accountWaitsForPCAndDebugLocalRetainsLogin` 从真实合成 CAS／PKCE 登录进入 Account 等待页，确认不会发现直连目录；通过实际头像三击进入 LOCAL 保留登录和授权来源，再切回 Account 并连接同账号 PC，检查真实加密 RPC。直接模型的重定向、取消及分块流用例显式在 LOCAL 执行；用户中心关闭后进入聊天，不依赖已移除的 Chat history 按钮。
 
 桌面 LOCAL 的授权双目录由 `internal/remote/account_local_sources_test.go` 覆盖：个人、预置和额外网关模型可并列，实际模型请求保持来源身份；撤权、空列表和退出不改用其他接口。
+
+
+### Embedding configuration and visible model availability
+
+`internal/config/search_test.go` covers model-derived enablement, including old
+`embedding: false` values with a saved model. `internal/provider/embedding_configuration_test.go`
+checks editable gateway defaults and explicit empty overrides.
+`internal/server/search_model_configuration_test.go` crosses Settings PUT, durable
+configuration reload and the actual search endpoint for enable/disable behavior.
+`frontend/e2e/model-policy.spec.ts` configures and clears the model through the UI,
+checks real semantic-search responses and verifies the disabled state after reload.
+Functional-model unit tests retain translation/image availability explanations.
+
+`unknown_tool_test.go` and `internal/engine/mcp_mount_test.go` cover detached
+route copies, one-turn consumption, explicit clearing, missing server/catalog
+data and legacy remote names, alongside real manager/worker/reviewer requests.
+Capability-dependent UI fixtures provide explicit local policies or verified
+Gateway grants. Speech regressions keep legacy LOCAL settings editable while
+refusing missing Gateway grants; stale-catalog polling tests count discovery
+separately from the independent capability refresh.
+
+Personal/offline engine fixtures select LOCAL explicitly; account-routing
+fixtures select Gateway explicitly. Source-switch tests retain an already-opened
+client's endpoint while requiring new lookups to use the new source. Nuwa
+planner, planning and scoped-worker HTTP regressions inspect the explicit
+`tool_not_registered` receipt on the next real model request and continue to
+assert no workspace, MCP or shared-state write occurred.
+Selection-translation regressions exercise the dedicated offline translator and
+legacy role-off fallback; `internal/provider/translation_policy_test.go` keeps
+negotiated denial separate. `frontend/e2e/legacy-local-settings.spec.ts` removes
+policy fields from both real HTTP snapshots, edits voice settings through the
+browser and verifies persistence after reload.
+
+Host validation inventory requests `lsof -b -nP` for cwd lookup, avoiding blocking
+kernel probes and hostname/service resolution inside its unchanged deadline.
+`tools/test_release_host_lease.py` retains the real cross-copy unittest-process
+identity check and rejects failed, absent, relative or ambiguous cwd results.
+
+## Task panels and the FOFA example
+
+Inspector coverage in `frontend/src/components/app/nuwa-project-mode.test.tsx`
+exercises both registered tabs together, including a hidden iframe, project and
+conversation isolation, and fallback to Agents without changing the requested
+tab. The task-panel browser spec runs in the default suite and checks frame and
+zoom retention across tabs and scope changes to a conversation without a
+panel. The dedicated Nuwa browser fixture above covers history after disabling
+the mode and opening the tab without automatic focus. These are browser
+checks, separate from native acceptance.
+
+`InspectorRegistry.tla` checks finite render combinations and delayed
+automatic-open signals. The `nuwa-panel-ownership.test.tsx` regression uses a
+layout effect to inspect the first committed DOM for the next project before
+its passive reconnect; the previous project's Live indicator and alert cannot
+appear there. See the [panel model bounds](../models/panels/README.md).
+
+Protocol and source tests use versioned state plus actual Registry/model HTTP, CLI and local HTTP boundaries. `internal/panelplugins/fofaworld` tests the installed compatible CLI only against a loopback fake API, with fictional credentials and no public targets. Two-batch blocking verifies actual overlap; counters and accepted receipts distinguish errors/unknown/cancellation from completion. `frontend/e2e/task-panels.spec.ts` verifies the actual bundled iframe and map without reloading on data updates. See [Task panels](TASK_PANELS.md) for the protocol and remaining native acceptance gate.
+
+The task-panel [formal model map](../models/panels/README.md) states finite bounds and the exact implementation boundaries. Current cases and guard-removal counterexamples cover operation digests/CAS, running source ownership, recovery failure isolation, overlapping GET/SSE per-panel revisions/deletions, hidden iframe resynchronization and observed HTTP result delivery before join. Every model has reachable witness cases. The independent audit regressions preserve the original failing order; protocol model success is not a SQLite atomicity, cancelled final-flush durability, wall-clock or native presentation proof.
+
+Paired mobile coverage adds `internal/remote/task_panels_test.go` and the Store transfer tests for actual sealed frames, frozen multi-chunk data during updates, exact patches, invalid scope/old cleanup, deletion and oversize refusal. `mobile/src/lib/remote-task-panels.test.ts` and `use-task-panels.test.tsx` verify complete body checks, cancellation, hidden reads, repair and PC/visit fencing. `mobile/e2e/task-panels.spec.ts` uses the same bundled plugin on Chromium/WebKit phone profiles with touch zoom, snapshot/patch identity, hidden/reopen, rotation, multiple panels and failure/version states. Tests use synthetic data; native packaged-app and physical-device acceptance remain separate. An isolated only-mobile dependency build checks that the shared plugin does not secretly need frontend node_modules. `MobileTaskPanel.tla` plus isolated client guard mutations cover the transport refinement; they do not prove arbitrary multi-panel memory or network timing.
+
+`internal/provider/leading_system_test.go` exercises real Chat and Responses
+Generate/Stream HTTP adapters. Accepted requests retain System boundaries; exact
+input refusals admit one lossless text-System compatibility retry. Authorization,
+server/unknown errors, cancellation, non-text System messages and repeated
+refusal cannot expand that budget. Engine model-JSON, midturn-output recovery and
+restart-inbox tests retain their original independent-role/roster assertions.

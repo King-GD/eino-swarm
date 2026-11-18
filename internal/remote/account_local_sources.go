@@ -91,6 +91,7 @@ func (a *AccountModels) switchableCatalogs(ctx context.Context, boot accountBoot
 			for _, cached := range a.pool.LocalAccountSources() {
 				if cached := cached.CopyForCatalogConnection(ref.sourceID, ref.apiBaseURL, token); cached != nil {
 					cached.SetCapabilities(capability)
+					cached.SetAudioParameters(nil)
 					cached.SetModelPolicy(ref.configurable, ref.defaults)
 					if ref.sameAsPreset && len(boot.roles) > 0 {
 						cached.SetRoles(boot.roles)
@@ -131,6 +132,7 @@ func (a *AccountModels) oneCatalog(ctx context.Context, token string, ref accoun
 	}
 	src.SetModelPolicy(ref.configurable, ref.defaults)
 	src.SetCatalogGroup(ref.group)
+	src.SetAudioParameters(raw)
 	return switchableSource{src: src, models: len(cat.Names), preset: ref.sameAsPreset}, catalogReady
 }
 

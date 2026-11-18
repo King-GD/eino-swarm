@@ -1029,7 +1029,9 @@ still hits. Archived conversations are filtered at query time.
 
 ## `search_chunks` — optional embedding passages
 
-Only filled when `search.embedding` is on and a model is named. One row per
+Only filled when an embedding model is configured (a functional binding, gateway
+default or legacy `search.embedding_model`). An explicit empty embedding binding
+disables it; the old `search.embedding` boolean is not an independent gate. One row per
 passage per model. Vectors are little-endian float32. A pin change deletes
 rows whose `model` is not the current name.
 

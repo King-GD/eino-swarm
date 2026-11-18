@@ -123,7 +123,7 @@ func (s *Service) Index(threadID string) {
 func (s *Service) Remove(threadID string) {}
 
 // Reload reapplies the live pin: a model change drops old vectors and
-// backfills. Turning the switch off leaves keyword search running.
+// backfills. Removing the model leaves keyword search running.
 func (s *Service) Reload() {
 	if !s.semantic() {
 		s.mu.Lock()

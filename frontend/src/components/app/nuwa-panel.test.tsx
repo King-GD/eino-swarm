@@ -103,6 +103,26 @@ describe("Nuwa shared work", () => {
     expect(screen.queryByRole("region", { name: "Latest turn in this conversation" })).toBeNull()
   })
 
+  it("paints facts and results on different backgrounds", async () => {
+    render(<NuwaPanel project={project} threadId="a" onSelectAgent={vi.fn()} />)
+    const graph = await screen.findByRole("region", { name: "Shared work collaboration graph" })
+    const card = (name: RegExp) => within(graph).getByRole("button", { name }).className
+    // A shared fill made a reported fact look like a finished result.
+    expect(card(/Node finding/)).toContain("bg-nuwa-fact-bg")
+    expect(card(/Node output/)).toContain("bg-nuwa-artifact-bg")
+    expect(card(/Node plan/)).toContain("bg-nuwa-task-bg")
+    expect(card(/Node finding/)).not.toContain("bg-nuwa-artifact-bg")
+    const tally = (kind: string) =>
+      screen.getByTestId("nuwa-panel").querySelector(`div[data-kind="${kind}"]`)
+    expect(tally("fact")?.className).toContain("bg-nuwa-fact-bg")
+    expect(tally("artifact")?.className).toContain("bg-nuwa-artifact-bg")
+    expect(tally("fact")?.className).not.toEqual(tally("artifact")?.className)
+    fireEvent.click(within(graph).getByRole("button", { name: /Node finding/ }))
+    expect(screen.getByTestId("nuwa-node-detail").className).toContain("bg-nuwa-fact-bg")
+    fireEvent.click(within(graph).getByRole("button", { name: /Node output/ }))
+    expect(screen.getByTestId("nuwa-node-detail").className).toContain("bg-nuwa-artifact-bg")
+  })
+
   it("shows reported facts separately from completed work and opens source evidence on demand", async () => {
     render(<NuwaPanel project={project} threadId="a" onSelectAgent={vi.fn()} />)
     const graph = await screen.findByRole("region", { name: "Shared work collaboration graph" })
@@ -195,7 +215,10 @@ describe("Nuwa shared work", () => {
     expect(within(graph).getAllByTestId("nuwa-loose-group")).toHaveLength(2)
     expect(within(graph).getByRole("button", { name: /loose-task/ })).toHaveAttribute("data-node-id", "loose-task")
     const artifactGroup = within(graph).getAllByTestId("nuwa-loose-group").find((group) => group.getAttribute("data-kind") === "artifact")
+    const factGroup = within(graph).getAllByTestId("nuwa-loose-group").find((group) => group.getAttribute("data-kind") === "fact")
     expect(artifactGroup).toHaveAttribute("data-count", "16")
+    expect(artifactGroup?.className).toContain("bg-nuwa-artifact-bg")
+    expect(factGroup?.className).toContain("bg-nuwa-fact-bg")
     expect(within(graph).queryByRole("button", { name: /artifact-0/ })).toBeNull()
     expect(within(graph).getAllByTestId("nuwa-edge")).toHaveLength(3)
     expect(within(graph).getAllByTestId("nuwa-goal-edge")).toHaveLength(5)
@@ -218,11 +241,19 @@ describe("Nuwa shared work", () => {
     fireEvent.click(within(path).getByTestId("nuwa-loose-group"))
     const filter = screen.getByRole("textbox", { name: "Filter Results" })
     expect(within(path).getAllByRole("button", { name: /artifact-/ })).toHaveLength(9)
+    expect(within(path).getByRole("button", { name: /artifact-3/ }).className).toContain("bg-nuwa-artifact-bg")
     fireEvent.change(filter, { target: { value: "unique-summary" } })
     expect(within(path).getByRole("button", { name: /artifact-3/ })).toBeInTheDocument()
     expect(within(path).queryByRole("button", { name: /artifact-0/ })).toBeNull()
     fireEvent.change(filter, { target: { value: "missing" } })
     expect(screen.getByText("No matching records")).toBeInTheDocument()
+  })
+
+  it("leaves an unknown collaboration kind on the ordinary card", () => {
+    render(<NuwaGraph nodes={[node("note", { kind: "note" })]} onSelect={vi.fn()} />)
+    const card = screen.getByRole("button", { name: /Node note/ })
+    expect(card.className).toContain("bg-card")
+    expect(card.className).not.toMatch(/bg-nuwa-(task|fact|artifact)-bg/)
   })
 
   it("keeps unknown states visible and exposes every cyclic graph node", () => {

@@ -639,7 +639,13 @@ back when a stored `gateway:` id has no source. In local mode that refresh also
 reads the bootstrap's same-origin third-party catalog and, when the response
 enables it, the original gateway catalog. An empty desktop catalog adopts the
 third-party catalog instead of reporting no access. Those catalogs are extra
-account sources the pool lists only while local mode is signed in. The projection exists only in
+account sources the pool lists only while local mode is signed in. The third-party
+catalog (`catalog_group:third_party`) exposes only its conversation binding in
+PC and paired-phone model choices: the server's explicit conversation default,
+or the `conversation` alias when no default is given. Other functional bindings
+remain available to their own callers, even when their transport type is `chat`.
+Original gateway catalogs retain their ordinary model-type filtering.
+The projection exists only in
 memory: `internal/config` rejects the reserved prefix in `models.providers`, and
 `models.default_source` (`account`/`provider`, migrated from the old
 default-provider rule) picks which one a new conversation starts on.
@@ -782,7 +788,9 @@ Gateway is an explicit `remote.auth_mode` alongside compatible `legacy` hubs.
 Go stages a private candidate credential before starting a Gateway flow,
 validates the Gateway-returned same-origin verification URL before publishing it
 and optionally opening the host browser, then polls with its secret device code
-and S256 proof. A missing or failed host browser does not stop polling. The
+and S256 proof. The login HTTP handler passes the launcher only on explicit
+request; the desktop shell opts in and Web does not, even on the same listener.
+A missing or failed host browser does not stop polling. The
 renderer receives safe status, the validated public link, code, fingerprint and
 account metadata; terminal status clears the link. The user can authorize a
 headless host from their own browser. Pending/rejected accounts do not
@@ -1041,7 +1049,7 @@ test clock and is imported only by tests.
 | `internal/config` | `config.yaml` under the data directory: load, normalize, detached snapshots, serialized candidate updates and atomic save, `OPENAI_*` seeding on first run. Nothing else in the tree hardcodes an endpoint or model. |
 | `internal/backup` | versioned `.zwai-backup` zip: manifest, path checks, secret switch, `VACUUM INTO` / `ATTACH` on the open pool, full replace with rollback, and project add or replace. A backup can omit conversations that are still running; restore stays idle-only. A symbolic link inside a copied tree is left out of the archive. The package reports snapshot, file, and archive progress for the settings page. The engine, HTTP routes, and CLI call it. See `C-044`. |
 | `internal/store` | gorm + pure-Go SQLite. Conversations, transcript messages, turns, the event timeline, model-call records, attachments, follow-ups waiting for the current turn, `schedules` / `schedule_runs`, conversation search (`search_docs` + FTS5 `thread_fts`, optional `search_chunks`), and `remote_devices` (phone model + last-seen keyed by pairlink fingerprint). Sidebar lists conversations and projects by `sort_rank` then last activity (`last_active_at` / `updated_at`); unranked rows interleave by activity so they cannot sit above ranked work that just ran. A drop pins ranks. Quiet standalone fires are archived out of Recents, using the kind stored when that fire was claimed. The open conversation lists wakes aimed at that thread and jobs whose fire minted it (`GET /api/threads/:id/schedules`); `origin_thread_id` is not that link. See [docs/DATA_MODEL.md](docs/DATA_MODEL.md). |
-| `internal/provider` | builds eino chat models from config, lists an endpoint's catalog (`GET {base_url}/models`), omits an endpoint switched off in Settings from the composer list, records per-call telemetry, POSTs OpenAI-compatible `/embeddings` when search is on, and provides the scripted offline provider used by `--mock` and the tests (character n-grams stand in for a real embed). The provider `timeout_seconds` bounds silence after the first byte, not the whole streamed body: a thinking model that is still emitting tokens is not cut off. `first_byte_timeout_seconds` independently bounds the wait for response headers (default 30 seconds); one fresh-connection retry retains the same wait, and its error carries the actual duration. |
+| `internal/provider` | builds eino chat models from config, lists an endpoint's catalog (`GET {base_url}/models`), omits an endpoint switched off in Settings from the composer list, records per-call telemetry, POSTs OpenAI-compatible `/embeddings` when search is on, and provides the scripted offline provider used by `--mock` and the tests (character n-grams stand in for a real embed). The provider `timeout_seconds` bounds silence after the first byte, not the whole streamed body: a thinking model that is still emitting tokens is not cut off. `first_byte_timeout_seconds` independently bounds the wait for response headers (default 30 seconds); one fresh-connection retry retains the same wait, and its error carries the actual duration. Chat and Responses requests send at most one leading system message: extra leading system sections are joined in order, and a system message after the conversation is sent in place as a user message. Stored turns keep the original separate system messages. |
 | `internal/tools` | assembles the eino-tools toolset anchored at one conversation's workspace; catalog + enable/disable rules feed the Settings UI. `BindExecOutput` is the host binder that tees `exec` stdout/stderr into `NotifyToolDelta` without the swarm library importing eino-tools. Legacy execution shortens a remaining-time `sleep` / `Start-Sleep` of five seconds or more to about a third of the estimate. Opt-in managed execution exposes turn-owned command IDs for status and progress-sensitive waiting. It keeps literal delays and converts supported polling shapes to a wait on an owned process exit. Another answers an `exec` whose `cwd` does not exist with a failed result naming the directory, before the shell starts (otherwise the OS reports the shell itself as missing); it is a result rather than a Go error because a tool error ends the turn. Every tool's model-facing result is capped at `tools.result_max_chars`, keeping head and tail around an omission notice; `exec` without its own `max_output_kb` gets a per-stream budget from that cap so its JSON stays whole. The advertised schemas omit the upstream `base_dir` parameter (relative paths resolve in the workspace, absolute paths reach anything else); a call that still sends it keeps working. |
 | `internal/mcpclient` | MCP client sessions, transport adaptation, static lazy discovery/call proxies, timeouts and connection cleanup. |
 | `internal/memory` | a project's memory as files: `MEMORY.md` notes under a character budget, `skills/<name>/SKILL.md` procedures, the manager tools (`memory`, `skill_view`, `skill_manage` including `merge`), in-memory notes drafts with revision-checked commit, the prompt sections they are rendered into, the reviewer's instruction, and the deterministic family fold that keeps one subject as one skill. A copied skill is a separate file with `origin_*` front matter so a later pull can read the source; the prompt and `skill_view` do not include that link. Owns the files; knows nothing about conversations. |
@@ -1099,7 +1107,11 @@ rebuilds the names stored with that decision.
 The first actual invocation, direct or proxied, connects under its running
 tool's cancellation context. Tools from one server share a holder, which binds
 that first entry, so later calls cannot silently reset server state. A proxied
-call accepts a discovered remote name and arguments. Paging stays at the
+call accepts a discovered remote name and arguments. Calling that remote name
+as its own function returns `tool_not_registered` and, when the frozen
+progressive catalog lists it on one server, the `call_tool` proxy that must
+receive it. The remote tool is not executed, and the other calls in that reply
+still run. Paging stays at the
 default of 10.
 
 Local commands use the captured workspace as cwd with the application's normal
@@ -1173,6 +1185,13 @@ Cancellation releases a probe without clearing the failure streak. A caller
 abandoning a stream must cancel its request context: closing the Eino reader
 alone does not interrupt the SDK's blocked receive. Stop cancels that context.
 Settings invalidate clients, not gates.
+Account capability checks reuse the tracked request's admission and source-policy
+hold. Per-agent telemetry keeps that same gate identity, so a cancelled cooldown
+records only the wait and never an HTTP call. Capability revocation is still
+checked before admission on every request.
+`models/provider/CapabilityAdmission.tla` checks this composition boundary,
+including the historical nil-gate wrapper and a nil-guard-only accounting fault.
+Its finite safety model is paired with the actual Pool/HTTP regressions.
 The adapter's one header-timeout reconnect releases its failed permit and
 waits at the same gate before resending. Response-header budgets start at the
 actual HTTP attempt, after admission; the caller's context still bounds the whole
@@ -1229,7 +1248,9 @@ Each project turn loads `projects.system_prompt` into the manager's system
 prompt. For a human-initiated project turn outside planning, the engine gives
 the manager a project-bound `update_project_description` tool. Its SQLite
 write compares the description seen by that turn and checks the running
-turn's current project membership. A later turn loads the committed value.
+turn's current project membership. The success result contains the saved
+description. This turn has no separate tool for reading it back. A later
+turn loads the committed value.
 The project settings editor reads the current record when opened and omits an
 untouched description from its patch.
 
@@ -2862,3 +2883,29 @@ them as cloud activity, and Trace / `zwai trace <turn>` retain the full receipt.
 This provider adapter adds no database table or engine-owned execution of the
 provider's cloud calls. See `C-030`
 in [current contracts](docs/CONTRACTS.md).
+
+## Bundled task panels
+
+The desktop and Web inspector resolves registered entries against the active
+project or conversation and uses the result to render both the tab and its
+content. Nuwa is a project-owned React entry gated by mode or retained history;
+it uses the existing project GET/SSE and mounts when selected. The conversation
+Task panels entry groups agent-opened iframe instances and keeps them mounted
+behind other tabs. The host registry controls presentation; the embedded
+HTML/JS plugin catalog remains the source for builds and Agent tools. The paired
+phone continues to use its conversation panel surface and does not register the
+Nuwa graph.
+
+`internal/taskpanel` defines the versioned state protocol; `internal/store/task_panels.go` persists conversation-owned projections and a separate delivery journal. Runtime tools provide trusted provenance and bounded producer publication. Repository HTML/JS plugins under `frontend/src/task-panels` own their layout and run in dedicated opaque-origin iframes through an acknowledged SDK channel. The FOFA example producer uses CLI batches and locally owned HTTP checks; no asset fields enter the generic host protocol. See [Task panels](docs/TASK_PANELS.md), `F-137` and `C-050`.
+
+The paired phone bundles the same plugin documents and `TaskPanelFrame` host.
+`mobile/src/lib/use-task-panels.ts` polls small manifests over the existing
+sealed link and reads a complete snapshot or exact-base patch through
+`internal/remote/task_panels.go`. Each connection owns one immutable transfer;
+36KiB raw chunks keep the complete envelope under the sealed frame limit.
+Scope/revision/hash validation precedes application, newer manifests do not
+cancel an in-flight body, and old cleanup cannot remove a successor. The phone
+never fetches PC HTTP or HTML and never starts the source. A full-screen sheet
+retains its iframe and zoom when hidden; PC/thread/data-generation changes fence
+old results. See the finite `models/panels/MobileTaskPanel.tla` refinement and
+the same `C-050` contract.

@@ -102,8 +102,9 @@ export async function startSpeechRecording(options: SpeechRecordingOptions): Pro
       if (failure) { reject(failure); return }
       const blob = new Blob(chunks, { type })
       if (!blob.size) { reject(new Error("The recording contains no audio.")); return }
-      // WebKit records AAC in MP4; normalize it for ASR container compatibility.
-      if (options.format === "wav" || /^(audio|video)\/mp4(?:;|$)/i.test(type)) {
+      // Browsers also record WebM/Opus (including newer WebKit). ASR services
+      // need an interoperable container regardless of the recorder's choice.
+      if (options.format === "wav" || /^(audio|video)\/(?:mp4|webm|ogg)(?:;|$)/i.test(type)) {
         void recordingWAV(blob).then((wav) => {
           if (cancelled || options.signal.aborted) reject(aborted())
           else if (wav.size > options.maxBytes) reject(new Error("The WAV recording exceeds the configured audio limit."))
@@ -146,7 +147,7 @@ export async function startSpeechRecording(options: SpeechRecordingOptions): Pro
   }
 }
 
-/** Convert an actual captured container to mono PCM WAV for local ASR. */
+/** Convert an actual captured container to mono PCM WAV for ASR. */
 async function recordingWAV(blob: Blob): Promise<Blob> {
   const context = new AudioContext()
   try {

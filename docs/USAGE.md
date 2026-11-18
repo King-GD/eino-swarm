@@ -9,7 +9,7 @@ behavior boundaries in [FEATURES](FEATURES.md) and [CONTRACTS](CONTRACTS.md).
 
 Configure **Settings → Models** on the PC. Voice input and spoken answers have
 separate switches, both initially off. Managed gateway mode reuses the account's
-enabled recognition/speech roles; editable gateways allow functional overrides. In local mode choose a service and its voice
+enabled recognition/speech roles; editable gateways allow functional overrides. In local mode, voice source account uses the signed-in account's enabled recognition or speech role. You can instead choose a service and its voice
 model, or configure a separate OpenAI-compatible endpoint. Select the recognition
 language, recording limit and, for playback, voice, speed and audio format.
 Try recording or playback in Settings to check the selected service.
@@ -116,10 +116,14 @@ stop the conversation.
 See [Configuration](CONFIG.md).
 
 **Settings → Models → Functional models** selects conversation, title, compression,
-embedding, recognition, spoken-answer and OCR models. The decisions role is a
+translation, embedding, recognition, spoken-answer, OCR and image-generation
+models. Image generation uses the same selector; this client does not call it
+yet, and a choice is kept. The decisions role is a
 background call and is not listed. Unchanged gateway
 roles follow updated server defaults. An explicit choice stays until **Use default**
-removes it. LOCAL works without login and uses your configured models plus any separately authorized account catalogs.
+removes it. In LOCAL the menu groups models you can already use: the signed-in
+gateway, an authorized third-party catalog, and providers configured on this
+computer. A group appears only when that source has a model for the function.
 
 In local mode, **Settings → Models** also edits base URL, API key, discovery
 and the default. The switch on a provider row shows that endpoint in the composer; off hides it
@@ -213,8 +217,9 @@ been sent yet drops immediately.
 Select text in the transcript, a sub-agent's log, or the terminal and **Add
 to chat**. It works while a turn is streaming. The snippet is a count chip —
 hover to read, edit, or drop it — and is sent in `<selected_text>` beside
-`<user_request>`. On the phone, the same action sits near the selection. The
-phone's selected text appears above the message box. Terminal selections
+`<user_request>`. On the phone, the same action sits near a selection in the
+transcript or in expanded thinking text. The phone's selected text appears
+above the message box. Terminal selections
 include their source tab, conversation or project, initial directory and
 shell, and they go into the current composer even when the terminal belongs
 to another conversation. Only selected text is included. The initial directory
@@ -412,8 +417,9 @@ markdown URL opens in a new browser tab (`zwai web`) or the system browser
 
 A `mermaid` fence renders a diagram in desktop and Web conversations, tool
 output, and Markdown file previews. Incomplete live fences, invalid diagrams,
-and diagrams that require external image or CSS resources keep readable source.
-The phone opens Mermaid as a fit-to-width diagram. See the
+diagrams that require external image or CSS resources, and diagrams whose
+rendered SVG exceeds the paint budget keep readable source. The phone opens
+Mermaid as a fit-to-width diagram under that same budget. See the
 [phone guide](../mobile/README.md).
 
 When numbers are easier to see as a comparison, the manager can emit a `chart`
@@ -890,9 +896,9 @@ supports this explicit switch. Switching closes the old phone page/connection.
 
 The circular **Account** button at the bottom of the left rail opens the
 account menu, even when the conversation list is hidden. **Sign in with
-Gateway** starts sign-in in its own account dialog and optionally opens the host
-browser. For a NAS, container or other headless host, choose **Open sign-in page**
-or copy the displayed link into your own browser. Missing host browser support
+Gateway** starts sign-in in its own account dialog. The desktop app can open the
+system browser. In Web, including a NAS, container or other headless host, choose
+**Open sign-in page** or copy the displayed link into your own browser. Missing host browser support
 does not stop authorization polling. Opening the menu does not start sign-in. Compare the public code and the PC fingerprint
 before authorizing the device. Explicit sign-in enables Gateway and phone
 connections and preserves your configured Hub and other settings. The address

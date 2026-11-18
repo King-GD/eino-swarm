@@ -6,13 +6,15 @@ import type { SpeechAudioStream } from "./speech-stream"
 afterEach(() => { speechPlayback.stop(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe("speech media ownership", () => {
-  it.each(["auto", "wav"] as const)("converts a complete iPhone MP4 recording to interoperable WAV in %s mode", async (format) => {
+  it.each((["auto", "wav"] as const).flatMap(format =>
+    ["audio/mp4;codecs=mp4a.40.2", "audio/webm; codecs=opus", "audio/ogg;codecs=opus"].map(mime => ({ format, mime }))))(
+    "converts the complete $mime recording to interoperable WAV in $format mode", async ({ format, mime }) => {
     vi.stubGlobal("Blob", NodeBlob)
     const trackStop = vi.fn()
     let recorder!: Recorder
     class Recorder {
-      static isTypeSupported(type: string) { return type === "audio/mp4" }
-      mimeType = "audio/mp4;codecs=mp4a.40.2"
+      static isTypeSupported(type: string) { return type.split(";")[0] === mime.split(";")[0] }
+      mimeType = mime
       state = "inactive"
       ondataavailable?: (event: { data: Blob }) => void
       onstop?: () => void

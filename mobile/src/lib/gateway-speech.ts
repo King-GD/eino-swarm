@@ -1,9 +1,14 @@
+import { parseAudioDescriptor, type AudioDescriptor } from "../../../frontend/src/lib/audio-parameters"
 import { capabilityAllows } from "../../../frontend/src/lib/capabilities"
 import { defaultSpeechSettings, type SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
 import type { GatewayBootstrap, GatewaySession } from "./gateway-account"
 
 export type GatewayVoiceModels = Record<string, Partial<Record<"transcription" | "speech", string>>>
+export type GatewayAudioParameters = Record<string, Record<string, AudioDescriptor>>
 const roles = ["transcription", "speech"] as const
+// Keep an automatic stream segment well within the default request deadline.
+// Explicit PC/personal settings still supply their own limits.
+const automaticSpeechChunkChars = 200
 const name = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value)
 
 function sources(bootstrap: GatewayBootstrap) {
@@ -20,7 +25,7 @@ function defaultModel(bootstrap: GatewayBootstrap, kind: "preset" | "gateway", r
 
 /** Only an authorized typed catalog can supply a missing default. Names and
  * credentials are never inferred from a PC or a model's spelling. */
-export async function discoverGatewayVoiceModels(bootstrap: GatewayBootstrap, read: (url: string) => Promise<unknown>): Promise<GatewayVoiceModels> {
+export async function discoverGatewayVoiceModels(bootstrap: GatewayBootstrap, read: (url: string) => Promise<unknown>, parameters: GatewayAudioParameters = {}): Promise<GatewayVoiceModels> {
   const result: GatewayVoiceModels = {}
   await Promise.all(sources(bootstrap).map(async ({ kind, descriptor }) => {
     if (!descriptor) return
@@ -31,10 +36,20 @@ export async function discoverGatewayVoiceModels(bootstrap: GatewayBootstrap, re
       if (model) selected[role] = model
     }
     const missing = roles.filter(role => capabilityAllows(capability, role) && !selected[role])
-    if (missing.length) {
+    const managed = roles.some(role => capabilityAllows(capability, role) && capability?.capabilities[role]?.audio_parameters_version === 1)
+    if (missing.length || managed) {
       try {
-        const data = await read(kind === "preset" ? bootstrap.models.client_catalog_url ?? descriptor.catalog_url : descriptor.catalog_url)
-        if (!Array.isArray(data)) throw new Error("invalid_gateway_catalog")
+        const url = kind === "preset" ? bootstrap.models.client_catalog_url : descriptor.catalog_url
+        if (!url && managed) throw new Error("invalid_gateway_catalog")
+        const raw = await read(url ?? descriptor.catalog_url)
+        const data = Array.isArray(raw) ? raw : raw && typeof raw === "object" && "id" in raw ? [raw] : undefined
+        if (!data) throw new Error("invalid_gateway_catalog")
+        if (managed) {
+          parameters[descriptor.source_id] = {}
+          for (const row of data.slice(0,1000)) if (row && name(row.id) && roles.includes(row.model_type) && capabilityAllows(capability, row.model_type) && capability?.capabilities[row.model_type as typeof roles[number]]?.audio_parameters_version === 1) {
+            parameters[descriptor.source_id][row.id] = parseAudioDescriptor(row.audio, row.model_type)
+          }
+        }
         for (const role of missing) {
           const row = data.slice(0, 1000).find(row => row && row.model_type === role && name(row.id))
           if (row) selected[role] = row.id
@@ -62,9 +77,9 @@ export async function discoverGatewayVoiceModels(bootstrap: GatewayBootstrap, re
 export function gatewayVoiceSnapshot(session: GatewaySession, bootstrap: GatewayBootstrap): SpeechSnapshot {
   const defaults = defaultSpeechSettings()
   const snapshot: SpeechSnapshot = {
-    execution: "gateway", gateway_origin: session.origin, limits: defaults.limits,
+    execution: "gateway", gateway_origin: session.origin, limits: { ...defaults.limits, chunk_chars: automaticSpeechChunkChars },
     input: { ...defaults.input, enabled: false, ready: false, label: "" },
-    output: { ...defaults.output, enabled: false, ready: false, label: "" },
+    output: { ...defaults.output, format: "pcm", enabled: false, ready: false, label: "" },
   }
   for (const role of roles) {
     for (const { kind, descriptor } of sources(bootstrap)) {

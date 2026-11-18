@@ -24,33 +24,51 @@ const (
 // Embed turns texts into vectors on the named embedding model. The scripted
 // pool never leaves the process: it hashes character n-grams so --mock and
 // the tests still exercise semantic ranking.
+//
+// Admission covers only the source lookup. A mode save starts a semantic
+// backfill of every conversation, and holding the gate across those HTTP
+// calls makes the reverse switch return busy until the backfill finishes.
+// The copied provider keeps the endpoint this request already resolved.
 func (p *Pool) Embed(ctx context.Context, providerID, model string, texts []string) ([][]float32, error) {
-	release, err := p.BeginModelUse()
-	if err != nil {
+	prov, name, call, err := p.prepareEmbedding(providerID, model, texts)
+	if err != nil || !call {
 		return nil, err
-	}
-	defer release()
-	if len(texts) == 0 {
-		return nil, nil
 	}
 	if p.mock {
 		return NgramEmbed(texts), nil
 	}
+	return fetchEmbeddings(ctx, prov, name, texts)
+}
+
+// prepareEmbedding resolves the embedding endpoint while model admission is
+// held, then releases it before the caller performs the request.
+func (p *Pool) prepareEmbedding(providerID, model string, texts []string) (config.Provider, string, bool, error) {
+	release, err := p.BeginModelUse()
+	if err != nil {
+		return config.Provider{}, "", false, err
+	}
+	defer release()
+	if len(texts) == 0 {
+		return config.Provider{}, "", false, nil
+	}
+	if p.mock {
+		return config.Provider{}, "", true, nil
+	}
 	if err := p.validateModelSelection(providerID, model); err != nil {
-		return nil, err
+		return config.Provider{}, "", false, err
 	}
 	prov, err := p.Resolve(providerID)
 	if err != nil {
-		return nil, err
+		return config.Provider{}, "", false, err
 	}
 	if !prov.EndpointReady() {
-		return nil, fmt.Errorf("provider: %q has no base_url; open Settings and finish setting it up", prov.ID)
+		return config.Provider{}, "", false, fmt.Errorf("provider: %q has no base_url; open Settings and finish setting it up", prov.ID)
 	}
 	name := strings.TrimSpace(model)
 	if name == "" {
-		return nil, fmt.Errorf("provider: an embedding model name is required")
+		return config.Provider{}, "", false, fmt.Errorf("provider: an embedding model name is required")
 	}
-	return fetchEmbeddings(ctx, prov, name, texts)
+	return prov, name, true, nil
 }
 
 type embedRequest struct {

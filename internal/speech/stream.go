@@ -44,19 +44,7 @@ func (s *Service) SynthesizeStream(ctx context.Context, text string) (*AudioStre
 		return nil, failure("speech_invalid_text", 400)
 	}
 	output := selected.settings.Output
-	body := map[string]any{"model": selected.target.Model, "input": text, "response_format": output.Format, "speed": output.Speed}
-	if output.Format == "pcm" {
-		body["stream_format"] = "audio"
-		if strings.HasPrefix(selected.target.ID, config.AccountSourcePrefix) {
-			body["stream_format"] = "sse"
-		}
-	}
-	if output.Voice != "" {
-		body["voice"] = output.Voice
-	}
-	if output.Instructions != "" {
-		body["instructions"] = output.Instructions
-	}
+	body := speechBody(selected, text, true)
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return nil, failure("speech_invalid_input", 400)
@@ -157,6 +145,17 @@ func (s *Service) performStream(ctx context.Context, selected selection, path, c
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if s.pool != nil && strings.HasPrefix(selected.target.ID, config.AccountSourcePrefix) {
 			s.pool.NotifyCapabilityRejection(resp.StatusCode)
+		}
+		var envelope struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+		_ = json.Unmarshal(raw, &envelope)
+		if selected.audio != nil && (envelope.Error.Code == "invalid_audio_parameter" || envelope.Error.Code == "audio_parameters_changed") {
+			s.pool.NotifyAudioParametersChanged()
+			return nil, failure(envelope.Error.Code, 409)
 		}
 		status, code := 502, "speech_upstream_error"
 		switch resp.StatusCode {

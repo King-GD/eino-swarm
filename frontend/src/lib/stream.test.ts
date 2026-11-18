@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { KINDS, subscribeEvents } from "./stream"
 import type { EventKind } from "./types"
+import { subscribeTaskPanelEvents } from "./task-panel-events"
 
 /** A stand-in for the browser's EventSource that records what was subscribed
  *  to and can deliver a named event. */
@@ -10,7 +11,7 @@ class FakeEventSource {
   static readonly CLOSED = 2
   readyState = 1
   onopen: (() => void) | null = null
-  onerror: (() => void) | null = null
+  onerror: ((event?: Event) => void) | null = null
   closed = false
   listeners = new Map<string, (e: MessageEvent) => void>()
 
@@ -27,10 +28,9 @@ class FakeEventSource {
   }
 
   deliver(kind: string, data: unknown) {
-    this.listeners.get(kind)?.({
-      type: kind,
-      data: JSON.stringify(data),
-    } as MessageEvent)
+    const event = new MessageEvent(kind, { data: JSON.stringify(data) })
+    this.listeners.get(kind)?.(event)
+    if (kind === "error") this.onerror?.(event)
   }
 }
 
@@ -108,9 +108,42 @@ const wireKinds: EventKind[] = [
 ]
 
 describe("the event stream", () => {
+  it("keeps panel transport connected on a named model error but disconnects on network error", () => {
+    const onEvent = vi.fn(), panelEvent = vi.fn()
+    const stopPanel = subscribeTaskPanelEvents("model-error", panelEvent)
+    const stop = subscribeEvents("model-error", { onEvent })
+    const source = FakeEventSource.last
+    source.onopen?.()
+    source.deliver("error", { kind: "error", seq: 4, err: "model failure" })
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ kind: "error", seq: 4 }))
+    expect(panelEvent).toHaveBeenLastCalledWith({ kind: "connection", connected: true })
+    source.onerror?.(new Event("error"))
+    expect(panelEvent).toHaveBeenLastCalledWith({ kind: "connection", connected: false })
+    stop(); stopPanel()
+  })
+  it("shares panel updates without consuming transcript events or another connection", () => {
+    const onEvent = vi.fn(), panelEvent = vi.fn()
+    const stopPanel = subscribeTaskPanelEvents("multiplex", panelEvent)
+    const stop = subscribeEvents("multiplex", { onEvent })
+    const source = FakeEventSource.last
+    source.onopen?.()
+    source.deliver("panel_ready", { panels: [], cursor: 17 })
+    source.deliver("panel_update", { thread_id: "multiplex", panel_id: "p", cursor: 18, revision: 2, kind: "snapshot", state: { count: 3 }, seq: 999 })
+    source.deliver("panel_error", { error: "private failure body" })
+    expect(source.url).toBe("/api/threads/multiplex/events?panels=1")
+    expect(onEvent).not.toHaveBeenCalled()
+    expect(panelEvent).toHaveBeenCalledWith({ kind: "ready", panels: [], cursor: 17 })
+    expect(panelEvent).toHaveBeenCalledWith(expect.objectContaining({ kind: "update" }))
+    expect(panelEvent).toHaveBeenCalledWith({ kind: "error", error: "Panel state unavailable" })
+    stop()
+    const count = panelEvent.mock.calls.length
+    source.deliver("panel_ready", { panels: [], cursor: 99 })
+    expect(panelEvent).toHaveBeenCalledTimes(count)
+    stopPanel()
+  })
   it("subscribes to every kind the server sends", () => {
     subscribeEvents("th_1", { onEvent: vi.fn() })
-    expect([...FakeEventSource.last.listeners.keys()]).toEqual([...KINDS, "ready"])
+    expect([...FakeEventSource.last.listeners.keys()]).toEqual([...KINDS, "ready", "panel_ready", "panel_update", "panel_error"])
     for (const kind of wireKinds) {
       expect(KINDS).toContain(kind)
       expect(FakeEventSource.last.listeners.has(kind)).toBe(true)
@@ -187,7 +220,7 @@ describe("the event stream", () => {
 
   it("resumes from where the app left off", () => {
     subscribeEvents("th_1", { onEvent: vi.fn() }, 12)
-    expect(FakeEventSource.last.url).toBe("/api/threads/th_1/events?since=12")
+    expect(FakeEventSource.last.url).toBe("/api/threads/th_1/events?since=12&panels=1")
   })
 
   it("closes the connection when the caller unsubscribes", () => {

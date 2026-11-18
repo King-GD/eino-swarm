@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/LubyRuffy/eino-swarm/internal/audioparams"
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 )
 
@@ -28,6 +29,7 @@ var ErrAccountModelsUnavailable = errors.New("server models are unavailable for 
 // carries exists only so this package can call the server: no accessor hands
 // it out, and every printable form hides it.
 type AccountSource struct {
+	audio        map[string]audioparams.Descriptor
 	negotiated   bool
 	capabilities *SourceCapabilities
 	catalogGroup string
@@ -204,8 +206,17 @@ func (s *AccountSource) conversationalNames() []string {
 		}
 		return nil
 	}
+	// A third-party catalog lists functional bindings, even when several use
+	// the chat protocol. Only its conversation binding is a model choice.
+	conversation := s.defaults["conversation"]
+	if conversation == "" {
+		conversation = "conversation"
+	}
 	out := make([]string, 0, len(s.names))
 	for _, name := range s.names {
+		if s.catalogGroup == "third_party" && name != conversation {
+			continue
+		}
 		if conversationalModelType(s.types[name]) {
 			out = append(out, name)
 		}
@@ -451,7 +462,7 @@ func (s *AccountSource) equal(o *AccountSource) bool {
 	if s == nil || o == nil {
 		return s == o
 	}
-	if s.catalogGroup != o.catalogGroup {
+	if s.catalogGroup != o.catalogGroup || !reflect.DeepEqual(s.audio, o.audio) {
 		return false
 	}
 	if s.negotiated != o.negotiated || !reflect.DeepEqual(s.capabilities, o.capabilities) {

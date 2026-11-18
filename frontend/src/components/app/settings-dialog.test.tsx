@@ -8,6 +8,7 @@ import { defaultAppearance } from "@/lib/appearance"
 import { defaultSpeechSettings } from "@/lib/speech-types"
 import { defaultRemoteSettings, type Meta, type RemoteStatus, type Settings } from "@/lib/types"
 import { useApp } from "@/store/app"
+import { gatewayVoicePolicy } from "@/test/gateway-policy"
 
 class ResizeObserverStub {
   observe() {}
@@ -15,6 +16,10 @@ class ResizeObserverStub {
   disconnect() {}
 }
 vi.stubGlobal("ResizeObserver", ResizeObserverStub)
+
+// These cases verify Settings persistence. Capability discovery has a separate
+// lifecycle and must not be mistaken for speech-model discovery.
+vi.mock("@/lib/refresh-capabilities", () => ({ refreshCapabilities: vi.fn(async () => {}) }))
 
 vi.mock("@/lib/api", () => ({
   api: {
@@ -140,7 +145,7 @@ describe("Settings dialog", () => {
     const speech = defaultSpeechSettings()
     speech.input = { ...speech.input, source: "custom", base_url: "http://private-speech.invalid/v1", model: "private-speech-model", has_api_key: true }
     speech.output = { ...speech.output, source: "custom", base_url: "http://private-speech.invalid/v1", has_api_key: true }
-    const model_policy = { mode: "gateway" as const, configurable: false, ready: true, scope: "gateway:managed" }
+    const model_policy = gatewayVoicePolicy()
     vi.mocked(api.settings).mockResolvedValue({ ...base, speech, model_policy })
     useApp.setState({ meta: { product_mode: "fofa", account_models, model_policy } as Meta })
     renderDialog({ initialSection: "speech" })
@@ -157,7 +162,7 @@ describe("Settings dialog", () => {
   })
 
   it("keeps Models and personal providers available for a configurable Gateway account", async () => {
-    const model_policy = { mode: "gateway" as const, configurable: true, ready: true, scope: "gateway:ordinary" }
+    const model_policy = gatewayVoicePolicy(true)
     vi.mocked(api.settings).mockResolvedValue({ ...base, model_policy })
     useApp.setState({ meta: { product_mode: "fofa", model_policy } as Meta })
     renderDialog({ initialSection: "models" })
@@ -234,7 +239,9 @@ describe("Settings dialog", () => {
   })
 
   it("saves voice switches through the independent Speech page", async () => {
-    useApp.setState({ meta: { product_mode: "fofa" } as Meta })
+    const model_policy = gatewayVoicePolicy()
+    vi.mocked(api.settings).mockResolvedValue({ ...base, model_policy })
+    useApp.setState({ meta: { product_mode: "fofa", model_policy } as Meta })
     renderDialog({ initialSection: "speech" })
     await screen.findByRole("heading", { name: "Voice input" })
     fireEvent.click(screen.getAllByLabelText("Enabled")[0])
@@ -245,16 +252,13 @@ describe("Settings dialog", () => {
     expect(patch.models).toBeUndefined()
   })
 
-  it("saves voice switches through the independent Speech page", async () => {
+  it("withholds Gateway voice controls until its capabilities are verified", async () => {
     useApp.setState({ meta: { product_mode: "fofa" } as Meta })
     renderDialog({ initialSection: "speech" })
-    await screen.findByRole("heading", { name: "Speech" })
-    fireEvent.click(screen.getAllByLabelText("Enabled")[0])
-    await waitFor(() => expect(api.saveSettings).toHaveBeenCalled())
-    const patch = vi.mocked(api.saveSettings).mock.lastCall![0]
-    expect(patch.speech?.input.enabled).toBe(true)
-    expect(patch.speech?.output.enabled).toBe(false)
-    expect(patch.models).toBeUndefined()
+    await screen.findByRole("tab", { name: "General" })
+    expect(screen.queryByRole("tab", { name: "Speech" })).toBeNull()
+    expect(screen.queryByRole("heading", { name: "Voice input" })).toBeNull()
+    expect(api.saveSettings).not.toHaveBeenCalled()
   })
 
   it("drains an earlier save before account login and does not rewrite enabled account settings", async () => {

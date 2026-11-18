@@ -22,6 +22,13 @@ over one concurrency-safe registry:
 | `close_agent(agent_id)` | cancel a **still-running** agent. A leftover finished id returns `{"cancelled": false, "already_finished": true}` instead of pretending it was cancelled. An unknown `agent_id` returns `{"error": …}` instead of a Go error. |
 | `resume_agent(agent_id, task)` | continue a finished or failed worker **in place** under the same `agent_id`, seeded with that worker's conversation; the way to continue one particular id, such as one of several leftover workers sharing a role. Returns `{"agent_id": …, "resumed_from": …}` with the same id. A missing id or task, a still-running target, or a full concurrency cap returns `{"error": …}` (`send_message` instead of resume while running; wait for a free slot when the cap is full). The tool does not queue past the cap. `Registry.Resume` still queues. Survives `Stats()` pruning the live handle. Do not `spawn_agent` a second worker with the same role to replace one that failed. |
 
+A function name that is not in the current tool list returns
+`{"ok":false,"code":"tool_not_registered","tool":…}` and does not fail the
+agent. Other calls in that same reply still run. `WithRemoteToolRoutes` can
+record that the name is one remote catalog tool; the result then names the
+`call_tool` proxy which must receive it, and the call is not executed. A name
+listed by more than one server does not select a proxy.
+
 Give sub-agents `SendTool()` as well and any agent can message any other (a mesh
 rather than a star).
 

@@ -26,7 +26,7 @@ it("discovers typed voice models without requiring PC switches or guessing from 
   expect(read).toHaveBeenCalledOnce()
   expect(read).toHaveBeenCalledWith(session.origin+"/client/models/v1/preset/models")
   expect(speech.input).toMatchObject({enabled:true,ready:true,model:"recognized",source_id:"gateway:preset"})
-  expect(speech.output).toMatchObject({enabled:true,ready:true,model:"spoken",source_id:"gateway:preset"})
+  expect(speech.output).toMatchObject({enabled:true,ready:true,model:"spoken",source_id:"gateway:preset",format:"pcm"})
   const configured={...speech,input:{...speech.input,execution:"pc_local" as const,gateway_origin:undefined,enabled:true,model:"personal-asr",ready:true}}
   const selected=selectPhoneSpeech(speech,configured,false,true,()=>true)
   expect(selected.owners).toEqual({input:"pc",output:"gateway"})
@@ -35,6 +35,19 @@ it("discovers typed voice models without requiring PC switches or guessing from 
   const offline=selectPhoneSpeech(speech,configured,false,false,()=>true)
   expect(offline.snapshot!.input.ready).toBe(false)
   expect(offline.snapshot!.output.ready).toBe(true)
+})
+
+it("uses incremental audio for automatic Gateway voice while retaining explicit PC output settings",()=>{
+  const boot=bootstrap()
+  boot.models.defaults={speech:"spoken"}
+  const automatic=gatewayVoiceSnapshot(session,boot)
+  expect(automatic.output.format).toBe("pcm")
+  expect(automatic.limits.chunk_chars).toBe(200)
+  const preferred={...automatic,output:{...automatic.output,format:"mp3" as const},limits:{...automatic.limits,chunk_chars:800}}
+  const selected=selectPhoneSpeech(automatic,preferred,false,true,()=>true)
+  expect(selected.snapshot!.output.format).toBe("mp3")
+  expect(selected.snapshot!.limits.chunk_chars).toBe(800)
+  expect(selectPhoneSpeech(automatic,undefined,false,false,()=>true).snapshot!.output.format).toBe("pcm")
 })
 
 it("keeps source grants independent and refuses cached voice after source authorization is removed",async()=>{

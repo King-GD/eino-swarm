@@ -1,7 +1,8 @@
 import { writeFileSync } from "node:fs"
 import path from "node:path"
 import react from "@vitejs/plugin-react"
-import { defineConfig } from "vite"
+import { build, defineConfig } from "vite"
+import { taskPanelBuild } from "./task-panel-build"
 
 function keepEmbedSentinel() {
   return {
@@ -14,7 +15,7 @@ function keepEmbedSentinel() {
 }
 
 export default defineConfig({
-  plugins: [react(), keepEmbedSentinel()],
+  plugins: [react(), taskPanelBuild(__dirname, build), keepEmbedSentinel()],
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },
   },

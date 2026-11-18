@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	swarm "github.com/LubyRuffy/eino-swarm"
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/mcpclient"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
@@ -448,5 +449,156 @@ func TestCachedCatalogMountsDirectlyWithoutDialing(t *testing.T) {
 	_, empty, err := e.resolveMCPSurface(t.Context(), &store.Turn{ID: "tn_empty"}, set)
 	if err != nil || empty.Mode != "progressive" || len(empty.Servers) != 0 {
 		t.Fatalf("empty server list %+v %v", empty, err)
+	}
+}
+
+func TestProgressiveRoutesIdentifyOneServerAndDropASharedOrDisabledName(t *testing.T) {
+	e := newTestEngine(t)
+	schema := map[string]any{"type": "object"}
+	one := config.MCPServer{ID: "one", Name: "One", Transport: "streamable_http", URL: "http://127.0.0.1:9", Enabled: true, DisabledTools: []string{"disabled_record"}}
+	two := config.MCPServer{ID: "two", Name: "Two", Transport: "streamable_http", URL: "http://127.0.0.1:9", Enabled: true}
+	direct := config.MCPServer{ID: "direct", Name: "Direct", Transport: "streamable_http", URL: "http://127.0.0.1:8", Enabled: true}
+	if err := mcpclient.SaveCatalog(e.cfg.DataDir(), one, mcpclient.Catalog{ServerID: one.ID, Tools: []mcpclient.ToolDescriptor{
+		{Name: "only_record", OriginalName: "only_record", InputSchema: schema},
+		{Name: "shared_record", OriginalName: "shared_record", InputSchema: schema},
+		{Name: "disabled_record", OriginalName: "disabled_record", InputSchema: schema},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mcpclient.SaveCatalog(e.cfg.DataDir(), two, mcpclient.Catalog{ServerID: two.ID, Tools: []mcpclient.ToolDescriptor{
+		{Name: "shared_record", OriginalName: "shared_record", InputSchema: schema},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mcpclient.SaveCatalog(e.cfg.DataDir(), direct, mcpclient.Catalog{ServerID: direct.ID, Tools: []mcpclient.ToolDescriptor{
+		{Name: "direct_record", OriginalName: "direct_record", InputSchema: schema},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	e.cfg.MCP.Servers = []config.MCPServer{one, two, direct}
+	routes := e.routesForMount(mcpMountRecord{Servers: []mcpMountServer{
+		{ID: "one", Mode: "progressive"},
+		{ID: "two", Mode: "progressive"},
+		{ID: "direct", Mode: "direct"},
+	}})
+	_, callOne := mcpclient.ProxyNames(one.ID)
+	if routes["only_record"] != callOne || routes["shared_record"] != "" {
+		t.Fatalf("routes %+v", routes)
+	}
+	if _, ok := routes["disabled_record"]; ok {
+		t.Fatal("disabled name stayed routable")
+	}
+	if _, ok := routes["direct_record"]; ok {
+		t.Fatal("directly mounted name stayed routable as a proxy")
+	}
+}
+
+func TestCallingAProgressiveCatalogNameReturnsTheProxy(t *testing.T) {
+	server, calls := engineMCPFixture(t)
+	_, callName := mcpclient.ProxyNames(server.ID)
+	var e *Engine
+	e, _ = newScheduleCompletionHTTPEngine(t, func(w http.ResponseWriter, _ *http.Request, step int, request scheduleCompletionRequest) {
+		switch step {
+		case 1:
+			writeContextFlowReply(w, request.Stream, map[string]any{"tool_calls": []any{
+				map[string]any{"index": 0, "id": "local-call", "type": "function", "function": map[string]any{"name": "list_tasks", "arguments": "{}"}},
+				map[string]any{"index": 1, "id": "remote-call", "type": "function", "function": map[string]any{"name": "inspect_record", "arguments": `{"token":"secret"}`}},
+			}}, "tool_calls")
+		default:
+			var result string
+			var local bool
+			for _, msg := range request.Messages {
+				if msg == nil || msg.Role != "tool" {
+					continue
+				}
+				if msg.ToolCallID == "remote-call" {
+					result = msg.Content
+				}
+				if msg.ToolCallID == "local-call" && strings.Contains(msg.Content, "self_thread_id") {
+					local = true
+				}
+			}
+			if !local || !strings.Contains(result, `"code":"tool_not_registered"`) || !strings.Contains(result, `"call_tool":"`+callName+`"`) || strings.Contains(result, "secret") {
+				t.Errorf("local=%t remote result=%s", local, result)
+			}
+			writeContextFlowReply(w, request.Stream, map[string]any{"content": "The catalog name was not a function."}, "stop")
+		}
+	})
+	if err := mcpclient.SaveCatalog(e.cfg.DataDir(), server, mcpclient.Catalog{ServerID: server.ID, Tools: []mcpclient.ToolDescriptor{{
+		Name: "inspect_record", OriginalName: "inspect_record", Description: "Inspect external evidence", InputSchema: map[string]any{"type": "object"},
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	e.cfg.MCP.DirectLoadPercent = 0
+	e.cfg.MCP.Servers = []config.MCPServer{server}
+	thread, err := e.CreateThread("Progressive catalog name", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn, err := e.StartTurn(thread.ID, "Check the external record.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	finished := waitForTurn(t, e, turn.ID)
+	if finished.Status != store.TurnDone || calls.Load() != 0 {
+		t.Fatalf("status=%s calls=%d err=%q", finished.Status, calls.Load(), finished.Error)
+	}
+}
+
+// Progressive hints belong to one admitted manager run, and must not retain
+// mutable catalog maps or reappear after that run consumes or clears them.
+func TestRemoteToolRoutesStayWithTheirTurnAndAreConsumedOnce(t *testing.T) {
+	e := newTestEngine(t)
+	ctx := context.Background()
+	routes := map[string]string{"remote_record": "original_proxy", "": "ignored_proxy"}
+	e.rememberRemoteRoutes("first", routes)
+	routes["remote_record"] = "changed_proxy"
+	handler := swarm.RegisteredToolsNode(nil, false).UnknownToolsHandler
+	bound := e.bindRemoteToolRoutes(ctx, "first")
+	out, err := handler(bound, "remote_record", "")
+	if err != nil || !strings.Contains(out, `"call_tool":"original_proxy"`) {
+		t.Fatalf("catalog mutation changed the turn's route: %s %v", out, err)
+	}
+	for _, turnID := range []string{"first", "other", ""} {
+		out, err = handler(e.bindRemoteToolRoutes(ctx, turnID), "remote_record", "")
+		if err != nil || strings.Contains(out, "call_tool") {
+			t.Fatalf("route leaked to turn %q: %s %v", turnID, out, err)
+		}
+	}
+	for _, empty := range []map[string]string{nil, {"": "ignored_proxy"}} {
+		e.rememberRemoteRoutes("cleared", routes)
+		e.rememberRemoteRoutes("cleared", empty)
+		if _, ok := e.remoteRoutes.Load("cleared"); ok {
+			t.Fatal("cleared catalog retained its route")
+		}
+	}
+	e.rememberRemoteRoutes("", routes)
+	var absent *Engine
+	absent.rememberRemoteRoutes("first", routes)
+	if absent.bindRemoteToolRoutes(ctx, "first") != ctx {
+		t.Fatal("an absent engine changed the context")
+	}
+	if absent.routesForMount(mcpMountRecord{}) != nil || (&Engine{}).routesForMount(mcpMountRecord{}) != nil {
+		t.Fatal("an absent configuration invented routes")
+	}
+}
+
+func TestMissingProgressiveCatalogNeverInventsARemoteTool(t *testing.T) {
+	e := newTestEngine(t)
+	if got := e.routesForMount(mcpMountRecord{Servers: []mcpMountServer{{ID: "removed", Mode: "progressive"}}}); got != nil {
+		t.Fatalf("removed server retained hints: %+v", got)
+	}
+	server := config.MCPServer{ID: "empty", Enabled: true}
+	e.cfg.MCP.Servers = []config.MCPServer{server}
+	if got := e.routesForMount(mcpMountRecord{Servers: []mcpMountServer{{ID: server.ID, Mode: "progressive"}}}); got != nil {
+		t.Fatalf("uncached catalog invented hints: %+v", got)
+	}
+	_, proxy := mcpclient.ProxyNames(server.ID)
+	routes := remoteCallRoutes(server, mcpclient.Catalog{Tools: []mcpclient.ToolDescriptor{
+		{Name: "legacy_name", InputSchema: map[string]any{"type": "object"}},
+		{InputSchema: map[string]any{"type": "object"}},
+	}})
+	if len(routes) != 1 || routes["legacy_name"] != proxy {
+		t.Fatalf("legacy or nameless catalog routes: %+v", routes)
 	}
 }

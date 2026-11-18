@@ -4,6 +4,7 @@ import { MockHost, MockLink, mockTickMs, resetMockHost, wantsMock } from "./mock
 import {
   OpEvent,
   OpCatalog,
+  OpSetProductMode,
   OpMeta,
   OpRefreshCatalog,
   OpFollowupSteer,
@@ -29,12 +30,30 @@ function host() {
 }
 
 describe("the walkthrough host", () => {
+  it("keeps both managed catalogs usable after the acknowledged Local switch", async () => {
+    const prior = location.href
+    history.replaceState(null, "", "/?mock=1&pc-models=managed")
+    const link = new MockLink(host())
+    try {
+      const managed = await link.rpc({ op: OpCatalog })
+      expect(managed.model_policy?.capability_status).toBe("ready")
+      expect(managed.model_policy?.capabilities?.authorized).toBe(true)
+      await link.rpc({ op: OpSetProductMode, product_mode: "local" })
+      for (const op of [OpCatalog, OpRefreshCatalog]) {
+        const reply = await link.rpc({ op })
+        expect(reply.models).toHaveLength(2)
+        for (const row of reply.models!) expect(reply.model_policy?.account_sources?.[row.provider_id]?.authorized).toBe(true)
+      }
+    } finally { link.close(); history.replaceState(null, "", prior) }
+  })
+
   it("reports PC-owned local Web execution for metadata and both catalog reads", async () => {
     const link = new MockLink(host())
     try {
       for (const op of [OpMeta, OpCatalog, OpRefreshCatalog]) {
         const result = await link.rpc({ op })
         expect(result.web_execution_status).toEqual({ preference: "auto", execution: "local", cloud_account: "sign_in_required" })
+        if (op !== OpMeta) expect(result.model_policy).toMatchObject({ mode: "local", ready: true, configurable: true })
       }
     } finally { link.close() }
   })

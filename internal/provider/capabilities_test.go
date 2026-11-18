@@ -109,6 +109,17 @@ func TestRoleUsesPublicResponsesAndRefusesAfterGrantRemoval(t *testing.T) {
 	if err != nil || out.Content != "result" || requests.Load() != 1 {
 		t.Fatalf("output=%v err=%v calls=%d", out, err, requests.Load())
 	}
+	// Removing one role must refuse this cached adapter while the source and
+	// conversation grant remain healthy; global discovery failure is different.
+	revoked := *src
+	revoked.SetCapabilities(roleManifest("conversation", "chat_completions", true))
+	p.SetAccountSource(&revoked)
+	if _, err := m.Generate(t.Context(), []*schema.Message{schema.UserMessage("input")}); !errors.Is(err, ErrModelPolicy) || requests.Load() != 1 {
+		t.Fatalf("revoked role reached HTTP: err=%v calls=%d", err, requests.Load())
+	}
+	if !p.ModelPolicy().Ready {
+		t.Fatal("role refusal fixture invalidated the whole conversation source")
+	}
 	p.InvalidateCapabilities()
 	if _, err := m.Generate(t.Context(), []*schema.Message{schema.UserMessage("input")}); err == nil || requests.Load() != 1 {
 		t.Fatal("revoked adapter sent a request")

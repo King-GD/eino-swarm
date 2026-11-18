@@ -6,7 +6,82 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ## Unreleased
 
+### Changed
+
+- Nuwa collaboration paints tasks, facts and results with different backgrounds, so a fact is no longer the same surface as a result. (`F-136`)
+- The desktop and Web inspector registers project collaboration and conversation task panels through one entry point. If a selected entry disappears, the inspector shows Agents without changing the requested tab. (`F-136`, `F-137`)
+
 ### Fixed
+
+- The EASM asset portrait tab remains available alongside registered project and conversation task panels after synchronizing main; both graph dependency sets are retained.
+
+- Web Gateway sign-in no longer opens the host's system browser on a shared loopback engine. Native desktop still opts in; both surfaces retain the validated manual link. (`F-210`, `C-006`)
+
+- Switching Nuwa projects no longer shows the previous project's connection status or error while the new subscription starts. (`F-136`)
+
+- Switching between gateway and local no longer waits for the semantic-search backfill started by the previous switch. A chat, speech, or decision call still finishes on the source it opened. (`F-173`, `C-040`)
+
+- Functional model menus and phone model groups title a third-party catalog with the name the gateway returned in its bootstrap label. The generic word is used only when that name is missing. (`F-171`, `C-040`)
+
+- The local composer model menu stays open after a fixed third-party conversation model is selected, so the conversation can switch back to a personal or original gateway model. Gateway mode still hides the menu when conversation selection is not allowed. (`F-171`, `C-040`)
+
+- Mermaid diagrams that exceed the SVG paint budget stay as source instead of
+  becoming an image. An unbounded diagram was painted on the WebKit page thread
+  and could leave the desktop window unable to accept clicks or resizing.
+  (`F-120`, `C-005`, #174)
+
+## [0.1.83] - 2026-11-18
+
+### Added
+
+- Gateway audio settings discover versioned parameters from authorized private catalogs on PC/Web and phone. Explicit choices are scoped to their account/source/model, omitted values follow gateway defaults, and changed or invalid choices require selection instead of silent replacement. Fixed model selection and audio parameter permissions remain independent. (`F-148`, `C-048`)
+
+### Fixed
+
+- 手机后台准备账号电脑连接时保留已保存配对的名称、顺序、当前选择与历史会话。
+
+- Speech recognition and spoken-answer settings list each signed-in catalog's
+  `transcription` and `speech` models. Those names stay out of the conversation
+  picker. A chat-only preset no longer hides voice models published by the
+  gateway catalog. (`F-148`, `F-171`, `C-040`)
+
+- Account model admission now has TLA+/TLC regression coverage for the historical
+  nil-gate panic, cancelled-wait accounting, capability checks and source-policy
+  holds. Seeded guard removals must fail; reachability witnesses prevent vacuous
+  success. (`C-029`)
+
+- Account model requests no longer panic while waiting for a shared service
+  cooldown. Capability checks retain the request's gate and source-policy hold;
+  cancellation records a wait without inventing an HTTP call. (`C-029`)
+
+- Mac local read-aloud preview uses the signed-in account's enabled speech role
+  when voice source is account and no functional model overrides it. A personal
+  binding or custom endpoint still wins. The preview no longer reports that
+  failure as a generic English sentence. (`F-148`, `C-048`)
+
+- Automatic phone Gateway read aloud now requests streaming PCM/SSE instead of
+  waiting for a complete MP3 segment. Explicit PC and personal audio formats stay
+  unchanged; the automatic phone profile uses shorter 200-character segments.
+  (`F-148`, `C-048`)
+
+- Phone Add to chat now appears for text selected inside an expanded thought,
+  including a thought opened from a work group. The disclosure label and tool
+  controls still do not quote. (`F-221`, `C-011`)
+
+- Phone voice service failures show their HTTP status instead of only a generic
+  error; private upstream error bodies remain hidden. (`F-148`, `C-048`)
+
+- Model requests preserve their original system roles and ordering. Only an
+  explicit typed HTTP 400/422 rejection of system placement permits one
+  compatibility retry: text system sections retain their complete content and
+  transcript positions inside one leading system message. System notices never
+  become human messages; unsupported multimodal systems fail without rewriting.
+  This also preserves worker-roster and restart/reasoning recovery boundaries.
+
+- Automatic voice capture now normalizes WebM/Opus and Ogg as well as MP4/AAC
+  to WAV, fixing ASR format rejection on newer iPhones that record WebM.
+  Recognition drafts also omit a complete leading ASR language/control envelope.
+  (`F-148`, `C-048`)
 
 - Phone model choices refresh after PC mode/account-policy changes; older PCs
   missing Gateway permission metadata show an update notice instead of silently
@@ -14,6 +89,20 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
   network/Gateway configuration message. (`F-210`, `F-148`, `C-006`, `C-048`)
 
 ### Changed
+
+- Conversation semantic search now follows embedding-model configuration, without
+  a separate switch. Clearing the model disables it; editable gateway defaults
+  can be explicitly disabled. Legacy saved models now enable search even when
+  their old switch was false. Translation and image-generation rows explain
+  unavailable capabilities instead of disappearing; image generation still has
+  no client adapter. (`F-410`, `C-040`)
+
+- Functional model rows use one selector. Image generation keeps that selector
+  and retains a choice even though this client does not call it yet. In LOCAL,
+  the menu groups authorized gateway models, third-party catalog models and
+  models configured on this computer. A LOCAL binding may name a signed-in
+  `gateway:` catalog; sign-out keeps the binding and fails that call closed.
+  (`F-410`, `C-040`)
 
 - Phone launches automatically connect all enabled online account PCs and list
   online PCs before offline PCs. Existing live sockets and pairing tickets are
@@ -33,6 +122,20 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
   survives unrelated phone model-catalog refreshes. (`F-148`, `C-048`)
 
 ### Fixed
+
+- Third-party functional catalogs offer only their conversation binding in PC
+  and paired-phone model pickers. Auxiliary bindings stay available to their
+  own callers, including when they use the chat protocol. (`F-171`, `C-040`)
+- Legacy LOCAL voice settings remain editable when no model-policy field is
+  supplied. A missing Gateway capability manifest still grants no voice controls.
+- Offline selection translation uses its dedicated translator role. Legacy
+  fixed-role accounts retain conversation translation when the separate role is
+  off; a negotiated translation denial still refuses the call. (`F-181`, `C-049`)
+- An unrecognized tool name returns `tool_not_registered` to the model. Other
+  calls in the same reply still run, and the turn continues. A progressive MCP
+  catalog name includes its `call_tool` proxy and is not executed.
+- `update_project_description` returns the saved description. The current turn
+  has no separate tool for reading it back.
 
 - Phone Gateway voice is available without configuring or enabling voice on a
   PC. Recognition and playback use independently authorized defaults, while
@@ -5331,3 +5434,10 @@ First GitHub Release. Tag `v0.1.0` is `1faf1a8`.
   on [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
   Pair from Settings → Phone. `adb install` works. A later APK signed with a
   different key cannot update this install in place.
+
+### Task-panel plugins and FOFA map example (unreleased)
+
+- Added repository-owned HTML/JS task panels with snapshot/JSON Patch data, durable conversation state, source lifecycle and an isolated iframe SDK.
+- Added a FOFA batch-collection/local HTTP-check example with country shading, incremental geographic markers and separate collection/check progress. No real query or public probe runs automatically.
+- Fixed task-panel ordering faults found by model checks and real-boundary regressions: hidden iframe retries, snapshot/live-update merging and deleted-instance recovery, running source write ownership, per-conversation recovery isolation and cancelled delivery of already observed HTTP results. Equivalent default-port origins now share one asset/check; known collection failures retain their recorded reason.
+- Added paired-phone task panels using the same bundled HTML/JS, full-screen touch presentation and immutable chunked Pairlink snapshots/patches. PC/conversation/database-generation changes fence old reads; hidden panes retain their iframe/zoom without restarting sources. Corrected two postal-code fallbacks that incorrectly colored unrelated map regions.

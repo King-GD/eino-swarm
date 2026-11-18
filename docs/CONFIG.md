@@ -40,12 +40,18 @@ playback parameters and limits. Both directions default off. **Models → Functi
 models** selects recognition and spoken-answer models independently of conversation.
 LOCAL and an editable gateway allow personal providers. A managed third-party
 gateway supplies the models and hides model/endpoint controls; ordinary voice
-parameters remain editable.
+parameters remain editable. In LOCAL, `source: account` uses the signed-in
+account's enabled recognition or speech role when no functional binding
+overrides that direction. A personal binding, provider, or custom endpoint
+remains the request target. Without that login or role, the direction stays
+not ready.
 
 `speech.input.recording_format` accepts `auto` and `wav`. Automatic recording
-normalizes WebKit's MP4/AAC container to 16 kHz mono PCM WAV for ASR
-interoperability; other browser containers remain unchanged. Explicit WAV also
+normalizes MP4/AAC, WebM/Opus and Ogg recordings to 16 kHz mono PCM WAV for ASR
+interoperability, including newer iPhones that record WebM. Explicit WAV also
 converts other containers. The input byte limit applies after conversion too.
+Before draft insertion, a complete leading ASR `language …<asr_text>` envelope
+is separated from the transcript. Plain text and literal tags elsewhere are kept.
 
 `speech.output.format` accepts `mp3` (the existing default), `wav` and `pcm`.
 Select **PCM (streaming playback)** to play a response while it is generated.
@@ -397,6 +403,10 @@ legacy `account_presentation: full` cannot unlock other models.
 `models.bindings` stores explicit functional overrides by scope. The `local` scope
 belongs to LOCAL. A gateway scope is a hash of gateway origin, source ID and account
 owner; credential renewal keeps that scope, changing accounts does not reuse it.
+A LOCAL binding may name a signed-in catalog with a `gateway:` provider id. That
+id is still not a `models.providers` entry. After sign-out the binding stays
+stored and execution fails closed instead of using a personal provider with the
+same model name. An absent binding does not inherit a gateway preset.
 Each scope maps `conversation`, `title`, `compact`, `embedding`, `transcription`,
 `speech`, `ocr` and `decisions` to `{provider_id, model}`. Settings does not
 list `decisions`; that role is a background call. Missing roles follow the
@@ -1010,13 +1020,16 @@ Android Back returns to the list. Back from the root inbox exits the app.
 
 ## `search`
 
-Conversation search for ⌘K. Keyword indexing is always on. Embeddings are
-opt-in: calling an extra endpoint is a cost the install did not ask for, and
-no model name is baked in.
+Conversation search for ⌘K. Keyword indexing is always on. Configuring an
+embedding model automatically enables semantic search; no model means off.
+No model name is baked in. Settings → Models → Functional models is the single
+current entry point. Its scoped embedding binding or gateway preset takes
+priority over the legacy fields below. An explicit empty embedding reference
+(`provider_id: ""`, `model: ""`) disables search even with a gateway preset.
 
 | key | default | meaning |
 |---|---|---|
-| `embedding` | `false` | when true **and** `embedding_model` is set, ⌘K also ranks by meaning. A true switch with an empty model stays keyword-only. |
+| `embedding` | `false` | legacy compatibility value derived from `embedding_model`, no longer an independent switch. Old `false` plus a saved model now enables search; clear the model to keep keyword-only search. |
 | `embedding_provider` | empty | endpoint `/embeddings` is sent to. Empty follows `models.default`. A deleted id is cleared on load. |
 | `embedding_model` | empty | the name that endpoint expects for embeddings. Never defaulted to a product name. Pin one in Settings → Models. |
 
@@ -1056,3 +1069,9 @@ This signing configuration is managed outside the application Settings; see
 [release setup and recovery](RELEASE.md#testflight-version-and-build-number).
 
 语音设置入口随模型配置权限显示：LOCAL 和可配置的普通网关账号在 Settings → Models 编辑功能模型及语音参数；托管第三方账号隐藏 Models，只在 Speech 入口显示语音开关、音色和资源参数，不显示模型、Provider 或凭据配置。
+
+旧版 LOCAL 设置没有 `model_policy` 时，明确的本地产品模式仍允许编辑原有语音配置；网关模式缺少已验证的能力清单时不推断语音权限，也不显示语音控制。
+
+## Task panels
+
+`task_panels` configures the bundled HTML/JS task-panel feature. Settings → Tools → Task panels edits its independent endpoint. Fields/defaults: `enabled:true`, `fofa_client:fofa`, `max_assets:1000`, `batch_size:100`, `concurrency:16`, `timeout_seconds:8`, `flush_interval_ms:100`, `max_state_bytes:8388608`, `max_update_bytes:1048576`. Changes apply to new source runs; turning the feature off also refuses later live publications, causing active sources to cancel/join and retain an interrupted marker. FOFA credentials stay in the CLI existing mechanism. See [Task panels](TASK_PANELS.md).

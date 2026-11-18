@@ -18,6 +18,7 @@
 EXTENDS Naturals, Sequences, FiniteSets
 
 CONSTANTS
+    PanelCursorAsChatID,  \* named panel frames incorrectly overwrite the chat SSE id
     MarkerUnstored,       \* the rewind marker is broadcast with seq 0 and never stored
     MarkerAfterUnlock,    \* the rewind marker is broadcast after the record lock is released
     BroadcastAfterUnlock, \* a stored row is broadcast after the record lock is released
@@ -41,9 +42,11 @@ VARIABLES
     highest,   \* highest seq the connection delivered (its SSE id)
     budget,    \* remaining rewinds, restarts and disconnects
     top,       \* highest sequence number ever assigned
+    panelCursor, \* independent panel cursor carried only in a named frame body
+    chatIdMixed, \* a panel cursor was used as Last-Event-ID
     ghost      \* scenario tags for the reachability witnesses
 
-vars == <<stored, next, outbox, pending, chan, lagged, up, view, highest, budget, top, ghost>>
+vars == <<stored, next, outbox, pending, chan, lagged, up, view, highest, budget, top, ghost, panelCursor, chatIdMixed>>
 
 Max(S) == IF S = {} THEN 0 ELSE CHOOSE x \in S : \A y \in S : y <= x
 Seqs(S) == {e.seq : e \in S}
@@ -52,7 +55,7 @@ RowSeqs(S) == {e.seq : e \in {x \in S : x.cut = 0}}
 (* The subscription channel is non-blocking (Engine.broadcast): a row that  *)
 (* does not fit flags the reader as lagged; an event without a seq is lost. *)
 Push(ev) ==
-    IF ~up THEN UNCHANGED <<chan, lagged>>
+    IF ~up THEN UNCHANGED <<chan, lagged, panelCursor, chatIdMixed>>
     ELSE IF Len(chan) < Cap THEN chan' = Append(chan, ev) /\ UNCHANGED lagged
     ELSE /\ lagged' = (lagged \/ (ev.seq > 0 /\ ~DropWhenSlow))
          /\ UNCHANGED chan
@@ -83,6 +86,7 @@ Init ==
     /\ budget = [rewind |-> 1, restart |-> 1, drop |-> 1]
     /\ top = 0
     /\ ghost = {}
+    /\ panelCursor = 0 /\ chatIdMixed = FALSE
 
 (* Engine.record: assign, store and broadcast under recordMu. *)
 Record ==
@@ -92,16 +96,16 @@ Record ==
        /\ next' = next + 1
        /\ top' = Max({top, next + 1})
        /\ IF BroadcastAfterUnlock
-          THEN outbox' = outbox \cup {ev} /\ UNCHANGED <<chan, lagged>>
+          THEN outbox' = outbox \cup {ev} /\ UNCHANGED <<chan, lagged, panelCursor, chatIdMixed>>
           ELSE Push(ev) /\ UNCHANGED outbox
     /\ ghost' = IF budget.restart = 0 THEN ghost \cup {"recordAfterRestart"} ELSE ghost
-    /\ UNCHANGED <<pending, up, view, highest, budget>>
+    /\ UNCHANGED <<pending, up, view, highest, budget, panelCursor, chatIdMixed>>
 
 Flush ==
     /\ \E ev \in outbox :
         /\ Push(ev)
         /\ outbox' = outbox \ {ev}
-    /\ UNCHANGED <<stored, next, pending, up, view, highest, budget, top, ghost>>
+    /\ UNCHANGED <<stored, next, pending, up, view, highest, budget, top, ghost, panelCursor, chatIdMixed>>
 
 (* Engine.applyRewind: truncate from a stored row, then announce the cut. *)
 Rewind ==
@@ -116,16 +120,16 @@ Rewind ==
            /\ next' = IF MarkerUnstored THEN next ELSE next + 1
            /\ top' = IF MarkerUnstored THEN top ELSE Max({top, next + 1})
            /\ IF MarkerAfterUnlock
-              THEN pending' = marker /\ UNCHANGED <<chan, lagged>>
+              THEN pending' = marker /\ UNCHANGED <<chan, lagged, panelCursor, chatIdMixed>>
               ELSE Push(marker) /\ UNCHANGED pending
     /\ budget' = [budget EXCEPT !.rewind = @ - 1]
-    /\ UNCHANGED <<outbox, up, view, highest, ghost>>
+    /\ UNCHANGED <<outbox, up, view, highest, ghost, panelCursor, chatIdMixed>>
 
 EmitMarker ==
     /\ pending # None
     /\ Push(pending)
     /\ pending' = None
-    /\ UNCHANGED <<stored, next, outbox, up, view, highest, budget, top, ghost>>
+    /\ UNCHANGED <<stored, next, outbox, up, view, highest, budget, top, ghost, panelCursor, chatIdMixed>>
 
 (* streamEvents: catch up first when lagged, skip a stored row already     *)
 (* delivered, forward the rest; the page applies what arrives in order.    *)
@@ -141,7 +145,7 @@ Deliver ==
     /\ lagged' = FALSE
     /\ ghost' = IF lagged /\ \E e \in stored : e.seq > highest /\ e.cut > 0
                 THEN ghost \cup {"catchUpAcrossRewind"} ELSE ghost
-    /\ UNCHANGED <<stored, next, outbox, pending, up, budget, top>>
+    /\ UNCHANGED <<stored, next, outbox, pending, up, budget, top, panelCursor, chatIdMixed>>
 
 (* The lag ticker catches up even when no further event arrives. *)
 CatchUp ==
@@ -151,21 +155,21 @@ CatchUp ==
     /\ lagged' = FALSE
     /\ ghost' = IF \E e \in stored : e.seq > highest /\ e.cut > 0
                 THEN ghost \cup {"catchUpAcrossRewind"} ELSE ghost
-    /\ UNCHANGED <<stored, next, outbox, pending, chan, up, budget, top>>
+    /\ UNCHANGED <<stored, next, outbox, pending, chan, up, budget, top, panelCursor, chatIdMixed>>
 
 (* The connection drops; EventSource reconnects with Last-Event-ID. *)
 Drop ==
     /\ up /\ budget.drop > 0
     /\ up' = FALSE /\ chan' = <<>> /\ lagged' = FALSE
     /\ budget' = [budget EXCEPT !.drop = @ - 1]
-    /\ UNCHANGED <<stored, next, outbox, pending, view, highest, top, ghost>>
+    /\ UNCHANGED <<stored, next, outbox, pending, view, highest, top, ghost, panelCursor, chatIdMixed>>
 
 Reconnect ==
     /\ ~up
     /\ up' = TRUE
     /\ view' = CatchUpView(view, highest)
     /\ highest' = Max({highest} \cup Seqs(stored))
-    /\ UNCHANGED <<stored, next, outbox, pending, chan, lagged, budget, top, ghost>>
+    /\ UNCHANGED <<stored, next, outbox, pending, chan, lagged, budget, top, ghost, panelCursor, chatIdMixed>>
 
 (* The engine process restarts: unbroadcast work is gone, the counter is   *)
 (* reseeded from the stored rows, and the reader must reconnect.            *)
@@ -175,9 +179,17 @@ Restart ==
     /\ outbox' = {} /\ pending' = None
     /\ up' = FALSE /\ chan' = <<>> /\ lagged' = FALSE
     /\ budget' = [budget EXCEPT !.restart = @ - 1]
-    /\ UNCHANGED <<stored, view, highest, top, ghost>>
+    /\ UNCHANGED <<stored, view, highest, top, ghost, panelCursor, chatIdMixed>>
 
-Next == Record \/ Flush \/ Rewind \/ EmitMarker \/ Deliver \/ CatchUp
+(* writeSSE(panel_ready/panel_update, seq=0) emits no id field. The body
+   owns a different cursor; record, catch-up and reconnect retain their chat id. *)
+PanelFrame == /\ up /\ panelCursor < MaxSeq
+              /\ panelCursor' = panelCursor + 1
+              /\ highest' = IF PanelCursorAsChatID THEN Max({highest, panelCursor + 1}) ELSE highest
+              /\ chatIdMixed' = (chatIdMixed \/ PanelCursorAsChatID)
+              /\ UNCHANGED <<stored, next, outbox, pending, chan, lagged, up, view, budget, top, ghost>>
+
+Next == PanelFrame \/ Record \/ Flush \/ Rewind \/ EmitMarker \/ Deliver \/ CatchUp
         \/ Drop \/ Reconnect \/ Restart
 
 Spec == Init /\ [][Next]_vars
@@ -186,6 +198,7 @@ Spec == Init /\ [][Next]_vars
 (* Safety *)
 
 TypeOK ==
+    /\ panelCursor \in 0..MaxSeq /\ chatIdMixed \in BOOLEAN
     /\ stored \subseteq Events /\ outbox \subseteq Events /\ pending \in Events
     /\ next \in 0..MaxSeq /\ highest \in 0..MaxSeq
     /\ Len(chan) <= Cap /\ view \subseteq 1..MaxSeq /\ top \in 0..MaxSeq
@@ -200,9 +213,12 @@ ConvergedView ==
 (* and its resume cursor, so the counter never falls below one it issued.   *)
 SeqIdentity == next >= top
 
+PanelCursorIsIndependent == ~chatIdMixed
+
 -----------------------------------------------------------------------------
 (* Witnesses: each must be violated, showing its scenario is reachable. *)
 
+NeverPanelFrame == panelCursor = 0
 NeverCatchUpAcrossRewind == "catchUpAcrossRewind" \notin ghost
 NeverRecordAfterRestart == ~("recordAfterRestart" \in ghost /\ budget.rewind = 0 /\ up /\ chan = <<>>)
 

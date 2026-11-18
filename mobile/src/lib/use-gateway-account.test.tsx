@@ -3,7 +3,7 @@ import { StrictMode } from "react"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { saveGatewaySession, type GatewaySession } from "./gateway-account"
 import { useGatewayAccount } from "./use-gateway-account"
-import { loadSavedLinks, saveLink } from "./store"
+import { loadActiveFingerprint, loadSavedLinks, saveLastThreadId, loadLastThreadId, saveLink } from "./store"
 import { bytesToB64url } from "./bytes"
 import { fingerprint } from "./crypto"
 
@@ -29,6 +29,9 @@ it("upgrades an existing anonymous PC after both devices join the same account",
   const pub = new Uint8Array(32).fill(7)
   const hostPub = bytesToB64url(pub)
   saveLink({ hubURL: origin + "/", hostPub, fingerprint: fingerprint(pub), ticket: "old", sessionID: "old", label: "My PC" })
+  saveLastThreadId("original-thread")
+  saveLink({ hubURL: "https://independent.example.test", hostPub: "independent", fingerprint: "independent", ticket: "other", sessionID: "other", label: "Independent PC" })
+  saveLastThreadId("independent-thread")
   saveGatewaySession(session)
   const connect = vi.fn()
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
@@ -42,7 +45,14 @@ it("upgrades an existing anonymous PC after both devices join the same account",
   await act(async () => { await Promise.resolve(); await Promise.resolve() })
   expect(result.current.status).toBe("authorized")
   expect(connect).toHaveBeenCalledTimes(1)
-  expect(loadSavedLinks()).toEqual([expect.objectContaining({ gatewayOwnerID: "u1", gatewayHostID: "pc-1", ticket: "a".repeat(64), label: "My PC" })])
+  expect(loadSavedLinks()).toEqual([expect.objectContaining({ gatewayOwnerID: "u1", gatewayHostID: "pc-1", ticket: "a".repeat(64), label: "My PC" }), expect.objectContaining({ fingerprint: "independent" })])
+  const upgraded = loadSavedLinks()
+  // Background socket preparation must not reorder or rename a pairing that
+  // the account refresh has already upgraded, or steal the selected PC.
+  await act(async () => { await result.current.connectHost("pc-1", { select: false }) })
+  expect(loadSavedLinks()).toEqual(upgraded)
+  expect(loadActiveFingerprint()).toBe("independent")
+  expect(loadLastThreadId()).toBe("independent-thread")
   await act(async () => { await result.current.refresh() })
   expect(connect).toHaveBeenCalledTimes(1)
   unmount()
@@ -252,7 +262,7 @@ it.each([401, 403])("a current PC connection refusal %s immediately removes cach
     if (url.endsWith("/auth/me")) { reads++; return response({ user: { ...session.user, approval_status: rejected ? "rejected" : "approved" }, device: session.device }) }
     if (url.endsWith("/bootstrap")) return response(bootstrap)
     if (url.endsWith("/connect")) return new Promise<Response>((resolve) => { release = resolve })
-    if (url.includes("/link-hosts")) return response([{ id: "pc-1", name: "PC", enabled: true, online: true }])
+    if (url.includes("/link-hosts")) return response([{ id: "pc-1", name: "PC", enabled: true, online: true, host_pub: "rotated-key" }])
     return response({ ok: true })
   }))
   const { result, unmount } = renderHook(useGatewayAccount)

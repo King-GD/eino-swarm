@@ -15,6 +15,7 @@ import (
 
 	"github.com/LubyRuffy/eino-swarm/internal/app"
 	"github.com/LubyRuffy/eino-swarm/internal/config"
+	"github.com/LubyRuffy/eino-swarm/internal/provider"
 	"github.com/LubyRuffy/eino-swarm/internal/remote"
 	"github.com/LubyRuffy/eino-swarm/internal/server"
 )
@@ -48,14 +49,22 @@ func newAccountHarness(t *testing.T, signedIn bool) *accountHarness {
 			models := map[string]any{
 				"source_id": accountSourceID, "source_kind": "gateway", "label": "Server", "execution": "desktop",
 				"api_base_url": origin + "/client/desktop/v1", "catalog_url": origin + "/client/desktop/v1/models", "api_access_enabled": true,
+				"configurable": ah.profile == nil,
 			}
 			if ah.profile != nil {
 				models["profile"] = ah.profile
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
 				"user":   map[string]any{"id": strings.Repeat("2", 32), "username": "account", "display_name": "Account Name"},
-				"models": models,
+				"models": models, "capabilities_url": origin + "/client/models/v1/capabilities",
 			}})
+		case "/client/models/v1/capabilities":
+			roles := make(map[string]provider.RoleCapability)
+			for _, role := range config.ModelRoles() {
+				roles[role] = provider.RoleCapability{Supported: true, Available: true, Configurable: ah.profile == nil, Endpoints: provider.ImplementedEndpoints(role)}
+			}
+			source := &provider.SourceCapabilities{Authorized: true, Available: true, Configurable: ah.profile == nil, Capabilities: roles}
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": provider.ClientCapabilities{Version: 1, ModelRolesVersion: 3, Sources: map[string]*provider.SourceCapabilities{"preset": source, "gateway": source}}})
 		case "/client/desktop/v1/models":
 			ah.catalogHits.Add(1)
 			_, _ = io.WriteString(w, ah.catalog)

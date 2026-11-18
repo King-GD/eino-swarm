@@ -14,11 +14,12 @@ import (
 
 // RoleCapability contains public protocol identifiers, never model credentials.
 type RoleCapability struct {
-	Supported    bool     `json:"supported"`
-	Available    bool     `json:"available"`
-	Configurable bool     `json:"configurable"`
-	Endpoints    []string `json:"endpoints"`
-	Reason       string   `json:"reason,omitempty"`
+	AudioParametersVersion int      `json:"audio_parameters_version,omitempty"`
+	Supported              bool     `json:"supported"`
+	Available              bool     `json:"available"`
+	Configurable           bool     `json:"configurable"`
+	Endpoints              []string `json:"endpoints"`
+	Reason                 string   `json:"reason,omitempty"`
 }
 
 type SourceCapabilities struct {
@@ -136,12 +137,25 @@ func (p *Pool) guardCapability(inner model.BaseChatModel, id, role string) model
 	if !config.KnownModelRole(role) {
 		role = "conversation"
 	}
-	return &recordingModel{inner: inner, onResult: p.capabilityResult, policyUse: func() (func(), error) {
+	guarded := &recordingModel{inner: inner}
+	if shared, ok := inner.(*recordingModel); ok {
+		// Keep capability checks on the existing request admission. A second
+		// recording layer loses the gate identity and counts cancelled waits
+		// as calls before the inner layer has admitted any HTTP request.
+		*guarded = *shared
+	}
+	policyUse := guarded.policyUse
+	guarded.onResult = p.capabilityResult
+	guarded.policyUse = func() (func(), error) {
 		if source := p.accountForExecution(id); source == nil || !source.allowsRole(role) {
 			return nil, ErrModelPolicy
 		}
+		if policyUse != nil {
+			return policyUse()
+		}
 		return func() {}, nil
-	}}
+	}
+	return guarded
 }
 
 // RefreshCapabilities requests discovery on its existing owner loop.

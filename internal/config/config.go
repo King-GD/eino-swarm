@@ -37,6 +37,7 @@ type Config struct {
 	Remote      RemoteConfig      `yaml:"remote" json:"remote"`
 	Search      SearchConfig      `yaml:"search" json:"search"`
 	Speech      SpeechConfig      `yaml:"speech" json:"speech"`
+	TaskPanels  TaskPanelConfig   `yaml:"task_panels" json:"task_panels"`
 	Clients     ClientsConfig     `yaml:"clients" json:"clients"`
 	// Product is omitted while the install stays on the default FOFA behavior.
 	Product ProductConfig `yaml:"product,omitempty" json:"product,omitempty"`
@@ -876,6 +877,7 @@ func (c *Config) normalize() {
 	c.normalizeSearch()
 	c.normalizeClients()
 	c.normalizeSpeech()
+	c.TaskPanels = c.TaskPanels.WithDefaults()
 }
 
 func (c *Config) providerIndex(id string) int {

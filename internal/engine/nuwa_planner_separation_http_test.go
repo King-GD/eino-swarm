@@ -262,6 +262,13 @@ func TestNuwaPlannerCannotExecuteModelAuthoredWorkAtHTTP(t *testing.T) {
 						if receipt == "" || strings.Contains(receipt, `"error"`) || operation == "MCP call" && !strings.Contains(receipt, "mcp-protocol-evidence") {
 							t.Errorf("ordinary manager did not receive its execution result: %s", receipt)
 						}
+					} else {
+						receipt := nuwaValidationReceipt(request, "separation-forged")
+						if !strings.Contains(receipt, `"code":"tool_not_registered"`) {
+							t.Errorf("planner did not receive an explicit refusal: %s", receipt)
+						}
+						writeContextFlowReply(w, request.Stream, map[string]any{"content": "The unregistered operation was refused."}, "stop")
+						return
 					}
 					writeContextFlowReply(w, request.Stream, map[string]any{"content": "The operation result was inspected."}, "stop")
 				}))
@@ -306,7 +313,7 @@ func TestNuwaPlannerCannotExecuteModelAuthoredWorkAtHTTP(t *testing.T) {
 				waitSettled(t, e, thread.ID)
 				body, readErr := os.ReadFile(filepath.Join(workspace, "manager-write.txt"))
 				if nuwa {
-					if finished.Status != store.TurnError || finished.Error == "" || requests.Load() != 1 || !os.IsNotExist(readErr) || remoteCalls.Load() != 0 {
+					if finished.Status != store.TurnDone || requests.Load() != 2 || !os.IsNotExist(readErr) || remoteCalls.Load() != 0 {
 						t.Fatalf("planner executed or silently accepted a forbidden call: turn=%+v requests=%d file=%q file_error=%v remote=%d", finished, requests.Load(), body, readErr, remoteCalls.Load())
 					}
 					return

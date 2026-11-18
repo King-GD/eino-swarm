@@ -14,7 +14,7 @@ export default defineConfig({
     __ZWAI_WEB_VERSION__: JSON.stringify(shellVersion()),
   },
   resolve: {
-    dedupe: ["react", "react-dom"],
+    dedupe: ["react", "react-dom", "shiki", "mermaid", "mdast-util-from-markdown"],
     alias: { "@": path.resolve(__dirname, "./src") },
   },
   server: {

@@ -91,7 +91,10 @@ test("Nuwa creation shares live evidence paths and preserves them after disablin
         .locator('[data-testid="thread-row"][aria-current="true"]')
         .getAttribute("data-id")) ?? ""
     expect(firstThread).not.toBe("")
-    await page.getByRole("tab", { name: "Collaboration", exact: true }).click()
+    const collaboration = page.getByRole("tab", { name: "Collaboration", exact: true })
+    await expect(collaboration).toHaveAttribute("aria-selected", "false")
+    await expect(page.getByTestId("nuwa-panel")).toHaveCount(0)
+    await collaboration.click()
     await expect(page.getByTestId("nuwa-panel")).toContainText("Shared work will appear here")
     const started = await request.post(`/api/threads/${firstThread}/turns`, {
       data: { text: "Compare the supplied evidence and prepare review notes." },

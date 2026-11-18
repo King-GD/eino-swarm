@@ -1,15 +1,15 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, screen, waitFor } from "@testing-library/react"
 import userEvent, { PointerEventsCheckLevel } from "@testing-library/user-event"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { Composer } from "./composer"
-import { TooltipProvider } from "@/components/ui/tooltip"
-import type { Meta } from "@/lib/types"
+import type { Attachment, Meta } from "@/lib/types"
 import { useApp } from "@/store/app"
 import { api } from "@/lib/api"
 import { IME_KEYCODE } from "@/lib/ime"
 import { formatQuotedMessage } from "@/lib/quote"
-import type { Attachment, ModelInfo } from "@/lib/types"
+import { composerElement, renderComposer } from "@/test/composer"
+
+beforeEach(() => useApp.setState({ meta: { product_mode: "local", model_policy: { mode: "local", configurable: true, ready: true, scope: "local" } } as Meta }))
 
 function savedFile(name: string): Attachment {
   return {
@@ -20,43 +20,6 @@ function savedFile(name: string): Attachment {
     size: 1,
     created_at: "2026-01-01T00:00:00Z",
   }
-}
-
-function composerElement(props: Partial<Parameters<typeof Composer>[0]> = {}) {
-  const models: ModelInfo[] = [
-    {
-      id: "default\tmock",
-      provider_id: "default",
-      provider_label: "Offline",
-      label: "mock",
-      model: "m",
-      ready: true,
-      default: true,
-    },
-  ]
-  return (
-    <TooltipProvider>
-      <Composer
-        running={false}
-        models={models}
-        provider="default"
-        model="m"
-        onModelChange={vi.fn()}
-        reasoning=""
-        reasoningLevels={["low", "medium", "high"]}
-        onReasoningChange={vi.fn()}
-        onSend={vi.fn()}
-        onStop={vi.fn()}
-        onUpload={vi.fn(async (): Promise<Attachment[]> => [])}
-        focusSignal={0}
-        {...props}
-      />
-    </TooltipProvider>
-  )
-}
-
-function renderComposer(props: Partial<Parameters<typeof Composer>[0]> = {}) {
-  return render(composerElement(props))
 }
 
 describe("Composer locked", () => {

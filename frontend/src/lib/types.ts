@@ -464,6 +464,8 @@ export interface ModelInfo {
   /** `account` is the signed-in server's catalog; `provider` is the user's
    *  own endpoint. The list already puts the account first. */
   source?: ModelSource
+  /** `original` is the signed-in gateway catalog; `third_party` is its preset. */
+  catalog_group?: string
 }
 
 export type ModelSource = "account" | "provider"
@@ -700,7 +702,7 @@ export function defaultClientsSettings(
   }
 }
 
-/** Conversation search. Keyword indexing is always on; embeddings are opt-in. */
+/** Conversation search. Keyword indexing is always on; a model enables embeddings. */
 export interface SearchSettings {
   embedding: boolean
   embedding_provider: string
@@ -711,7 +713,7 @@ export function defaultSearchSettings(
   search?: Partial<SearchSettings> | null,
 ): SearchSettings {
   return {
-    embedding: search?.embedding ?? false,
+    embedding: Boolean(search?.embedding_model?.trim()),
     embedding_provider: search?.embedding_provider ?? "",
     embedding_model: search?.embedding_model ?? "",
   }
