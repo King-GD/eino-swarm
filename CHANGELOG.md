@@ -8,20 +8,32 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Added
 
-- Gateway image generation in desktop, Web, paired phone and phone-direct chat. Ask for an image or use `/image`. The result opens and downloads from the chat and remains available in history. (`F-182`, `C-051`)
 - PC and Web voice settings can choose the microphone. System default follows the operating-system input; a named device is used exactly, and an unplugged device asks for another choice instead of switching microphones silently. Phones keep the phone microphone. (`F-148`, `C-048`)
 
 ### Changed
 
+- Signed-in phones can open Chat directly with their authorized Gateway catalog while the PC page waits for a connection. Chat and PC keep their separate model sources. (`F-210`, `C-013`)
 - 网关模式下，普通网关和第三方接入会根据可用的识别、朗读模型分别默认开启语音。语音设置仅显示网关允许编辑的参数，录音格式和超时等设置默认折叠。(`F-148`, `C-048`)
-- Nuwa collaboration paints tasks, facts and results with different backgrounds, so a fact is no longer the same surface as a result. (`F-136`)
-- The desktop and Web inspector registers project collaboration and conversation task panels through one entry point. If a selected entry disappears, the inspector shows Agents without changing the requested tab. (`F-136`, `F-137`)
 
 ### Fixed
 
 - The phone composer's voice button matches the one-line field, so the rounded row no longer leaves empty space above the text. (`F-148`)
 
 - Switching LOCAL to a third-party Gateway preset preserves an authorized original Gateway model for the current turn and workers, including catalog refresh and restart recovery; new turns apply the preset. (`F-171`, `C-040`)
+
+## [0.1.84] - 2026-11-18
+
+### Added
+
+- Gateway image generation in desktop, Web, paired phone and phone-direct chat. Ask for an image or use `/image`. The result opens and downloads from the chat and remains available in history. (`F-182`, `C-051`)
+
+### Changed
+
+- Nuwa collaboration paints tasks, facts and results with different backgrounds, so a fact is no longer the same surface as a result. (`F-136`)
+- The desktop and Web inspector registers project collaboration and conversation task panels through one entry point. If a selected entry disappears, the inspector shows Agents without changing the requested tab. (`F-136`, `F-137`)
+
+### Fixed
+
 - Web Gateway sign-in no longer opens the host's system browser on a shared loopback engine. Native desktop still opts in; both surfaces retain the validated manual link. (`F-210`, `C-006`)
 
 - Switching Nuwa projects no longer shows the previous project's connection status or error while the new subscription starts. (`F-136`)
