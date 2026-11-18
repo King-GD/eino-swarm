@@ -420,14 +420,16 @@ func (a *AccountModels) fetch(ctx context.Context, id accountIdentity) (outcome 
 			outcome.source.SetCapabilities(boot.sourceCapabilities("preset"))
 			capability := boot.sourceCapabilities("preset")
 			if capability != nil && capability.Authorized && capability.Available && (capability.Capabilities["speech"].AudioParametersVersion == 1 || capability.Capabilities["transcription"].AudioParametersVersion == 1) && boot.clientCatalogURL != "" {
-				if data, err := a.get(ctx, boot.clientCatalogURL, id.token); err == nil {
-					outcome.source.SetAudioParameters(data)
+				boot.clientCatalogRead = &accountCatalogRead{}
+				boot.clientCatalogRead.raw, boot.clientCatalogRead.err = a.get(ctx, boot.clientCatalogURL, id.token)
+				if boot.clientCatalogRead.err == nil {
+					outcome.source.SetAudioParameters(boot.clientCatalogRead.raw)
 				}
 			}
 		}
-		if a.cfg != nil && a.cfg.ProductSnapshot().Resolved() == config.ProductModeLocal {
-			outcome = a.attachSwitchableCatalogs(ctx, boot, id.token, outcome)
-		}
+		// Discovery retains independently authorized sources for running and
+		// recovered bindings. The pool separately limits new choices by mode.
+		outcome = a.attachSwitchableCatalogs(ctx, boot, id.token, outcome)
 	}()
 	who = a.withPicture(id, boot, who)
 	if !boot.access {
@@ -583,6 +585,7 @@ type accountBootstrap struct {
 	profile                                 *provider.AccountProfile
 	roles                                   []provider.AccountRole
 	clientCatalogURL                        string
+	clientCatalogRead                       *accountCatalogRead
 	gatewayCatalog                          *accountCatalogRef
 }
 

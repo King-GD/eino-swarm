@@ -1,13 +1,12 @@
 import { GATEWAY_CAPABILITY_REFRESH_EVENT } from "@/lib/gateway-capabilities"
 import { useEffect, useRef, useState } from "react"
-import { createPortal } from "react-dom"
 import { Check, Loader2, Mic, RotateCcw, X } from "lucide-react"
 import { speechRecordingSupported, startSpeechRecording, type SpeechRecording } from "../../../frontend/src/lib/speech-media"
 import { installAndroidBack } from "@/lib/android-back"
 import { t } from "@/lib/i18n"
 import { cancelPhoneSpeech, transcribePhoneSpeech, usePhoneSpeech } from "@/lib/phone-speech"
 import { SpeechCallError } from "@/lib/speech-transport"
-import { Button } from "./ui/button"
+import { cn } from "@/lib/cn"
 
 export function speechFailureMessage(error: unknown): string {
   const name = error && typeof error === "object" && "name" in error ? String(error.name) : ""
@@ -23,37 +22,44 @@ export function speechFailureMessage(error: unknown): string {
   return t("speech.failed")
 }
 
-type Phase = "idle" | "preparing" | "recording" | "transcribing" | "error"
+export type SpeechCapturePhase = "idle" | "preparing" | "recording" | "transcribing" | "error"
+const emptyLevels = Array.from({ length: 20 }, () => 0)
+const actionClass = "flex size-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-40"
 
-/** The phone keeps recording controls in a touch-sized panel. The result is
+/** The composer hosts the recording controls. The result is
  * always a draft edit, never a send or a turn-start operation. */
-export function SpeechCapture({ disabled, onStart, onText, onBusyChange }: {
+export function SpeechCapture({ disabled, onStart, onText, onPhaseChange }: {
   disabled?: boolean
   onStart: () => void
   onText: (text: string) => void
-  onBusyChange: (busy: boolean) => void
+  onPhaseChange: (phase: SpeechCapturePhase) => void
 }) {
   const speech = usePhoneSpeech()
-  const [phase, setPhase] = useState<Phase>("idle")
+  const [phase, setPhase] = useState<SpeechCapturePhase>("idle")
   const [seconds, setSeconds] = useState(0)
-  const [level, setLevel] = useState(0)
+  const [levels, setLevels] = useState(emptyLevels)
   const [error, setError] = useState("")
   const controller = useRef<AbortController | undefined>(undefined)
   const recorder = useRef<SpeechRecording | undefined>(undefined)
   const recorded = useRef<Blob | undefined>(undefined)
-  const phaseRef = useRef<Phase>("idle")
+  const phaseRef = useRef<SpeechCapturePhase>("idle")
   const panel = useRef<HTMLDivElement>(null)
-  const handlers = useRef({ onStart, onText, onBusyChange })
-  handlers.current = { onStart, onText, onBusyChange }
-  const changePhase = (value: Phase) => {
+  const trigger = useRef<HTMLButtonElement>(null)
+  const handlers = useRef({ onStart, onText, onPhaseChange })
+  handlers.current = { onStart, onText, onPhaseChange }
+  const changePhase = (value: SpeechCapturePhase) => {
     phaseRef.current = value
     setPhase(value)
-    handlers.current.onBusyChange(value === "preparing" || value === "recording" || value === "transcribing")
+    handlers.current.onPhaseChange(value)
   }
   const cancel = () => {
     controller.current?.abort(); recorder.current?.cancel()
     controller.current = undefined; recorder.current = undefined; recorded.current = undefined
-    setError(""); setLevel(0); changePhase("idle")
+    setError(""); setLevels(emptyLevels); changePhase("idle")
+  }
+  const cancelFromControl = () => {
+    cancel()
+    requestAnimationFrame(() => trigger.current?.focus())
   }
   const cancelRef = useRef(cancel)
   cancelRef.current = cancel
@@ -63,11 +69,12 @@ export function SpeechCapture({ disabled, onStart, onText, onBusyChange }: {
     return () => { window.removeEventListener("zwai.phone.speech.cancel", cancelled); cancelRef.current() }
   }, [])
   useEffect(() => { cancelRef.current() }, [speech.epoch])
+  const open = phase !== "idle"
   useEffect(() => {
-    if (phase === "idle") return
+    if (!open) return
     panel.current?.focus()
     return installAndroidBack(() => { cancelRef.current(); return true })
-  }, [phase])
+  }, [open])
 
   const transcribe = async (blob: Blob, owner: AbortController) => {
     recorded.current = blob
@@ -108,11 +115,13 @@ export function SpeechCapture({ disabled, onStart, onText, onBusyChange }: {
     const owner = new AbortController()
     controller.current = owner
     recorded.current = undefined
-    setError(""); setSeconds(0); setLevel(0); changePhase("preparing")
+    setError(""); setSeconds(0); setLevels(emptyLevels); changePhase("preparing")
     try {
       const active = await startSpeechRecording({ signal: owner.signal, format: input.recording_format,
         maxDurationSeconds: input.max_duration_seconds, maxBytes: speech.snapshot!.limits.input_bytes,
-        onDuration: setSeconds, onLevel: setLevel, onLimit: () => { void finishRef.current() },
+        onDuration: (elapsed) => setSeconds(Math.floor(elapsed)),
+        onLevel: (value) => setLevels(history => [...history.slice(1), value]),
+        onLimit: () => { void finishRef.current() },
         onError: (failure) => { if (!owner.signal.aborted) { setError(speechFailureMessage(failure)); changePhase("error") } },
         onCancel: () => { if (controller.current === owner) { owner.abort(); controller.current = undefined; recorder.current = undefined; changePhase("idle") } },
       })
@@ -130,39 +139,56 @@ export function SpeechCapture({ disabled, onStart, onText, onBusyChange }: {
     setError("")
     void transcribe(recorded.current, owner)
   }
-  const open = phase !== "idle"
-  return <>
-    {speech.inputReady && speechRecordingSupported() ? <button type="button" aria-label={t("speech.start")} title={t("speech.start")}
-      disabled={disabled || open} className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-accent disabled:opacity-40"
-      onClick={() => { void start() }}><Mic className="size-5" aria-hidden /></button> : null}
-    {phase === "transcribing" ? createPortal(<div className="fixed inset-x-3 top-[max(3.5rem,env(safe-area-inset-top))] z-50 mx-auto flex max-w-lg items-center gap-3 rounded-xl border border-border bg-background p-3 shadow-lg">
-      <Loader2 aria-hidden className="size-5 animate-spin motion-reduce:animate-none" />
-      <p role="status" className="flex-1 text-sm">{t("speech.transcribing")}</p>
-      <Button type="button" variant="ghost" aria-label={t("speech.cancel")} onClick={cancel}><X aria-hidden className="size-5" /></Button>
-    </div>, document.body) : null}
-    {open && phase !== "transcribing" ? createPortal(<div className="fixed inset-0 z-50 flex items-end justify-center bg-background/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-      <div ref={panel} role="dialog" aria-modal="true" aria-label={t("speech.panel")} tabIndex={-1}
-        className="flex w-full max-w-lg flex-col gap-5 rounded-3xl border border-border bg-background p-6 shadow-lg focus:outline-hidden"
-        onKeyDown={(event) => {
-          if (event.key === "Escape") { event.preventDefault(); cancel(); return }
-          if (event.key === "Tab") {
-            const buttons = Array.from(panel.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [])
-            const first = buttons[0], last = buttons.at(-1)
-            if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.current)) { event.preventDefault(); last?.focus() }
-            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
-          }
-        }}>
-        <h2 className="text-center text-lg font-semibold">{t("speech.panel")}</h2>
-        <p role="status" className="text-center text-base tabular-nums">{phase === "preparing" ? t("speech.preparing") : phase === "recording" ? t("speech.recording", { seconds: Math.floor(seconds) }) : t("speech.failed")}</p>
-        {phase === "recording" ? <meter aria-label={t("speech.level")} className="h-6 w-full" min={0} max={1} value={level} /> : null}
-        {phase === "preparing" ? <Loader2 aria-hidden className="mx-auto size-8 animate-spin motion-reduce:animate-none" /> : null}
-        {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-        <div className="flex gap-3">
-          <Button type="button" variant="outline" className="h-14 flex-1 gap-2" onClick={cancel}><X aria-hidden className="size-5" />{t("speech.cancel")}</Button>
-          {phase === "error" ? <Button type="button" className="h-14 flex-1 gap-2" onClick={retry}><RotateCcw aria-hidden className="size-5" />{t("speech.retry")}</Button>
-            : <Button type="button" className="h-14 flex-1 gap-2" disabled={phase !== "recording"} onClick={() => { void finish() }}><Check aria-hidden className="size-5" />{t("speech.finish")}</Button>}
+  if (!open) return speech.inputReady && speechRecordingSupported() ? (
+    // The one-line field is 36px. A 44px control aligns to the bottom and
+    // leaves empty space across the top of the rounded row.
+    <button ref={trigger} type="button" aria-label={t("speech.start")} title={t("speech.start")} disabled={disabled}
+      className="flex size-9 shrink-0 items-center justify-center self-end rounded-full text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring active:bg-accent disabled:opacity-40"
+      onClick={() => { void start() }}><Mic className="size-4" aria-hidden /></button>
+  ) : null
+
+  const recording = phase === "recording"
+  const preparing = phase === "preparing"
+  const status = recording ? t("speech.recording", { seconds }) : preparing ? t("speech.preparing") : t("speech.transcribing")
+  return (
+    <div ref={panel} role="group" aria-label={t("speech.panel")} tabIndex={-1}
+      className="order-first flex min-h-11 min-w-0 basis-full items-center gap-2 outline-none"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancelFromControl() }
+      }}>
+      <button type="button" className={cn(actionClass, "text-muted-foreground active:bg-accent")}
+        aria-label={t("speech.cancel")} title={t("speech.cancel")} onClick={cancelFromControl}><X className="size-5" aria-hidden /></button>
+      {phase === "error" ? (
+        <p role="alert" className="min-w-0 flex-1 py-1 text-sm leading-snug text-destructive">{error}</p>
+      ) : recording ? (
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-2.5">
+          <span className="sr-only">{status}</span>
+          <meter className="sr-only" aria-label={t("speech.level")} min={0} max={1} value={levels.at(-1) ?? 0} />
+          <span aria-hidden className="flex shrink-0 items-center gap-1.5 text-xs font-medium tabular-nums">
+            <span className="size-1.5 rounded-full bg-destructive" />
+            {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
+          </span>
+          <div className="flex h-7 min-w-0 flex-1 items-center justify-center gap-[3px]" aria-hidden>
+            {levels.map((value, index) => (
+              <span key={index} className="max-w-1 flex-1 rounded-full bg-current text-muted-foreground transition-[height] duration-100 motion-reduce:transition-none"
+                style={{ height: `${3 + 21 * value ** 0.65}px` }} />
+            ))}
+          </div>
         </div>
-      </div>
-    </div>, document.body) : null}
-  </>
+      ) : (
+        <div role="status" className="flex min-w-0 flex-1 items-center gap-2 py-1 text-sm text-muted-foreground">
+          <Loader2 className="size-4 shrink-0 motion-safe:animate-spin" aria-hidden />
+          <span>{status}</span>
+        </div>
+      )}
+      {phase === "error" ? (
+        <button type="button" disabled={disabled} className={cn(actionClass, "bg-primary text-primary-foreground active:opacity-75")}
+          aria-label={t("speech.retry")} title={t("speech.retry")} onClick={retry}><RotateCcw className="size-5" aria-hidden /></button>
+      ) : preparing || recording ? (
+        <button type="button" disabled={!recording} className={cn(actionClass, "bg-primary text-primary-foreground active:opacity-75")}
+          aria-label={t("speech.finish")} title={t("speech.finish")}
+          onClick={() => { void finish() }}><Check className="size-5" aria-hidden /></button>
+      ) : null}
+    </div>
+  )
 }

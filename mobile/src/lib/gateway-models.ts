@@ -19,7 +19,7 @@ export function gatewayProvider(session: GatewaySession | null, bootstrap: Gatew
 }
 
 export const GATEWAY_MODEL_REFRESH_EVENT = "zwai.gateway.model-sources.refresh"
-export type GatewayModelSource = { provider: DirectProvider; names?: string[] }
+export type GatewayModelSource = { provider: DirectProvider; names?: string[]; conversationModel?: string }
 
 export function gatewayModelSources(session: GatewaySession, bootstrap: GatewayBootstrap): GatewayModelSource[] {
   const result: GatewayModelSource[] = []
@@ -29,13 +29,23 @@ export function gatewayModelSources(session: GatewaySession, bootstrap: GatewayB
     const published = (models.profile?.label ?? models.label).trim()
     source.label = published || source.id
     source.catalogURL = models.client_catalog_url ?? models.catalog_url
-    source.modelLabels = Object.fromEntries((models.roles ?? []).map(role => [role.id, role.label]))
     if (models.profile) {
       source.displayLabel = models.profile.label
       source.model = "account"
       result.push({ provider: source, names: [source.model] })
-    } else if (!models.client_catalog_url && models.roles) {
-      result.push({ provider: source, names: models.roles.filter(role => role.id === "conversation" && role.enabled).map(role => role.id) })
+    } else if (models.configurable === false || models.roles?.length) {
+      // Functional aliases can use the chat protocol too. Use this source's
+      // conversation binding, and still check the private catalog when present.
+      const role = models.roles?.find(item => item.id === "conversation")
+      if (!models.roles?.length || role?.enabled) {
+        const conversationModel = source.model || role?.id || "conversation"
+        if (role?.label) source.modelLabels = { [conversationModel]: role.label }
+        result.push({
+          provider: source,
+          conversationModel,
+          names: !models.client_catalog_url && role?.enabled ? [conversationModel] : undefined,
+        })
+      }
     } else result.push({ provider: source })
   }
   const global = bootstrap.gateway_models

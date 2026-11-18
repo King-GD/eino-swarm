@@ -355,6 +355,12 @@ func TestGatewaySpeechUsesFixedRolesEvenWithAnOfficialChatProfile(t *testing.T) 
 	if svc.Snapshot().Output.Ready {
 		t.Fatal("unannounced audio role became ready")
 	}
+	if err := cfg.Update(func(c *config.Config) error {
+		c.Speech.Input.Enabled, c.Speech.Output.Enabled = false, false
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	src, err = provider.NewAccountProfile("gateway:test", upstream.URL+"/client/desktop/v1", "private-host-token", provider.AccountProfile{Label: "chat-alias"})
 	if err != nil {
 		t.Fatal(err)
@@ -362,7 +368,7 @@ func TestGatewaySpeechUsesFixedRolesEvenWithAnOfficialChatProfile(t *testing.T) 
 	src.SetRoles([]provider.AccountRole{{ID: "speech", Enabled: true, Label: "Voice"}, {ID: "transcription", Enabled: true, Label: "Dictation"}})
 	svc.pool.SetAccountSource(src)
 	view := svc.Snapshot()
-	if view.Execution != "gateway" || view.GatewayOrigin != upstream.URL || !view.Input.Ready || view.Input.Model != "transcription" || view.Output.Model != "speech" || view.Output.Label != "Voice" {
+	if view.Execution != "gateway" || view.GatewayOrigin != upstream.URL || !view.Input.Enabled || !view.Input.Ready || view.Input.Model != "transcription" || !view.Output.Enabled || !view.Output.Ready || view.Output.Model != "speech" || view.Output.Label != "Voice" {
 		t.Fatalf("gateway view=%+v", view)
 	}
 	audio, err := svc.Synthesize(context.Background(), "answer")

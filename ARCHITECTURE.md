@@ -567,14 +567,20 @@ overwriting or re-signing an executable already used by an engine/window.
 
 Voice is an independent request service (`internal/speech`), not a chat turn or
 tool. The PC alone persists `speech.input`, `speech.output` and bounded resource
-limits. The voice sections in Settings → Models publish the safe readiness
-snapshot through HTTP metadata and Pairlink `speech_config`/catalog. Both directions default off. Input and output each project their resolved
+limits. The voice sections in Settings → Models or Speech use the safe readiness
+snapshot published through HTTP metadata and Pairlink `speech_config`/catalog.
+Gateway mode enables each resolved account voice role by default. A saved
+direction-specific opt-out survives reconnect. LOCAL and personal voice use
+their own enable switches. Input and output each project their resolved
 account-origin or PC-local route; editable Gateway defaults bypass PC audio RPC
 on the phone just as managed roles do. Same-named personal bindings stay on the
 PC, and old phone snapshots retain their legacy route.
 The pool resolves Gateway `transcription`/`speech` roles separately from the
 conversation profile alias; local voice selects its own provider/custom model.
 PC renderers use same-origin `/api/audio/*`, keeping credentials in Go.
+The PC and phone render editable parameters from the selected model's authorized
+audio declaration. Fixed values and gateway caps still govern requests. PC
+capture format, timeouts and client limits sit under collapsed Advanced settings.
 
 The phone reuses the explicitly selected PC's safe snapshot in PC conversations
 and direct Chat. Gateway execution uses the phone's own current Mobile session
@@ -635,7 +641,7 @@ published on `account_models.kinds` for the settings summary and the embedding
 picker. `models.account_model` selects which conversation name a new server
 chat starts on. The pool resolves a conversation's
 stored id against both, and returns `ErrAccountLoginRequired` instead of falling
-back when a stored `gateway:` id has no source. In local mode that refresh also
+back when a stored `gateway:` id has no source. In either mode that refresh also
 reads the bootstrap's same-origin third-party catalog and, when the response
 enables it, the original gateway catalog. An empty desktop catalog adopts the
 third-party catalog instead of reporting no access. Those catalogs are extra
@@ -652,7 +658,16 @@ default-provider rule) picks which one a new conversation starts on.
 The client has LOCAL and gateway execution sources. The persisted default name
 `fofa` remains compatible. `provider.ModelPolicy` projects the active source,
 server edit permission and functional defaults. LOCAL preserves signed-in catalogs beside personal providers without applying a managed selection lock. Editable gateways combine their preset with scoped explicit overrides;
-managed third-party gateways expose and execute only their own preset. Legacy
+managed third-party gateways expose and select only their own preset for new turns.
+An already-bound turn or worker retains its original, independently authorized
+Gateway source across a mode switch, catalog refresh and restart. Same-turn
+human Retry follows that original binding as well. Recovery uses
+the durable binding rather than resolving it through the current preset; the
+next new turn applies that preset. While startup still has an unavailable
+account projection, recovery joins the existing cancellable discovery loop
+before resolving its binding. Hidden catalogs remain private authorization
+data and do not become new model choices. Revocation, logout and credential
+replacement still stop subsequent calls on the old client. Legacy
 profile/role bootstrap responses imply managed unless the server explicitly grants
 configuration. `models.account_presentation` cannot unlock it.
 
@@ -664,13 +679,15 @@ Profile guidance and tool allowlists still apply to that account source only;
 the guidance text stays out of meta/settings and is traced only as a length.
 
 Debug mode switching persists while turns and workers keep the model client they
-already opened. It takes the model-use write lock, so a stream, embedding,
-decision or audio call that holds the read lock finishes on its original source
-first. Backup, restore and restart still refuse the switch because they own the
-data directory. `models/lifecycle/ModelModeAdmission.tla` checks this model-call
-ordering and rediscovers the sample-then-commit race. Phone Account mode requires
-a live same-account PC and
-ready engine, using the PC's model policy without its own gateway model projection.
+already opened. The write lock excludes new source admission during the save.
+Chat rechecks policy after a cooldown and releases its read hold before HTTP.
+An admitted reply can finish on its bound source while new work picks up the
+saved mode. Embeddings hold admission only while resolving a source. Audio,
+decisions and legacy fixed-role requests keep their existing holds. Backup,
+restore and restart still refuse the switch. `models/lifecycle/ModelModeAdmission.tla`
+models this ordering and the sample-then-commit race. Paired phone conversations
+in Account mode require a live same-account PC and a ready engine and use its
+model policy. Phone-direct conversations use the mobile account's Gateway grants.
 
 `/api/meta.configured` counts a ready account, so a signed-in person is not
 shown the setup banner. The desktop welcome (`welcome-gate.tsx`) is gated by
@@ -680,10 +697,13 @@ account state changes. The server side is aigateway's
 `/client/desktop/v1/{bootstrap,models,chat/completions,responses}`, which accept
 the host token on those routes only.
 
-The phone requires sign-in and a ready selected PC in Account mode:
-`gateway-account-shell.tsx` shows `GatewayAccountScreen` with PC guidance while
-unbound. Scan, paste and own-model under Other ways belong to the LOCAL debug
-mode. An explicit avatar gesture first switches the currently live selected PC
+The phone requires sign-in in Account mode. The PC page shows connection guidance
+while no selected engine is ready. **Chat** stays available in the top bar.
+`use-gateway-model-sources.ts` resolves the signed-in account's same-origin
+conversation catalogs for both modes. `DirectChatScreen` sends through
+`openai-client.ts` using the mobile credential and keeps its history on the phone.
+Scan, paste and own-model under Other ways belong to the LOCAL debug mode.
+An explicit avatar gesture first switches the currently live selected PC
 through `set_product_mode`, reusing `Engine.UpdateConfigForMode` and its model-use
 admission. Only the exact acknowledged mode commits the phone preference;
 errors retain it, and reconnect/PC selection never replays the mutation. The PC

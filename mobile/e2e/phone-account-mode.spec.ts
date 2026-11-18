@@ -53,13 +53,12 @@ test("signed-in avatar toggles Local menus and returns to Account without a conn
   await portrait.tap()
   await portrait.tap()
   expect(await page.evaluate(() => localStorage.getItem("zwai.phone.mode"))).toBeNull()
-  // The third touch may replace the account page as its catalog arrives.
-  // Send that touch to its observed coordinates without waiting for the old
-  // portrait to remain mounted after the action has already taken effect.
+  // The third touch moves the embedded waiting page into the User center overlay.
   const bounds = await portrait.boundingBox()
   expect(bounds).not.toBeNull()
   await page.touchscreen.tap(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2)
   await expect.poll(() => page.evaluate(() => localStorage.getItem("zwai.phone.mode"))).toBe("local")
+  await page.getByRole("dialog", { name: "用户中心", exact: true }).getByRole("button", { name: "关闭", exact: true }).click()
   await expect(page.getByLabel("消息", { exact: true })).toBeVisible()
   await page.getByRole("button", { name: "用户中心", exact: true }).click()
   const center = page.getByRole("dialog", { name: "用户中心", exact: true })
@@ -92,7 +91,7 @@ test("Account waits for its selected PC engine and restores the unchanged draft 
   let modelRequests = 0
   await page.route(origin + "/**", async route => {
     const path = new URL(route.request().url()).pathname
-    if (path.startsWith("/v1/")) modelRequests++
+    if (path.startsWith("/v1/") && route.request().method() === "POST") modelRequests++
     const data = path === "/client/api/v1/capabilities" ? conversationCapabilities() : path.endsWith("/auth/me") ? { user, device }
       : path.endsWith("/bootstrap") ? { user, device, capabilities_url: origin + "/client/api/v1/capabilities", models: { source_id: "gateway:owner", source_kind: "gateway", label: "Team", execution: "phone", api_base_url: origin + "/v1", catalog_url: origin + "/v1/models", api_access_enabled: true }, pairlink: { enabled: false, hub_url: origin, redeem_url: origin + "/pairlink/v1/pairings/redeem", info_url: origin + "/pairlink/v1/info", websocket_url: origin.replace("https:", "wss:") + "/pairlink/v1/ws" }, heartbeat_interval: 30, presence_ttl: 90 } : []
     await route.fulfill({ json: { data } })
@@ -141,6 +140,30 @@ async function hiddenGateway(page: Page, bindMockPC = false) {
   return () => modelRequests
 }
 
+test("Account streams a Gateway reply from the phone while all PCs are unavailable", async ({ page }) => {
+  await hiddenGateway(page)
+  await page.route(origin + "/v1/models", route => route.fulfill({ json: { data: [
+    { id: "title", model_type: "chat" },
+    { id: "conversation", model_type: "chat" },
+  ] } }))
+  const requests: Array<{ model: string; authorization?: string }> = []
+  await page.route(origin + "/v1/chat/completions", async route => {
+    const request = route.request()
+    requests.push({ model: request.postDataJSON().model, authorization: request.headers().authorization })
+    await route.fulfill({ contentType: "text/event-stream",
+      body: 'data: {"choices":[{"delta":{"content":"Direct Gateway reply"}}]}\n\ndata: [DONE]\n\n' })
+  })
+  await page.goto("/")
+  await expect(page.getByTestId("pc-wait")).toBeVisible()
+  await page.getByRole("tab", { name: "对话", exact: true }).click()
+  const input = page.getByRole("textbox", { name: "消息", exact: true })
+  await expect(input).toBeEnabled()
+  await input.fill("Routing fixture")
+  await page.getByRole("button", { name: "发送", exact: true }).click()
+  await expect(page.getByText("Direct Gateway reply", { exact: true })).toBeVisible()
+  expect(requests).toEqual([{ model: "conversation", authorization: "Bearer " + token }])
+})
+
 test("debug mode switch works with a hidden Gateway catalog", async ({ page }, info) => {
   const modelRequests = await hiddenGateway(page)
   await page.goto("/")
@@ -148,6 +171,7 @@ test("debug mode switch works with a hidden Gateway catalog", async ({ page }, i
   await expect(portrait).toHaveAttribute("aria-label", user.username)
   await portrait.tap(); await portrait.tap(); await portrait.tap()
   await expect.poll(() => page.evaluate(() => localStorage.getItem("zwai.phone.mode"))).toBe("local")
+  await page.getByRole("dialog", { name: "用户中心", exact: true }).getByRole("button", { name: "关闭", exact: true }).click()
   await expect(page.getByText("无法加载服务器模型，可刷新重试。", { exact: true })).toHaveCount(0)
   await expect(page.getByRole("heading", { name: "服务器模型", exact: true })).toHaveCount(0)
   await page.getByRole("button", { name: "其他方式", exact: true }).click()
@@ -159,7 +183,7 @@ test("debug mode switch works with a hidden Gateway catalog", async ({ page }, i
 })
 
 
-test("debug mode switch closes an open User center and preserves PC selection", async ({ page }, info) => {
+test("debug mode switch keeps User center open until Close and preserves PC selection", async ({ page }, info) => {
   const modelRequests = await hiddenGateway(page, true)
   await page.goto("/?mock=1&tick=0")
   const input = page.getByLabel("消息", { exact: true })
@@ -171,6 +195,9 @@ test("debug mode switch closes an open User center and preserves PC selection", 
     const portrait = dialog.getByTestId("account-portrait")
     await portrait.tap(); await portrait.tap(); await portrait.tap()
     await expect.poll(() => page.evaluate(() => localStorage.getItem("zwai.phone.mode"))).toBe(next)
+    await expect(dialog).toBeVisible()
+    await expect(page.getByRole("textbox", { name: "消息", exact: true })).toHaveCount(0)
+    await dialog.getByRole("button", { name: "关闭", exact: true }).click()
     await expect(dialog).toHaveCount(0)
     await expect(input).toBeVisible()
     await expect(input).toBeInViewport()
@@ -200,6 +227,7 @@ test("three avatar taps switch the selected PC and expose both interface groups 
   }
   await toggle()
   await expect.poll(() => page.evaluate(() => localStorage.getItem("zwai.phone.mode"))).toBe("local")
+  await page.getByRole("dialog", { name: "用户中心", exact: true }).getByRole("button", { name: "关闭", exact: true }).click()
   await page.getByRole("button", { name: "模型", exact: true }).click()
   const picker = page.getByRole("dialog", { name: "模型", exact: true })
   for (const name of ["Partner", "原始接口 · Main"]) await expect(picker.getByRole("group", { name, exact: true }).getByRole("radio", { name: "shared-model", exact: true })).toBeVisible()
@@ -212,6 +240,7 @@ test("three avatar taps switch the selected PC and expose both interface groups 
   await picker.getByRole("button", { name: "关闭", exact: true }).click()
   await toggle()
   await expect.poll(() => page.evaluate(() => localStorage.getItem("zwai.phone.mode"))).toBe("account")
+  await page.getByRole("dialog", { name: "用户中心", exact: true }).getByRole("button", { name: "关闭", exact: true }).click()
   await expect(page.getByRole("button", { name: "模型", exact: true })).toHaveCount(0)
   expect(await page.evaluate(() => localStorage.getItem("zwai.remote.active"))).toBe(selected)
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("zwai.phone.gateway.session") || "null")?.user.id)).toBe(user.id)
@@ -229,6 +258,7 @@ test("a PC mode refusal retains Account and offers an explicit retry without los
   await page.evaluate(() => history.replaceState(null, "", "?mock=1&tick=0&pc-models=managed"))
   await portrait.tap(); await portrait.tap(); await portrait.tap()
   await expect.poll(() => page.evaluate(() => localStorage.getItem("zwai.phone.mode"))).toBe("local")
+  await page.getByRole("dialog", { name: "用户中心", exact: true }).getByRole("button", { name: "关闭", exact: true }).click()
   await expect(page.getByRole("button", { name: "模型", exact: true })).toBeVisible()
   await page.screenshot({ path: info.outputPath("pc-mode-retry.png") })
 })

@@ -146,15 +146,25 @@ func (p *Pool) guardCapability(inner model.BaseChatModel, id, role string) model
 		*guarded = *shared
 	}
 	policyUse := guarded.policyUse
+	roleSource := guarded.roleSource
+	if roleSource == nil {
+		roleSource = func() *AccountSource { return p.accountForExecution(id) }
+	}
 	guarded.onResult = p.capabilityResult
 	guarded.policyUse = func() (func(), error) {
-		if source := p.accountForExecution(id); source == nil || !source.allowsRole(role) {
+		acquire := policyUse
+		if acquire == nil {
+			acquire = p.beginChatAdmission
+		}
+		release, err := acquire()
+		if err != nil {
+			return nil, err
+		}
+		if source := roleSource(); source == nil || !source.allowsRole(role) {
+			release()
 			return nil, ErrModelPolicy
 		}
-		if policyUse != nil {
-			return policyUse()
-		}
-		return func() {}, nil
+		return release, nil
 	}
 	return guarded
 }

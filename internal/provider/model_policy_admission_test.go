@@ -13,9 +13,8 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// A model stream, including an auxiliary call outside a turn, must finish
-// before changing execution source. The assertion crosses the real HTTP client.
-func TestModelStreamHoldsSourceUntilUpstreamCompletes(t *testing.T) {
+// Source saves freeze new admission while an already-bound stream drains.
+func TestOpenModelStreamLeavesSourceSwitchFree(t *testing.T) {
 	for _, account := range []bool{false, true} {
 		name := "provider"
 		if account {
@@ -60,10 +59,16 @@ func TestModelStreamHoldsSourceUntilUpstreamCompletes(t *testing.T) {
 				t.Fatal(err)
 			}
 			<-entered
-			if release, ok := p.TryHoldModelPolicy(); ok {
-				release()
-				t.Error("live stream allowed source change")
+			release, ok := p.TryHoldModelPolicy()
+			if !ok {
+				close(finish)
+				stream.Close()
+				t.Fatal("live stream still holds model admission")
 			}
+			if _, err := m.Generate(t.Context(), nil); !errors.Is(err, ErrModelPolicy) {
+				t.Errorf("new request entered frozen source: %v", err)
+			}
+			release()
 			close(finish)
 			for {
 				_, err = stream.Recv()
@@ -75,14 +80,6 @@ func TestModelStreamHoldsSourceUntilUpstreamCompletes(t *testing.T) {
 			if !errors.Is(err, io.EOF) {
 				t.Fatal(err)
 			}
-			release, ok := p.TryHoldModelPolicy()
-			if !ok {
-				t.Fatal("completed stream retained hold")
-			}
-			if _, err = m.Generate(t.Context(), nil); !errors.Is(err, ErrModelPolicy) {
-				t.Fatalf("request entered frozen source: %v", err)
-			}
-			release()
 			if hits.Load() != 1 {
 				t.Fatal("refused call reached HTTP")
 			}
@@ -184,6 +181,51 @@ func TestOpenedGatewayModelKeepsItsCredentialUntilThatCredentialChanges(t *testi
 	}
 	if hits.Load() != 2 {
 		t.Fatal("rotated credential reached HTTP")
+	}
+}
+
+func TestOpenedLocalGatewayCallKeepsItsOwnGrantAfterSwitch(t *testing.T) {
+	var hits atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		if r.Header.Get("Authorization") != "Bearer local-gateway-session" {
+			t.Error("the old call lost its credential")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, backoffCompletion)
+	}))
+	defer upstream.Close()
+	cfg := configFor(t, false)
+	cfg.Product.Mode = config.ProductModeLocal
+	p := New(cfg)
+	local := accountSourceFor(t, upstream.URL, "local-gateway-session")
+	local.SetCatalogGroup("original")
+	local.SetCapabilities(roleManifest("conversation", "chat_completions", true))
+	primary := accountSourceFor(t, upstream.URL, "local-gateway-session")
+	primary.SetCapabilities(roleManifest("conversation", "chat_completions", true))
+	p.SetAccountSource(primary)
+	p.SetLocalAccountSources([]*AccountSource{local})
+
+	build, err := p.ModelBuilder(t.Context(), local.id, "server-model", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened := build("manager", "manager")
+	if _, err := opened.Generate(t.Context(), backoffMessages()); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.Update(func(c *config.Config) error { c.Product.Mode = config.ProductModeFOFA; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := opened.Generate(t.Context(), backoffMessages()); err != nil {
+		t.Fatalf("the running turn could not continue on its original gateway route: %v", err)
+	}
+	p.SetLocalAccountSources(nil)
+	if _, err := opened.Generate(t.Context(), backoffMessages()); !errors.Is(err, ErrModelPolicy) {
+		t.Fatalf("a different catalog replaced the removed grant: %v", err)
+	}
+	if hits.Load() != 2 {
+		t.Fatalf("upstream requests = %d, want 2", hits.Load())
 	}
 }
 

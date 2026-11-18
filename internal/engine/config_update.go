@@ -13,9 +13,9 @@ func (e *Engine) UpdateConfig(edit func(*config.Config) error) error {
 }
 
 // UpdateConfigForMode persists a debug source switch while turns and workers
-// keep the model they already opened. A model call that has entered admission
-// still finishes on that source before the switch can commit. Backup, restore
-// and restart keep the data directory, so they still refuse the switch.
+// keep the model they already opened. Chat admission is exclusive with the
+// save, while bound chat requests can finish on their original source.
+// Backup, restore and restart still refuse the switch.
 func (e *Engine) UpdateConfigForMode(mode *config.ProductConfig, edit func(*config.Config) error) error {
 	e.configUpdateMu.Lock()
 	defer e.configUpdateMu.Unlock()

@@ -379,6 +379,8 @@ export const en = {
   "chat.edit": "Edit model",
   "chat.emptyTitle": "No chat yet",
   "chat.emptyHint": "Pick a model and a thinking level, then send. This phone talks to the model service itself.",
+  "chat.gatewayHint": "Chat directly with the Gateway from this phone.",
+  "chat.noGatewayModel": "Your account has no available Gateway chat model.",
   "chat.needModel": "Pick a model before sending.",
   "chat.name": "Name",
   "chat.baseUrl": "Base URL",

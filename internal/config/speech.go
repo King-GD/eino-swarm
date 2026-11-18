@@ -3,11 +3,12 @@ package config
 import (
 	"errors"
 	"fmt"
-	"github.com/LubyRuffy/eino-swarm/internal/audioparams"
 	"math"
 	"net/url"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/LubyRuffy/eino-swarm/internal/audioparams"
 )
 
 // ErrInvalidSpeech identifies invalid voice settings without inspecting prose.
@@ -39,8 +40,10 @@ type SpeechEndpoint struct {
 // SpeechInputConfig controls recording and OpenAI-compatible transcription.
 type SpeechInputConfig struct {
 	SpeechEndpoint     `yaml:",inline"`
+	GatewayDisabled    bool   `yaml:"gateway_disabled,omitempty" json:"gateway_disabled"`
 	Language           string `yaml:"language,omitempty" json:"language"`
 	Prompt             string `yaml:"prompt,omitempty" json:"prompt"`
+	DeviceID           string `yaml:"device_id,omitempty" json:"device_id,omitempty"`
 	RecordingFormat    string `yaml:"recording_format" json:"recording_format"`
 	MaxDurationSeconds int    `yaml:"max_duration_seconds" json:"max_duration_seconds"`
 	TimeoutSeconds     int    `yaml:"timeout_seconds" json:"timeout_seconds"`
@@ -48,12 +51,13 @@ type SpeechInputConfig struct {
 
 // SpeechOutputConfig controls on-demand spoken answers.
 type SpeechOutputConfig struct {
-	SpeechEndpoint `yaml:",inline"`
-	Voice          string  `yaml:"voice,omitempty" json:"voice"`
-	Speed          float64 `yaml:"speed" json:"speed"`
-	Format         string  `yaml:"format" json:"format"`
-	Instructions   string  `yaml:"instructions,omitempty" json:"instructions"`
-	TimeoutSeconds int     `yaml:"timeout_seconds" json:"timeout_seconds"`
+	SpeechEndpoint  `yaml:",inline"`
+	GatewayDisabled bool    `yaml:"gateway_disabled,omitempty" json:"gateway_disabled"`
+	Voice           string  `yaml:"voice,omitempty" json:"voice"`
+	Speed           float64 `yaml:"speed" json:"speed"`
+	Format          string  `yaml:"format" json:"format"`
+	Instructions    string  `yaml:"instructions,omitempty" json:"instructions"`
+	TimeoutSeconds  int     `yaml:"timeout_seconds" json:"timeout_seconds"`
 }
 
 // SpeechLimits bounds independent voice requests and ephemeral phone buffers.
@@ -72,7 +76,7 @@ type SpeechConfig struct {
 	Limits            SpeechLimits                     `yaml:"limits" json:"limits"`
 }
 
-// DefaultSpeech leaves both directions off and does not choose a model product.
+// DefaultSpeech leaves personal speech off and follows Gateway model availability.
 func DefaultSpeech() SpeechConfig {
 	return SpeechConfig{
 		Input:  SpeechInputConfig{SpeechEndpoint: SpeechEndpoint{Source: SpeechSourceAccount}, RecordingFormat: "auto", MaxDurationSeconds: DefaultSpeechDurationSeconds, TimeoutSeconds: DefaultSpeechTimeoutSeconds},
@@ -92,6 +96,7 @@ func (c *Config) normalizeSpeech() {
 		endpoint.BaseURL = strings.TrimRight(strings.TrimSpace(endpoint.BaseURL), "/")
 		endpoint.Model = strings.TrimSpace(endpoint.Model)
 	}
+	s.Input.DeviceID = strings.TrimSpace(s.Input.DeviceID)
 	if s.Input.RecordingFormat == "" {
 		s.Input.RecordingFormat = d.Input.RecordingFormat
 	}
@@ -176,6 +181,9 @@ func (c *Config) validateSpeech() (err error) {
 	}
 	if s.Input.RecordingFormat != "auto" && s.Input.RecordingFormat != "wav" {
 		return fmt.Errorf("speech recording format must be auto or wav")
+	}
+	if id := s.Input.DeviceID; id != "" && (len(id) > 256 || strings.ContainsAny(id, "\r\n") || !utf8.ValidString(id)) {
+		return fmt.Errorf("speech input device is invalid")
 	}
 	if s.Output.Format != "mp3" && s.Output.Format != "wav" && s.Output.Format != "pcm" {
 		return fmt.Errorf("speech output format must be mp3, wav or pcm")

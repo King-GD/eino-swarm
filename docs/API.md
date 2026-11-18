@@ -48,7 +48,12 @@ complete-segment semantics.
 `GET /api/settings` and `PUT /api/settings` include `speech.input`,
 `speech.output` and `speech.limits`. Each direction has `enabled`, `source`
 (`account`, `provider`, `custom`), `provider_id`, `base_url`, `model` and
-direction-specific parameters. `api_key` is write-only: omitted keeps the saved
+direction-specific parameters. `enabled` controls LOCAL and personal services.
+For a resolved account model in Gateway mode, `gateway_disabled: true`
+disables that direction. `false` follows model availability, and omitting the
+field on PUT preserves its stored value. `speech.input.device_id` is optional; empty
+uses the system microphone, and a non-empty value is that browser's audio
+input id. Phones drop it and keep the phone microphone. `api_key` is write-only: omitted keeps the saved
 key, an explicit empty string clears it; reads report `has_api_key`.
 Functional bindings resolve each direction's model. Managed gateways supply
 their enabled roles; editable accounts and LOCAL can select personal providers.
@@ -56,7 +61,7 @@ The request cannot supply a replacement upstream URL, key or model.
 
 PC metadata and phone `speech_config`/catalog replies publish only a safe voice
 snapshot: `execution` (`gateway`/`pc_local`), verified `gateway_origin` when
-applicable, input/output `enabled`, `ready`, reason, model/label, parameters and
+applicable, effective input/output `enabled`, `ready`, reason, model/label, parameters and
 limits. Both `input` and `output` additionally publish their own `execution`
 and, only for a resolved account source, `gateway_origin`. New phones prefer
 that direction's fields. Unchanged Gateway defaults therefore send recognition

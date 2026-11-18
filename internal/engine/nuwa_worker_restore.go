@@ -115,7 +115,7 @@ func (e *Engine) workerConfigurationForTag(ctx context.Context, threadID, tag st
 	if _, recovered := turn.WorkerModelRecovery[turn.ProviderID]; recovered {
 		builder, err = e.pool.RestoreWorkerModel(ctx, selection, e.callRecorder(threadID, tag))
 	} else {
-		builder, err = e.pool.ModelBuilder(ctx, selection.ProviderID, selection.Model, selection.ReasoningEffort, e.callRecorder(threadID, tag))
+		builder, err = e.pool.ResumeModelBuilder(ctx, selection.ProviderID, selection.Model, selection.ReasoningEffort, e.callRecorder(threadID, tag))
 	}
 	if err != nil {
 		return swarm.WorkerConfig{}, err

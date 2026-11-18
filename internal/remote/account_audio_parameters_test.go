@@ -55,4 +55,7 @@ func TestFixedAudioRolesReadOnlyTheAuthorizedPrivateParameterCatalog(t *testing.
 	if view = p.AudioParameters(accountModelsSourceID, "speech", "speech"); view == nil || view.Status != "unavailable" {
 		t.Fatalf("stale declaration retained: %+v", view)
 	}
+	if privateReads.Load() != 2 {
+		t.Fatalf("one refresh repeated its failed private catalog read: %d", privateReads.Load())
+	}
 }

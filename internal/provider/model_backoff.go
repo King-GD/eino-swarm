@@ -84,7 +84,14 @@ func (r *recordingModel) admitBackoff(ctx context.Context) (context.Context, fun
 		ticket.finish(backoffFailure)
 		var err error
 		ticket, err = r.gate.acquire(ctx, onWait)
-		return err
+		if err != nil {
+			return err
+		}
+		if err := r.checkPolicy(); err != nil {
+			ticket.finish(backoffCanceled)
+			return err
+		}
+		return nil
 	})
 	ctx = context.WithValue(ctx, backoffProgressKey{}, func() {
 		if ctx.Err() == nil {

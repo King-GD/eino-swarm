@@ -36,7 +36,7 @@ export function useAutoGatewayPCs(account: ReturnType<typeof useGatewayAccount>)
         const target = owned.find(link => link.gatewayHostID === targetHost?.id)
         if (!target) return
         selected.current = true
-        window.dispatchEvent(new CustomEvent("zwai.gateway.connect", { detail: target.fingerprint }))
+        window.dispatchEvent(new CustomEvent("zwai.gateway.auto-connect", { detail: target.fingerprint }))
       }))
     }
     void connect()

@@ -151,6 +151,7 @@ describe("Settings dialog", () => {
     renderDialog({ initialSection: "speech" })
     await screen.findByRole("heading", { name: "Voice input" })
     expect(screen.getByRole("tab", { name: "Speech" })).toHaveAttribute("aria-selected", "true")
+    expect(screen.getByRole("heading", { name: "Speech", level: 2 })).toBeVisible()
     expect(screen.queryByRole("tab", { name: "Models" })).toBeNull()
     expect(screen.queryByTestId("account-models-card")).toBeNull()
     expect(screen.getByRole("heading", { name: "Read aloud" })).toBeVisible()
@@ -238,17 +239,22 @@ describe("Settings dialog", () => {
     } finally { fetcher.mockRestore() }
   })
 
-  it("saves voice switches through the independent Speech page", async () => {
+  it("saves gateway voice opt-out through the independent Speech page", async () => {
     const model_policy = gatewayVoicePolicy()
     vi.mocked(api.settings).mockResolvedValue({ ...base, model_policy })
-    useApp.setState({ meta: { product_mode: "fofa", model_policy } as Meta })
+    const speech = defaultSpeechSettings()
+    useApp.setState({ meta: { product_mode: "fofa", model_policy, speech: {
+      ...speech, execution: "gateway",
+      input: { ...speech.input, execution: "gateway", model: "recognizer", label: "Voice input", enabled: true, ready: true },
+      output: { ...speech.output, ready: false, label: "" },
+    } } as unknown as Meta })
     renderDialog({ initialSection: "speech" })
     await screen.findByRole("heading", { name: "Voice input" })
     fireEvent.click(screen.getAllByLabelText("Enabled")[0])
     await waitFor(() => expect(api.saveSettings).toHaveBeenCalled())
     const patch = vi.mocked(api.saveSettings).mock.lastCall![0]
-    expect(patch.speech?.input.enabled).toBe(true)
-    expect(patch.speech?.output.enabled).toBe(false)
+    expect(patch.speech?.input.gateway_disabled).toBe(true)
+    expect(patch.speech?.output.gateway_disabled).toBeUndefined()
     expect(patch.models).toBeUndefined()
   })
 

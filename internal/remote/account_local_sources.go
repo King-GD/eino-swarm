@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/provider"
 )
 
@@ -18,6 +19,14 @@ type accountCatalogRef struct {
 	group                                   string
 	defaults                                map[string]string
 	configurable                            bool
+	read                                    *accountCatalogRead
+}
+
+// A refresh consumes one private response for both audio declarations and
+// the retained preset catalog, including a failed read.
+type accountCatalogRead struct {
+	raw []byte
+	err error
 }
 
 const (
@@ -26,8 +35,9 @@ const (
 	catalogKeep
 )
 
-// attachSwitchableCatalogs adds the authorized third-party preset and original
-// gateway catalogs while LOCAL is signed in. A denied or empty catalog is
+// attachSwitchableCatalogs retains the authorized third-party preset and original
+// gateway catalogs while signed in. Only LOCAL lists the extras as new choices.
+// A denied or empty catalog is
 // omitted. A transient failure retains only that still-authorized source.
 func (a *AccountModels) attachSwitchableCatalogs(ctx context.Context, boot accountBootstrap, token string, o accountOutcome) accountOutcome {
 	if o.state.State != AccountReady && o.state.State != AccountNoAccess && !o.transient {
@@ -40,7 +50,7 @@ func (a *AccountModels) attachSwitchableCatalogs(ctx context.Context, boot accou
 		if item.src == nil {
 			continue
 		}
-		if o.source == nil && item.preset && !o.transient {
+		if (o.source == nil || o.source.ModelCount() == 0) && item.preset && !o.transient {
 			kinds := item.src.Kinds()
 			o.source = item.src
 			o.state.State = AccountReady
@@ -53,7 +63,7 @@ func (a *AccountModels) attachSwitchableCatalogs(ctx context.Context, boot accou
 		extra = append(extra, item.src)
 	}
 	o.local = extra
-	if len(extra) > 0 && o.state.State == AccountNoAccess {
+	if a.cfg.ProductSnapshot().Resolved() == config.ProductModeLocal && len(extra) > 0 && o.state.State == AccountNoAccess {
 		o.state.State = AccountReady
 		o.state.Reason = ""
 	}
@@ -63,7 +73,7 @@ func (a *AccountModels) attachSwitchableCatalogs(ctx context.Context, boot accou
 func (a *AccountModels) switchableCatalogs(ctx context.Context, boot accountBootstrap, token string) []switchableSource {
 	var refs []accountCatalogRef
 	if boot.access && boot.clientCatalogURL != "" {
-		refs = append(refs, accountCatalogRef{sourceID: boot.sourceID, label: boot.label, apiBaseURL: boot.apiBaseURL, catalogURL: boot.clientCatalogURL, sameAsPreset: true, group: "third_party", defaults: boot.defaults, configurable: boot.configurable()})
+		refs = append(refs, accountCatalogRef{sourceID: boot.sourceID, label: boot.label, apiBaseURL: boot.apiBaseURL, catalogURL: boot.clientCatalogURL, sameAsPreset: true, group: "third_party", defaults: boot.defaults, configurable: boot.configurable(), read: boot.clientCatalogRead})
 	}
 	if boot.gatewayCatalog != nil {
 		refs = append(refs, *boot.gatewayCatalog)
@@ -112,7 +122,12 @@ type switchableSource struct {
 }
 
 func (a *AccountModels) oneCatalog(ctx context.Context, token string, ref accountCatalogRef) (switchableSource, int) {
-	raw, err := a.get(ctx, ref.catalogURL, token)
+	read := ref.read
+	if read == nil {
+		read = &accountCatalogRead{}
+		read.raw, read.err = a.get(ctx, ref.catalogURL, token)
+	}
+	raw, err := read.raw, read.err
 	if err != nil {
 		return switchableSource{}, catalogStatus(err)
 	}

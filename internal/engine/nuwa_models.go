@@ -92,7 +92,12 @@ func (e *Engine) wireNuwaRegistry(reg *swarm.Registry, set *tools.Set, pc *proje
 			}
 			id, name, effort = executor.ProviderID, executor.Model, executor.ReasoningEffort
 			if !nuwaReadyChoice(options, id, name) {
-				return swarm.ModelBinding{}, nil, fmt.Errorf("choose a ready planner model and executor model in the project")
+				// The current turn froze this executor before a mode switch.
+				// Hidden choices may still be independently authorized; this
+				// trusted binding cannot authorize an arbitrary model_ref.
+				builder, err := e.pool.RestoreWorkerModel(ctx, executor, recorder)
+				executor.Ref = provider.ChoiceID(id, name)
+				return executor, builder, err
 			}
 		} else if ref == "" && len(options) > 1 {
 			return swarm.ModelBinding{}, nil, fmt.Errorf("model_ref is required for a new role when multiple models are available; use an exact ref returned by list_models")

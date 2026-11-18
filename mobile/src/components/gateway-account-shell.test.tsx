@@ -106,6 +106,8 @@ describe("gateway account shell", () => {
       expect(mutations).toHaveLength(1)
       await act(async () => acknowledge())
       await waitFor(() => expect(localStorage.getItem("zwai.phone.mode")).toBe("local"))
+      const center = screen.getByRole("dialog", { name: "User center" })
+      fireEvent.click(within(center).getByRole("button", { name: "Close" }))
       fireEvent.click(await screen.findByRole("button", { name: "Model" }))
       const picker = screen.getByRole("dialog", { name: "Model" })
       expect(within(picker).getByRole("group", { name: "Partner" })).toBeVisible()
@@ -159,7 +161,7 @@ describe("gateway account shell", () => {
       expect(screen.getByRole("textbox", { name: /^Message$/ })).toBe(input)
       expect(input).toHaveValue("Continue after the computer reconnects")
       expect(screen.getByTestId("transcript").textContent).toBe(history)
-      expect(mocks.discover).not.toHaveBeenCalled()
+      expect(mocks.discover).toHaveBeenCalledOnce()
     } finally { page.unmount(); host.stop() }
   })
 
@@ -191,7 +193,7 @@ describe("gateway account shell", () => {
     expect(localStorage.getItem("zwai.phone.mode")).toBe("local")
   })
 
-  it("closes User center after the debug mode changes and keeps the account signed in", async () => {
+  it("keeps User center open after switching and through automatic PC selection", async () => {
     localStorage.setItem("zwai.phone.mode", "local")
     mocks.account = { ...mocks.account, status: "authorized", session, bootstrap }
     function Menu() {
@@ -207,6 +209,10 @@ describe("gateway account shell", () => {
     const portrait = within(dialog).getByTestId("account-portrait")
     fireEvent.click(portrait); fireEvent.click(portrait); fireEvent.click(portrait)
     expect(localStorage.getItem("zwai.phone.mode")).toBe("account")
+    act(() => window.dispatchEvent(new CustomEvent("zwai.gateway.auto-connect", { detail: "background-pc" })))
+    expect(dialog).toBeVisible()
+    expect(screen.queryByRole("button", { name: "Open user center" })).not.toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }))
     expect(screen.queryByRole("dialog", { name: "User center" })).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Open user center" })).toHaveAttribute("data-mode", "account")
     expect(mocks.account.logout).not.toHaveBeenCalled()
@@ -224,6 +230,8 @@ describe("gateway account shell", () => {
       expect(localStorage.getItem("zwai.phone.mode")).toBeNull()
       fireEvent.click(portrait); fireEvent.click(portrait)
       expect(localStorage.getItem("zwai.phone.mode")).toBe("local")
+      const dialog = screen.getByRole("dialog", { name: "User center" })
+      fireEvent.click(within(dialog).getByRole("button", { name: "Close" }))
       expect(screen.queryByTestId("gateway-account")).not.toBeInTheDocument()
     } finally { vi.useRealTimers() }
   })
@@ -251,9 +259,11 @@ describe("gateway account shell", () => {
     expect(localStorage.getItem("zwai.phone.mode")).toBeNull()
     fireEvent.click(portrait)
     expect(localStorage.getItem("zwai.phone.mode")).toBe("local")
-    expect(screen.getByRole("button",{name:"Other ways"})).toBeVisible()
-    fireEvent.click(screen.getByTestId("account-portrait"));fireEvent.click(screen.getByTestId("account-portrait"));fireEvent.click(screen.getByTestId("account-portrait"))
+    const center = screen.getByRole("dialog", { name: "User center" })
+    const dialogPortrait = within(center).getByTestId("account-portrait")
+    fireEvent.click(dialogPortrait); fireEvent.click(dialogPortrait); fireEvent.click(dialogPortrait)
     expect(localStorage.getItem("zwai.phone.mode")).toBe("account")
+    expect(center).toBeVisible()
   })
 
   it.each([
@@ -365,26 +375,38 @@ describe("gateway account shell", () => {
     if (username !== expected) expect(screen.queryByText(username, { exact: true })).not.toBeInTheDocument()
   })
 
-  it("retains direct history without exposing or executing it in gateway mode", async () => {
-    const own = newThread({providerId:"gateway:owner",model:"shared-model",reasoning:""}); own.title="Own history"
-    saveThreads([own])
-    mocks.account={...mocks.account,status:"authorized",session,bootstrap}
+  it("opens only this account's Gateway chat history while waiting for a PC", async () => {
+    const own = { ...newThread({ providerId: "gateway:owner", model: "shared-model", reasoning: "" }), title: "Own history" }
+    const other = { ...newThread({ providerId: "gateway:other", model: "shared-model", reasoning: "" }), title: "Other history" }
+    const personal = { ...newThread({ providerId: "personal", model: "shared-model", reasoning: "" }), title: "Personal history" }
+    saveThreads([own, other, personal])
+    mocks.account = { ...mocks.account, status: "authorized", session, bootstrap }
     render(<App />)
     expect(await screen.findByTestId("pc-wait")).toBeVisible()
-    expect(screen.queryByRole("button",{name:"Chat history"})).not.toBeInTheDocument()
-    expect(screen.queryByLabelText("Message")).not.toBeInTheDocument()
-    expect(localStorage.getItem("zwai.phone.directThreads")).toContain("Own history")
-    expect(mocks.discover).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole("tab", { name: "Chat" }))
+    expect(screen.getByRole("button", { name: "Open Own history" })).toBeVisible()
+    expect(screen.queryByRole("button", { name: "Open Other history" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Open Personal history" })).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText("Message")).toBeEnabled())
+    expect(openSaved).not.toHaveBeenCalled()
   })
 
-  it("requires a PC despite a usable gateway catalog and ignores direct execution events", async () => {
-    mocks.account={...mocks.account,status:"authorized",session,bootstrap}
+  it("keeps an open Gateway chat and its draft while a PC connects in the background", async () => {
+    mocks.account = { ...mocks.account, status: "authorized", session, bootstrap,
+      hosts: [{ id: "host", name: "Office", hostname: "office", version: "1", online: true, enabled: true }] }
+    vi.mocked(openSaved).mockImplementation(() => new Promise(() => undefined))
     render(<App />)
     expect(await screen.findByTestId("pc-wait")).toBeVisible()
-    for(const name of ["chat","models","scan"]) await act(async()=>{window.dispatchEvent(new Event("zwai.gateway."+name))})
-    expect(screen.queryByLabelText("Message")).not.toBeInTheDocument()
-    expect(screen.queryByRole("dialog",{name:"Models"})).not.toBeInTheDocument()
-    expect(mocks.discover).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole("tab", { name: "Chat" }))
+    const input = screen.getByLabelText("Message")
+    await waitFor(() => expect(input).toBeEnabled())
+    fireEvent.change(input, { target: { value: "Keep this direct draft" } })
+    saveLink({ hubURL: session.origin, ticket: "ticket", hostPub: "pub", sessionID: "session", fingerprint: "account-pc", gatewayOrigin: session.origin, gatewayOwnerID: session.user.id, gatewayMobileID: session.device.id, gatewayHostID: "host" }, false)
+    act(() => window.dispatchEvent(new CustomEvent("zwai.gateway.auto-connect", { detail: "account-pc" })))
+    await waitFor(() => expect(openSaved).toHaveBeenCalled())
+    expect(screen.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true")
+    expect(input).toHaveValue("Keep this direct draft")
+    expect(screen.queryByRole("button", { name: "Model" })).not.toBeInTheDocument()
     expect(localStorage.getItem("zwai.phone.providers")).toBeNull()
     expect(document.body.textContent).not.toContain(session.token)
   })

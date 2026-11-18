@@ -167,6 +167,7 @@ export function SettingsChoice({
   search,
   value,
   onValueChange,
+  onOpenChange,
   placeholder,
   ariaLabel,
   disabled,
@@ -179,6 +180,7 @@ export function SettingsChoice({
   search?: Array<string | undefined | null>
   value?: string
   onValueChange: (value: string) => void
+  onOpenChange?: (open: boolean) => void
   placeholder?: string
   ariaLabel?: string
   disabled?: boolean
@@ -192,7 +194,7 @@ export function SettingsChoice({
       query={query}
       search={search}
     >
-      <Select value={value} onValueChange={onValueChange} disabled={disabled}>
+      <Select value={value} onValueChange={onValueChange} onOpenChange={onOpenChange} disabled={disabled}>
         <SelectTrigger
           aria-label={ariaLabel ?? label}
           className={settingsSelectTriggerClass}

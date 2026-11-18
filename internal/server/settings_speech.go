@@ -31,11 +31,13 @@ type putSpeechSettings struct {
 	GatewayParameters *map[string]audioparams.Overrides `json:"gateway_parameters"`
 	Input             *struct {
 		config.SpeechInputConfig
-		APIKey *string `json:"api_key"`
+		APIKey          *string `json:"api_key"`
+		GatewayDisabled *bool   `json:"gateway_disabled"`
 	} `json:"input"`
 	Output *struct {
 		config.SpeechOutputConfig
-		APIKey *string `json:"api_key"`
+		APIKey          *string `json:"api_key"`
+		GatewayDisabled *bool   `json:"gateway_disabled"`
 	} `json:"output"`
 	Limits *config.SpeechLimits `json:"limits"`
 }
@@ -49,16 +51,26 @@ func mergeSpeechSettings(previous config.SpeechConfig, patch *putSpeechSettings)
 		if patch.Input.APIKey != nil {
 			key = *patch.Input.APIKey
 		}
+		gatewayDisabled := previous.Input.GatewayDisabled
+		if patch.Input.GatewayDisabled != nil {
+			gatewayDisabled = *patch.Input.GatewayDisabled
+		}
 		previous.Input = patch.Input.SpeechInputConfig
 		previous.Input.APIKey = key
+		previous.Input.GatewayDisabled = gatewayDisabled
 	}
 	if patch.Output != nil {
 		key := previous.Output.APIKey
 		if patch.Output.APIKey != nil {
 			key = *patch.Output.APIKey
 		}
+		gatewayDisabled := previous.Output.GatewayDisabled
+		if patch.Output.GatewayDisabled != nil {
+			gatewayDisabled = *patch.Output.GatewayDisabled
+		}
 		previous.Output = patch.Output.SpeechOutputConfig
 		previous.Output.APIKey = key
+		previous.Output.GatewayDisabled = gatewayDisabled
 	}
 	if patch.Limits != nil {
 		previous.Limits = *patch.Limits

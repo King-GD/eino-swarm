@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { useApp } from "@/store/app"
 import { toastError } from "@/store/toasts"
 import { useT } from "./use-t"
+import { speechFailureMessage } from "./speech-error"
 import { speechRecordingSupported, startSpeechRecording, type SpeechRecording } from "./speech-media"
 import { insertSpeechText } from "./speech-text"
 import { transcribeSpeech } from "./speech-api"
@@ -91,7 +92,7 @@ export function useComposerSpeech(input: {
     try {
       const capture = await startSpeechRecording({
         signal: owner.signal, maxDurationSeconds: snapshot.input.max_duration_seconds, maxBytes: snapshot.limits.input_bytes,
-        format: snapshot.input.recording_format, onDuration: setSeconds, onLevel: setLevel,
+        format: snapshot.input.recording_format, deviceId: snapshot.input.device_id, onDuration: setSeconds, onLevel: setLevel,
         onCancel: () => { if (controller.current === owner) { owner.abort(); controller.current = undefined; recording.current = undefined; setState("idle"); setLevel(0) } },
         onLimit: () => { void finish() }, onError: (error) => { cancel(); toastError(error instanceof Error ? error.message : t("speech.failed")) },
       })
@@ -101,8 +102,8 @@ export function useComposerSpeech(input: {
     } catch (error) {
       if (owner.signal.aborted || controller.current !== owner) return
       cancel()
-      const key = error instanceof DOMException && error.name === "NotAllowedError" ? "speech.permissionDenied" : "speech.failed"
-      toastError(t(key), { title: t("speech.input") })
+      const message = speechFailureMessage(error, t)
+      if (message) toastError(message, { title: t("speech.input") })
     }
   }
   return { ready, state, seconds, level, busy: state !== "idle", disabled: input.disabled, toggle, cancel }

@@ -10,11 +10,12 @@ it("shows the selected PC throughout connection and readiness without flashing U
   const page = (connecting: boolean, connected: boolean, ready: boolean) => (
     <PhoneAccountContext.Provider value={{ providers: [], mode: "account", empty: <p>User center page</p> }}>
       <PcConnectionGate hosts={[host]} activeFingerprint={host.fingerprint} connecting={connecting} connected={connected}
-        ready={ready} onRetry={() => undefined}><p>PC inbox</p></PcConnectionGate>
+        ready={ready} onRetry={() => undefined} onSelectHost={() => undefined} onOpenChat={() => undefined}><p>PC inbox</p></PcConnectionGate>
     </PhoneAccountContext.Provider>
   )
   const view = render(page(true, false, false))
   expect(screen.getByRole("heading", { name: "Selected PC" })).toBeVisible()
+  expect(screen.getByRole("tab", { name: "Chat" })).toBeVisible()
   expect(screen.queryByText("User center page")).not.toBeInTheDocument()
   view.rerender(page(false, true, false))
   expect(screen.getByTestId("pc-connection")).toBeVisible()
@@ -24,4 +25,5 @@ it("shows the selected PC throughout connection and readiness without flashing U
   expect(screen.queryByTestId("pc-connection")).not.toBeInTheDocument()
   view.rerender(page(false, false, false))
   expect(screen.getByText("User center page")).toBeVisible()
+  expect(screen.getByRole("tab", { name: "Chat" })).toBeVisible()
 })

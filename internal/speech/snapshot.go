@@ -4,11 +4,11 @@ package speech
 
 import (
 	"errors"
-	"github.com/LubyRuffy/eino-swarm/internal/audioparams"
 	"net/url"
 	"reflect"
 	"strings"
 
+	"github.com/LubyRuffy/eino-swarm/internal/audioparams"
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/provider"
 )
@@ -26,6 +26,7 @@ type InputView struct {
 	Label              string            `json:"label"`
 	Language           string            `json:"language"`
 	Prompt             string            `json:"prompt"`
+	DeviceID           string            `json:"device_id,omitempty"`
 	RecordingFormat    string            `json:"recording_format"`
 	MaxDurationSeconds int               `json:"max_duration_seconds"`
 	TimeoutSeconds     int               `json:"timeout_seconds"`
@@ -73,13 +74,11 @@ func (s *Service) Snapshot() SnapshotView {
 	cfg := s.cfg.Snapshot()
 	input, output := cfg.Speech.Input, cfg.Speech.Output
 	v := SnapshotView{Execution: "pc_local", Limits: cfg.Speech.Limits,
-		Input:  InputView{Execution: "pc_local", Enabled: input.Enabled, Model: input.Model, Language: input.Language, Prompt: input.Prompt, RecordingFormat: input.RecordingFormat, MaxDurationSeconds: input.MaxDurationSeconds, TimeoutSeconds: input.TimeoutSeconds},
-		Output: OutputView{Execution: "pc_local", Enabled: output.Enabled, Model: output.Model, Voice: output.Voice, Speed: output.Speed, Format: output.Format, Instructions: output.Instructions, TimeoutSeconds: output.TimeoutSeconds},
+		Input:  InputView{Execution: "pc_local", DeviceID: input.DeviceID, RecordingFormat: input.RecordingFormat, MaxDurationSeconds: input.MaxDurationSeconds, TimeoutSeconds: input.TimeoutSeconds},
+		Output: OutputView{Execution: "pc_local", TimeoutSeconds: output.TimeoutSeconds},
 	}
 	if s.pool != nil && s.pool.OfficialOnly() {
 		v.Execution = "gateway"
-		v.Input.Model = "transcription"
-		v.Output.Model = "speech"
 	}
 	for _, isInput := range []bool{true, false} {
 		selection, err := s.selectTarget(cfg, isInput)
@@ -88,6 +87,7 @@ func (s *Service) Snapshot() SnapshotView {
 			reason = errorCode(err)
 		}
 		if isInput {
+			v.Input.Enabled = selection.enabled
 			v.Input.Audio = selection.audio
 			v.Input.Language, v.Input.Prompt = selection.settings.Input.Language, selection.settings.Input.Prompt
 			v.Input.SourceID = selection.target.ID
@@ -97,6 +97,7 @@ func (s *Service) Snapshot() SnapshotView {
 				v.Input.Execution, v.Input.GatewayOrigin = "gateway", gatewayOrigin
 			}
 		} else {
+			v.Output.Enabled = selection.enabled
 			v.Output.Audio = selection.audio
 			v.Output.Voice, v.Output.Speed, v.Output.Format, v.Output.Instructions = selection.settings.Output.Voice, selection.settings.Output.Speed, selection.settings.Output.Format, selection.settings.Output.Instructions
 			v.Output.SourceID = selection.target.ID
@@ -120,6 +121,7 @@ func (s *Service) Snapshot() SnapshotView {
 }
 
 type selection struct {
+	enabled    bool
 	audio      *audioparams.View
 	parameters map[string]any
 	settings   config.SpeechConfig
@@ -134,11 +136,16 @@ func (s *Service) selectTarget(cfg *config.Config, isInput bool) (selection, err
 	if err == nil {
 		err = s.resolveAudio(&selected)
 	}
-	enabled := cfg.Speech.Output.Enabled
+	selected.enabled = cfg.Speech.Output.Enabled
+	gatewayDisabled := cfg.Speech.Output.GatewayDisabled
 	if isInput {
-		enabled = cfg.Speech.Input.Enabled
+		selected.enabled = cfg.Speech.Input.Enabled
+		gatewayDisabled = cfg.Speech.Input.GatewayDisabled
 	}
-	if !enabled {
+	if cfg.Product.FOFA() && strings.HasPrefix(selected.target.ID, config.AccountSourcePrefix) {
+		selected.enabled = selected.target.Model != "" && origin(selected.target.BaseURL) != "" && !gatewayDisabled
+	}
+	if !selected.enabled {
 		return selected, failure("speech_disabled", 403)
 	}
 	if err != nil {

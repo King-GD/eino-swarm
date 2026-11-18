@@ -371,9 +371,16 @@ func (s *AccountSource) rows(isDefault bool, preferred string) []Info {
 	}
 	out := make([]Info, 0, len(names)+1)
 	for _, name := range names {
+		label := name
+		for _, role := range s.roles {
+			if role.ID == name && role.Enabled && role.Label != "" {
+				label = role.Label
+				break
+			}
+		}
 		out = append(out, Info{
 			Capabilities: cloneCapabilities(s.capabilities), ID: ChoiceID(s.id, name), ProviderID: s.id, ProviderLabel: s.label,
-			Label: name, Model: name, Ready: true,
+			Label: label, Model: name, Ready: true,
 			Default:               isDefault && name == chosen,
 			DefaultFollowsSetting: isDefault && follows && name == chosen,
 			ContextWindow:         s.windows[name], Source: SourceAccount, CatalogGroup: s.catalogGroup,

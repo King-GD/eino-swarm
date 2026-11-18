@@ -34,14 +34,16 @@ func (p *Pool) WorkerModel(ctx context.Context, id, modelName, effort string, re
 // default or a possibly changed catalog reference. Empty effort bindings retain
 // their original omission. Missing providers fail closed.
 func (p *Pool) RestoreWorkerModel(ctx context.Context, binding swarm.ModelBinding, rec Recorder) (swarm.ModelBuilder, error) {
-	if err := p.validateModelSelection(binding.ProviderID, binding.Model); err != nil {
-		return nil, err
-	}
 	if strings.TrimSpace(binding.ProviderID) == "" || strings.TrimSpace(binding.Model) == "" {
 		return nil, fmt.Errorf("provider: worker model binding requires provider_id and model")
 	}
 	if config.NormalizeReasoning(binding.ReasoningEffort) != binding.ReasoningEffort {
 		return nil, fmt.Errorf("provider: invalid bound worker reasoning effort %q", binding.ReasoningEffort)
 	}
-	return p.modelBuilder(ctx, binding.ProviderID, binding.Model, binding.ReasoningEffort, rec)
+	if !strings.HasPrefix(binding.ProviderID, config.AccountSourcePrefix) {
+		if err := p.validateModelSelection(binding.ProviderID, binding.Model); err != nil {
+			return nil, err
+		}
+	}
+	return p.boundModelBuilder(ctx, binding.ProviderID, binding.Model, binding.ReasoningEffort, rec)
 }

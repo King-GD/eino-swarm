@@ -23,10 +23,14 @@ beforeEach(() => {
   setLocale("en")
   opened.length = 0
   window.addEventListener("zwai.gateway.connect", record)
+  window.addEventListener("zwai.gateway.auto-connect", record)
   mocks.account = { status: "signed_out", session: null, bootstrap: undefined, hosts: [], origin: session.origin, error: undefined, busy: false, freshLogin: false, consumeFreshLogin: vi.fn(), setOrigin: vi.fn(), login: vi.fn(), refresh: vi.fn(async () => undefined), logout: vi.fn(async () => undefined), connectHost: vi.fn() }
   mocks.discover.mockReset().mockResolvedValue(["shared-model"])
 })
-afterEach(() => window.removeEventListener("zwai.gateway.connect", record))
+afterEach(() => {
+  window.removeEventListener("zwai.gateway.connect", record)
+  window.removeEventListener("zwai.gateway.auto-connect", record)
+})
 
 const signedIn = (patch: Partial<ReturnType<typeof useGatewayAccount>>) => {
   mocks.account = { ...mocks.account, status: "authorized", session, bootstrap, ...patch }
@@ -92,7 +96,7 @@ describe("the signed-in start page", () => {
     signedIn({ hosts: [pc("pc-online", "Work PC")], freshLogin: false })
     render(<App />)
     await screen.findByTestId("pc-wait")
-    expect(screen.queryByRole("tab", {name:"Chat"})).not.toBeInTheDocument()
+    expect(screen.getByRole("tab", { name: "Chat" })).toBeVisible()
     expect(screen.getByRole("button", { name: "Connect Work PC" })).toBeVisible()
     expect(screen.queryByRole("button", { name: t("welcome.other") })).not.toBeInTheDocument()
   })

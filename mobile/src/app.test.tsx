@@ -709,9 +709,9 @@ describe("starting a conversation is its own screen", () => {
     )
     render(<App />)
     await waitFor(() => {
-      expect(screen.getByTestId("new-chat-top")).toBeInTheDocument()
+      expect(screen.getByTestId("new-chat")).toBeInTheDocument()
     })
-    fireEvent.click(screen.getByTestId("new-chat-top"))
+    fireEvent.click(screen.getByTestId("new-chat"))
     fireEvent.change(screen.getByLabelText(t("home.newMessage")), { target: { value: "go" } })
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: t("home.start") }))

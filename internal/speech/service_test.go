@@ -60,6 +60,19 @@ func configuredSpeech(t *testing.T, endpoint string) (*config.Config, *Service) 
 	return cfg, New(cfg, provider.New(cfg))
 }
 
+func TestVoiceSnapshotKeepsTheSelectedInputDevice(t *testing.T) {
+	cfg, svc := configuredSpeech(t, "http://127.0.0.1:9/v1")
+	if err := cfg.Update(func(next *config.Config) error {
+		next.Speech.Input.DeviceID = "camera-mic"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if svc.Snapshot().Input.DeviceID != "camera-mic" {
+		t.Fatalf("snapshot dropped the selected microphone: %+v", svc.Snapshot().Input)
+	}
+}
+
 func TestRecordedBytesReachASRAndSynthesizedBytesStayUnchanged(t *testing.T) {
 	wav := wavFixture()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	swarm "github.com/LubyRuffy/eino-swarm"
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/provider"
 	"github.com/cloudwego/eino/schema"
@@ -166,6 +167,39 @@ func TestLocalModeListsAuthorizedServerCatalogs(t *testing.T) {
 	if inferenceCalls.Load() != 2 {
 		t.Fatal("LOCAL models did not reach both HTTP sources")
 	}
+	// A mode change affects new turns, not the authorized model already
+	// bound to the running turn. Refresh must retain its hidden catalog.
+	if err := cfg.Update(func(next *config.Config) error { next.Product.Mode = config.ProductModeFOFA; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	am.Refresh(t.Context())
+	if listedAccount(pool, localGatewaySourceID, "original") {
+		t.Fatal("gateway mode exposed the original catalog as a new choice")
+	}
+	if _, err := gatewayModel.Generate(t.Context(), []*schema.Message{schema.UserMessage("continue bound work")}); err != nil {
+		t.Fatalf("mode switch interrupted an authorized running model: %v", err)
+	}
+	if inferenceCalls.Load() != 3 {
+		t.Fatal("bound model did not reach its original HTTP source")
+	}
+	coldPool := provider.New(cfg)
+	cold := NewAccountModels(cfg, coldPool, nil)
+	if state := cold.Refresh(t.Context()); state.State != AccountReady {
+		t.Fatalf("replacement lost the preset: %+v", state)
+	}
+	restored, err := coldPool.RestoreWorkerModel(t.Context(), swarm.ModelBinding{ProviderID: localGatewaySourceID, Model: "original"}, nil)
+	if err != nil {
+		t.Fatalf("replacement lost the still-authorized original catalog: %v", err)
+	}
+	if _, err := restored("worker", "restored-worker").Generate(t.Context(), []*schema.Message{schema.UserMessage("resume bound work")}); err != nil {
+		t.Fatal(err)
+	}
+	if inferenceCalls.Load() != 4 {
+		t.Fatal("replacement did not call the bound HTTP source")
+	}
+	if err := cfg.Update(func(next *config.Config) error { next.Product.Mode = config.ProductModeLocal; return nil }); err != nil {
+		t.Fatal(err)
+	}
 	gatewayStatus.Store(http.StatusServiceUnavailable)
 	kept := am.Refresh(context.Background())
 	if kept.State != AccountReady || !listedAccount(pool, localGatewaySourceID, "original") || !listedAccount(pool, accountModelsSourceID, "conversation") || listedAccount(pool, accountModelsSourceID, "title") {
@@ -179,7 +213,7 @@ func TestLocalModeListsAuthorizedServerCatalogs(t *testing.T) {
 	if _, err := gatewayModel.Generate(t.Context(), []*schema.Message{schema.UserMessage("revoked fixture")}); err == nil {
 		t.Fatal("revoked cached LOCAL model reached HTTP")
 	}
-	if inferenceCalls.Load() != 2 {
+	if inferenceCalls.Load() != 4 {
 		t.Fatal("revoked source was still callable")
 	}
 	signOutAccount(t, cfg)

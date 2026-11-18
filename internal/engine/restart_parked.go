@@ -169,10 +169,6 @@ func (e *Engine) parkedRegistry(th *store.Thread, turn *store.Turn) (*swarm.Regi
 		providerID = th.ProviderID
 	}
 	selection := recoveredWorkerBinding(turn, swarm.ModelBinding{ProviderID: providerID, Model: turn.Model, ReasoningEffort: turn.ReasoningEffort})
-	_, err = e.pool.ResolveModel(selection.ProviderID, selection.Model)
-	if err != nil {
-		return nil, err
-	}
 	effort := selection.ReasoningEffort
 	if _, recovered := turn.WorkerModelRecovery[providerID]; effort == "" && !recovered {
 		effort = th.ReasoningEffort
@@ -181,7 +177,7 @@ func (e *Engine) parkedRegistry(th *store.Thread, turn *store.Turn) (*swarm.Regi
 	if _, recovered := turn.WorkerModelRecovery[providerID]; recovered {
 		builder, err = e.pool.RestoreWorkerModel(context.Background(), selection, e.callRecorder(th.ID, turn.ID))
 	} else {
-		builder, err = e.pool.ModelBuilder(context.Background(), selection.ProviderID, selection.Model, effort, e.callRecorder(th.ID, turn.ID))
+		builder, err = e.pool.ResumeModelBuilder(context.Background(), selection.ProviderID, selection.Model, effort, e.callRecorder(th.ID, turn.ID))
 	}
 	if err != nil {
 		return nil, err

@@ -10,7 +10,7 @@ import { parseSlashSubmit } from "../../../frontend/src/lib/slash-core"
 import { isVisionFile } from "@/lib/put-chunks"
 import type { ModelChoice } from "@/lib/rpc"
 import { ModelPicker } from "./model-picker"
-import { SpeechCapture } from "./speech-capture"
+import { SpeechCapture, type SpeechCapturePhase } from "./speech-capture"
 import { insertSpeechText } from "../../../frontend/src/lib/speech-text"
 
 const noModels: ModelChoice[] = []
@@ -88,7 +88,9 @@ export function Composer({
   const textRef = useRef(text)
   textRef.current = text
   const speechAnchor = useRef({ text: "", caret: 0 })
-  const [speechBusy, setSpeechBusy] = useState(false)
+  const [speechPhase, setSpeechPhase] = useState<SpeechCapturePhase>("idle")
+  const capturingSpeech = speechPhase === "preparing" || speechPhase === "recording"
+  const speechBusy = capturingSpeech || speechPhase === "transcribing"
   const [commandRejected, setCommandRejected] = useState<"text" | "prompt">()
   const [attached, setAttached] = useState<File[]>([])
   const [pick, setPick] = useState(() => chosen(models, providerId, model))
@@ -134,10 +136,10 @@ export function Composer({
   // the transcript loses its last answer.
   useLayoutEffect(() => {
     const el = box.current
-    if (!el) return
+    if (!el || capturingSpeech) return
     el.style.height = "auto"
     el.style.height = Math.min(el.scrollHeight, 132) + "px"
-  }, [text])
+  }, [text, capturingSpeech])
 
   const extra = (): ComposerExtra | undefined => {
     if (attached.length === 0 && models.length === 0 && reasoningLevels.length === 0) return undefined
@@ -247,8 +249,8 @@ export function Composer({
       ) : null}
       <form
         className={cn(
-          "flex min-w-0 items-end gap-1.5 rounded-3xl bg-muted p-1.5 transition-colors",
-          "focus-within:ring-1 focus-within:ring-ring",
+          "flex min-w-0 flex-wrap items-end gap-1.5 rounded-3xl bg-muted p-1.5 transition-colors",
+          !capturingSpeech && "focus-within:ring-1 focus-within:ring-ring",
         )}
         aria-busy={pending || undefined}
         onSubmit={(e) => {
@@ -256,7 +258,7 @@ export function Composer({
           void fire(onSubmit)
         }}
       >
-        {onSteer && steerLabel ? (
+        {!capturingSpeech && onSteer && steerLabel ? (
           <button
             type="button"
             aria-label={steerLabel}
@@ -277,6 +279,7 @@ export function Composer({
           placeholder={placeholder ?? label}
           value={text}
           rows={1}
+          hidden={capturingSpeech}
           disabled={disabled || pending}
           onChange={(e) => setText(e.target.value)}
           onPaste={(e) => {
@@ -298,15 +301,18 @@ export function Composer({
           )}
         />
         <SpeechCapture disabled={disabled || pending}
-          onBusyChange={setSpeechBusy}
-          onStart={() => { speechAnchor.current = { text: textRef.current, caret: box.current?.selectionStart ?? textRef.current.length } }}
+          onPhaseChange={setSpeechPhase}
+          onStart={() => {
+            speechAnchor.current = { text: textRef.current, caret: box.current?.selectionStart ?? textRef.current.length }
+            box.current?.blur()
+          }}
           onText={(spoken) => {
             const next = insertSpeechText(textRef.current, speechAnchor.current.text, speechAnchor.current.caret, spoken)
             textRef.current = next.text
             setText(next.text)
             requestAnimationFrame(() => { box.current?.focus(); box.current?.setSelectionRange(next.caret, next.caret) })
           }} />
-        <button
+        {!capturingSpeech ? <button
           type={showStop ? "button" : "submit"}
           aria-label={showStop ? stopLabel : sendLabel}
           title={showStop ? stopLabel : sendLabel}
@@ -325,7 +331,7 @@ export function Composer({
           ) : (
             <ArrowUp className="size-4" aria-hidden />
           )}
-        </button>
+        </button> : null}
       </form>
       <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
         <input

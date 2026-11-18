@@ -14,10 +14,10 @@ The current composition checks five invariants:
 | `ObserverOwnsGate` | The observer uses the gate that admits its request. |
 | `CallsRequireHTTP` | A terminal call record requires an admitted upstream attempt; cancelling a wait alone is not a call. |
 | `CapabilityRequired` | A request needs the role grant sampled at capability admission. |
-| `SourcePolicyRespected` | Source changes wait for admitted calls and live streams; frozen source policy refuses new calls. |
+| `SourcePolicyRespected` | Frozen source policy refuses new bindings. Bound HTTP requests and streams can coexist with a save. |
 
 `TypeOK` is checked alongside these invariants. Eight independent `Never*`
-witnesses demonstrate reachable waits, cancelled waits, completed calls, live
+witnesses demonstrate reachable waits, cancelled waits, completed calls, source saves during live
 streams, capability refusals, source-policy refusals, concurrent calls and a
 source change after completion. A witness must fail, rather than quietly pass
 because its scenario is unreachable.
@@ -26,11 +26,11 @@ because its scenario is unreachable.
 
 | Model action | Implementation boundary | Real regression |
 |---|---|---|
-| `CheckCapability` | `Pool.guardCapability` preserves `trackedModel.policyUse`; `recordingModel.admit` acquires the source hold. | `TestRoleUsesPublicResponsesAndRefusesAfterGrantRemoval` removes one role while the conversation source remains healthy. |
+| `CheckCapability` | `Pool.guardCapability` preserves `trackedModel.policyUse`; `recordingModel.admit` checks the source under a short hold before and after waiting. | `TestRoleUsesPublicResponsesAndRefusesAfterGrantRemoval` removes one role while the conversation source remains healthy. |
 | `WaitNotice` | `recordingModel.admitBackoff` passes the recorder to `backoffGate.acquire`. | `TestModelBackoffCanceledBeforeHTTPRecordsOnlyTheWait/account` crosses `ModelBuilder` and the real HTTP adapter. |
 | `SendHTTP`, `Complete`, `Cancel` | `generateOnce` / `streamOnce` begin accounting after admission and settle the actual request. | `TestAccountModelRecoversThroughOneAdmissionAndRecorder` covers Chat Completions and Responses, Generate and Stream. |
-| `OpenStream` | `streamOnce` retains admission until the stream completes or is cancelled. | `TestModelStreamHoldsSourceUntilUpstreamCompletes/account` refuses a source change while the real HTTP stream remains open. |
-| `AcquireSourceChange` | `Pool.TryHoldModelPolicy` uses the writer side of the shared policy lock. | Both source-hold regressions above check refusal while active and availability after completion. |
+| `OpenStream` | `streamOnce` owns the admitted stream until completion or cancel. | `TestOpenModelStreamLeavesSourceSwitchFree/account` admits a source save during an open HTTP stream. |
+| `AcquireSourceChange` | `Pool.TryHoldModelPolicy` uses the writer side of the shared policy lock. | The stream and paired RPC regressions verify a bounded admission hold and an independent response lifetime. |
 
 The historical `NestedCapabilityWrapper` switch restores the outer recorder's
 missing gate. It must violate both `NoPanic` and `ObserverOwnsGate` in separate
@@ -40,7 +40,7 @@ Go cancellation regression rejects both variants, for the original nil-pointer
 stack and for the extra call record respectively.
 
 The other seeded switches remove the role check, drop the inherited source
-policy callback, or release it at stream creation. Each must violate its named
+policy callback, or skip the second check after the cooldown. Each must violate its named
 invariant and is mapped to the real HTTP regression in the table. These are
 seeded guard removals, not additional reported production incidents.
 

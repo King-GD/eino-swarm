@@ -24,7 +24,7 @@ test("phone creates a PC project, edits it and starts a conversation in it", asy
  await panel.getByRole("button",{name:"保存项目",exact:true}).click()
  await panel.getByRole("button",{name:"关闭",exact:true}).click()
  await expect(page.getByText("Phone managed",{exact:true})).toBeVisible()
- await page.getByTestId("new-chat-top").click()
+ await page.getByTestId("new-chat").click()
  await page.getByRole("radio",{name:"Phone managed",exact:true}).click()
  await page.getByRole("button",{name:"项目管理",exact:true}).click()
  await panel.getByRole("button",{name:"新建项目",exact:true}).click()

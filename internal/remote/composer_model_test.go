@@ -63,6 +63,33 @@ func TestPhoneCatalogShowsAMissingAccountDefaultAsUnavailable(t *testing.T) {
 	}
 }
 
+func TestPhoneCatalogShowsManagedConversationLabelAndKeepsItsRoute(t *testing.T) {
+	e := accountPhoneEngine(t, "conversation")
+	for _, label := range []string{"Partner chat", "Renamed chat", ""} {
+		src, err := provider.NewAccountSource(accountModelsSourceID, "Partner", "https://account.invalid/v1", "token", provider.Catalog{
+			Names: []string{"conversation"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		src.SetRoles([]provider.AccountRole{{ID: "conversation", Enabled: true, Label: label}})
+		e.Providers().SetAccountSource(src)
+		var found bool
+		for _, row := range modelViews(e) {
+			if row.ProviderID != accountModelsSourceID {
+				continue
+			}
+			if found || row.Model != "conversation" || row.Label != label || row.ProviderLabel != "Partner" {
+				t.Fatalf("paired model row for label %q: %+v", label, row)
+			}
+			found = true
+		}
+		if !found {
+			t.Fatalf("missing paired model row for label %q", label)
+		}
+	}
+}
+
 func TestPhoneCatalogLocksTheOfficialName(t *testing.T) {
 	e := accountPhoneEngine(t, "vendor-secret-model")
 	src, err := provider.NewAccountProfile(accountModelsSourceID, "https://account.invalid/v1", "token", provider.AccountProfile{

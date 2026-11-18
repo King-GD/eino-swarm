@@ -2,6 +2,7 @@ import type { AudioOverrides, AudioParameterView } from "./audio-parameters"
 /** Persisted on the PC; credentials never enter the phone snapshot. */
 export interface SpeechConnectionSettings {
   enabled: boolean
+  gateway_disabled?: boolean
   source: "account" | "provider" | "custom"
   provider_id: string
   base_url: string
@@ -13,6 +14,8 @@ export interface SpeechConnectionSettings {
 export interface SpeechInputSettings extends SpeechConnectionSettings {
   language: string
   prompt: string
+  /** Browser audio input id. Empty follows the operating-system default. */
+  device_id: string
   recording_format: "auto" | "wav"
   max_duration_seconds: number
   timeout_seconds: number
@@ -48,6 +51,7 @@ export interface SpeechRoute {
 
 export interface SpeechSnapshot extends SpeechRoute {
   input: Pick<SpeechInputSettings, "enabled" | "language" | "prompt" | "recording_format" | "max_duration_seconds" | "timeout_seconds"> & {
+    device_id?: string
     ready: boolean; reason?: string; model: string; label: string; audio?: AudioParameterView
   } & Partial<SpeechRoute>
   output: Pick<SpeechOutputSettings, "enabled" | "voice" | "speed" | "format" | "instructions" | "timeout_seconds"> & {
@@ -69,7 +73,7 @@ export function defaultSpeechSettings(value?: Partial<SpeechSettings>): SpeechSe
   const connection = { enabled: false, source: "account" as const, provider_id: "", base_url: "", model: "" }
   return {
     gateway_parameters: value?.gateway_parameters,
-    input: { ...connection, language: "", prompt: "", recording_format: "auto", max_duration_seconds: 120, timeout_seconds: 120, ...value?.input },
+    input: { ...connection, language: "", prompt: "", recording_format: "auto", max_duration_seconds: 120, timeout_seconds: 120, ...value?.input, device_id: value?.input?.device_id ?? "" },
     output: { ...connection, voice: "", speed: 1, format: "mp3", instructions: "", timeout_seconds: 120, ...value?.output },
     limits: { input_bytes: 25 << 20, output_bytes: 32 << 20, chunk_chars: 1000, staging_ttl_seconds: 300, ...value?.limits },
   }

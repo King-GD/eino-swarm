@@ -23,7 +23,6 @@ export function GatewayAccountScreen({ account, providers, modelBusy, modelError
   modelError: boolean
   pcWeb?: PcWebSnapshot
   onClose?: () => void
-  onOpenChat?: () => void
   /** Present on the signed-in start page, where pairing by QR and a model
    *  service of one's own are the secondary ways in. */
   onOtherWays?: { scan: () => void; addModel: () => void }
@@ -57,7 +56,7 @@ export function GatewayAccountScreen({ account, providers, modelBusy, modelError
     <div className="mx-auto flex h-full max-w-lg flex-col">
       <UpdateNotice />
       <main data-testid="gateway-account" className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-[env(safe-area-inset-bottom)]">
-      <header className="flex h-12 shrink-0 items-center border-b border-border px-4">
+      <header className={pcRequired && authorized && !onClose ? "sr-only" : "flex h-12 shrink-0 items-center border-b border-border px-4"}>
         <h1 className="flex-1 text-base font-semibold">{t("account.title")}</h1>
         {onClose ? <Button variant="ghost" className="size-10 px-0" aria-label={t("home.close")} onClick={onClose}><X className="size-5" aria-hidden /></Button> : null}
       </header>

@@ -9,32 +9,32 @@ EXTENDS Naturals, FiniteSets
    captures no gate and starts before the inner gate admits a request.
    GuardNilObserverOnly is the insufficient patch that suppresses that observer
    but retains the premature outer call. DropSourcePolicy and SkipCapabilityCheck
-   remove independent guards; ReleaseStreamHoldEarly ends the hold at headers.
+   remove independent guards; SkipFinalAdmission sends on a stale admission.
    The gate's clock/probe health is abstracted to blocked/ready, not proved here.
-   Permissions are sampled at CheckCapability, not continuously revalidated. *)
+   Permissions are checked before waiting and again before binding the request.
+   SendHTTP represents that final binding as one step. *)
 CONSTANTS
     NestedCapabilityWrapper,
     GuardNilObserverOnly,
     SkipCapabilityCheck,
     DropSourcePolicy,
-    ReleaseStreamHoldEarly,
+    SkipFinalAdmission,
     MaxRequests
 
 Requests == 1..MaxRequests
 Phases == {"new", "waiting", "http", "stream", "done", "cancelled", "denied", "source_denied", "panicked"}
 Active == {"waiting", "http", "stream"}
 
-VARIABLES phase, accepted, held, sent, recorded, waitCalled, noticeSeen,
+VARIABLES phase, accepted, sent, recorded, waitCalled, noticeSeen,
           observerGate, grant, grantChanged, blocked, faultSeen,
           sourceFrozen, sourceChanged, sourceViolation, switchedAfterCompletion
-vars == <<phase, accepted, held, sent, recorded, waitCalled, noticeSeen,
+vars == <<phase, accepted, sent, recorded, waitCalled, noticeSeen,
           observerGate, grant, grantChanged, blocked, faultSeen,
           sourceFrozen, sourceChanged, sourceViolation, switchedAfterCompletion>>
 
 Init ==
     /\ phase = [r \in Requests |-> "new"]
     /\ accepted = [r \in Requests |-> FALSE]
-    /\ held = [r \in Requests |-> FALSE]
     /\ sent = [r \in Requests |-> FALSE]
     /\ recorded = [r \in Requests |-> FALSE]
     /\ waitCalled = [r \in Requests |-> FALSE]
@@ -52,14 +52,10 @@ Init ==
 CheckCapability(r) ==
     /\ phase[r] = "new"
     /\ accepted' = [accepted EXCEPT ![r] = grant]
-    /\ IF ~grant /\ ~SkipCapabilityCheck
-       THEN /\ phase' = [phase EXCEPT ![r] = "denied"]
-            /\ UNCHANGED held
-       ELSE IF sourceFrozen /\ ~DropSourcePolicy
-            THEN /\ phase' = [phase EXCEPT ![r] = "source_denied"]
-                 /\ UNCHANGED held
-            ELSE /\ phase' = [phase EXCEPT ![r] = "waiting"]
-                 /\ held' = [held EXCEPT ![r] = ~DropSourcePolicy]
+    /\ phase' = [phase EXCEPT ![r] =
+         IF ~grant /\ ~SkipCapabilityCheck THEN "denied"
+         ELSE IF sourceFrozen /\ ~DropSourcePolicy THEN "source_denied"
+         ELSE "waiting"]
     /\ UNCHANGED <<sent, recorded, waitCalled, noticeSeen, observerGate,
                    grant, grantChanged, blocked, faultSeen, sourceFrozen,
                    sourceChanged, sourceViolation, switchedAfterCompletion>>
@@ -72,23 +68,29 @@ WaitNotice(r) ==
        ELSE /\ waitCalled' = [waitCalled EXCEPT ![r] = TRUE]
             /\ observerGate' = [observerGate EXCEPT ![r] = IF NestedCapabilityWrapper THEN 0 ELSE 1]
             /\ phase' = [phase EXCEPT ![r] = IF NestedCapabilityWrapper THEN "panicked" ELSE @]
-    /\ UNCHANGED <<accepted, held, sent, recorded, grant, grantChanged,
+    /\ UNCHANGED <<accepted, sent, recorded, grant, grantChanged,
                    blocked, faultSeen, sourceFrozen, sourceChanged,
                    sourceViolation, switchedAfterCompletion>>
 
 SendHTTP(r) ==
     /\ phase[r] = "waiting" /\ ~blocked
-    /\ phase' = [phase EXCEPT ![r] = "http"]
-    /\ sent' = [sent EXCEPT ![r] = TRUE]
-    /\ sourceViolation' = (sourceViolation \/ sourceFrozen)
-    /\ UNCHANGED <<accepted, held, recorded, waitCalled, noticeSeen,
+    /\ IF sourceFrozen /\ ~DropSourcePolicy /\ ~SkipFinalAdmission
+       THEN /\ phase' = [phase EXCEPT ![r] = "source_denied"]
+            /\ UNCHANGED <<sent, accepted, sourceViolation>>
+       ELSE IF ~grant /\ ~SkipCapabilityCheck /\ ~SkipFinalAdmission
+            THEN /\ phase' = [phase EXCEPT ![r] = "denied"]
+                 /\ UNCHANGED <<sent, accepted, sourceViolation>>
+            ELSE /\ phase' = [phase EXCEPT ![r] = "http"]
+                 /\ sent' = [sent EXCEPT ![r] = TRUE]
+                 /\ accepted' = [accepted EXCEPT ![r] = grant]
+                 /\ sourceViolation' = (sourceViolation \/ sourceFrozen)
+    /\ UNCHANGED <<recorded, waitCalled, noticeSeen,
                    observerGate, grant, grantChanged, blocked, faultSeen,
                    sourceFrozen, sourceChanged, switchedAfterCompletion>>
 
 OpenStream(r) ==
     /\ phase[r] = "http"
     /\ phase' = [phase EXCEPT ![r] = "stream"]
-    /\ held' = [held EXCEPT ![r] = IF ReleaseStreamHoldEarly THEN FALSE ELSE @]
     /\ UNCHANGED <<accepted, sent, recorded, waitCalled, noticeSeen,
                    observerGate, grant, grantChanged, blocked, faultSeen,
                    sourceFrozen, sourceChanged, sourceViolation, switchedAfterCompletion>>
@@ -96,7 +98,6 @@ OpenStream(r) ==
 Complete(r) ==
     /\ phase[r] \in {"http", "stream"}
     /\ phase' = [phase EXCEPT ![r] = "done"]
-    /\ held' = [held EXCEPT ![r] = FALSE]
     /\ recorded' = [recorded EXCEPT ![r] = TRUE]
     /\ UNCHANGED <<accepted, sent, waitCalled, noticeSeen, observerGate,
                    grant, grantChanged, blocked, faultSeen, sourceFrozen,
@@ -106,7 +107,6 @@ Cancel(r) ==
     /\ phase[r] \in Active \cup {"new"}
     /\ recorded' = [recorded EXCEPT ![r] = sent[r] \/ (phase[r] = "waiting" /\ NestedCapabilityWrapper)]
     /\ phase' = [phase EXCEPT ![r] = "cancelled"]
-    /\ held' = [held EXCEPT ![r] = FALSE]
     /\ UNCHANGED <<accepted, sent, waitCalled, noticeSeen, observerGate,
                    grant, grantChanged, blocked, faultSeen, sourceFrozen,
                    sourceChanged, sourceViolation, switchedAfterCompletion>>
@@ -114,34 +114,32 @@ Cancel(r) ==
 FailOrigin ==
     /\ ~faultSeen
     /\ faultSeen' = TRUE /\ blocked' = TRUE
-    /\ UNCHANGED <<phase, accepted, held, sent, recorded, waitCalled, noticeSeen,
+    /\ UNCHANGED <<phase, accepted, sent, recorded, waitCalled, noticeSeen,
                    observerGate, grant, grantChanged, sourceFrozen, sourceChanged,
                    sourceViolation, switchedAfterCompletion>>
 
 GateReady ==
     /\ blocked /\ blocked' = FALSE
-    /\ UNCHANGED <<phase, accepted, held, sent, recorded, waitCalled, noticeSeen,
+    /\ UNCHANGED <<phase, accepted, sent, recorded, waitCalled, noticeSeen,
                    observerGate, grant, grantChanged, faultSeen, sourceFrozen,
                    sourceChanged, sourceViolation, switchedAfterCompletion>>
 
 ChangeGrant ==
     /\ ~grantChanged /\ grantChanged' = TRUE /\ grant' = ~grant
-    /\ UNCHANGED <<phase, accepted, held, sent, recorded, waitCalled, noticeSeen,
+    /\ UNCHANGED <<phase, accepted, sent, recorded, waitCalled, noticeSeen,
                    observerGate, blocked, faultSeen, sourceFrozen, sourceChanged,
                    sourceViolation, switchedAfterCompletion>>
 
 AcquireSourceChange ==
     /\ ~sourceFrozen /\ ~sourceChanged
-    /\ (\A r \in Requests : ~held[r])
     /\ sourceFrozen' = TRUE
-    /\ sourceViolation' = (sourceViolation \/ (\E r \in Requests : phase[r] \in Active))
     /\ switchedAfterCompletion' = (\E r \in Requests : phase[r] = "done")
-    /\ UNCHANGED <<phase, accepted, held, sent, recorded, waitCalled, noticeSeen,
-                   observerGate, grant, grantChanged, blocked, faultSeen, sourceChanged>>
+    /\ UNCHANGED <<phase, accepted, sent, recorded, waitCalled, noticeSeen,
+                   observerGate, grant, grantChanged, blocked, faultSeen, sourceChanged, sourceViolation>>
 
 ReleaseSourceChange ==
     /\ sourceFrozen /\ sourceFrozen' = FALSE /\ sourceChanged' = TRUE
-    /\ UNCHANGED <<phase, accepted, held, sent, recorded, waitCalled, noticeSeen,
+    /\ UNCHANGED <<phase, accepted, sent, recorded, waitCalled, noticeSeen,
                    observerGate, grant, grantChanged, blocked, faultSeen,
                    sourceViolation, switchedAfterCompletion>>
 
@@ -152,7 +150,7 @@ Spec == Init /\ [][Next]_vars
 
 TypeOK ==
     /\ phase \in [Requests -> Phases]
-    /\ accepted \in [Requests -> BOOLEAN] /\ held \in [Requests -> BOOLEAN]
+    /\ accepted \in [Requests -> BOOLEAN]
     /\ sent \in [Requests -> BOOLEAN] /\ recorded \in [Requests -> BOOLEAN]
     /\ waitCalled \in [Requests -> BOOLEAN] /\ noticeSeen \in [Requests -> BOOLEAN]
     /\ observerGate \in [Requests -> {0, 1}]
@@ -167,7 +165,7 @@ SourcePolicyRespected == ~sourceViolation
 NeverCooldownWait == \A r \in Requests : ~waitCalled[r]
 NeverCancelledWait == ~\E r \in Requests : phase[r] = "cancelled" /\ waitCalled[r] /\ ~sent[r]
 NeverSuccessfulCall == ~\E r \in Requests : phase[r] = "done"
-NeverLiveStream == ~\E r \in Requests : phase[r] = "stream" /\ held[r]
+NeverSwitchDuringStream == ~(sourceFrozen /\ (\E r \in Requests : phase[r] = "stream"))
 NeverPermissionRefusal == ~\E r \in Requests : phase[r] = "denied"
 NeverSourceRefusal == ~\E r \in Requests : phase[r] = "source_denied"
 NeverConcurrentRequests == Cardinality({r \in Requests : phase[r] \in {"http", "stream"}}) < 2

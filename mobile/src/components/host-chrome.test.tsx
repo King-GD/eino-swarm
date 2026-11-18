@@ -29,7 +29,6 @@ describe("HostChrome", () => {
         path="relay"
         onSelect={vi.fn()}
         onAdd={vi.fn()}
-        onNewChat={vi.fn()}
         onUnlink={vi.fn()}
       />,
     )
@@ -52,7 +51,6 @@ describe("HostChrome", () => {
         path="relay"
         onSelect={onSelect}
         onAdd={onAdd}
-        onNewChat={vi.fn()}
         onUnlink={vi.fn()}
       />,
     )
@@ -82,25 +80,6 @@ describe("HostChrome", () => {
     expect(onAdd).not.toHaveBeenCalled()
   })
 
-  it("puts New chat in the corner the plus used to hold", () => {
-    setLocale("en")
-    const onNewChat = vi.fn()
-    render(
-      <HostChrome
-        hosts={[host("a", "desk-one")]}
-        activeFingerprint="a"
-        path="relay"
-        onSelect={vi.fn()}
-        onAdd={vi.fn()}
-        onNewChat={onNewChat}
-        onUnlink={vi.fn()}
-      />,
-    )
-    fireEvent.click(screen.getByTestId("new-chat-top"))
-    expect(onNewChat).toHaveBeenCalledOnce()
-    expect(screen.getByTestId("new-chat-top")).toHaveAttribute("aria-label", t("home.newChat"))
-  })
-
   it("hides unlink in the side menu so it does not compete with the inbox", () => {
     setLocale("en")
     const onUnlink = vi.fn()
@@ -112,7 +91,6 @@ describe("HostChrome", () => {
         path="direct"
         onSelect={vi.fn()}
         onAdd={onAdd}
-        onNewChat={vi.fn()}
         onUnlink={onUnlink}
       />,
     )
@@ -137,7 +115,6 @@ describe("HostChrome", () => {
         path="relay"
         onSelect={vi.fn()}
         onAdd={vi.fn()}
-        onNewChat={vi.fn()}
         onUnlink={vi.fn()}
       />,
     )
@@ -166,7 +143,6 @@ describe("HostChrome", () => {
         path="relay"
         onSelect={vi.fn()}
         onAdd={vi.fn()}
-        onNewChat={vi.fn()}
         onUnlink={vi.fn()}
       />,
     )
@@ -179,7 +155,6 @@ describe("HostChrome", () => {
         path="relay"
         onSelect={vi.fn()}
         onAdd={vi.fn()}
-        onNewChat={vi.fn()}
         onUnlink={vi.fn()}
       />,
     )
@@ -196,7 +171,6 @@ describe("HostChrome", () => {
         connected={false}
         onSelect={vi.fn()}
         onAdd={vi.fn()}
-        onNewChat={vi.fn()}
         onUnlink={vi.fn()}
       />,
     )
@@ -217,7 +191,6 @@ describe("HostChrome", () => {
         path="relay"
         onSelect={vi.fn()}
         onAdd={vi.fn()}
-        onNewChat={vi.fn()}
         onUnlink={vi.fn()}
       />,
     )
@@ -232,7 +205,6 @@ describe("HostChrome", () => {
         onSelect={vi.fn()}
         onSelectChat={onSelectChat}
         onAdd={vi.fn()}
-        onNewChat={vi.fn()}
         onUnlink={vi.fn()}
         onModels={onModels}
       />,

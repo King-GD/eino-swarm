@@ -1,9 +1,88 @@
 import { Blob as NodeBlob } from "node:buffer"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { speechPlayback, startSpeechRecording } from "./speech-media"
+import { audioInputChoices, listAudioInputDevices, speechPlayback, startSpeechRecording } from "./speech-media"
 import type { SpeechAudioStream } from "./speech-stream"
 
 afterEach(() => { speechPlayback.stop(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
+
+describe("microphone selection", () => {
+  it("lists physical inputs and keeps the browser default as the system choice", () => {
+    expect(audioInputChoices([
+      { kind: "audioinput", deviceId: "default", label: "Default - MacBook Pro Microphone" },
+      { kind: "audioinput", deviceId: "communications", label: "Communications" },
+      { kind: "audioinput", deviceId: "camera", label: " Camera 100-Audio " },
+      { kind: "audioinput", deviceId: "camera", label: "duplicate" },
+      { kind: "audiooutput", deviceId: "speakers", label: "Speakers" },
+      { kind: "audioinput", deviceId: " ", label: "blank" },
+    ])).toEqual([{ id: "camera", label: "Camera 100-Audio" }])
+  })
+
+  it("asks for the chosen device and does not replace a blank choice", async () => {
+    const getUserMedia = vi.fn(async () => ({ getTracks: () => [{ stop: vi.fn() }] }))
+    vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } })
+    class Recorder {
+      static isTypeSupported() { return false }
+      state = "inactive"
+      onstop?: () => void
+      start() { this.state = "recording" }
+      stop() { this.state = "inactive"; this.onstop?.() }
+    }
+    vi.stubGlobal("MediaRecorder", Recorder)
+    const chosen = await startSpeechRecording({ signal: new AbortController().signal, maxDurationSeconds: 5, maxBytes: 1000, format: "auto", deviceId: " camera " })
+    expect(getUserMedia).toHaveBeenLastCalledWith({ audio: { deviceId: { exact: "camera" } }, video: false })
+    chosen.cancel()
+    const standard = await startSpeechRecording({ signal: new AbortController().signal, maxDurationSeconds: 5, maxBytes: 1000, format: "auto", deviceId: "  " })
+    expect(getUserMedia).toHaveBeenLastCalledWith({ audio: true, video: false })
+    standard.cancel()
+  })
+
+  it("unlocks blank device names once and keeps the list when permission is denied", async () => {
+    const stop = vi.fn()
+    const enumerateDevices = vi.fn()
+      .mockResolvedValueOnce([{ kind: "audioinput", deviceId: "iphone", label: "" }])
+      .mockResolvedValueOnce([{ kind: "audioinput", deviceId: "iphone", label: "赵武's iPhone Microphone" }])
+    const getUserMedia = vi.fn(async () => ({ getTracks: () => [{ stop }] }))
+    vi.stubGlobal("navigator", { mediaDevices: { enumerateDevices, getUserMedia } })
+    await expect(listAudioInputDevices()).resolves.toEqual([{ id: "iphone", label: "赵武's iPhone Microphone" }])
+    expect(stop).toHaveBeenCalledOnce()
+    enumerateDevices.mockReset()
+    getUserMedia.mockRejectedValueOnce(new DOMException("denied", "NotAllowedError"))
+    enumerateDevices.mockResolvedValue([{ kind: "audioinput", deviceId: "iphone", label: "" }])
+    await expect(listAudioInputDevices()).resolves.toEqual([{ id: "iphone", label: "" }])
+  })
+
+  it("asks for permission when WebKit has not revealed any device id yet", async () => {
+    const stop = vi.fn()
+    const enumerateDevices = vi.fn()
+      .mockResolvedValueOnce([{ kind: "audioinput", deviceId: "", label: "" }])
+      .mockResolvedValueOnce([
+        { kind: "audioinput", deviceId: "default", label: "Default - MacBook Pro Microphone" },
+        { kind: "audioinput", deviceId: "iphone", label: "赵武's iPhone Microphone" },
+        { kind: "audioinput", deviceId: "camera", label: "Camera 100-Audio" },
+      ])
+    const getUserMedia = vi.fn(async () => ({ getTracks: () => [{ stop }] }))
+    vi.stubGlobal("navigator", { mediaDevices: { enumerateDevices, getUserMedia } })
+    await expect(listAudioInputDevices()).resolves.toEqual([
+      { id: "iphone", label: "赵武's iPhone Microphone" },
+      { id: "camera", label: "Camera 100-Audio" },
+    ])
+    expect(getUserMedia).toHaveBeenCalledOnce()
+    expect(stop).toHaveBeenCalledOnce()
+  })
+
+  it("uses the capture started by the menu click instead of asking again after enumeration", async () => {
+    const stop = vi.fn()
+    const enumerateDevices = vi.fn()
+      .mockResolvedValueOnce([{ kind: "audioinput", deviceId: "", label: "" }])
+      .mockResolvedValueOnce([{ kind: "audioinput", deviceId: "camera", label: "Camera 100-Audio" }])
+    const getUserMedia = vi.fn()
+    vi.stubGlobal("navigator", { mediaDevices: { enumerateDevices, getUserMedia } })
+    const permission = Promise.resolve({ getTracks: () => [{ stop }] } as unknown as MediaStream)
+    await expect(listAudioInputDevices(permission)).resolves.toEqual([{ id: "camera", label: "Camera 100-Audio" }])
+    expect(getUserMedia).not.toHaveBeenCalled()
+    expect(stop).toHaveBeenCalledOnce()
+  })
+})
 
 describe("speech media ownership", () => {
   it.each((["auto", "wav"] as const).flatMap(format =>

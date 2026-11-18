@@ -21,11 +21,13 @@ required. Finish device authorization in the system browser. Pending/rejected
 accounts show only review status. Approved accounts automatically connect all enabled online PCs, including on a
 returning launch. **User center** and the PC rail show online PCs first and
 offline PCs afterwards. An existing online selection stays selected; otherwise
-the first available PC opens without a QR or a manual Connect action. Account mode waits for a same-account PC and a ready engine,
-even when the account has API access. The waiting page explains how to install
-and open the desktop app, sign in to the same gateway and keep it online. There
-is no direct gateway Chat fallback. Disconnecting returns to that page; the draft
-and history remain mounted for reconnection.
+the first available PC opens without a QR or a manual Connect action. PC
+conversations require a same-account PC and a ready engine. The waiting page
+explains how to connect the desktop app and keeps **Chat** in the top bar.
+Chat talks directly to the Gateway using the mobile login and its authorized
+conversation models, including when no PC is online. Background PC connections
+leave Chat in place. A disconnect on the PC page preserves its mounted draft
+and history for reconnection.
 
 In a PC conversation or the phone's direct Chat, ask for an image or enter
 `/image` followed by a description. The selected chat needs an authorized
@@ -38,8 +40,13 @@ Gateway models, even if the PC has no voice configuration. Each direction follow
 its own advertised role and source. Missing role defaults are resolved from the
 source’s authorized typed model catalog; no model-name guessing is used. Calls
 use this phone’s same-origin Mobile Bearer and the source’s API base. Gateway
-voice does not need a live PC voice service. Account conversations still need a
-PC; dictation remains an editable draft and never sends automatically.
+voice does not need a live PC voice service. Account-mode direct Chat uses the
+phone's Gateway speech settings. Dictation remains an editable draft and never
+sends automatically.
+
+During recording the composer shows an inline timer, microphone levels and
+separate icon buttons to cancel or transcribe. While recognition runs, the
+draft is visible and editable again, with recognition status in the composer.
 
 An enabled personal PC voice configuration overrides its direction while that
 PC is live and ready. LOCAL phone personal voice settings can also override each
@@ -117,22 +124,27 @@ For packaged cold-launch/background/relaunch regression, use
 `e2e/ios-scene-lifecycle.swift` with the disposable native fixture described in
 [Testing](../docs/TESTING.md#ios-scene-startup-regression).
 
-A new phone opens on **Sign in**. Account mode exposes no personal model,
-anonymous QR, or direct Chat bypass. The existing three taps on the User center
+A new phone opens on **Sign in**. Account mode's **Chat** uses the account's
+authorized Gateway sources. Personal models and anonymous QR are LOCAL features.
+The existing three taps on the User center
 portrait toggle LOCAL debug mode, retaining login and saved data. When a selected
 PC is connected, the gesture first requests its install-wide execution mode
 (`local`, or `fofa` when returning to Account) over encrypted Pairlink. The PC
-uses its own login to list authorized original and third-party catalogs. Only
+uses its own login to list authorized original and third-party catalogs.
+A running chat reply keeps its original model while the mode changes. Only
 an exact success acknowledgement commits the phone preference; busy, unsupported,
 failed or changed-link responses keep the prior phone mode and show retry guidance.
 A timeout may have changed that PC: inspect it before explicitly retrying. There is
 no queued switch on reconnect or when choosing another PC. With no connected PC,
 only the phone preference changes. Each touch counts once. A successful switch
-closes the User center dialog and reveals the selected mode. Switching rebuilds the phone page; unsent composer
+keeps User center open, including during automatic PC connection. Close reveals
+the selected mode. Switching rebuilds the phone page; unsent composer
 drafts are not retained. The debug switch works even when a managed third-party
 account hides its model catalog. LOCAL restores personal models and anonymous
 pairing under **Other ways**. When signed in, it independently reads the authorized
 private preset and Gateway catalogs and groups them beside personal providers.
+A managed preset contributes only its authorized conversation binding to the
+picker. Translation, titles, and compaction remain service functions.
 A denied or empty source has no group; model names shared across sources keep
 separate routes. Source credentials and catalogs stay in memory.
 The phone prepares each online PC independently, reuses saved pairing tickets
@@ -179,11 +191,14 @@ model picker; a managed third-party preset hides it and project planner/executor
 selectors. After a connected-PC debug switch to LOCAL, the composer exposes
 **Original interface** groups, and third-party groups titled with the name the
 gateway returned, using that PC’s authorized catalogs. Identical model names retain their source IDs and routes.
+The paired PC also supplies the hosted conversation role’s display name. The
+composer shows that name while requests keep the role ID.
 The phone has no second Official/All models switch. LOCAL Chat
 shows third-party presets and Gateway models only when the server authorizes
 those sources. A source returning 403 disappears without signing out or hiding
 other sources. Refresh retries transient failures while retaining this account's
-last catalog. Account mode continues to require a ready PC. Sign-out removes account
+last catalog. The same authorized Gateway sources back Account-mode Chat. Its
+composer reports when no conversation model is available. Sign-out removes account
 credentials and managed tickets, retaining private providers and anonymous pairings.
 User center does not offer another server address.
 
@@ -454,9 +469,8 @@ not have a PC transcript to quote.
 The command refusal above preserves the current phone draft; it does not add a
 cross-restart draft-storage guarantee or silently discard selected context.
 
-The inbox does not compose. Search and **New chat** sit under the list,
-and the header corner is the same **New chat** — Add a PC stays on the
-menu, not a second control beside the chips. Each project row folds.
+Search and **New chat** sit under the inbox list. The header holds the menu,
+the PC tabs, and User center. **Add a PC** is in the menu. Each project row folds.
 The icon on its right starts a conversation already in that project,
 including a project that has no threads yet. A conversation shown under
 In progress stays listed under its project too. **New chat** is its own

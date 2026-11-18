@@ -5,14 +5,24 @@ test.use({ permissions: ["microphone"] })
 
 const input = (page: Page) => page.getByLabel("消息", { exact: true })
 const start = (page: Page) => page.getByRole("button", { name: "开始语音输入", exact: true })
-const panel = (page: Page) => page.getByRole("dialog", { name: "语音输入", exact: true })
+const panel = (page: Page) => page.getByRole("group", { name: "语音输入", exact: true })
 
 async function record(page: Page) {
   await start(page).click()
   await expect(panel(page).getByRole("button", { name: "完成并转为文字" })).toBeEnabled()
-  await expect(panel(page).getByRole("status")).toContainText("1 秒")
+  await expect(panel(page)).toContainText("1 秒")
   await panel(page).getByRole("button", { name: "完成并转为文字" }).click()
 }
+
+test("the idle microphone stays level with the one-line composer", async ({ page }) => {
+  await page.goto("/?mock=1&tick=0&speech=local")
+  const field = await input(page).boundingBox()
+  const mic = await start(page).boundingBox()
+  expect(field).not.toBeNull()
+  expect(mic).not.toBeNull()
+  expect(Math.round(mic!.height)).toBe(Math.round(field!.height))
+  expect(Math.round(mic!.y)).toBe(Math.round(field!.y))
+})
 
 test("disabled PC speech shows no microphone or read action", async ({ page }) => {
   await page.goto("/?mock=1&tick=0&speech=off")

@@ -191,7 +191,6 @@ export function HomeScreen({
         reconnecting={reconnecting}
         onSelect={onSelectHost}
         onAdd={onAddHost}
-        onNewChat={() => onNewChat("")}
         onUnlink={onUnlink}
         onToggleLocale={onToggleLocale}
         showChat={showChat}

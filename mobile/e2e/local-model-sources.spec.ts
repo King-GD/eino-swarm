@@ -33,7 +33,9 @@ test("LOCAL groups both catalogs, routes duplicates and drops only a revoked sou
       inference.push({ path, model: request.postDataJSON().model })
       await route.fulfill({ contentType: "text/event-stream", body: `data: ${JSON.stringify({ choices: [{ delta: { content: path.startsWith(gateway) ? "GATEWAY REPLY" : "PRESET REPLY" } }] })}\n\ndata: [DONE]\n\n` }); return
     }
-    const data = path === "/client/capabilities" ? fixtureCapabilities() : path.endsWith("/auth/me") ? { user, device } : path.endsWith("/bootstrap") ? bootstrap : path === preset || path === gateway + "/models" ? [{ id: "conversation" }] : {}
+    const data = path === "/client/capabilities" ? fixtureCapabilities() : path.endsWith("/auth/me") ? { user, device } : path.endsWith("/bootstrap") ? bootstrap
+      : path === preset ? ["compact", "title", "translation", "conversation"].map(id => ({ id, model_type: "chat" }))
+      : path === gateway + "/models" ? [{ id: "conversation" }] : {}
     expect(path).not.toBe("/v1/models")
     await route.fulfill({ json: { data } })
   })
@@ -49,6 +51,7 @@ test("LOCAL groups both catalogs, routes duplicates and drops only a revoked sou
   }
   let picker = await openPicker()
   for (const name of ["个人接口", "Partner", "网关 · Main"]) await expect(picker.getByRole("group", { name, exact: true }).getByRole("radio", { name: "conversation", exact: true })).toBeVisible()
+  await expect(picker.getByRole("group", { name: "Partner", exact: true }).getByRole("radio")).toHaveCount(1)
   await page.screenshot({ path: info.outputPath("local-three-source-groups.png") })
   await picker.getByRole("button", { name: "关闭", exact: true }).click()
   for (const [group, reply] of [["个人接口", "PERSONAL REPLY"], ["Partner", "PRESET REPLY"], ["网关 · Main", "GATEWAY REPLY"]]) {

@@ -7,7 +7,7 @@ import type { SavedLink } from "@/lib/store"
 
 const host: SavedLink = { hubURL: "https://hub.example.test", ticket: "t", hostPub: "p", sessionID: "s", fingerprint: "desk", label: "Office PC" }
 const link: RemoteLink = { path: "relay", alive: () => true, close: vi.fn(), announceDevice: vi.fn(), rpc: vi.fn(async () => ({ v: 1, id: "r", ok: true, timeout_settings: { agent_timeout_seconds: 600, providers: [{ id: "primary", label: "Primary", timeout_seconds: 300, first_byte_timeout_seconds: 30, effective_first_byte_timeout_seconds: 30 }] } })) }
-function props() { return { hosts: [host], activeFingerprint: "desk", path: "relay", onSelect: vi.fn(), onAdd: vi.fn(), onNewChat: vi.fn(), onUnlink: vi.fn(), pcLink: link } }
+function props() { return { hosts: [host], activeFingerprint: "desk", path: "relay", onSelect: vi.fn(), onAdd: vi.fn(), onUnlink: vi.fn(), pcLink: link } }
 
 describe("bound PC timeout entry", () => {
   it("opens actual PC settings separately from phone-direct Models", async () => {
