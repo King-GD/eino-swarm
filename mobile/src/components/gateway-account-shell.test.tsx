@@ -10,7 +10,7 @@ import { saveLink } from "@/lib/store"
 import { saveProviders } from "@/lib/direct-provider"
 import { GatewayError, saveGatewaySession } from "@/lib/gateway-account"
 import { setLocale, t } from "@/lib/i18n"
-import type { ModelChoice } from "@/lib/rpc"
+import { OpList, type ModelChoice } from "@/lib/rpc"
 import { MockHost, MockLink } from "@/lib/mock-link"
 
 const mocks = vi.hoisted(() => ({ account: {} as ReturnType<typeof useGatewayAccount>, discover: vi.fn() }))
@@ -327,8 +327,9 @@ describe("gateway account shell", () => {
     }
     render(<App />)
     expect(screen.getByText("林小明", { exact: true })).toBeVisible()
-    expect(document.querySelector("img")).toBeNull()
-    expect(screen.getByText("林", { exact: true })).toBeVisible()
+    const portrait = screen.getByTestId("account-portrait")
+    expect(portrait.querySelector("img")).toBeNull()
+    expect(within(portrait).getByText("林", { exact: true })).toBeVisible()
     expect(screen.getByRole("button", { name: "Connect Office Mac" })).toBeEnabled()
     expect(screen.getByRole("button", { name: "Connect Home Mac" })).toBeDisabled()
     expect(screen.getAllByRole("button", { name: "Connect Unnamed PC" })).toHaveLength(2)
@@ -347,12 +348,15 @@ describe("gateway account shell", () => {
       bootstrap: { ...bootstrap, models: { ...bootstrap.models, api_access_enabled: false }, capabilities: { ...bootstrap.capabilities, sources: { ...bootstrap.capabilities.sources, preset: { ...bootstrap.capabilities.sources.preset!, authorized: false } } } },
     }
     const view = render(<App />)
-    const image = document.querySelector("img")
-    expect(image).toHaveAttribute("src", picture)
-    expect(image).toHaveAttribute("referrerpolicy", "no-referrer")
-    fireEvent.error(image!)
-    expect(document.querySelector("img")).toBeNull()
-    expect(screen.getByText("林", { exact: true })).toBeVisible()
+    const portraits = () => [screen.getByTestId("account-portrait"), screen.getByRole("button", { name: "User center" })]
+    for (const portrait of portraits()) {
+      const image = portrait.querySelector("img")
+      expect(image).toHaveAttribute("src", picture)
+      expect(image).toHaveAttribute("referrerpolicy", "no-referrer")
+      fireEvent.error(image!)
+      expect(portrait.querySelector("img")).toBeNull()
+      expect(within(portrait).getByText("林", { exact: true })).toBeVisible()
+    }
     expect(screen.getByText("林小明", { exact: true })).toBeVisible()
     view.unmount()
     mocks.account = {
@@ -360,8 +364,10 @@ describe("gateway account shell", () => {
       session: { ...session, user: { ...session.user, display_name: "林小明", avatar_url: "javascript:alert(1)" } },
     }
     render(<App />)
-    expect(document.querySelector("img")).toBeNull()
-    expect(screen.getByText("林", { exact: true })).toBeVisible()
+    for (const portrait of portraits()) {
+      expect(portrait.querySelector("img")).toBeNull()
+      expect(within(portrait).getByText("林", { exact: true })).toBeVisible()
+    }
   })
 
   it.each([
@@ -392,23 +398,41 @@ describe("gateway account shell", () => {
   })
 
   it("keeps an open Gateway chat and its draft while a PC connects in the background", async () => {
-    mocks.account = { ...mocks.account, status: "authorized", session, bootstrap,
-      hosts: [{ id: "host", name: "Office", hostname: "office", version: "1", online: true, enabled: true }] }
-    vi.mocked(openSaved).mockImplementation(() => new Promise(() => undefined))
-    render(<App />)
-    expect(await screen.findByTestId("pc-wait")).toBeVisible()
-    fireEvent.click(screen.getByRole("tab", { name: "Chat" }))
-    const input = screen.getByLabelText("Message")
-    await waitFor(() => expect(input).toBeEnabled())
-    fireEvent.change(input, { target: { value: "Keep this direct draft" } })
-    saveLink({ hubURL: session.origin, ticket: "ticket", hostPub: "pub", sessionID: "session", fingerprint: "account-pc", gatewayOrigin: session.origin, gatewayOwnerID: session.user.id, gatewayMobileID: session.device.id, gatewayHostID: "host" }, false)
-    act(() => window.dispatchEvent(new CustomEvent("zwai.gateway.auto-connect", { detail: "account-pc" })))
-    await waitFor(() => expect(openSaved).toHaveBeenCalled())
-    expect(screen.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true")
-    expect(input).toHaveValue("Keep this direct draft")
-    expect(screen.queryByRole("button", { name: "Model" })).not.toBeInTheDocument()
-    expect(localStorage.getItem("zwai.phone.providers")).toBeNull()
-    expect(document.body.textContent).not.toContain(session.token)
+    const saved = { hubURL: session.origin, ticket: "ticket", hostPub: "pub", sessionID: "session", fingerprint: "account-pc",
+      gatewayOrigin: session.origin, gatewayOwnerID: session.user.id, gatewayMobileID: session.device.id, gatewayHostID: "host", label: "Office" }
+    const connectHost = vi.fn(async () => { saveLink(saved, false); return saved })
+    const host = new MockHost(0), link = new MockLink(host)
+    const rpc = vi.spyOn(link, "rpc")
+    saveGatewaySession(session)
+    mocks.account = { ...mocks.account, status: "authorized", session, bootstrap, connectHost }
+    vi.mocked(openSaved).mockResolvedValue(link as never)
+    const view = render(<App />)
+    try {
+      expect(await screen.findByTestId("pc-wait")).toBeVisible()
+      expect(openSaved).not.toHaveBeenCalled()
+      fireEvent.click(screen.getByRole("tab", { name: "Chat" }))
+      const input = screen.getByLabelText("Message")
+      await waitFor(() => expect(input).toBeEnabled())
+      fireEvent.change(input, { target: { value: "Keep this direct draft" } })
+
+      mocks.account = { ...mocks.account, hosts: [{ id: "host", name: "Office", hostname: "office", version: "1", online: true, enabled: true }] }
+      view.rerender(<App />)
+      await waitFor(() => expect(rpc.mock.calls.some(([req]) => req.op === OpList)).toBe(true))
+      expect(connectHost.mock.calls).toEqual([["host", { select: false }]])
+      expect(vi.mocked(openSaved).mock.calls).toEqual([[saved]])
+      expect(screen.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true")
+      expect(screen.getByLabelText("Message")).toBe(input)
+      expect(input).toHaveValue("Keep this direct draft")
+      expect(screen.queryByRole("button", { name: "Model" })).not.toBeInTheDocument()
+      expect(localStorage.getItem("zwai.phone.providers")).toBeNull()
+      expect(document.body.textContent).not.toContain(session.token)
+
+      fireEvent.click(screen.getByRole("tab", { name: "Office" }))
+      expect(screen.getByRole("tab", { name: "Office" })).toHaveAttribute("aria-selected", "true")
+      expect(screen.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "false")
+      expect(screen.queryByLabelText("Message")).not.toBeInTheDocument()
+      expect(openSaved).toHaveBeenCalledTimes(1)
+    } finally { view.unmount(); host.stop() }
   })
 
   it("shows the signed-in Gateway models beside personal models in LOCAL", async () => {
