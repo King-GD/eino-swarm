@@ -105,6 +105,8 @@ device capture separately from simulator-generated media. Preserve first
 failures, audio MIME/byte evidence, target identity and cleanup receipts outside
 the checkout; never invoke a real model from an automated test.
 
+Offline PC catalogs advertise explicit Local or managed capability policy; synthetic gateway fixtures serve their same-origin capability discovery endpoint before model and voice calls. Permission-sensitive fixtures grant only the roles exercised by each case.
+
 The phone streaming case also runs in the iPhone WebKit project. Its real HTTP
 fixture answers real CORS preflights and asserts that WebKit made one before
 testing playback through the streaming POST.

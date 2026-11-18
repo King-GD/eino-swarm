@@ -25,8 +25,15 @@ export class MockProductMode {
   }
 
   private policy(): Partial<RemoteResponse> {
+    const configurable = this.mode === "local"
+    const capability = { authorized: true, available: true, configurable, capabilities: {
+      conversation: { supported: true, available: true, configurable, endpoints: ["chat_completions"] },
+      translation: { supported: true, available: true, configurable, endpoints: ["chat_completions"] },
+    } }
     return { product_mode: this.mode as "local" | "fofa", model_policy: {
-      mode: this.mode === "local" ? "local" : "gateway", configurable: this.mode === "local", ready: true, scope: this.mode,
+      mode: this.mode === "local" ? "local" : "gateway", configurable, ready: true, scope: this.mode,
+      capability_status: "ready", capabilities: capability,
+      account_sources: { "gateway:preset": capability, "gateway:original": capability },
     } }
   }
 }

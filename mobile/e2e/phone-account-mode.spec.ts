@@ -1,9 +1,19 @@
+import { fixtureCapabilities } from "../src/test/capabilities"
 import { test, expect, type Page } from "@playwright/test"
 
 const origin = "https://gateway.invalid"
 const user = { id: "owner", username: "Test user", avatar_url: "https://images.fofa.info/account.png", approval_status: "approved", enabled: true }
 const device = { id: "phone", expires_at: "2099-01-01T00:00:00Z" }
 const token = "agm_" + "a".repeat(64)
+function conversationCapabilities() {
+  const grants = fixtureCapabilities()
+  for (const source of Object.values(grants.sources)) {
+    if (!source) continue
+    delete source.capabilities.speech
+    delete source.capabilities.transcription
+  }
+  return grants
+}
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.removeItem("zwai.phone.mode"))
@@ -28,8 +38,8 @@ test("signed-in avatar toggles Local menus and returns to Account without a conn
   }, { origin, user, device, token })
   await page.route(origin + "/**", async (route) => {
     const path = new URL(route.request().url()).pathname
-    const data = path.endsWith("/auth/me") ? { user, device }
-      : path.endsWith("/bootstrap") ? { user, device, models: { source_id: "gateway:owner", source_kind: "gateway", label: "Team", execution: "phone", api_base_url: origin + "/v1", catalog_url: origin + "/v1/models", api_access_enabled: true }, pairlink: { enabled: false, hub_url: origin, redeem_url: origin + "/pairlink/v1/pairings/redeem", info_url: origin + "/pairlink/v1/info", websocket_url: origin.replace("https:", "wss:") + "/pairlink/v1/ws" }, heartbeat_interval: 30, presence_ttl: 90 }
+    const data = path === "/client/api/v1/capabilities" ? conversationCapabilities() : path.endsWith("/auth/me") ? { user, device }
+      : path.endsWith("/bootstrap") ? { user, device, capabilities_url: origin + "/client/api/v1/capabilities", models: { source_id: "gateway:owner", source_kind: "gateway", label: "Team", execution: "phone", api_base_url: origin + "/v1", catalog_url: origin + "/v1/models", api_access_enabled: true }, pairlink: { enabled: false, hub_url: origin, redeem_url: origin + "/pairlink/v1/pairings/redeem", info_url: origin + "/pairlink/v1/info", websocket_url: origin.replace("https:", "wss:") + "/pairlink/v1/ws" }, heartbeat_interval: 30, presence_ttl: 90 }
       : path === "/v1/models" ? [{ id: "shared-model" }] : []
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ data }) })
   })
@@ -83,8 +93,8 @@ test("Account waits for its selected PC engine and restores the unchanged draft 
   await page.route(origin + "/**", async route => {
     const path = new URL(route.request().url()).pathname
     if (path.startsWith("/v1/")) modelRequests++
-    const data = path.endsWith("/auth/me") ? { user, device }
-      : path.endsWith("/bootstrap") ? { user, device, models: { source_id: "gateway:owner", source_kind: "gateway", label: "Team", execution: "phone", api_base_url: origin + "/v1", catalog_url: origin + "/v1/models", api_access_enabled: true }, pairlink: { enabled: false, hub_url: origin, redeem_url: origin + "/pairlink/v1/pairings/redeem", info_url: origin + "/pairlink/v1/info", websocket_url: origin.replace("https:", "wss:") + "/pairlink/v1/ws" }, heartbeat_interval: 30, presence_ttl: 90 } : []
+    const data = path === "/client/api/v1/capabilities" ? conversationCapabilities() : path.endsWith("/auth/me") ? { user, device }
+      : path.endsWith("/bootstrap") ? { user, device, capabilities_url: origin + "/client/api/v1/capabilities", models: { source_id: "gateway:owner", source_kind: "gateway", label: "Team", execution: "phone", api_base_url: origin + "/v1", catalog_url: origin + "/v1/models", api_access_enabled: true }, pairlink: { enabled: false, hub_url: origin, redeem_url: origin + "/pairlink/v1/pairings/redeem", info_url: origin + "/pairlink/v1/info", websocket_url: origin.replace("https:", "wss:") + "/pairlink/v1/ws" }, heartbeat_interval: 30, presence_ttl: 90 } : []
     await route.fulfill({ json: { data } })
   })
   await page.goto("/?mock=1&tick=0")
@@ -124,8 +134,8 @@ async function hiddenGateway(page: Page, bindMockPC = false) {
   await page.route(origin + "/**", async route => {
     const path = new URL(route.request().url()).pathname
     if (path.startsWith("/v1/")) modelRequests++
-    const data = path.endsWith("/auth/me") ? { user, device }
-      : path.endsWith("/bootstrap") ? { user, device, models: { source_id: "gateway:owner", source_kind: "gateway", label: "Managed", execution: "phone", api_base_url: origin + "/v1", catalog_url: origin + "/v1/models", api_access_enabled: true, configurable: false, defaults: { conversation: "conversation" } }, pairlink: { enabled: false, hub_url: origin, redeem_url: origin + "/pairlink/v1/pairings/redeem", info_url: origin + "/pairlink/v1/info", websocket_url: origin.replace("https:", "wss:") + "/pairlink/v1/ws" }, heartbeat_interval: 30, presence_ttl: 90 } : []
+    const data = path === "/client/api/v1/capabilities" ? conversationCapabilities() : path.endsWith("/auth/me") ? { user, device }
+      : path.endsWith("/bootstrap") ? { user, device, capabilities_url: origin + "/client/api/v1/capabilities", models: { source_id: "gateway:owner", source_kind: "gateway", label: "Managed", execution: "phone", api_base_url: origin + "/v1", catalog_url: origin + "/v1/models", api_access_enabled: true, configurable: false, defaults: { conversation: "conversation" } }, pairlink: { enabled: false, hub_url: origin, redeem_url: origin + "/pairlink/v1/pairings/redeem", info_url: origin + "/pairlink/v1/info", websocket_url: origin.replace("https:", "wss:") + "/pairlink/v1/ws" }, heartbeat_interval: 30, presence_ttl: 90 } : []
     await route.fulfill({ json: { data } })
   })
   return () => modelRequests
