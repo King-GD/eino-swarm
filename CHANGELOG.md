@@ -14,6 +14,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- 手机后台准备账号电脑连接时保留已保存配对的名称、顺序、当前选择与历史会话。
+
 - Speech recognition and spoken-answer settings list each signed-in catalog's
   `transcription` and `speech` models. Those names stay out of the conversation
   picker. A chat-only preset no longer hides voice models published by the

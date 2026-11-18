@@ -1,3 +1,4 @@
+import { fixtureCapabilities } from "../src/test/capabilities"
 import { expect, test } from "@playwright/test"
 
 const origin = "https://sources.invalid"
@@ -17,6 +18,7 @@ test("LOCAL groups both catalogs, routes duplicates and drops only a revoked sou
   }, { origin, token, user, device })
   const bootstrap = {
     user, device,
+    capabilities_url: origin + "/client/capabilities",
     models: { source_id: "gateway:preset", source_kind: "gateway", execution: "phone", label: "Partner", api_base_url: origin + "/v1", catalog_url: origin + "/v1/models", client_catalog_url: origin + preset, api_access_enabled: true, configurable: false },
     gateway_models: { source_id: "gateway:global", source_kind: "gateway", execution: "phone", label: "Main", api_base_url: origin + gateway, catalog_url: origin + gateway + "/models", api_access_enabled: true },
     pairlink: { enabled: false, hub_url: origin, redeem_url: origin + "/pairlink/v1/pairings/redeem", info_url: origin + "/pairlink/v1/info", websocket_url: origin.replace("https:", "wss:") + "/pairlink/v1/ws" }, heartbeat_interval: 30, presence_ttl: 90,
@@ -31,7 +33,7 @@ test("LOCAL groups both catalogs, routes duplicates and drops only a revoked sou
       inference.push({ path, model: request.postDataJSON().model })
       await route.fulfill({ contentType: "text/event-stream", body: `data: ${JSON.stringify({ choices: [{ delta: { content: path.startsWith(gateway) ? "GATEWAY REPLY" : "PRESET REPLY" } }] })}\n\ndata: [DONE]\n\n` }); return
     }
-    const data = path.endsWith("/auth/me") ? { user, device } : path.endsWith("/bootstrap") ? bootstrap : path === preset || path === gateway + "/models" ? [{ id: "conversation" }] : {}
+    const data = path === "/client/capabilities" ? fixtureCapabilities() : path.endsWith("/auth/me") ? { user, device } : path.endsWith("/bootstrap") ? bootstrap : path === preset || path === gateway + "/models" ? [{ id: "conversation" }] : {}
     expect(path).not.toBe("/v1/models")
     await route.fulfill({ json: { data } })
   })

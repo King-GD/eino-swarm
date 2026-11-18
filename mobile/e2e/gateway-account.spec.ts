@@ -1,11 +1,12 @@
 import { expect, test, type Page } from "@playwright/test"
+import { fixtureCapabilities } from "../src/test/capabilities"
 import { startAccountFixture } from "./account-fixture/browser-fixture"
 
 const origin = "https://ai.fofa.info:2440"
 const token = "agm_" + "a".repeat(64)
 const user = { id: "owner", username: "Test User", enabled: true, approval_status: "approved" }
 const device = { id: "mobile", expires_at: "2099-01-01T00:00:00Z" }
-const bootstrap = { user, device, models: { source_id: "gateway:owner", source_kind: "gateway", label: "测试网关", execution: "phone", api_base_url: origin + "/v1", catalog_url: origin + "/v1/models", api_access_enabled: true }, pairlink: { enabled: true, hub_url: origin, redeem_url: origin + "/pairlink/v1/pairings/redeem", info_url: origin + "/pairlink/v1/info", websocket_url: origin.replace("https:", "wss:") + "/pairlink/v1/ws" }, heartbeat_interval: 30, presence_ttl: 90 }
+const bootstrap = { user, device, capabilities_url: origin + "/client/capabilities", models: { source_id: "gateway:owner", source_kind: "gateway", label: "测试网关", execution: "phone", api_base_url: origin + "/v1", catalog_url: origin + "/v1/models", api_access_enabled: true }, pairlink: { enabled: true, hub_url: origin, redeem_url: origin + "/pairlink/v1/pairings/redeem", info_url: origin + "/pairlink/v1/info", websocket_url: origin.replace("https:", "wss:") + "/pairlink/v1/ws" }, heartbeat_interval: 30, presence_ttl: 90 }
 
 async function approved(page: Page, withPersonal = false) {
   await page.addInitScript(({ origin, token, user, device, withPersonal }) => {
@@ -27,6 +28,7 @@ async function fixture(page: Page, options: { apiEnabled?: boolean; hosts?: unkn
     else if (path === "/client/api/v1/auth/mobile/poll") data = options.review === "authorized" ? { status: "authorized", mobile_id: device.id, user } : { status: options.review || "account_pending" }
     else if (path === "/client/api/v1/auth/me") data = { user: connectionRefused ? { ...user, approval_status: "rejected" } : user, device }
     else if (path === "/client/api/v1/bootstrap" && options.denyBootstrap) { await route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: { code: "permission_denied" } }) }); return }
+    else if (path === "/client/capabilities") { const caps = fixtureCapabilities(); data = { ...caps, sources: Object.fromEntries(Object.entries(caps.sources).map(([id, source]) => [id, { ...source, authorized: options.apiEnabled !== false }])) } }
     else if (path === "/client/api/v1/bootstrap") data = { ...bootstrap, models: { ...bootstrap.models, api_access_enabled: options.apiEnabled !== false } }
     else if (path === "/client/api/v1/link-hosts") data = options.hosts || []
     else if (path === "/client/api/v1/link-hosts/pc-online/connect" && options.denyConnect) { connectionRefused = true; await route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: { code: "permission_denied" } }) }); return }
@@ -170,7 +172,7 @@ test("LOCAL groups the signed-in gateway catalog and logout preserves private se
   await page.goto("/")
   await expect(page.getByRole("tab", { name: "对话" })).toHaveAttribute("aria-selected", "true")
   await page.getByRole("button", { name: "模型", exact: true }).click()
-  await expect(page.getByRole("heading", { name: "网关 · 测试网关" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "第三方 · 测试网关" })).toBeVisible()
   await expect(page.getByRole("heading", { name: "手机自配" })).toBeVisible()
   await expect(page.getByRole("radio", { name: "shared-model" })).toHaveCount(2)
   await page.screenshot({ path: testInfo.outputPath("model-sources.png") })
@@ -258,7 +260,7 @@ test("sign-in prepares all online PCs and displays the offline PC last", async (
   await page.goto("/")
   await expect.poll(() => connectCalls(calls).length).toBe(2)
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("zwai.remote.links") || "[]").length)).toBe(2)
-  const tabs = page.getByRole("tablist", { name: "电脑" }).getByRole("tab")
+  const tabs = page.getByRole("tablist", { name: "导航" }).getByRole("tab").filter({ hasText: /办公电脑|实验室电脑|离线电脑/ })
   await expect(tabs).toHaveCount(3)
   await expect(tabs.last()).toHaveAccessibleName("离线电脑")
   await expect(tabs.last()).toBeDisabled()
@@ -354,7 +356,8 @@ test("real anonymous QR becomes one account connection and the replacement ticke
     expect(managed.links[0]).toMatchObject({ fingerprint: anonymous[0].fingerprint, hostPub: anonymous[0].hostPub, gatewayHostID: "native-pc", gatewayOwnerID: "native-owner" })
     expect(managed.links[0].ticket).not.toBe(anonymous[0].ticket)
     expect(managed.links[0].sessionID).not.toBe(anonymous[0].sessionID)
-    await page.getByRole("button", { name: "关闭", exact: true }).click()
+    // Restoring the active PC returns directly to its conversation list.
+    await expect(page.getByRole("dialog", { name: "用户中心", exact: true })).toHaveCount(0)
     await expect(page.getByRole("button", { name: new RegExp(proofTitle) })).toBeVisible()
     await page.getByRole("button", { name: new RegExp(proofTitle) }).click()
     await expect(page.getByRole("heading", { name: proofTitle, exact: true })).toBeVisible()
@@ -411,7 +414,8 @@ test("a refused PC connection rechecks review and hides private models and devic
     { id: "pc-online", name: "办公电脑", hostname: "work", version: "1", online: true, enabled: true },
   ] })
   await page.goto("/")
-  await page.getByRole("button", { name: "连接 办公电脑" }).click()
+  // Automatic online-PC preparation performs the refused request.
+  await expect.poll(() => calls.filter((call) => call.path.endsWith("/connect")).length).toBe(1)
   await expect(page.getByText("账号审核未通过，请联系管理员。")).toBeVisible()
   await expect(page.getByRole("heading", { name: "用户中心" })).toBeVisible()
   await expect(page.getByRole("heading", { name: "我的电脑" })).toHaveCount(0)
