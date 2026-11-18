@@ -25,6 +25,7 @@ import (
 )
 
 const speechInput = `{"model":"speech","input":"Read the completed response.","voice":"native-fixture-voice","response_format":"pcm","stream_format":"sse"}`
+const speechDefaultInput = `{"model":"speech","input":"Read the completed response.","response_format":"pcm","stream_format":"sse"}`
 
 func realSpeechFixture(t *testing.T) *fixture {
 	t.Helper()
@@ -79,6 +80,12 @@ func TestNativeSpeechFixtureRefusesWrongAuthorityAndMalformedAudioRequests(t *te
 		{"cookie", "/v1/audio/speech", "mobile", speechInput, "cookie", 401},
 		{"method", "/v1/audio/speech", "mobile", "", "", 400},
 		{"json", "/v1/audio/speech", "mobile", "{", "", 400},
+		{"missing-mobile-default-voice", "/v1/audio/speech", "", speechDefaultInput, "", 401},
+		{"cookie-default-voice", "/v1/audio/speech", "mobile", speechDefaultInput, "cookie", 401},
+		{"desktop-missing-voice", "/client/desktop/v1/audio/speech", desktopSpeechToken, speechDefaultInput, "", 400},
+		{"arbitrary-voice", "/v1/audio/speech", "mobile", strings.Replace(speechInput, "native-fixture-voice", "unknown-voice", 1), "", 400},
+		{"explicit-empty-voice", "/v1/audio/speech", "mobile", strings.Replace(speechInput, `"native-fixture-voice"`, `""`, 1), "", 400},
+		{"explicit-null-voice", "/v1/audio/speech", "mobile", strings.Replace(speechInput, `"native-fixture-voice"`, `null`, 1), "", 400},
 		{"wrong-model", "/v1/audio/speech", "mobile", strings.Replace(speechInput, `"model":"speech"`, `"model":"conversation"`, 1), "", 400},
 		{"not-pcm", "/v1/audio/speech", "mobile", strings.Replace(speechInput, `"pcm"`, `"mp3"`, 1), "", 400},
 		{"buffered-wire", "/v1/audio/speech", "mobile", strings.Replace(speechInput, `"sse"`, `"audio"`, 1), "", 400},
@@ -173,7 +180,7 @@ func TestNativeSpeechFixtureFiniteRawAndSSERetainExactPCMAndCompletion(t *testin
 	for _, mode := range []string{"raw-finite", "sse-finite"} {
 		f, server, token := webFixture(t)
 		f.speech.enabled, f.speech.mode = true, mode
-		raw := webRequest(t, server, "/v1/audio/speech", token, speechInput, 200)
+		raw := webRequest(t, server, "/v1/audio/speech", token, speechDefaultInput, 200)
 		if mode == "raw-finite" {
 			if !bytes.Equal([]byte(raw), bytes.Repeat(speechPCM(), 4)) {
 				t.Fatal("finite PCM changed audio bytes")

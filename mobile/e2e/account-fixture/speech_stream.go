@@ -238,12 +238,21 @@ func speechPCM() []byte {
 
 func (f *fixture) streamSpeech(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Model, Input, Voice string
-		ResponseFormat      string `json:"response_format"`
-		StreamFormat        string `json:"stream_format"`
+		Model, Input   string
+		Voice          json.RawMessage
+		ResponseFormat string `json:"response_format"`
+		StreamFormat   string `json:"stream_format"`
 	}
-	if r.Method != http.MethodPost || json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&input) != nil ||
-		input.Model != "speech" || input.Input == "" || input.Voice != "native-fixture-voice" || input.ResponseFormat != "pcm" || input.StreamFormat != "sse" {
+	if r.Method != http.MethodPost || json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&input) != nil {
+		http.Error(w, "invalid native PCM request", 400)
+		return
+	}
+	// A Mobile request may omit voice to use its current Gateway role's
+	// default. The desktop fixture and explicit selections require the named voice.
+	var voice string
+	namedVoice := json.Unmarshal(input.Voice, &voice) == nil && voice == "native-fixture-voice"
+	phoneDefault := r.URL.Path == "/v1/audio/speech" && len(input.Voice) == 0
+	if input.Model != "speech" || input.Input == "" || (!namedVoice && !phoneDefault) || input.ResponseFormat != "pcm" || input.StreamFormat != "sse" {
 		http.Error(w, "invalid native PCM request", 400)
 		return
 	}
