@@ -87,8 +87,8 @@ plugin reports an update requirement rather than loading different code.
 See [Task panels](../docs/TASK_PANELS.md) for plugin authoring and data rules.
 
 Conversation Mermaid fences open as fit-to-width/height diagrams with touch zoom,
-actual size and copyable source. Incomplete, invalid or resource-bearing diagrams
-remain code. In paired PC conversations, an idle empty composer can show the
+actual size and copyable source. Incomplete, invalid, resource-bearing, or
+over-paint-budget diagrams remain code. In paired PC conversations, an idle empty composer can show the
 PC's latest next-step suggestion. Tap it or press Tab to edit it as a draft;
 Send remains explicit. The PC settings switch also controls this phone hint.
 Selected transcript text opens an opaque, high-contrast action panel in both

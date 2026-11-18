@@ -6,6 +6,13 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ## Unreleased
 
+### Fixed
+
+- Mermaid diagrams that exceed the SVG paint budget stay as source instead of
+  becoming an image. An unbounded diagram was painted on the WebKit page thread
+  and could leave the desktop window unable to accept clicks or resizing.
+  (`F-120`, `C-005`, #174)
+
 ## [0.1.83] - 2026-11-18
 
 ### Added

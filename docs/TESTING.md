@@ -5216,6 +5216,21 @@ these cases. The Go tests still own the sampled image and the real controller.
 python3 tools/model_check.py --fetch renderer-recovery-current renderer-recovery-ignore-presented renderer-recovery-unknown-as-flat renderer-recovery-skip-reload renderer-recovery-background-spends
 ```
 
+## Diagram paint admission (`C-005`)
+
+`models/desktop/DiagramPaint.tla` checks the decision in `mermaidSVGDataURL`,
+not WebKit's SVG painter or the product pixel caps. A diagram is mounted only
+when its edge, area, element count, text length and byte count are all inside
+the budget. Dropping any one check must be caught by that axis alone: a legal
+edge with too much area breaks `MountedPixels` and does not need to break
+`MountedEdge`. `diagram-paint-reach-mount` and `diagram-paint-reach-source`
+keep both outcomes reachable. The Vitest cases own the real caps, including a
+value that is legal on every other axis.
+
+```bash
+python3 tools/model_check.py --fetch diagram-paint-current diagram-paint-ignore-edge diagram-paint-ignore-pixels diagram-paint-ignore-elements diagram-paint-ignore-text diagram-paint-ignore-bytes diagram-paint-reach-mount diagram-paint-reach-source
+```
+
 ## iOS startup prompt model (opt-in, `C-045`)
 
 `models/mobile/IOSStartupPrompt.tla` checks the shell's document-start decision,

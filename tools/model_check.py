@@ -166,6 +166,14 @@ MODELS = {
             (("MaxProbes", 3), ("MaxReplacements", 2)),
         ),
         Model(
+            "diagram-paint", ROOT / "models" / "desktop" / "DiagramPaint.tla",
+            ("IgnoreEdge", "IgnorePixels", "IgnoreElements", "IgnoreText", "IgnoreBytes"),
+            ("TypeOK", "MountedEdge", "MountedPixels", "MountedElements",
+             "MountedText", "MountedBytes"),
+            (("MaxEdge", 4), ("MaxPixels", 6), ("MaxElements", 2),
+             ("MaxText", 2), ("MaxBytes", 2), ("Bound", 5)),
+        ),
+        Model(
             "installed-skills", ROOT / "models" / "skills" / "InstalledSkills.tla",
             ("PublishWithoutValidation", "PublishOverExisting", "CleanupBeforeHide",
              "ReadOtherProject", "LoadFallsBackToLearned", "ListIncludesBody", "ReviewTouchesInstall",
@@ -581,6 +589,27 @@ CASES: tuple[Case, ...] = (
         ("renderer-recovery-reach-reload", "NeverReloaded"),
         ("renderer-recovery-reach-replace", "NeverReplaced"),
         ("renderer-recovery-reach-unknown", "NeverUnknownHealthy"),
+    )),
+    _case("diagram-paint-current",
+          "a Mermaid SVG becomes an image only when every paint axis is inside its budget",
+          model="diagram-paint"),
+    *(_case(name, source, (switch,), invariant, model="diagram-paint")
+      for name, source, switch, invariant in (
+        ("diagram-paint-ignore-edge", "seeded: an edge past the budget is still mounted",
+         "IgnoreEdge", "MountedEdge"),
+        ("diagram-paint-ignore-pixels", "seeded: a legal edge with too much area is still mounted",
+         "IgnorePixels", "MountedPixels"),
+        ("diagram-paint-ignore-elements", "seeded: an element tree past the budget is still mounted",
+         "IgnoreElements", "MountedElements"),
+        ("diagram-paint-ignore-text", "seeded: a text run past the budget is still mounted",
+         "IgnoreText", "MountedText"),
+        ("diagram-paint-ignore-bytes", "seeded: a document past the byte budget is still mounted",
+         "IgnoreBytes", "MountedBytes"),
+    )),
+    *(_case(name, "witness", witness=witness, model="diagram-paint")
+      for name, witness in (
+        ("diagram-paint-reach-mount", "NeverMounted"),
+        ("diagram-paint-reach-source", "NeverSource"),
     )),
     _case("installed-skills-current", "validate, publish and detach whole project skill bundles",
           model="installed-skills"),

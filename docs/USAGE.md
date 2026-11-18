@@ -408,8 +408,9 @@ markdown URL opens in a new browser tab (`zwai web`) or the system browser
 
 A `mermaid` fence renders a diagram in desktop and Web conversations, tool
 output, and Markdown file previews. Incomplete live fences, invalid diagrams,
-and diagrams that require external image or CSS resources keep readable source.
-The phone opens Mermaid as a fit-to-width diagram. See the
+diagrams that require external image or CSS resources, and diagrams whose
+rendered SVG exceeds the paint budget keep readable source. The phone opens
+Mermaid as a fit-to-width diagram under that same budget. See the
 [phone guide](../mobile/README.md).
 
 When numbers are easier to see as a comparison, the manager can emit a `chart`

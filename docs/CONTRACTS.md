@@ -304,7 +304,7 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 - 允许行为：同源 shell 连接；禁止行为：无认证的非 loopback 默认服务；失败语义：跨源请求被拒绝；不变量：默认网络暴露为本机；边界条件：用户显式配置监听地址。
 - 证据：实现 `internal/app`, `internal/server`；测试 `internal/server`；变更规则：同步配置、API 和安全测试；来源：`AGENTS.md`。
 
-- PC 和手机对话 Markdown 的 `mermaid` 围栏使用本地打包的 Mermaid 严格模式；生成的 SVG 仅作为图片展示，不作为同源活动 DOM，也不绑定图内点击回调。源码复制不改写围栏正文；未闭合的流式图表和渲染失败均保留源码。CSS `url()`、`@import` 和节点图片留在源码；标识符末尾的 url 不是资源请求。图默认适应阅读列和有限高度，可放大、缩小、回到测量尺寸或重新适应；放大超出阅读列时只在图内滚动，不撑开页面。图表异步完成不得覆盖更新后的源码或已卸载的视图。此规则不改变独立 SVG 文件只显示源码的预览边界。证据：`frontend/src/lib/markdown-mermaid.ts`、`frontend/src/components/app/markdown-mermaid.tsx`、`frontend/e2e/mermaid.spec.ts`、`mobile/src/components/phone-mermaid.tsx`、`mobile/e2e/markdown-mermaid.spec.ts`；来源：Issue #133。
+- PC 和手机对话 Markdown 的 `mermaid` 围栏使用本地打包的 Mermaid 严格模式；生成的 SVG 仅作为图片展示，不作为同源活动 DOM，也不绑定图内点击回调。源码复制不改写围栏正文；未闭合的流式图表和渲染失败均保留源码。CSS `url()`、`@import` 和节点图片留在源码；标识符末尾的 url 不是资源请求。图默认适应阅读列和有限高度，可放大、缩小、回到测量尺寸或重新适应；放大超出阅读列时只在图内滚动，不撑开页面。图表异步完成不得覆盖更新后的源码或已卸载的视图。发布为图片前，viewBox 边长、像素面积、元素数、文本长度和序列化字节必须同时落在绘制预算内；任一轴超出预算时保留源码，不把该 SVG 挂进页面绘制树。测量节点在布局期间不参与绘制，并在返回前移除。此规则不改变独立 SVG 文件只显示源码的预览边界。证据：`frontend/src/lib/markdown-mermaid.ts`、`frontend/src/lib/markdown-mermaid.test.ts`、`frontend/src/components/app/markdown-mermaid.tsx`、`frontend/e2e/mermaid.spec.ts`、`mobile/src/components/phone-mermaid.tsx`、`mobile/e2e/markdown-mermaid.spec.ts`、`models/desktop/DiagramPaint.tla`；来源：Issue #133、Issue #174。
 
 ## C-006 Phone remote protocol
 

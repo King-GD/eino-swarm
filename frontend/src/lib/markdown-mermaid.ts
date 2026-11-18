@@ -102,6 +102,12 @@ export function renderMermaid(
     const container = document.createElement("div")
     container.className = "md-mermaid-measure"
     container.setAttribute("aria-hidden", "true")
+    // Mermaid lays the SVG out in this node and then removes it. Keeping the
+    // node out of the painted tree means that work cannot take the frame the
+    // desktop window needs for clicks and resizing.
+    container.style.position = "absolute"
+    container.style.visibility = "hidden"
+    container.style.pointerEvents = "none"
     document.body.appendChild(container)
     try {
       const { svg } = await mermaid.render(`mermaid-${++nextID}`, source, container)
@@ -114,20 +120,58 @@ export function renderMermaid(
   return task
 }
 
-/** A percentage-sized standalone SVG otherwise gets the image default width
- * (300px). Keep the measured pixel size so 100% is the diagram's own text
- * size; the view scales that image to fit or zoom. */
+/** One Mermaid SVG may become an image only inside these bounds. WebKit paints
+ * that image on the page main thread; an unbounded edge, pixel area, element
+ * tree, text run or document keeps the frame from finishing, and the desktop
+ * window then stops accepting clicks and resizes. */
+export const MERMAID_PAINT_LIMITS = {
+  edge: 4096,
+  pixels: 2_000_000,
+  elements: 2500,
+  text: 12_000,
+  bytes: 350_000,
+} as const
+
+function svgPaintTreeFits(root: Element): boolean {
+  let elements = 0
+  let text = 0
+  const visit = (node: Node): boolean => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      text += node.textContent?.length ?? 0
+      return text <= MERMAID_PAINT_LIMITS.text
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return true
+    elements += 1
+    if (elements > MERMAID_PAINT_LIMITS.elements) return false
+    for (let child = node.firstChild; child; child = child.nextSibling) {
+      if (!visit(child)) return false
+    }
+    return true
+  }
+  return visit(root)
+}
+
 export function mermaidSVGDataURL(svg: string): string | null {
+  if (svg.length > MERMAID_PAINT_LIMITS.bytes) return null
   const parsed = new DOMParser().parseFromString(svg, "image/svg+xml")
   const root = parsed.documentElement
   if (root.localName !== "svg" || root.namespaceURI !== "http://www.w3.org/2000/svg" ||
     parsed.querySelector("parsererror")) return null
   const box = root.getAttribute("viewBox")?.trim().split(/[\s,]+/).map(Number)
   if (!box || box.length !== 4 || !box.every(Number.isFinite) || box[2] <= 0 || box[3] <= 0) return null
-  root.setAttribute("width", String(box[2]))
-  root.setAttribute("height", String(box[3]))
+  const width = box[2]
+  const height = box[3]
+  if (width > MERMAID_PAINT_LIMITS.edge || height > MERMAID_PAINT_LIMITS.edge ||
+    width * height > MERMAID_PAINT_LIMITS.pixels || !svgPaintTreeFits(root)) return null
+  // A percentage-sized standalone SVG otherwise gets the image default width
+  // (300px). Keep the measured pixel size so 100% is the diagram's own text
+  // size; the view scales that image to fit or zoom.
+  root.setAttribute("width", String(width))
+  root.setAttribute("height", String(height))
   root.style.removeProperty("max-width")
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(root))}`
+  const serialized = new XMLSerializer().serializeToString(root)
+  if (serialized.length > MERMAID_PAINT_LIMITS.bytes) return null
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(serialized)}`
 }
 
 export type MermaidBox = { width: number; height: number }

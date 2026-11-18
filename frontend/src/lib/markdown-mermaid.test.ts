@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { mermaidFenceIsClosed, mermaidFitScale, mermaidSourceUsesResources, mermaidSVGDataURL, mermaidZoomBy, readMermaidAppearance, readMermaidFrame } from "./markdown-mermaid"
+import { MERMAID_PAINT_LIMITS, mermaidFenceIsClosed, mermaidFitScale, mermaidSourceUsesResources, mermaidSVGDataURL, mermaidZoomBy, readMermaidAppearance, readMermaidFrame } from "./markdown-mermaid"
 
 describe("Mermaid source boundaries", () => {
   it.each([
@@ -108,6 +108,35 @@ describe("Mermaid source boundaries", () => {
       width.mockRestore()
       element.remove()
     }
+  })
+
+  function diagram(inner = "", width = 20, height = 20, extra = "") {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}"${extra}>${inner}</svg>`
+  }
+
+  it("publishes a diagram at the edge, area, element and text limits", () => {
+    const { edge, pixels, elements, text } = MERMAID_PAINT_LIMITS
+    const height = Math.floor(pixels / edge)
+    expect(edge * height).toBeLessThanOrEqual(pixels)
+    expect(edge * (height + 1)).toBeGreaterThan(pixels)
+    expect(mermaidSVGDataURL(diagram("", edge, height))).toMatch(/^data:image\/svg\+xml/)
+    expect(mermaidSVGDataURL(diagram("<g/>".repeat(elements - 1)))).toMatch(/^data:image\/svg\+xml/)
+    expect(mermaidSVGDataURL(diagram(`<text>${"a".repeat(text)}</text>`))).toMatch(/^data:image\/svg\+xml/)
+    expect(mermaidSVGDataURL(diagram('<defs><path id="a" d="M0 0"/></defs><use href="#a"/>'))).toMatch(/^data:image\/svg\+xml/)
+  })
+
+  it("keeps each oversized axis as source while the other axes stay inside the budget", () => {
+    const { edge, pixels, elements, text, bytes } = MERMAID_PAINT_LIMITS
+    const height = Math.floor(pixels / edge)
+    expect(mermaidSVGDataURL(diagram("", edge + 1, 1))).toBeNull()
+    expect(mermaidSVGDataURL(diagram("", edge, height + 1))).toBeNull()
+    expect(mermaidSVGDataURL(diagram("<g/>".repeat(elements)))).toBeNull()
+    expect(mermaidSVGDataURL(diagram(`<text>${"a".repeat(text + 1)}</text>`))).toBeNull()
+    const prefix = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8" data-pad="'
+    const over = `${prefix}${"b".repeat(bytes)}${"x"}</svg>`
+    expect(over.length).toBeGreaterThan(bytes)
+    expect(mermaidSVGDataURL(over)).toBeNull()
+    expect(mermaidSVGDataURL('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1e20 10"/>')).toBeNull()
   })
 
   it.each([
