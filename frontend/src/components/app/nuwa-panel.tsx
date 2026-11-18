@@ -18,7 +18,7 @@ import { useApp } from "@/store/app"
 import { useNuwa } from "@/store/nuwa"
 import { useTraceFocus } from "@/store/trace-focus"
 import { NuwaGraph, nuwaRecorder } from "./nuwa-graph"
-import { NuwaStatus, NuwaStale, nuwaKind } from "./nuwa-status"
+import { NuwaStatus, NuwaStale, nuwaKind, nuwaKindSurface } from "./nuwa-status"
 
 export function NuwaPanel({
   project,
@@ -163,7 +163,14 @@ export function NuwaPanel({
                 ["artifact", FileCheck2],
               ] as const
             ).map(([kind, Icon]) => (
-              <div key={kind} className="rounded-lg border border-border bg-muted/20 px-2 py-2">
+              <div
+                key={kind}
+                data-kind={kind}
+                className={cn(
+                  "rounded-lg border border-border px-2 py-2",
+                  nuwaKindSurface(kind) ?? "bg-muted/20"
+                )}
+              >
                 <Icon className="mb-1 size-3.5 text-muted-foreground" />
                 <strong className="block text-lg font-semibold tabular-nums">
                   {nodes.filter((node) => node.kind === kind).length}
@@ -226,6 +233,7 @@ export function NuwaPanel({
                     aria-pressed={selected === node.id}
                     className={cn(
                       "flex w-full min-w-0 items-center gap-2 rounded-md border px-2 py-2 text-left hover:bg-accent/50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+                      nuwaKindSurface(node.kind),
                       selected === node.id ? "border-primary" : "border-transparent"
                     )}
                   >
@@ -351,7 +359,10 @@ function NodeDetail({
   return (
     <section
       data-testid="nuwa-node-detail"
-      className="mt-3 rounded-lg border border-border bg-muted/20 p-3"
+      className={cn(
+        "mt-3 rounded-lg border border-border p-3",
+        nuwaKindSurface(node.kind) ?? "bg-muted/20"
+      )}
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <h3 className="wrap-break-word text-(length:--chrome-font-size) font-medium">{node.title}</h3>

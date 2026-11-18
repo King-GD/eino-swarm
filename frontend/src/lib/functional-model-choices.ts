@@ -151,6 +151,28 @@ export function groupFunctionalChoices(choices: FunctionalModelChoice[]): { grou
     .filter(group => group.choices.length > 0)
 }
 
+export interface FunctionalGroupHeading {
+  key: string
+  title: string
+  choices: FunctionalModelChoice[]
+}
+
+/** Third-party headings use the name the gateway published for that catalog.
+ *  An empty name, or a label that is only the source id, keeps the generic title. */
+export function functionalGroupHeadings(group: FunctionalSourceGroup, choices: FunctionalModelChoice[], generic: string): FunctionalGroupHeading[] {
+  if (group !== "third_party") return [{ key: group, title: generic, choices }]
+  const out: FunctionalGroupHeading[] = []
+  for (const choice of choices) {
+    const published = choice.providerLabel.trim()
+    const title = published && published !== choice.providerId ? published : generic
+    const key = `${group}\t${title}`
+    const found = out.find(section => section.key === key)
+    if (found) found.choices.push(choice)
+    else out.push({ key, title, choices: [choice] })
+  }
+  return out
+}
+
 /** Two providers in one group can publish the same model name. */
 export function functionalChoiceLabel(choice: FunctionalModelChoice, group: FunctionalModelChoice[]): string {
   const shared = group.some(other => other.model === choice.model && other.providerId !== choice.providerId)

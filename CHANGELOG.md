@@ -8,6 +8,7 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
+- Nuwa collaboration paints tasks, facts and results with different backgrounds, so a fact is no longer the same surface as a result. (`F-136`)
 - The desktop and Web inspector registers project collaboration and conversation task panels through one entry point. If a selected entry disappears, the inspector shows Agents without changing the requested tab. (`F-136`, `F-137`)
 
 ### Fixed
@@ -15,6 +16,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - Web Gateway sign-in no longer opens the host's system browser on a shared loopback engine. Native desktop still opts in; both surfaces retain the validated manual link. (`F-210`, `C-006`)
 
 - Switching Nuwa projects no longer shows the previous project's connection status or error while the new subscription starts. (`F-136`)
+
+- Switching between gateway and local no longer waits for the semantic-search backfill started by the previous switch. A chat, speech, or decision call still finishes on the source it opened. (`F-173`, `C-040`)
+
+- Functional model menus and phone model groups title a third-party catalog with the name the gateway returned in its bootstrap label. The generic word is used only when that name is missing. (`F-171`, `C-040`)
 
 - The local composer model menu stays open after a fixed third-party conversation model is selected, so the conversation can switch back to a personal or original gateway model. Gateway mode still hides the menu when conversation selection is not allowed. (`F-171`, `C-040`)
 

@@ -171,8 +171,8 @@ automatically open another browser or claim to cancel an OS action already sent.
 The selected PC publishes `model_policy`. An editable gateway permits the PC's
 model picker; a managed third-party preset hides it and project planner/executor
 selectors. After a connected-PC debug switch to LOCAL, the composer exposes
-**Original interface** and **Third-party interface** groups using that PC’s
-authorized catalogs. Identical model names retain their source IDs and routes.
+**Original interface** groups, and third-party groups titled with the name the
+gateway returned, using that PC’s authorized catalogs. Identical model names retain their source IDs and routes.
 The phone has no second Official/All models switch. LOCAL Chat
 shows third-party presets and Gateway models only when the server authorizes
 those sources. A source returning 403 disappears without signing out or hiding

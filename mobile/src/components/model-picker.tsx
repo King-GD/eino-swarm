@@ -57,8 +57,7 @@ export function ModelPicker({
   for (const row of models) {
     if (!row.model) continue
     const name = row.provider_label || row.provider_id
-    const label = row.catalog_group === "original" ? t("account.originalInterface", { name })
-      : row.catalog_group === "third_party" ? t("account.thirdPartyInterface", { name }) : name
+    const label = row.catalog_group === "original" ? t("account.originalInterface", { name }) : name
     const group = groups.find((item) => item.id === row.provider_id)
     if (group) group.rows.push(row)
     else groups.push({ id: row.provider_id, label, rows: [row] })

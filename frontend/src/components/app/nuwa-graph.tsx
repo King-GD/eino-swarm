@@ -6,7 +6,7 @@ import { MANAGER_ID } from "@/lib/transcript-blocks"
 import { useT } from "@/lib/use-t"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
-import { NuwaStatus, NuwaStale, nuwaKind, nuwaStatusLabel } from "./nuwa-status"
+import { NuwaStatus, NuwaStale, nuwaKind, nuwaKindSurface, nuwaStatusLabel } from "./nuwa-status"
 
 const CARD_HEIGHT = 88
 const ROW = 116
@@ -209,7 +209,8 @@ export function NuwaGraph({
                     current.includes(node.kind) ? current.filter((kind) => kind !== node.kind) : [...current, node.kind]
                   )}
                   className={cn(
-                    "absolute flex flex-col items-start justify-center gap-0.5 overflow-hidden rounded-lg border border-dashed bg-card px-3 py-2 text-left shadow-xs hover:border-primary/60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+                    "absolute flex flex-col items-start justify-center gap-0.5 overflow-hidden rounded-lg border border-dashed px-3 py-2 text-left shadow-xs hover:border-primary/60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+                    nuwaKindSurface(node.kind) ?? "bg-card",
                     expanded ? "border-primary" : "border-border",
                     !active && "opacity-35"
                   )}
@@ -242,8 +243,10 @@ export function NuwaGraph({
                 aria-description={record.agent_id && record.turn_id && author
                   ? t("nuwa.originDescription", { agent: author, turn: record.turn_id })
                   : undefined}
+                data-kind={record.kind}
                 className={cn(
-                  "absolute flex flex-col items-start gap-0.5 overflow-hidden rounded-lg border bg-card px-3 py-2 text-left shadow-xs transition-colors hover:border-primary/60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+                  "absolute flex flex-col items-start gap-0.5 overflow-hidden rounded-lg border px-3 py-2 text-left shadow-xs transition-colors hover:border-primary/60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+                  nuwaKindSurface(record.kind) ?? "bg-card",
                   selected === record.id ? "border-primary ring-1 ring-primary/30" : "border-border",
                   !active && "opacity-35"
                 )}
@@ -300,6 +303,7 @@ export function NuwaGraph({
                             : undefined}
                           className={cn(
                             "flex w-full min-w-0 items-center gap-2 rounded-md border px-2 py-1.5 text-left hover:bg-accent/50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+                            nuwaKindSurface(record.kind),
                             selected === record.id ? "border-primary" : "border-transparent"
                           )}
                         >

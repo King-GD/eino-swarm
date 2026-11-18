@@ -2,7 +2,7 @@ import { useId } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { SelectGroup, SelectItem, SelectLabel } from "@/components/ui/select"
-import { functionalChoiceLabel, functionalModelChoices, groupFunctionalChoices, type FunctionalSourceGroup } from "@/lib/functional-model-choices"
+import { functionalChoiceLabel, functionalGroupHeadings, functionalModelChoices, groupFunctionalChoices, type FunctionalSourceGroup } from "@/lib/functional-model-choices"
 import type { MessageKey } from "@/lib/i18n"
 import { configurableModelRoles, policyAllows, policyConfigurable, type ModelRef, type ModelRole } from "@/lib/model-policy"
 import { modelChoiceId, parseModelChoiceId } from "@/lib/models"
@@ -66,6 +66,7 @@ export function FunctionalModels({ settings, onChange, query = "" }: {
         selected: ref?.provider_id && ref.model ? ref : undefined,
       })
       const groups = groupFunctionalChoices(choices)
+      const sections = groups.flatMap(group => functionalGroupHeadings(group.group, group.choices, t(groupLabels[group.group])))
       const names = choices.filter(choice => choice.providerId === ref?.provider_id).map(choice => choice.model)
       const value = off ? "__disabled" : ref?.provider_id && ref.model ? modelChoiceId(ref.provider_id, ref.model) : "__default"
       return <div key={role} data-settings-key={`model-${role}`}>
@@ -87,11 +88,11 @@ export function FunctionalModels({ settings, onChange, query = "" }: {
           }}>
           {role === "embedding" ? <SelectItem value="__disabled">{t("modelPolicy.off")}</SelectItem> : null}
           <SelectItem value="__default">{t(role === "embedding" && !fallback ? "modelPolicy.defaultOff" : "modelPolicy.default")}{fallback ? ` · ${fallback.model}` : ""}</SelectItem>
-          {groups.map(group => <SelectGroup key={group.group}>
-            {groups.length > 1 ? <SelectLabel>{t(groupLabels[group.group])}</SelectLabel> : null}
-            {group.choices.map(choice => {
+          {sections.map(section => <SelectGroup key={section.key}>
+            {sections.length > 1 ? <SelectLabel>{section.title}</SelectLabel> : null}
+            {section.choices.map(choice => {
               const choiceId = modelChoiceId(choice.providerId, choice.model)
-              return <SelectItem key={choiceId} value={choiceId}>{functionalChoiceLabel(choice, group.choices)}</SelectItem>
+              return <SelectItem key={choiceId} value={choiceId}>{functionalChoiceLabel(choice, section.choices)}</SelectItem>
             })}
           </SelectGroup>)}
         </SettingsChoice>

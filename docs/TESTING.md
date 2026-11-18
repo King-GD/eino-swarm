@@ -9121,8 +9121,9 @@ packaged desktop window acceptance.
 covers scoped bindings, account renewal/isolation, managed catalog/settings
 projection and direct mutation refusal. `internal/engine/model_policy_test.go`
 covers a running turn leaving the source switch free, an in-flight model call
-still refusing it, backup and restart still refusing it, and managed project
-choices. `internal/provider/model_policy_admission_test.go` proves a stream holds
+still refusing it, an embedding request that has reached its endpoint leaving
+the switch free (`TestEmbeddingBackfillDoesNotBlockDebugSourceSwitch`), backup
+and restart still refusing it, and managed project choices. `internal/provider/model_policy_admission_test.go` proves a stream holds
 the gate until upstream completion, and that an already opened client keeps its
 endpoint after the switch while a new lookup uses the new source.
 

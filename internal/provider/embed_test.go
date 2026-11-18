@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -91,6 +92,17 @@ func TestEmbedRequiresAModelNameAndAURL(t *testing.T) {
 	p = New(cfg)
 	if _, err := p.Embed(context.Background(), cfg.Models.Default, "named-embed", []string{"alpha"}); err == nil {
 		t.Fatal("empty URL must fail")
+	}
+	cfg = configFor(t, true)
+	p = New(cfg)
+	if _, err := p.Embed(context.Background(), "missing", "named-embed", []string{"alpha"}); !errors.Is(err, ErrUnknownProvider) {
+		t.Fatalf("unknown provider: %v", err)
+	}
+	src := accountSourceFor(t, "https://gateway.invalid/v1", "private")
+	src.SetModelPolicy(false, map[string]string{"embedding": "server-model"})
+	p.SetAccountSource(src)
+	if _, err := p.Embed(context.Background(), cfg.Models.Default, "named-embed", []string{"alpha"}); !errors.Is(err, ErrModelPolicy) {
+		t.Fatalf("managed preset: %v", err)
 	}
 }
 

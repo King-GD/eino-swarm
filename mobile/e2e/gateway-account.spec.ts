@@ -172,7 +172,7 @@ test("LOCAL groups the signed-in gateway catalog and logout preserves private se
   await page.goto("/")
   await expect(page.getByRole("tab", { name: "对话" })).toHaveAttribute("aria-selected", "true")
   await page.getByRole("button", { name: "模型", exact: true }).click()
-  await expect(page.getByRole("heading", { name: "第三方 · 测试网关" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "测试网关" })).toBeVisible()
   await expect(page.getByRole("heading", { name: "手机自配" })).toBeVisible()
   await expect(page.getByRole("radio", { name: "shared-model" })).toHaveCount(2)
   await page.screenshot({ path: testInfo.outputPath("model-sources.png") })

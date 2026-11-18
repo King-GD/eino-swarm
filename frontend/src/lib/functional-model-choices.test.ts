@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { functionalChoiceLabel, functionalModelChoices, groupFunctionalChoices } from "./functional-model-choices"
+import { functionalChoiceLabel, functionalGroupHeadings, functionalModelChoices, groupFunctionalChoices } from "./functional-model-choices"
 import type { ModelPolicy } from "./model-policy"
 import type { ModelInfo } from "./types"
 
@@ -105,5 +105,23 @@ describe("functional model choices", () => {
     expect(choices.map(choice => choice.model)).toEqual(["origin-chat", "partner-chat", "local-chat", "kept"])
     const local = groupFunctionalChoices(choices).find(group => group.group === "local")!.choices
     expect(functionalChoiceLabel(local[0], local)).toBe("local-chat")
+  })
+
+  it("titles a third-party catalog with the name the gateway returned", () => {
+    const choices = functionalModelChoices({ role: "translation", policy: policy(), models, providers: [], account: undefined })
+    const third = groupFunctionalChoices(choices).find(group => group.group === "third_party")!
+    expect(functionalGroupHeadings("third_party", third.choices, "Third-party")).toEqual([
+      { key: "third_party\tPartner", title: "Partner", choices: third.choices },
+    ])
+    expect(functionalGroupHeadings("gateway", choices.filter(choice => choice.group === "gateway"), "Gateway")[0].title).toBe("Gateway")
+    expect(functionalGroupHeadings("third_party", [
+      { providerId: "gateway:missing", providerLabel: "gateway:missing", model: "speech", group: "third_party" },
+      { providerId: "gateway:fofa", providerLabel: "FOFA", model: "speech", group: "third_party" },
+      { providerId: "gateway:other", providerLabel: "Other", model: "voice", group: "third_party" },
+    ], "Third-party").map(section => [section.title, section.choices.map(choice => choice.model)])).toEqual([
+      ["Third-party", ["speech"]],
+      ["FOFA", ["speech"]],
+      ["Other", ["voice"]],
+    ])
   })
 })

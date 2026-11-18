@@ -10,6 +10,15 @@ export function nuwaKind(kind: string, t: Translate): string {
   return kind
 }
 
+/** Quiet kind fill. Facts and results must not share a surface; unknown
+ * kinds stay on the ordinary card so a new kind is not painted as either. */
+export function nuwaKindSurface(kind: string): string | undefined {
+  if (kind === "task") return "bg-nuwa-task-bg"
+  if (kind === "fact") return "bg-nuwa-fact-bg"
+  if (kind === "artifact") return "bg-nuwa-artifact-bg"
+  return undefined
+}
+
 export function NuwaStale({ node }: { node: NuwaNode }) {
   const t = useT()
   if (!node.stale_dependencies?.length) return null

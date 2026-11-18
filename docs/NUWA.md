@@ -208,9 +208,10 @@ and downstream. The graph frame stays as tall as the path instead of stretching 
 panel. A collapsed row shows how many records share each status. Opening it
 lists the newest records first, and a list longer than eight records can be
 filtered by title or summary. The index below the graph does not repeat those
-grouped records. The graph card shows kind, title and status. Who recorded a
-result, in which turn, and with which model stays in the detail and in the
-opened kind list, not on a separate graph node. Worker
+grouped records. The graph card shows kind, title and status. Tasks, facts and results use
+different background colors on the summary, graph cards, unlinked groups,
+lists and detail. Who recorded a result, in which turn, and with which model
+stays in the detail and in the opened kind list, not on a separate graph node. Worker
 rows show durable lifecycle status and recorded model bindings. Source links open the source conversation and, when a
 turn is given, its Trace; results use the existing file API.
 

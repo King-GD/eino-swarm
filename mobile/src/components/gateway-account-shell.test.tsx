@@ -108,7 +108,7 @@ describe("gateway account shell", () => {
       await waitFor(() => expect(localStorage.getItem("zwai.phone.mode")).toBe("local"))
       fireEvent.click(await screen.findByRole("button", { name: "Model" }))
       const picker = screen.getByRole("dialog", { name: "Model" })
-      expect(within(picker).getByRole("group", { name: "Third-party interface · Partner" })).toBeVisible()
+      expect(within(picker).getByRole("group", { name: "Partner" })).toBeVisible()
       const group = within(picker).getByRole("group", { name: "Original interface · Main" })
       fireEvent.click(within(group).getByRole("radio", { name: "shared-model" }))
       await waitFor(() => expect(mutations.at(-1)).toMatchObject({ op: "tune", provider_id: "gateway:original", model: "shared-model" }))
@@ -396,7 +396,7 @@ describe("gateway account shell", () => {
     mocks.account = { ...mocks.account, status: "authorized", session, bootstrap }
     render(<App />)
     fireEvent.click(await screen.findByRole("button", { name: /^Model$/ }))
-    expect(await screen.findByRole("heading", { name: "Third-party · Team" })).toBeVisible()
+    expect(await screen.findByRole("heading", { name: "Team" })).toBeVisible()
     expect(screen.getByRole("heading", { name: "Personal" })).toBeVisible()
     expect(screen.getAllByRole("radio", { name: "shared-model" })).toHaveLength(2)
     expect(localStorage.getItem("zwai.phone.providers")).not.toContain(session.token)
@@ -408,7 +408,7 @@ describe("gateway account shell", () => {
     mocks.account={...mocks.account,status:"authorized",session,bootstrap:{...bootstrap,models:{...bootstrap.models,profile:{label:"Partner model",tools:["read"]}}}}
     render(<App />)
     fireEvent.click(await screen.findByRole("button",{name:/^Model$/}))
-    expect(await screen.findByRole("heading",{name:"Third-party · Partner model"})).toBeVisible()
+    expect(await screen.findByRole("heading",{name:"Partner model"})).toBeVisible()
     expect(screen.getByRole("radio",{name:"Partner model"})).toBeVisible()
     expect(mocks.discover).not.toHaveBeenCalled()
     expect(localStorage.getItem("zwai.phone.providers")).toBeNull()

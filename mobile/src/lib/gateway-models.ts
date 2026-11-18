@@ -26,7 +26,8 @@ export function gatewayModelSources(session: GatewaySession, bootstrap: GatewayB
   const models = bootstrap.models
   const source = gatewayProvider(session, bootstrap)
   if (source) {
-    source.label = t("account.thirdPartyGroup", { name: models.profile?.label ?? models.label })
+    const published = (models.profile?.label ?? models.label).trim()
+    source.label = published || source.id
     source.catalogURL = models.client_catalog_url ?? models.catalog_url
     source.modelLabels = Object.fromEntries((models.roles ?? []).map(role => [role.id, role.label]))
     if (models.profile) {

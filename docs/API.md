@@ -683,10 +683,12 @@ function. An older response without the field keeps the single
 `account_models.kinds` list. Only the existing
 account-portrait triple-click debug entry changes product mode; there is no normal
 mode selector. A running turn or worker keeps the model it already opened and
-does not block the change. A model call that has started holds admission until
-it finishes, and the change returns the existing busy error during that call.
-Backup, restore and restart also return that error. Later model requests use
-the new source.
+does not block the change. A chat, speech, or decision call that has started
+holds admission until it finishes, and the change returns the existing busy
+error during that call. Semantic indexing resolves its source and then
+continues; the backfill started by a mode save does not keep the next switch
+waiting. Backup, restore and restart also return that error. Later model
+requests use the new source.
 
 An ordinary gateway permits provider edits, discovery and functional overrides.
 A managed preset or a gateway without a ready model source refuses model writes

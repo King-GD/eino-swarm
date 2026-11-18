@@ -22,7 +22,7 @@ describe("LOCAL account model sources",()=>{
   }))
   const hook=renderHook(()=>useLocalModelSources("local","authorized",session,bootstrap))
   await waitFor(()=>expect(hook.result.current.providers).toHaveLength(2))
-  expect(hook.result.current.providers.map(row=>[row.id,row.label])).toEqual([["gateway:preset","Third-party · Partner"],["gateway:global","Gateway · Main"]])
+  expect(hook.result.current.providers.map(row=>[row.id,row.label])).toEqual([["gateway:preset","Partner"],["gateway:global","Gateway · Main"]])
   for(const provider of hook.result.current.providers){
    await streamCompletion({provider,model:"conversation",reasoning:"",turns:[{role:"user",parts:[{kind:"text",text:"routing fixture"}]}],signal:new AbortController().signal,onDelta:()=>undefined})
   }

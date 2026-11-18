@@ -74,11 +74,29 @@ it("lists gateway, third-party and local models in separate groups", () => {
   render(<FunctionalModels settings={value} onChange={onChange} />)
   fireEvent.click(screen.getByLabelText("Translation Provider"))
   expect(screen.getByText("Gateway")).toBeInTheDocument()
-  expect(screen.getByText("Third-party")).toBeInTheDocument()
+  expect(screen.getByText("Partner")).toBeInTheDocument()
+  expect(screen.queryByText("Third-party")).not.toBeInTheDocument()
   expect(screen.getByText("Local")).toBeInTheDocument()
   fireEvent.click(screen.getByRole("option", { name: "partner-chat" }))
   expect(onChange.mock.lastCall?.[0].models.bindings.translation).toEqual({ provider_id: "gateway:partner", model: "partner-chat" })
   expect(screen.getByRole("combobox", { name: "Image generation" })).toBeEnabled()
+})
+
+it("titles a third-party speech catalog with the gateway name", () => {
+  const value = settings()
+  const speech = { authorized: true, available: true, configurable: true, capabilities: { speech: { supported: true, available: true, configurable: true, endpoints: ["audio_speech"] } } }
+  value.model_policy!.account_sources = { "gateway:origin": speech, "gateway:partner": speech }
+  value.model_policy!.functional_catalogs = [
+    { provider_id: "gateway:origin", label: "Origin", catalog_group: "original", speech_models: ["voxcpm2"] },
+    { provider_id: "gateway:partner", label: "FOFA", catalog_group: "third_party", speech_models: ["speech"] },
+  ]
+  render(<FunctionalModels settings={value} onChange={vi.fn()} />)
+  fireEvent.click(screen.getByLabelText("Spoken answers Provider"))
+  expect(screen.getByText("Gateway")).toBeInTheDocument()
+  expect(screen.getByText("FOFA")).toBeInTheDocument()
+  expect(screen.queryByText("Third-party")).not.toBeInTheDocument()
+  expect(screen.getByRole("option", { name: "voxcpm2" })).toBeInTheDocument()
+  expect(screen.getByRole("option", { name: "speech" })).toBeInTheDocument()
 })
 
 it("clears the old search pin when disabling semantic search", () => {
