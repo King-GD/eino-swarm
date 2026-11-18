@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import '../../frontend/src/styles/easm.css';
 @import '../../frontend/src/styles/scroll-fade.css';
 
 /* The phone paints `.dark` from the system theme. Follow that class. */
@@ -8,6 +9,8 @@
    package. Scan that file so light and dark Shiki classes ship. */
 @source '../../frontend/src/lib/highlighter.tsx';
 @source '../../frontend/src/components/app/task-panel-frame.tsx';
+@source '../../frontend/src/components/app/easm';
+@source '../../frontend/src/components/ui/{badge,button,dialog,input}.tsx';
 
 @theme inline {
   --font-sans: var(--font-sans);
@@ -22,6 +25,9 @@
   --color-syntax-operator: hsl(var(--syntax-operator));
   --color-syntax-flag: hsl(var(--syntax-flag));
   --color-syntax-variable: hsl(var(--syntax-variable));
+
+  --color-running: hsl(var(--running));
+  --color-ask: hsl(var(--ask));
 
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
@@ -46,6 +52,8 @@
 
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--card));
+  --color-popover-foreground: hsl(var(--card-foreground));
 
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
@@ -209,6 +217,8 @@
     --chart-5: 28 75% 42%;
     --radius: 0.65rem;
     --running: 38 92% 50%;
+    --ask: 252 55% 46%;
+    --chrome-font-size: 14px;
     --online: 142 72% 36%;
     --done: var(--online);
     --qr-plate: 0 0% 100%;
@@ -246,6 +256,7 @@
     --chart-4: 250 45% 72%;
     --chart-5: 32 70% 62%;
     --running: 38 92% 50%;
+    --ask: 252 58% 72%;
     --online: 142 72% 36%;
     --done: var(--online);
     --qr-plate: 0 0% 100%;

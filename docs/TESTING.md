@@ -909,6 +909,19 @@ Use an isolated port, data directory and output directory when another E2E run
 is active. The plugin catalog test validates the empty state and the complete
 example with the production Schema validator.
 
+The paired phone EASM case uses a scripted PC to deliver cumulative snapshots
+with 8, 18 and 32 synthetic nodes through the mobile manifest and chunk readers.
+It checks automatic opening, touch selection, zoom retention, canvas identity
+and restoring the latest snapshot after closing and reopening. Run it on
+Chromium and WebKit phone profiles in visible browser windows.
+
+```sh
+cd mobile
+npm run e2e -- e2e/task-panels.spec.ts --headed -g "EASM"
+```
+
+The case saves screenshots of each batch and a video in the test output.
+
 ## Original project-history SQL and source reports (`F-410`, `C-036`)
 
 `internal/history` uses real temporary WAL databases for single-statement

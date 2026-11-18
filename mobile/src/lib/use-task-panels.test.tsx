@@ -4,6 +4,7 @@ import type { RemoteLink } from "./link"
 import { TaskPanelReadError } from "./remote-task-panels"
 import { useTaskPanels } from "./use-task-panels"
 import type { TaskPanel } from "../../../frontend/src/task-panels/types"
+import catalog from "../../../frontend/src/task-panels/catalog.json"
 
 const calls = vi.hoisted(() => ({ list: vi.fn(), read: vi.fn() }))
 vi.mock("./remote-task-panels", async (original) => ({ ...await original<typeof import("./remote-task-panels")>(), listTaskPanels: calls.list, readTaskPanel: calls.read }))
@@ -42,6 +43,34 @@ it("applies a valid patch and repairs an invalid one with one complete snapshot"
   expect(view.result.current.panels[0].state).toEqual({ count: 3 })
   expect(view.result.current.changes.p).toBeUndefined()
   expect(first.state).toEqual({ count: 1 })
+})
+
+it("replaces one EASM panel with three cumulative snapshots and restores the latest after remount", async () => {
+  const pc = link(), definition = catalog.find((definition) => definition.id === "easm-asset-portrait")!
+  const batches: TaskPanel[] = [1, 2, 3].map((revision) => ({ ...panel("portrait", revision), plugin_id: definition.id,
+    plugin_version: definition.version, definition, source_status: revision === 3 ? "finished" : "running",
+    state: { schema_version: 1, title: "EASM", nodes: Array.from({ length: revision }, (_, index) => ({
+      id: `node|${index}`, kind: index === 0 ? "root" : "domain", label: `sample-${index}`,
+    })), edges: [], heat: [], components: [] },
+  }))
+  calls.list.mockResolvedValue([manifest(batches[0])])
+  calls.read.mockResolvedValueOnce({ panel: batches[0] })
+  const view = renderHook(() => useTaskPanels(pc, "t", "pc", true))
+  await waitFor(() => expect(view.result.current.panels).toEqual([batches[0]]))
+  for (const batch of batches.slice(1)) {
+    calls.list.mockResolvedValue([manifest(batch)])
+    calls.read.mockResolvedValueOnce({ panel: batch })
+    await act(async () => { await view.result.current.refresh() })
+    expect(view.result.current.panels).toEqual([batch])
+    expect(view.result.current.changes).toEqual({})
+  }
+  expect(calls.read.mock.calls.map((args) => args[3])).toEqual([undefined, 1, 2])
+  expect(batches[0].state).toMatchObject({ nodes: [{ id: "node|0" }] })
+  view.unmount()
+  calls.read.mockResolvedValueOnce({ panel: batches[2] })
+  const restored = renderHook(() => useTaskPanels(pc, "t", "pc", true))
+  await waitFor(() => expect(restored.result.current.panels).toEqual([batches[2]]))
+  expect(calls.read).toHaveBeenLastCalledWith(pc, "t", "portrait", undefined, expect.any(AbortSignal))
 })
 
 it("rejects late replies across PC and A to B to A conversation visits", async () => {

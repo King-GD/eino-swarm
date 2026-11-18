@@ -1,7 +1,7 @@
 import { useId } from "react"
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import type { TooltipProps } from "recharts"
-import type { EasmResult } from "@/lib/easm/types"
+import type { EasmResult } from "../../../lib/easm/types"
 
 const LINE = "hsl(var(--chart-1))"
 

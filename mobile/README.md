@@ -84,7 +84,10 @@ on the PC. Progress and asset points update through the existing encrypted
 connection; reconnecting reads saved results without restarting collection.
 Conversations without a panel keep their ordinary header. An incompatible
 plugin reports an update requirement rather than loading different code.
-The EASM asset portrait opens in the desktop or Web conversation.
+The EASM asset portrait uses the same React graph, heat trend and supply-chain
+table as desktop. Pinch to zoom or tap **Fit view**. Each cumulative snapshot
+updates the graph in place and keeps the current zoom and selected node.
+Reopen the sheet to see the latest saved snapshot.
 See [Task panels](../docs/TASK_PANELS.md) for plugin authoring and data rules.
 
 Conversation Mermaid fences open as fit-to-width/height diagrams with touch zoom,

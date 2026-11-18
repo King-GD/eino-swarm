@@ -2900,9 +2900,9 @@ Nuwa graph.
 
 EASM uses a catalog Schema and the same conversation state and snapshot
 delivery. An empty catalog entry path identifies a panel rendered by the
-host. Desktop and Web render EASM with the existing React graph. The graph
-retains its state across updates, and reopening the conversation loads the
-latest saved portrait.
+host. Desktop, Web and paired phones share the React graph, heat trend and
+supply-chain view. The graph retains its state across updates, and reopening
+the conversation loads the latest saved portrait.
 
 The paired phone bundles the same plugin documents and `TaskPanelFrame` host.
 `mobile/src/lib/use-task-panels.ts` polls small manifests over the existing
@@ -2912,6 +2912,6 @@ sealed link and reads a complete snapshot or exact-base patch through
 Scope/revision/hash validation precedes application, newer manifests do not
 cancel an in-flight body, and old cleanup cannot remove a successor. The phone
 never fetches PC HTTP or HTML and never starts the source. A full-screen sheet
-retains its iframe and zoom when hidden; PC/thread/data-generation changes fence
-old results. See the finite `models/panels/MobileTaskPanel.tla` refinement and
+keeps the active panel mounted when hidden. PC/thread/data-generation changes
+fence old results. See the finite `models/panels/MobileTaskPanel.tla` refinement and
 the same `C-050` contract.

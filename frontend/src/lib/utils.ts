@@ -1,11 +1,6 @@
-import { clsx, type ClassValue } from "clsx"
-import { twMerge } from "tailwind-merge"
-
 import { t, type Locale } from "@/lib/i18n"
 
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
+export { cn } from "./cn"
 
 /** Human-readable byte size for the Files panel. */
 export function formatBytes(bytes: number): string {

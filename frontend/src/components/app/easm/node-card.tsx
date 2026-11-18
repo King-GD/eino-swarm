@@ -1,10 +1,10 @@
 import { X } from "lucide-react"
 import { useId, type ReactNode, type Ref } from "react"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { FEATURE_GROUPS, displayKind, formatCount, isSafeLink, kindLabel, summaryStats, validity, type EasmIndex } from "@/lib/easm/model"
-import type { DisplayKind, EasmNode, EasmResult } from "@/lib/easm/types"
-import { cn } from "@/lib/utils"
+import { Badge } from "../../ui/badge"
+import { Button } from "../../ui/button"
+import { FEATURE_GROUPS, displayKind, formatCount, isSafeLink, kindLabel, summaryStats, validity, type EasmIndex } from "../../../lib/easm/model"
+import type { DisplayKind, EasmNode, EasmResult } from "../../../lib/easm/types"
+import { cn } from "@/lib/cn"
 import { KIND_ICONS, kindColor } from "./kind-style"
 
 export function KindIcon({ kind, className }: { kind: DisplayKind; className?: string }) {
@@ -124,9 +124,10 @@ function FeatureBody({ node, index, onSelect }: { node: EasmNode; index: EasmInd
   )
 }
 
-/** Details for the node the user clicked, anchored next to it on the canvas. */
-export function NodeCard({ ref, node, index, summary, onSelect, onClose }: {
+/** Details for the node the user clicked. */
+export function NodeCard({ ref, className, node, index, summary, onSelect, onClose }: {
   ref?: Ref<HTMLElement>
+  className?: string
   node: EasmNode
   index: EasmIndex
   summary: EasmResult["summary"]
@@ -137,7 +138,7 @@ export function NodeCard({ ref, node, index, summary, onSelect, onClose }: {
   const titleId = useId()
   return (
     <section ref={ref} role="dialog" aria-modal="false" aria-labelledby={titleId} data-testid="easm-node-card"
-      className="absolute z-20 flex max-h-[min(560px,calc(100%-24px))] w-[min(400px,calc(100%-24px))] flex-col overflow-hidden rounded-xl border bg-popover text-sm text-popover-foreground shadow-xl"
+      className={cn("absolute z-20 flex max-h-[min(560px,calc(100%-24px))] w-[min(400px,calc(100%-24px))] flex-col overflow-hidden rounded-xl border bg-popover text-sm text-popover-foreground shadow-xl", className)}
       onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onClose() } }}>
       <header className="flex items-center gap-3 border-b bg-muted/40 py-3 pr-2 pl-4">
         <KindIcon kind={kind} className="size-10" />

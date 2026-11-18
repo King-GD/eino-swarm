@@ -1,6 +1,6 @@
 import type { NodeObject } from "force-graph"
 
-import type { DisplayKind, EasmNode } from "@/lib/easm/types"
+import type { DisplayKind, EasmNode } from "../../../lib/easm/types"
 
 export interface GraphNode extends NodeObject {
   id: string

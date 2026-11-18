@@ -35,6 +35,15 @@ it("assembles a large UTF-8 snapshot before exposing it and releases only its ow
   expect(rpc).toHaveBeenLastCalledWith({ op: OpTaskPanelCancel, thread_id: "t", panel_id: "p", transfer_id: "immutable-transfer" }, { dropOnTimeout: false })
 })
 
+it("reads a native EASM snapshot with its pinned empty entry over the same transfer", async () => {
+  const definition = catalog.find((definition) => definition.id === "easm-asset-portrait")!
+  const portrait = { ...panel, plugin_id: definition.id, plugin_version: definition.version, definition,
+    state: { schema_version: 1, title: "EASM", nodes: [{ id: "root|sample", kind: "root", label: "Sample" }], edges: [], heat: [], components: [] } }
+  const { link, rpc } = reader({ panel: portrait })
+  expect(await readTaskPanel(link, "t", "p")).toEqual({ panel: portrait })
+  expect(rpc).toHaveBeenCalledWith({ op: OpTaskPanelRead, thread_id: "t", panel_id: "p" }, expect.objectContaining({ dropOnTimeout: false }))
+})
+
 it.each(["revision", "id", "sha256", "size", "thread", "panel"])("rejects mixed %s across chunks", async (field) => {
   const { link } = reader({ panel }, (chunk, request) => {
     if (!request.transfer_id) return
@@ -81,12 +90,19 @@ it("keeps an unknown older host separate from an empty manifest", async () => {
   await expect(listTaskPanels(link, "t")).rejects.toThrow("manifest")
 })
 
-it("offers embedded panels while leaving host-rendered portraits on the PC", async () => {
+it("offers native EASM panels alongside embedded panels", async () => {
   const portrait = { id: "portrait", thread_id: "t", plugin_id: "easm-asset-portrait", plugin_version: "1", revision: 1 }
   const embedded = { id: "embedded", thread_id: "t", plugin_id: catalog[0].id, plugin_version: catalog[0].version, revision: 1 }
   const rpc = vi.fn().mockResolvedValueOnce({ ...base, task_panels: [portrait] })
     .mockResolvedValueOnce({ ...base, task_panels: [portrait, embedded] })
   const link = { rpc } as unknown as RemoteLink
-  expect(await listTaskPanels(link, "t")).toEqual([])
-  expect(await listTaskPanels(link, "t")).toEqual([embedded])
+  expect(await listTaskPanels(link, "t")).toEqual([portrait])
+  expect(await listTaskPanels(link, "t")).toEqual([portrait, embedded])
+})
+
+it("keeps unknown plugins and old EASM definitions available for the compatibility notice", async () => {
+  const unknown = { id: "unknown", thread_id: "t", plugin_id: "future-plugin", plugin_version: "1", revision: 1 }
+  const oldPortrait = { id: "portrait", thread_id: "t", plugin_id: "easm-asset-portrait", plugin_version: "old", revision: 1 }
+  const link = { rpc: vi.fn().mockResolvedValue({ ...base, task_panels: [unknown, oldPortrait] }) } as unknown as RemoteLink
+  expect(await listTaskPanels(link, "t")).toEqual([unknown, oldPortrait])
 })

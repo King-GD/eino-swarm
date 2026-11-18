@@ -1,0 +1,33 @@
+@theme {
+  --color-easm-root: hsl(var(--easm-root));
+  --color-easm-company: hsl(var(--easm-company));
+  --color-easm-domain: hsl(var(--easm-domain));
+  --color-easm-org: hsl(var(--easm-org));
+  --color-easm-cert: hsl(var(--easm-cert));
+  --color-easm-icp: hsl(var(--easm-icp));
+  --color-easm-asn: hsl(var(--easm-asn));
+  --color-easm-ipc: hsl(var(--easm-ipc));
+  --color-easm-fid: hsl(var(--easm-fid));
+  --color-easm-icon-hash: hsl(var(--easm-icon-hash));
+  --color-easm-mx: hsl(var(--easm-mx));
+  --color-easm-edge: hsl(var(--easm-edge));
+  --color-easm-highlight: hsl(var(--easm-highlight));
+}
+
+@layer base {
+  :root {
+    --easm-root: 201 100% 50%;
+    --easm-company: 218 89% 61%;
+    --easm-domain: 122 55% 42%;
+    --easm-org: 37 85% 48%;
+    --easm-cert: 45 68% 50%;
+    --easm-icp: 268 100% 63%;
+    --easm-asn: 259 66% 50%;
+    --easm-ipc: 188 100% 40%;
+    --easm-fid: 17 76% 58%;
+    --easm-icon-hash: 234 82% 64%;
+    --easm-mx: 84 56% 53%;
+    --easm-edge: 212 18% 62%;
+    --easm-highlight: 40 100% 35%;
+  }
+}

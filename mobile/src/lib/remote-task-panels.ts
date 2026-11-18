@@ -37,7 +37,7 @@ export async function listTaskPanels(link: RemoteLink, threadId: string, signal?
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
   if (!result.ok) throw new TaskPanelReadError(result.code ?? "panel_read_failed", result.error ?? "Could not load task panels")
   return validatePanelManifest(result.task_panels, threadId).filter(
-    (panel) => catalog.find((definition) => definition.id === panel.plugin_id)?.entry !== "",
+    (panel) => panel.plugin_id === "easm-asset-portrait" || catalog.find((definition) => definition.id === panel.plugin_id)?.entry !== "",
   )
 }
 

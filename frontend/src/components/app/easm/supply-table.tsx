@@ -1,9 +1,9 @@
 import { useEffect, useId, useMemo, useState } from "react"
-import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
-import { TAG_LABELS, formatCount, hotDays, isSafeLink, sortComponents, type ComponentRow } from "@/lib/easm/model"
-import type { EasmResult, TagType } from "@/lib/easm/types"
-import { cn } from "@/lib/utils"
+import { Badge } from "../../ui/badge"
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../ui/dialog"
+import { TAG_LABELS, formatCount, hotDays, isSafeLink, sortComponents, type ComponentRow } from "../../../lib/easm/model"
+import type { EasmResult, TagType } from "../../../lib/easm/types"
+import { cn } from "@/lib/cn"
 
 const TAG_VARIANT: Record<TagType, "warning" | "danger" | "ask"> = { hot: "warning", kev: "danger", cve: "ask" }
 
@@ -41,12 +41,14 @@ function TagEvidence({ row }: { row: ComponentRow }) {
 }
 
 /** Third-party components with their aggregate counts; a row opens its tag evidence. */
-export function SupplyTable({ components, className }: { components: EasmResult["components"]; className?: string }) {
+export function SupplyTable({ components, className, sheet, visible = true }: {
+  components: EasmResult["components"]; className?: string; sheet?: HTMLElement | null; visible?: boolean
+}) {
   const rows = useMemo(() => sortComponents(components), [components])
   const [openName, setOpenName] = useState<string | null>(null)
   const open = rows.find((row) => row.name === openName)
   const titleId = useId()
-  useEffect(() => { if (openName && !open) setOpenName(null) }, [openName, open])
+  useEffect(() => { if (openName && (!open || !visible)) setOpenName(null) }, [openName, open, visible])
   return (
     <section aria-labelledby={titleId} className={cn("flex min-h-0 flex-col rounded-xl border bg-card p-3", className)}>
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -85,8 +87,8 @@ export function SupplyTable({ components, className }: { components: EasmResult[
           </tbody>
         </table>
       </div>
-      <Dialog open={!!open} onOpenChange={(value) => { if (!value) setOpenName(null) }}>
-        <DialogContent className="max-h-[80dvh] overflow-y-auto">
+      <Dialog open={visible && !!open} onOpenChange={(value) => { if (!value) setOpenName(null) }}>
+        <DialogContent container={sheet} className="max-h-[80dvh] max-w-[min(92vw,32rem)] overflow-y-auto">
           <DialogTitle>{open ? open.display_name || open.name : ""}</DialogTitle>
           <DialogDescription className="sr-only">该组件的热搜和漏洞标签依据</DialogDescription>
           {open ? <TagEvidence row={open} /> : null}

@@ -14,7 +14,11 @@ export default defineConfig({
     __ZWAI_WEB_VERSION__: JSON.stringify(shellVersion()),
   },
   resolve: {
-    dedupe: ["react", "react-dom", "shiki", "mermaid", "mdast-util-from-markdown"],
+    dedupe: [
+      "react", "react-dom", "shiki", "mermaid", "mdast-util-from-markdown",
+      "@radix-ui/react-dialog", "@radix-ui/react-slot", "class-variance-authority",
+      "force-graph", "lucide-react", "recharts",
+    ],
     alias: { "@": path.resolve(__dirname, "./src") },
   },
   server: {

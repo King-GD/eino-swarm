@@ -1,29 +1,32 @@
 import { Maximize2 } from "lucide-react"
 import { useMemo, useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
-import { indexResult } from "@/lib/easm/model"
-import type { EasmResult } from "@/lib/easm/types"
+import { Button } from "../../ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../ui/dialog"
+import { indexResult } from "../../../lib/easm/model"
+import type { EasmResult } from "../../../lib/easm/types"
 import { AssetGraph } from "./asset-graph"
 import { HeatTrend } from "./heat-trend"
 import { SupplyTable } from "./supply-table"
 
 /** The EASM tab: relationship graph, heat trend and supply chain for one result,
  *  stacked in the side panel and side by side in the enlarged dialog. */
-export function EasmPanel({ result, visible = true }: { result: EasmResult; visible?: boolean }) {
+export function EasmPanel({ result, visible = true, sheet }: {
+  result: EasmResult; visible?: boolean; sheet?: HTMLElement | null
+}) {
   const index = useMemo(() => indexResult(result), [result])
   const [open, setOpen] = useState(false)
   const subject = (index.rootId && index.byId.get(index.rootId)?.label) || result.title
+  const expand = sheet === undefined ? () => setOpen(true) : undefined
   return (
     <section aria-label="EASM" className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between border-b px-3 py-2">
         <span className="truncate font-medium">{subject}</span>
-        <Button size="icon" variant="ghost" aria-label="展开 EASM" title="展开资产图" onClick={() => setOpen(true)}><Maximize2 className="size-4" /></Button>
+        {expand ? <Button size="icon" variant="ghost" aria-label="展开 EASM" title="展开资产图" onClick={expand}><Maximize2 className="size-4" /></Button> : null}
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2">
-        <AssetGraph result={result} index={index} visible={visible && !open} onExpand={() => setOpen(true)} />
+        <AssetGraph result={result} index={index} visible={visible && !open} onExpand={expand} mobile={sheet !== undefined} />
         <HeatTrend heat={result.heat} className="flex h-[260px] flex-col rounded-xl border bg-card p-3" />
-        <SupplyTable components={result.components} className="h-[360px]" />
+        <SupplyTable components={result.components} className="h-[360px]" sheet={sheet} visible={visible && !open} />
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="flex h-[94dvh] w-[96vw] max-w-none flex-col gap-0 overflow-hidden p-0">

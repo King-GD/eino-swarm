@@ -1,17 +1,17 @@
 import ForceGraph from "force-graph"
 import { Search } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import enlargeIcon from "@/assets/easm/enlarge.svg"
-import expandIcon from "@/assets/easm/expand.svg"
-import shrinkIcon from "@/assets/easm/shrink.svg"
-import fitIcon from "@/assets/easm/zoomfit.svg"
-import { Input } from "@/components/ui/input"
+import enlargeIcon from "../../../assets/easm/enlarge.svg"
+import expandIcon from "../../../assets/easm/expand.svg"
+import shrinkIcon from "../../../assets/easm/shrink.svg"
+import fitIcon from "../../../assets/easm/zoomfit.svg"
+import { Input } from "../../ui/input"
 import {
   displayKind, graphLabel, highlightIds, kindLabel, layoutOrder, localView, nodeRadius, searchNodes, summaryStats, visibleIds, wrapLabel,
   type EasmIndex,
-} from "@/lib/easm/model"
-import type { DisplayKind, EasmResult } from "@/lib/easm/types"
-import { cn } from "@/lib/utils"
+} from "../../../lib/easm/model"
+import type { DisplayKind, EasmResult } from "../../../lib/easm/types"
+import { cn } from "@/lib/cn"
 import { chooseLabels, drawLabels, drawLink, drawNode, FONT_SIZE, MAX_LABEL_WIDTH, type DrawState, type GraphLink, type GraphNode, type Palette } from "./graph-canvas"
 import { KIND_ICONS, KIND_TOKENS, tokenColor } from "./kind-style"
 import { KindIcon, NodeCard } from "./node-card"
@@ -52,10 +52,11 @@ function MaskIcon({ src }: { src: string }) {
 
 const toolButton = "grid size-7 place-items-center rounded-md border bg-card/95 text-muted-foreground shadow-sm hover:border-primary hover:text-primary"
 
-export function AssetGraph({ result, index, expanded = false, visible: active = true, onExpand }: {
+export function AssetGraph({ result, index, expanded = false, mobile = false, visible: active = true, onExpand }: {
   result: EasmResult
   index: EasmIndex
   expanded?: boolean
+  mobile?: boolean
   visible?: boolean
   onExpand?: () => void
 }) {
@@ -411,10 +412,12 @@ export function AssetGraph({ result, index, expanded = false, visible: active = 
           <div ref={stageRef} data-testid="easm-graph" role="group" aria-label="资产与具体特征网络" className="absolute inset-0" style={{ opacity: 0 }} />
           {!result.nodes.length ? <p className="pointer-events-none absolute inset-0 m-0 grid place-items-center text-sm text-muted-foreground">等待资产数据</p> : null}
           <div role="toolbar" aria-label="关联网络操作" className="absolute top-3 left-3 z-10 flex gap-1.5">
-            <button type="button" className={toolButton} aria-label="放大关联网络" title="放大" onClick={() => zoomBy(0.3)}><MaskIcon src={enlargeIcon} /></button>
-            <button type="button" className={toolButton} aria-label="缩小关联网络" title="缩小" onClick={() => zoomBy(-0.3)}><MaskIcon src={shrinkIcon} /></button>
+            {!mobile ? <>
+              <button type="button" className={toolButton} aria-label="放大关联网络" title="放大" onClick={() => zoomBy(0.3)}><MaskIcon src={enlargeIcon} /></button>
+              <button type="button" className={toolButton} aria-label="缩小关联网络" title="缩小" onClick={() => zoomBy(-0.3)}><MaskIcon src={shrinkIcon} /></button>
+            </> : null}
             {onExpand ? <button type="button" className={toolButton} aria-label="展开资产图" title="展开资产图" onClick={onExpand}><MaskIcon src={expandIcon} /></button> : null}
-            <button type="button" className={toolButton} aria-label="适配视图" title="适配视图" onClick={() => fit(1000)}><MaskIcon src={fitIcon} /></button>
+            <button type="button" className={toolButton} aria-label="适配视图" title="适配视图" onClick={() => fit(mobile ? 0 : 1000)}><MaskIcon src={fitIcon} /></button>
           </div>
           <button type="button" aria-pressed={local} onClick={() => setLocal(!local)}
             className="absolute top-3 right-3 z-10 h-7 rounded-full border bg-card/95 px-2.5 text-xs text-muted-foreground hover:border-primary hover:text-primary aria-pressed:border-primary aria-pressed:text-primary">
@@ -422,7 +425,9 @@ export function AssetGraph({ result, index, expanded = false, visible: active = 
           </button>
         </div>
         {cardNode ? (
-          <NodeCard key={cardNode.id} ref={cardRef} node={cardNode} index={index} summary={result.summary}
+          <NodeCard key={cardNode.id} ref={mobile ? undefined : cardRef}
+            className={mobile ? "bottom-3 left-3 max-h-[400px]" : undefined}
+            node={cardNode} index={index} summary={result.summary}
             onSelect={(id) => select(id, true, true)} onClose={() => { setCardId(null); setFocus(null) }} />
         ) : null}
       </section>

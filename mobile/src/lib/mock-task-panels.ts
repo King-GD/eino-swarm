@@ -1,5 +1,6 @@
 import { sha256 } from "@noble/hashes/sha2.js"
 import catalog from "../../../frontend/src/task-panels/catalog.json"
+import type { EasmResult } from "../../../frontend/src/lib/easm/types"
 import type { PanelChange, TaskPanel } from "../../../frontend/src/task-panels/types"
 import { bytesToHex } from "./bytes"
 import { OpTaskPanelCancel, OpTaskPanelRead, OpTaskPanels, type RemoteRequest, type RemoteResponse } from "./rpc"
@@ -11,6 +12,50 @@ let panels = new Map<string, TaskPanel>()
 let changes = new Map<string, PanelChange>()
 let initialized = false, sequence = 0, failures = 0
 const definition = catalog[0]
+const easmDefinition = catalog.find((panel) => panel.id === "easm-asset-portrait")!
+
+/** Complete, cumulative offline batches; the mock never collects real assets. */
+function easmState(batch: number): EasmResult {
+  const root = { id: "root|sample", kind: "root" as const, label: "示例大学", ip_count: [0, 90, 310, 670][batch] }
+  const company = { id: "company|sample", kind: "company" as const, label: "示例机构" }
+  const domain = { id: "domain|example.test", kind: "domain" as const, label: "example.test", detail: { reason: batch === 3 ? "第三批已复核的域名归属依据" : "本地样例域名依据" } }
+  const certificate = { id: "feature|certificate", kind: "feature" as const, featureKind: "cert" as const, label: "*.example.test" }
+  const domains = (names: string[]): EasmResult["nodes"] => names.map((name) => ({ id: `domain|${name}.example.test`, kind: "domain", label: `${name}.example.test` }))
+  const allNodes: EasmResult["nodes"] = [root, company, domain,
+    { id: "company|research", kind: "company", label: "示例研究院" },
+    { id: "org|laboratory", kind: "org", label: "联合实验室" },
+    ...domains(["mail", "vpn"]),
+    { id: "feature|mx", kind: "feature", featureKind: "mx", label: "mx.example.test" },
+    ...domains(["www", "library", "admissions", "alumni", "campus", "oa", "sso", "portal", "data", "lab"]),
+    certificate,
+    { id: "company|cloud", kind: "company", label: "示例云服务" },
+    { id: "org|information", kind: "org", label: "信息技术中心" },
+    { id: "feature|asn", kind: "feature", featureKind: "asn", label: "AS64500" },
+    { id: "feature|icp", kind: "feature", featureKind: "icp", label: "示例备案 001" },
+    { id: "feature|icon", kind: "feature", featureKind: "icon_hash", label: "示例站点图标" },
+    ...domains(["git", "video", "api", "storage", "learn", "status", "news", "backup"]),
+  ]
+  const nodes = allNodes.slice(0, [0, 8, 18, 32][batch])
+  const edges: EasmResult["edges"] = nodes.slice(1).map((node, index) => ({
+    source: nodes[index === 1 ? 1 : Math.floor(index / 3)].id, target: node.id, confirmed: true,
+  }))
+  if (batch === 3) edges.push(...[[2, 18], [4, 20], [6, 26], [10, 31]].map(([source, target]) => ({ source: nodes[source].id, target: nodes[target].id })))
+  const components: EasmResult["components"] = [
+    { name: "nginx", display_name: "NGINX", count: 180, hot_days: 6, tags: [{ type: "hot" }, { type: "kev", summary: "本地示例标签依据" }] },
+    { name: "openssl", display_name: "OpenSSL", count: 96, tags: [{ type: "cve", summary: "合成样例组件线索" }] },
+    { name: "apache-tomcat", display_name: "Apache Tomcat", count: 72 },
+    { name: "redis", display_name: "Redis", count: 48 },
+    { name: "vue", display_name: "Vue", count: 42 },
+    { name: "spring", display_name: "Spring", count: 36 },
+    { name: "jquery", display_name: "jQuery", count: 24 },
+  ]
+  return {
+    schema_version: 1, title: "EASM", nodes, edges,
+    summary: { clues: nodes.length, fofa_assets: [0, 350, 1200, 2600][batch], fofa_ips: [0, 90, 310, 670][batch] },
+    heat: Array.from({ length: [0, 7, 10, 14][batch] }, (_, index) => ({ date: `2026-11-${String(index + 1).padStart(2, "0")}`, value: 45 + index * 8 + (index % 3) * 12 })),
+    components: components.slice(0, [0, 3, 5, 7][batch]),
+  }
+}
 
 function state(finished = false) {
   const rows = [
@@ -29,25 +74,28 @@ function add(id = "mobile-map", version = definition.version) {
   panels.set(id, { id, thread_id: "t-live", plugin_id: definition.id, plugin_version: version, revision: 1,
     definition: { ...definition, version }, state: state() })
 }
+function addEasm() {
+  panels.set("mobile-easm", { id: "mobile-easm", thread_id: "t-live", plugin_id: easmDefinition.id, plugin_version: easmDefinition.version,
+    revision: 1, definition: easmDefinition, state: easmState(0) })
+}
 function initialize() {
   if (initialized) return
   initialized = true
   const mode = new URLSearchParams(location.search).get("panels")
   if (!mode) return
-  if (mode !== "delayed") add("mobile-map", mode === "incompatible" ? "older-version" : definition.version)
+  if (mode !== "delayed" && mode !== "easm") add("mobile-map", mode === "incompatible" ? "older-version" : definition.version)
   if (mode === "multi") add("mobile-map-second")
   if (mode === "failed") failures = 1
   if (mode === "large") panels.get("mobile-map")!.state = { ...state(), synthetic_note: "合成测试数据🌍".repeat(20_000) }
 }
 
-/** This event exists only in the offline walkthrough. It exercises normal
- * manifest/chunk RPCs and the shipped iframe rather than injecting HTML. */
+/** The offline walkthrough exercises normal manifest/chunk RPCs and bundled renderers. */
 function control(event: Event) {
   if (!new URLSearchParams(location.search).get("panels")) return
   initialize()
   const detail = (event as CustomEvent<{ kind: string; panel_id?: string }>).detail
   if (!detail) return
-  if (detail.kind === "show") { add(); return }
+  if (detail.kind === "show") { new URLSearchParams(location.search).get("panels") === "easm" ? addEasm() : add(); return }
   if (detail.kind === "remove") { panels.delete(detail.panel_id ?? "mobile-map"); return }
   const id = detail.panel_id ?? "mobile-map", panel = panels.get(id)
   if (!panel) return
@@ -62,7 +110,8 @@ function control(event: Event) {
       { op: "replace", path: "/probe/pending", value: 2 }, { op: "replace", path: "/probe/responded", value: 1 },
     ] })
   } else if (detail.kind === "snapshot") {
-    panel.state = state(true); panel.revision++; changes.delete(id)
+    panel.state = panel.plugin_id === easmDefinition.id ? easmState(Math.min(panel.revision, 3)) : state(true)
+    panel.revision++; changes.delete(id)
   }
 }
 if (typeof window !== "undefined") window.addEventListener("zwai.mock.task-panel", control)

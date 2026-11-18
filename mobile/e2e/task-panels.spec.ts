@@ -1,7 +1,7 @@
-import { expect, test, type Page, type TestInfo } from "@playwright/test"
+import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test"
 import { writeFile } from "node:fs/promises"
 
-test.use({ screenshot: "only-on-failure", trace: "retain-on-failure" })
+test.use({ screenshot: "only-on-failure", trace: "retain-on-failure", video: "on" })
 
 async function control(page: Page, kind: "show" | "patch" | "snapshot" | "remove", panelId = "mobile-map") {
   await page.evaluate(({ kind, panel_id }) => window.dispatchEvent(new CustomEvent("zwai.mock.task-panel", { detail: { kind, panel_id } })), { kind, panel_id: panelId })
@@ -9,9 +9,115 @@ async function control(page: Page, kind: "show" | "patch" | "snapshot" | "remove
 async function capture(page: Page, info: TestInfo, name: string) {
   await writeFile(info.outputPath(name), await page.screenshot(), { mode: 0o600 })
 }
+
+type GraphStage = HTMLDivElement & { __easmNodePoint?: (id: string) => { x: number; y: number } | undefined }
+
+async function settledNode(stage: Locator, id: string) {
+  return stage.evaluate((element, nodeId) => new Promise<{ x: number; y: number }>((resolve) => {
+    let previous = "", frames = 0
+    const sample = () => {
+      const graph = element as GraphStage, point = graph.__easmNodePoint?.(nodeId)
+      const current = JSON.stringify([graph.dataset.zoom, point])
+      frames = point && current === previous ? frames + 1 : 0
+      previous = current
+      if (point && frames === 3) resolve(point)
+      else requestAnimationFrame(sample)
+    }
+    requestAnimationFrame(sample)
+  }), id)
+}
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("zwai.phone.locale", "en"))
   await page.setViewportSize({ width: 390, height: 844 })
+})
+
+test.describe("native EASM on the paired phone", () => {
+  test("three cumulative batches update one React graph and preserve touch selection and zoom after reopening", async ({ page }, info) => {
+    test.setTimeout(90_000)
+    const htmlRequests: string[] = []
+    page.on("request", (request) => { if (request.url().includes("/task-panels/")) htmlRequests.push(request.url()) })
+    await page.goto("/?mock=1&tick=0&panels=easm")
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+    await expect(page.getByRole("button", { name: "Task panels", exact: true })).toHaveCount(0)
+    await control(page, "show")
+    const sheet = page.getByRole("dialog", { name: "Task panels", exact: true })
+    const panel = sheet.getByTestId("easm-task-panel"), stage = panel.getByTestId("easm-graph").first()
+    await expect(sheet).toBeVisible()
+    await expect(panel).toHaveAttribute("data-revision", "1")
+    await expect(panel.getByText("等待资产数据")).toBeVisible()
+    await expect(page.locator("iframe")).toHaveCount(0)
+    await expect(panel.getByRole("button", { name: "放大关联网络", exact: true })).toHaveCount(0)
+    await expect(panel.getByRole("button", { name: "缩小关联网络", exact: true })).toHaveCount(0)
+
+    await control(page, "snapshot", "mobile-easm")
+    await expect(panel).toHaveAttribute("data-revision", "2")
+    await expect(stage).toHaveAttribute("data-ready", "true")
+    await expect(stage).toHaveAttribute("data-selected-id", "root|sample")
+    await expect(panel.getByRole("region", { name: "资产关联知识库" })).toContainText(/8\s*个线索/)
+    await expect(panel.getByTestId("easm-supply").getByRole("row")).toHaveCount(4)
+    await expect(stage).toHaveAttribute("data-layout-moving", "false", { timeout: 20_000 })
+    await stage.locator("canvas").first().evaluate((canvas) => Object.assign(window, { originalPhoneEasmCanvas: canvas }))
+    await capture(page, info, "easm-first-batch-phone.png")
+
+    await control(page, "snapshot", "mobile-easm")
+    await expect(panel).toHaveAttribute("data-revision", "3")
+    await expect(stage).toHaveAttribute("data-layout-moving", "false", { timeout: 20_000 })
+    await expect.poll(() => stage.evaluate((element) => Boolean((element as GraphStage).__easmNodePoint?.("domain|example.test")))).toBe(true)
+    await expect(panel.getByRole("region", { name: "资产关联知识库" })).toContainText(/18\s*个线索/)
+    await expect(panel.getByTestId("easm-supply").getByRole("row")).toHaveCount(6)
+    await capture(page, info, "easm-second-batch-phone.png")
+    const search = panel.getByRole("searchbox", { name: "搜索资产或特征" })
+    await search.fill("example.test")
+    await search.press("Enter")
+    await expect.poll(async () => Number(await stage.getAttribute("data-zoom"))).toBe(1.5)
+    await stage.tap({ position: await settledNode(stage, "domain|example.test") })
+    const card = panel.getByTestId("easm-node-card")
+    await expect(card).toContainText("example.test")
+    await expect(stage).toHaveAttribute("data-selected-id", "domain|example.test")
+    const zoom = await stage.getAttribute("data-zoom")
+    await capture(page, info, "easm-second-batch-selected-phone.png")
+
+    await control(page, "snapshot", "mobile-easm")
+    await expect(panel).toHaveAttribute("data-revision", "4")
+    await expect(card).toContainText("第三批已复核的域名归属依据")
+    await expect(stage).toHaveAttribute("data-selected-id", "domain|example.test")
+    await expect(stage).toHaveAttribute("data-zoom", zoom!)
+    await expect(panel.getByRole("region", { name: "资产关联知识库" })).toContainText(/32\s*个线索/)
+    await expect(panel.getByTestId("easm-supply").getByRole("row")).toHaveCount(8)
+    await expect.poll(() => stage.evaluate((element) => Boolean((element as GraphStage).__easmNodePoint?.("feature|certificate")))).toBe(true)
+    expect(await stage.locator("canvas").first().evaluate((canvas) => canvas === (window as unknown as { originalPhoneEasmCanvas: HTMLCanvasElement }).originalPhoneEasmCanvas)).toBe(true)
+    await capture(page, info, "easm-third-batch-phone.png")
+
+    await sheet.getByRole("button", { name: "Close", exact: true }).tap()
+    await expect(sheet).toHaveCount(0)
+    await expect(page.getByTestId("transcript")).toBeVisible()
+    await page.getByRole("button", { name: "Task panels", exact: true }).tap()
+    await expect(panel).toHaveAttribute("data-revision", "4")
+    await expect(card).toContainText("第三批已复核的域名归属依据")
+    await expect(stage).toHaveAttribute("data-selected-id", "domain|example.test")
+    await expect(stage).toHaveAttribute("data-zoom", zoom!)
+    expect(await stage.locator("canvas").first().evaluate((canvas) => canvas === (window as unknown as { originalPhoneEasmCanvas: HTMLCanvasElement }).originalPhoneEasmCanvas)).toBe(true)
+    await expect(page.locator("iframe")).toHaveCount(0)
+    expect(htmlRequests).toHaveLength(0)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await capture(page, info, "easm-reopened-phone.png")
+    await card.getByRole("button", { name: "关闭节点卡片", exact: true }).tap()
+    await search.fill("")
+    await expect(stage).toHaveAttribute("data-layout-moving", "false", { timeout: 20_000 })
+    await panel.getByRole("button", { name: "适配视图", exact: true }).first().tap()
+    await expect.poll(async () => Number(await stage.getAttribute("data-zoom"))).toBeLessThan(Number(zoom))
+    await expect(stage).not.toHaveAttribute("data-viewport-moving", "true")
+    await settledNode(stage, "root|sample")
+    await capture(page, info, "easm-final-overview-phone.png")
+    await panel.getByRole("button", { name: "查看NGINX标签依据", exact: true }).tap()
+    const evidence = sheet.getByRole("dialog", { name: "NGINX", exact: true })
+    await expect(evidence).toBeVisible()
+    await expect(evidence).toContainText("本地示例标签依据")
+    await capture(page, info, "easm-component-evidence-phone.png")
+    expect(await page.evaluate(() => (window as unknown as { __zwaiAndroidBack?: () => boolean }).__zwaiAndroidBack?.())).toBe(true)
+    await expect(evidence).toHaveCount(0)
+    await expect(sheet).toBeVisible()
+  })
 })
 
 test("a paired task opens its local map once and preserves touch zoom through patch, hidden snapshot and rotation", async ({ page }, info) => {

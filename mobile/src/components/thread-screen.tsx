@@ -148,11 +148,10 @@ export function ThreadScreen({
   }
 
   useEffect(() => installAndroidBack(() => {
-    if (taskPanels.open) { taskPanels.close(); return true }
     if (agentPage === "chat" || agentPage === "files") return false
     changePage(agentPage === "agents" ? "chat" : "agents")
     return true
-  }), [agentPage, taskPanels.open, taskPanels.close])
+  }), [agentPage])
 
   useEffect(() => {
     if (asking) return

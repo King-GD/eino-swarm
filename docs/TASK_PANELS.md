@@ -1,8 +1,8 @@
 # Task panels and the FOFA world-map example
 
-Task panels are bundled HTML/JS applications. Each panel owns its layout and may use D3, Canvas or another bundled library. The host supplies conversation identity, versioned data and appearance; it does not interpret business fields. Desktop and Web use the same implementation. This is the local Task Panel Protocol v1, not a claim of MCP Apps compatibility.
+Task panels use bundled HTML/JS plugins or a registered host React component. An HTML/JS plugin owns its layout and may use D3, Canvas or another bundled library. The generic host supplies conversation identity, versioned data and appearance. Desktop and Web use the same implementation. The local Task Panel Protocol is at v1.
 
-The paired mobile app bundles the same plugin HTML/JS and iframe host. A PC conversation with a panel gains a Task panels button and opens the first available panel once. The phone uses a full-screen sheet with touch interaction and multiple-panel selection; closing it preserves the frame and zoom without stopping the PC task. A replacement connection to the same PC/thread/database generation retains the last validated projection data while fencing old RPC replies; the source is not restarted. A conversation without a panel has no panel entry. PC selection, conversation selection and database-generation changes invalidate old reads. A phone-only direct-model chat does not run the PC's registered sources.
+The paired mobile app supports the same bundled HTML/JS and the React EASM renderer. A PC conversation with a panel gains a Task panels button and opens the first available panel once. The phone uses a full-screen sheet with touch interaction and multiple-panel selection. Closing the sheet keeps the panel mounted while the PC task continues. A replacement connection to the same PC/thread/database generation retains the last validated projection data while fencing old RPC replies. A conversation without a panel has no panel entry. PC selection, conversation selection and database-generation changes invalidate old reads. A phone-only direct-model chat does not run the PC's registered sources.
 
 ## Using the example
 
@@ -58,8 +58,8 @@ The Vite task-panel builder bundles scripts/styles/data into one HTML document. 
 
 The [EASM asset portrait](EASM_PROTOCOL.md) uses this tool-based route. One
 panel receives cumulative snapshots as the asset task produces each batch.
-Its empty catalog entry path selects the desktop and Web host's React
-renderer. Bundled HTML plugins continue to declare a file entry.
+Its empty catalog entry path selects the shared React renderer on desktop,
+Web and paired phones. Bundled HTML plugins declare a file entry.
 
 ## Protocol v1
 
