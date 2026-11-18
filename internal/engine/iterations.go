@@ -173,6 +173,9 @@ func (rt *runtime) runManager(ctx context.Context, turn *store.Turn, reg *swarm.
 		!turn.GoalContinue && !turn.ScheduleContinue {
 		managerTools = append(managerTools, e.projectDescriptionTool(pc.project, turn))
 	}
+	if imageTool := rt.imageTool(ctx, th, turn, audience); imageTool != nil {
+		managerTools = append(managerTools, imageTool)
+	}
 	if pursuingGoal(th) && !turn.NuwaReadOnly && (th == nil || !th.PlanMode) {
 		tid := rt.threadID
 		managerTools = append(managerTools,

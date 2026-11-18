@@ -1,3 +1,4 @@
+import { gatewayImageModel } from "./gateway-image-models"
 import { applyGatewayAudio, gatewayAudioView } from "./gateway-audio-parameters"
 import { speechRoute, type SpeechSnapshot } from "../../../frontend/src/lib/speech-types"
 import { gatewayVoiceSnapshot, type GatewayVoiceModels } from "./gateway-speech"
@@ -13,7 +14,7 @@ function policyKey(value: typeof current): string {
   if (!value) return ""
   const { session, bootstrap } = value
   return JSON.stringify([session.origin, session.token, session.user.id, session.device.id, bootstrap.capabilities,
-    bootstrap.models.source_id, bootstrap.gateway_models?.source_id, bootstrap.models.defaults, bootstrap.gateway_models?.defaults])
+    bootstrap.models.source_id, bootstrap.gateway_models?.source_id, bootstrap.models.defaults, bootstrap.gateway_models?.defaults, bootstrap.image_models])
 }
 export function publishGatewayCapabilities(session: GatewaySession, bootstrap: GatewayBootstrap): void {
   const policyChanged = policyKey(current) !== policyKey({ session, bootstrap })
@@ -65,3 +66,31 @@ export function currentGatewayAudioView(session: GatewaySession, snapshot: Speec
 }
 
 export function knownGatewayAudioParameters(session: GatewaySession) {return bootstrapFor(session)?.voice_parameters}
+
+export function currentGatewayImageModel(session: GatewaySession, sourceID: string) {
+  const bootstrap = bootstrapFor(session)
+  return bootstrap && gatewayImageModel(bootstrap, sourceID)
+}
+
+export function knownGatewayImageModels(session: GatewaySession) { return bootstrapFor(session)?.image_models }
+
+export function invalidateGatewayImageCapability(session: GatewaySession, sourceID: string): void {
+  const bootstrap = bootstrapFor(session)
+  const capabilities = bootstrap?.capabilities
+  const kind = sourceID === bootstrap?.models.source_id ? "preset"
+    : sourceID === bootstrap?.gateway_models?.source_id ? "gateway" : undefined
+  if (!bootstrap || !capabilities || !kind) return
+  const source = capabilities.sources[kind]
+  const image = source?.capabilities.image
+  if (!source || !image) return
+  publishGatewayCapabilities(session, {
+    ...bootstrap,
+    capabilities: {
+      ...capabilities,
+      sources: {
+        ...capabilities.sources,
+        [kind]: { ...source, capabilities: { ...source.capabilities, image: { ...image, available: false, endpoints: [] } } },
+      },
+    },
+  })
+}

@@ -567,6 +567,9 @@ func (e *Engine) convergeTerminalTurn(turn *store.Turn, snapshots ...*restoreSna
 			return true, err
 		}
 		e.finishScheduledRun(turn, status, ev.Text, ev.Err)
+		if turn.ImageCommand {
+			return true, nil
+		}
 		if status == store.TurnCancelled {
 			e.runtimeFor(turn.ThreadID).pauseOpenGoalOnInterrupt()
 		}

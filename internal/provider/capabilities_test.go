@@ -58,8 +58,8 @@ func TestCapabilityAdaptersAndSourcesStayIndependent(t *testing.T) {
 			}
 		}
 	}
-	if roleManifest("image", "images", true).Allows("image") {
-		t.Fatal("unimplemented image generation opened")
+	if roleManifest("image", "responses", true).Allows("image") {
+		t.Fatal("image generation borrowed the chat adapter")
 	}
 	c := roleManifest("speech", "audio_speech", true)
 	copy := cloneCapabilities(c)

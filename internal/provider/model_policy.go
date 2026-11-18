@@ -30,8 +30,8 @@ type ModelPolicy struct {
 }
 
 // FunctionalCatalog is one signed-in catalog's non-conversation names.
-// The composer list omits them. Embedding, transcription and speech settings
-// read the names from the catalog that published them.
+// The composer list omits them. Functional model settings read each typed
+// list from the catalog that published it.
 type FunctionalCatalog struct {
 	ProviderID          string   `json:"provider_id"`
 	Label               string   `json:"label,omitempty"`
@@ -39,6 +39,7 @@ type FunctionalCatalog struct {
 	EmbeddingModels     []string `json:"embedding_models,omitempty"`
 	TranscriptionModels []string `json:"transcription_models,omitempty"`
 	SpeechModels        []string `json:"speech_models,omitempty"`
+	ImageModels         []string `json:"image_models,omitempty"`
 }
 
 // SetModelPolicy installs the server's edit permission and role defaults.
@@ -75,6 +76,9 @@ func (p *Pool) ModelPolicy() ModelPolicy {
 		}
 		status := ""
 		if primary := p.account.Load(); primary != nil && primary.negotiated {
+			if _, published := sources[primary.id]; primary.id != "" && !published {
+				sources[primary.id] = cloneCapabilities(primary.capabilities)
+			}
 			status = "unavailable"
 			if primary.capabilities != nil {
 				status = "ready"
@@ -87,12 +91,10 @@ func (p *Pool) ModelPolicy() ModelPolicy {
 	if src == nil {
 		return view
 	}
-	origin, err := url.Parse(src.baseURL)
-	if err != nil {
+	view.Scope = src.bindingScope()
+	if view.Scope == "" {
 		return view
 	}
-	sum := sha256.Sum256([]byte(origin.Scheme + "://" + origin.Host + "\x00" + src.id + "\x00" + src.owner))
-	view.Scope = "gateway:" + hex.EncodeToString(sum[:])
 	view.Configurable, view.Ready = !src.managed, src.id != ""
 	view.Capabilities = cloneCapabilities(src.capabilities)
 	view.AccountSources = map[string]*SourceCapabilities{src.id: view.Capabilities}
@@ -116,6 +118,15 @@ func (p *Pool) ModelPolicy() ModelPolicy {
 	return view
 }
 
+func (s *AccountSource) bindingScope() string {
+	origin, err := url.Parse(s.baseURL)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(origin.Scheme + "://" + origin.Host + "\x00" + s.id + "\x00" + s.owner))
+	return "gateway:" + hex.EncodeToString(sum[:])
+}
+
 // functionalCatalogs publishes typed names that the conversation list removes.
 // A switchable catalog owns its id when the signed-in projection reuses it.
 func (p *Pool) functionalCatalogs() []FunctionalCatalog {
@@ -127,12 +138,12 @@ func (p *Pool) functionalCatalogs() []FunctionalCatalog {
 		}
 		seen[src.id] = true
 		kinds := src.Kinds()
-		if len(kinds.EmbeddingModels) == 0 && len(kinds.TranscriptionModels) == 0 && len(kinds.SpeechModels) == 0 {
+		if len(kinds.EmbeddingModels) == 0 && len(kinds.TranscriptionModels) == 0 && len(kinds.SpeechModels) == 0 && len(kinds.ImageModels) == 0 {
 			return
 		}
 		out = append(out, FunctionalCatalog{
 			ProviderID: src.id, Label: strings.TrimSpace(src.label), CatalogGroup: src.catalogGroup,
-			EmbeddingModels: kinds.EmbeddingModels, TranscriptionModels: kinds.TranscriptionModels, SpeechModels: kinds.SpeechModels,
+			EmbeddingModels: kinds.EmbeddingModels, TranscriptionModels: kinds.TranscriptionModels, SpeechModels: kinds.SpeechModels, ImageModels: kinds.ImageModels,
 		})
 	}
 	if p.localExecution() {

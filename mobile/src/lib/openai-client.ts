@@ -24,6 +24,7 @@ import { defaultTimeoutSeconds } from "./direct-provider"
 import { openBody, type StreamBodyPlugin } from "./stream-body"
 import { gatewayFetch } from "./gateway-fetch"
 import { assertCloudWebToolsCurrent, CloudWebToolFailure, cloudToolTraceText, currentCloudWebTools, executeCloudWebTool, validateCloudWebTool, type CloudToolEvent } from "./cloud-web-tools"
+import { gatewayImageTarget, imagePromptFromArguments, imageToolName, ImageGenerationError, type GatewayImageTarget } from "./gateway-image"
 import { ToolContinuation, ToolRoundCollector } from "./openai-tool-wire"
 import { watchWebAuthority } from "./web-execution"
 import { loadGatewaySession, type GatewaySession } from "./gateway-account"
@@ -117,6 +118,7 @@ export async function streamCompletion(input: {
   nativeStream?: StreamBodyPlugin
   onDelta: (piece: StreamPiece) => void
   onTool?: (event: CloudToolEvent) => void
+  generateImage?: (target: GatewayImageTarget, prompt: string, signal: AbortSignal, timeoutMs: number, transport?: FetchLike) => Promise<{ width: number; height: number }>
 }): Promise<void> {
   const base = httpBaseURL(input.provider.baseURL)
   if (!base) throw new ModelCallError("bad-url", "http")
@@ -124,7 +126,9 @@ export async function streamCompletion(input: {
   const ctrl = new AbortController()
   const authority = modelGatewayAuthority(input.provider)
   const tools = currentCloudWebTools(input.fetchImpl)
-  const continuation = tools ? new ToolContinuation() : null
+  const imageTarget = input.generateImage && gatewayImageTarget(input.provider)
+  const continuation = tools || imageTarget ? new ToolContinuation() : null
+  let imageAttempted = false
   let seenToolFrames = false
   let sawToken = false
   let previousText = ""
@@ -160,8 +164,9 @@ export async function streamCompletion(input: {
             summary: !omitSummary,
           })
         : chatRequestBody(input.model, input.turns, input.reasoning)
-    continuation?.request(body, style)
-    const collector = tools ? new ToolRoundCollector(style) : undefined
+    const offerImage = Boolean(imageTarget && !imageAttempted && gatewayImageTarget(input.provider)?.model === imageTarget.model)
+    continuation?.request(body, style, Boolean(tools), offerImage)
+    const collector = continuation ? new ToolRoundCollector(style) : undefined
     armIdle()
     const opened = await openBody({
       url: completionURL(base, style),
@@ -187,7 +192,7 @@ export async function streamCompletion(input: {
         raw += chunk
       }, ctrl, idleMs)
       if (authority) modelSourceRefusal(authority, opened.status)
-      const message = tools && toolUnsupported(raw, opened.status) ? "cloud_tools_model_unsupported" : redact(errorText(raw, opened.status), input.provider.apiKey)
+      const message = continuation && toolUnsupported(raw, opened.status) ? "cloud_tools_model_unsupported" : redact(errorText(raw, opened.status), input.provider.apiKey)
       throw new ModelHttpError(message, opened.status)
     }
     try {
@@ -195,7 +200,7 @@ export async function streamCompletion(input: {
         onToken()
         input.onDelta({ text: previousText + delta.text, reasoning: previousReasoning + delta.reasoning })
       }, ctrl, idleMs, collector)
-      return { piece, round: collector?.finish() }
+      return { piece, round: collector?.finish(), offerImage }
     } finally { seenToolFrames ||= collector?.seen ?? false }
   }
   try {
@@ -236,12 +241,38 @@ export async function streamCompletion(input: {
       }
       if (!completed) throw new ModelCallError("parse", "parse")
       const calls = completed.round?.calls ?? []
-      if (!tools || !continuation || !completed.round || !calls.length) break
+      if (!continuation || !completed.round || !calls.length) break
       if (roundIndex === 7 || continuation.calls + calls.length > 16) throw new ModelCallError("cloud_tools_limit", "parse")
       continuation.assertFresh(style, completed.round)
-      calls.forEach(validateCloudWebTool)
+      const prompts = calls.map(call => {
+        if (call.name === imageToolName) {
+          if (!imageTarget || !input.generateImage || !completed.offerImage && !imageAttempted) throw new ModelCallError("cloud_tools_arguments", "parse")
+          return imagePromptFromArguments(call.arguments)
+        }
+        if (!tools) throw new ModelCallError("cloud_tools_arguments", "parse")
+        validateCloudWebTool(call)
+        return undefined
+      })
       const outputs: string[] = []
-      for (const call of calls) {
+      for (const [index, call] of calls.entries()) {
+        if (call.name === imageToolName && imageTarget && input.generateImage) {
+          if (ctrl.signal.aborted) throw stopError(ctrl)
+          if (imageAttempted) {
+            outputs.push(JSON.stringify({ error: { code: "image_limit" } }))
+            continue
+          }
+          imageAttempted = true
+          try {
+            const result = await input.generateImage(imageTarget, prompts[index]!, ctrl.signal, idleMs, input.fetchImpl)
+            outputs.push(JSON.stringify({ status: "completed", width: result.width, height: result.height }))
+          } catch (error) {
+            if (ctrl.signal.aborted) throw stopError(ctrl)
+            if (!(error instanceof ImageGenerationError)) throw error
+            outputs.push(JSON.stringify({ error: { code: error.code } }))
+          }
+          continue
+        }
+        if (!tools) throw new ModelCallError("cloud_tools_arguments", "parse")
         const event = { id: `${roundIndex}:${call.id}`, callId: call.id, responseId: completed.round.responseID || undefined, name: call.name, args: call.arguments.slice(0, 4096), text: "" }
         input.onTool?.({ ...event, status: "running" })
         let output: string
@@ -266,7 +297,7 @@ export async function streamCompletion(input: {
         const preview = status === "completed" ? cloudToolTraceText(call.name, output) : ""
         input.onTool?.({ ...event, status, text: preview.slice(0, 4096), truncated: preview.length > 4096 })
       }
-      assertCloudWebToolsCurrent(tools)
+      if (tools) assertCloudWebToolsCurrent(tools)
       continuation.append(style, completed.round, completed.piece, outputs)
       previousText += completed.piece.text
       previousReasoning += completed.piece.reasoning

@@ -446,7 +446,9 @@ export function Composer({
       if (session) receipt = await session.beginSend()
       if (sourceSession && sourceSession !== session) sourceReceipt = await sourceSession.beginSend()
       let accepted: void | boolean
-      if (slash?.arg) {
+      if (slash?.id === "image") {
+        accepted = await onSend(payload, undefined, threadId ? { threadId } : undefined)
+      } else if (slash?.arg) {
         const action = slash.id === "plan" ? onSetPlan : onSetGoal
         const result = threadId ? action?.(slash.arg, threadId) : action?.(slash.arg)
         accepted = result instanceof Promise ? await result : result
@@ -663,7 +665,7 @@ export function Composer({
             >
               {awaitingArg === "goal"
                 ? t("composer.placeholderGoal")
-                : t("composer.placeholderPlan")}
+                : t(awaitingArg === "image" ? "composer.placeholderImage" : "composer.placeholderPlan")}
             </p>
           ) : null}
           <Textarea

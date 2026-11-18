@@ -169,12 +169,14 @@ type Message struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// ImageRef is the handle a pasted image travels as on the wire and in the
-// database. The pixels sit in the data directory, named by ID.
+// ImageRef points to pixels held in a conversation's private media storage.
+// Dimensions are present on generated images.
 type ImageRef struct {
-	ID   string `json:"id"`
-	Name string `json:"name,omitempty"`
-	MIME string `json:"mime"`
+	ID     string `json:"id"`
+	Name   string `json:"name,omitempty"`
+	MIME   string `json:"mime"`
+	Width  int    `json:"width,omitempty"`
+	Height int    `json:"height,omitempty"`
 }
 
 // Turn is one user request and everything the swarm did to answer it. The ID
@@ -212,6 +214,8 @@ type Turn struct {
 	NuwaExecutorModel      string `gorm:"size:200" json:"nuwa_executor_model,omitempty"`
 	// NuwaReadOnly preserves planning's read-only tool surface after recovery.
 	NuwaReadOnly bool `json:"nuwa_read_only"`
+	// ImageCommand belongs to an explicit /image turn and never resumes as a chat-model turn.
+	ImageCommand bool `gorm:"not null;default:false" json:"image_command,omitempty"`
 	// GoalContinue is true when the engine started this turn to keep pursuing
 	// an open standing objective. The transcript records goal_continued, not
 	// a human user_message.

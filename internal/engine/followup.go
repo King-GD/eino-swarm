@@ -13,6 +13,9 @@ import (
 // It is not steering: the manager will not see this text until a later turn.
 // Nothing running is idle, not a silent queue that never flushes.
 func (e *Engine) EnqueueFollowup(threadID, text string) (*store.Followup, error) {
+	if IsImageCommand(text) {
+		return nil, ErrBusy
+	}
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil, fmt.Errorf("engine: an empty follow-up has nothing to wait for")
@@ -46,6 +49,9 @@ func (e *Engine) DeleteFollowup(threadID, id string) error {
 // The queue can outlive the turn that created it (Stop leaves rows), so this
 // does not require a running turn.
 func (e *Engine) RequeueFollowup(threadID, id, text string) (*store.Followup, error) {
+	if IsImageCommand(text) {
+		return nil, ErrBusy
+	}
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil, fmt.Errorf("engine: an empty follow-up has nothing to wait for")
@@ -107,7 +113,7 @@ func (rt *runtime) flushFollowup(status string) bool {
 	}
 	var startErr error
 	for attempt := 0; attempt < 8; attempt++ {
-		_, startErr = rt.engine.StartTurn(rt.threadID, item.Text)
+		_, startErr = rt.engine.StartTurnInput(rt.threadID, UserInput{Text: item.Text, queuedFollowup: true})
 		if startErr == nil {
 			return true
 		}

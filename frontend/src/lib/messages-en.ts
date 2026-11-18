@@ -1,3 +1,4 @@
+import { imageGenerationEn } from "./messages-image-generation"
 import { modelSettingsEn } from "./messages-model-settings"
 import { backoffEn } from "./messages-backoff"
 import { modelPolicyEn } from "./messages-model-policy"
@@ -17,6 +18,7 @@ import { speechEn } from "./messages-speech"
 
 export const en = {
   ...modelPolicyEn,
+  ...imageGenerationEn,
   ...modelSettingsEn,
   ...speechEn,
   ...backupEn,
@@ -174,6 +176,7 @@ export const en = {
   "composer.placeholderRunning": "Working… Enter queues, ⌘Enter steers",
   "composer.placeholderGoal": "Standing objective for this conversation",
   "composer.placeholderPlan": "What should we plan?",
+  "composer.placeholderImage": "Describe the image you want to generate.",
   "composer.placeholderAsk": "Type an answer, or pick a choice above",
   "composer.attach": "Attach files",
   "composer.attachHint": "Attach files to the workspace",
@@ -263,6 +266,7 @@ export const en = {
   "slash.commands": "Commands",
   "slash.goal": "Set a standing objective to pursue until done",
   "slash.plan": "Explore and write a plan before changing anything",
+  "slash.image": "Generate an image from a description",
   "slash.compact": "Compact this chat's context",
   "slash.full": "{pct}% full",
 

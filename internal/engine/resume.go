@@ -77,7 +77,11 @@ func (e *Engine) resumeOrphanedTurn(ctx context.Context, t store.Turn, snapshot 
 		return 0, nil
 	}
 	checkpoint := e.checkpointForTurn(t.ID, snapshot)
-	if e.turnHasKind(t.ID, KindUserStopRequested, snapshot) || checkpoint != nil && checkpoint.HumanStopped {
+	stopped := e.turnHasKind(t.ID, KindUserStopRequested, snapshot) || checkpoint != nil && checkpoint.HumanStopped
+	if settled, err := e.restoreImageGeneration(ctx, &t, stopped, snapshot); err != nil || settled {
+		return 0, err
+	}
+	if stopped {
 		e.stopOrphanedGenerations(t.ThreadID, true, snapshot)
 		e.record(store.Event{ThreadID: t.ThreadID, TurnID: t.ID, Kind: swarm.NotifyError.String(), AgentID: swarm.DefaultManagerID, Err: "interrupted", SuppressCompletion: true})
 		if err := e.store.FinishTurn(t.ID, store.TurnCancelled, "", "interrupted"); err != nil {
@@ -380,7 +384,9 @@ func (e *Engine) closeOrphanedToolCalls(turn *store.Turn, snapshots ...*restoreS
 			agent = swarm.DefaultManagerID
 		}
 		text, errText := resumeToolStopped, resumeToolStopped
-		if toolCallName(c.Text) == waitAgentsToolName {
+		if imageText, imageErr, handled := orphanedImageToolResult(turn.ID, c, events); handled {
+			text, errText = imageText, imageErr
+		} else if toolCallName(c.Text) == waitAgentsToolName {
 			_, args := splitToolCallText(c.Text)
 			ids := waitAgentIDsFromArgs(args)
 			if len(ids) == 0 {

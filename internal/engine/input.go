@@ -77,8 +77,9 @@ type UserInput struct {
 	ComposerModel string
 	// ImplementPlan is an engine-started turn that executes an accepted plan.
 	// The transcript records plan_implemented, not a human user_message.
-	ImplementPlan bool
-	retryWorkers  bool // only the explicit human goal-resume path may reset watchdog recovery
+	ImplementPlan  bool
+	retryWorkers   bool // only the explicit human goal-resume path may reset watchdog recovery
+	queuedFollowup bool // previously queued text never becomes an image command automatically
 }
 
 // DecodeImages turns the wire payload into pixels. It refuses anything that

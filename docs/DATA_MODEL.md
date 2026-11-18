@@ -511,6 +511,7 @@ The `id` is the handle the whole troubleshooting story hangs off: the UI shows i
 | `user_text` | what was asked. On `goal_continue` / `schedule_continue` this is the protocol prompt the model saw, not a human send |
 | `final` | the manager's final answer |
 | `error` | why it failed, when it did |
+| `image_command` | whether this is a direct `/image` turn. Legacy rows default to false. Recovery uses its durable image events to settle the turn |
 | `provider_id`, `model` | what actually ran, not what is configured now — settings change. An official-source turn stores the alias `account` here even when the conversation row still names an own provider |
 | `reasoning_effort` | the thinking level this turn ran with, so a trace shows what produced the answer |
 | `web_execution` | captured Web-tool preference at turn start; restoration and parked workers use it before later conversation/global settings. Old rows remain empty and use the current inherited policy |
@@ -579,7 +580,7 @@ stream still walks forward.
 | `tool_call_id` | pairs `tool_call` with `tool_result` (and live `tool_delta`); agents issue several at once and they finish out of order |
 | `message_id` | optional identity of one streamed model output. Worker checkpoints across manager turns retain it; a new model round or restored stream gets another identity. Legacy rows remain empty. It does not replace event seq or tool-call identity |
 | `err` | set on `error` and on a failed `finished` |
-| `images` | JSON array of `{id,name,mime}` on `user_message` and `steer` when the send carried pasted images. Never the pixels |
+| `images` | JSON array of pasted input references on `user_message` / `steer`. A completed `image_generation` event stores the one generated reference with dimensions and uses its image ID as `message_id` |
 | `created_at` | UTC; the timeline offsets are computed against the turn's `started_at` |
 
 `model_backoff` remains an event-text JSON envelope, with no new event column.
@@ -868,6 +869,7 @@ $ZWAI_HOME (default ~/.zwai-swarm)/
 │   └── pending-host-token-*   bounded retry candidates (0600)
 ├── inputs/
 │   └── th_ab12…/              pasted images, named by `img_` id
+│       └── generated/        validated output images, referenced by completed events
 ├── workspaces/
 │   └── th_ab12…/              a standalone conversation's own directory
 ├── plans/

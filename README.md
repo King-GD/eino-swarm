@@ -9,6 +9,8 @@ same engine, so uploads, downloads and the live event stream have one implementa
 
 Projects can opt into **Nuwa collaboration**: a planner model coordinates, and an
 executor model does the workspace and external-service work. See [Nuwa](docs/NUWA.md).
+With an authorized gateway image model, ask chat to draw or type `/image`
+followed by a description. Open or save the finished image from the conversation.
 Day-to-day use is in [Using zwai](docs/USAGE.md).
 
 ```

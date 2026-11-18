@@ -211,6 +211,7 @@ func New(opts Options) (*Server, error) {
 		api.GET("/threads/:id/download/*path", s.downloadFile)
 		api.DELETE("/threads/:id/download/*path", s.deleteFile)
 		api.GET("/threads/:id/input-images/:image_id", s.getInputImage)
+		api.GET("/threads/:id/generated-images/:image_id", s.getGeneratedImage)
 		api.POST("/threads/:id/reveal", s.reveal)
 		api.GET("/threads/:id/terminal", s.threadTerminal)
 		api.GET("/projects/:id/terminal", s.projectTerminal)
@@ -346,6 +347,14 @@ func (s *Server) fail(c *gin.Context, err error) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "backup_invalid"})
 	case errors.Is(err, engine.ErrRestarting):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "restarting"})
+	case errors.Is(err, engine.ErrImageUnavailable):
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error(), "code": "image_generation_unavailable"})
+	case errors.Is(err, engine.ErrImagePrompt):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "image_generation_invalid_prompt"})
+	case errors.Is(err, engine.ErrImageTextOnly):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "image_generation_text_only"})
+	case errors.Is(err, engine.ErrImageReadOnly):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "image_generation_read_only"})
 	case errors.Is(err, engine.ErrBusy):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "busy"})
 	case errors.Is(err, update.ErrBusy):

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { functionalChoiceLabel, functionalGroupHeadings, functionalModelChoices, groupFunctionalChoices } from "./functional-model-choices"
+import { functionalGroupHeadings, functionalModelChoices, groupFunctionalChoices } from "./functional-model-choices"
 import type { ModelPolicy } from "./model-policy"
 import type { ModelInfo } from "./types"
 
@@ -97,14 +97,20 @@ describe("functional model choices", () => {
     expect(choices.map(choice => choice.model)).toEqual([])
   })
 
-  it("offers image the same authorized chat catalogs and keeps a saved name", () => {
+  it("offers only configurable typed gateway image models and keeps a saved name", () => {
+    const next = policy()
+    const available = { supported: true, available: true, configurable: true, endpoints: ["images"] }
+    next.account_sources!["gateway:origin"] = { ...granted(["chat_completions"]), capabilities: { image: available } }
+    next.account_sources!["gateway:partner"] = { ...granted(["chat_completions"]), capabilities: { image: { ...available, configurable: false } } }
+    next.functional_catalogs = [
+      { provider_id: "gateway:origin", image_models: ["draw"] },
+      { provider_id: "gateway:partner", image_models: ["fixed"] },
+    ]
     const choices = functionalModelChoices({
-      role: "image", policy: policy(), models, providers: [],
+      role: "image", policy: next, models, providers: [],
       selected: { provider_id: "own", model: "kept" },
     })
-    expect(choices.map(choice => choice.model)).toEqual(["origin-chat", "partner-chat", "local-chat", "kept"])
-    const local = groupFunctionalChoices(choices).find(group => group.group === "local")!.choices
-    expect(functionalChoiceLabel(local[0], local)).toBe("local-chat")
+    expect(choices.map(choice => choice.model)).toEqual(["draw", "kept"])
   })
 
   it("titles a third-party catalog with the name the gateway returned", () => {

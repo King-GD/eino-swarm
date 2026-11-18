@@ -74,6 +74,8 @@ type runtime struct {
 	// wakes so in-flight sub-agents survive the manager's turn boundary.
 	parked           *swarm.Registry
 	workerAccounting *workerAccounting
+	imageCallID      string // owned by the current turn; guarded by mu
+	imageOnly        bool
 }
 
 // release marks the runtime idle. It runs before the turn's terminal event is
@@ -95,6 +97,8 @@ func (rt *runtime) release(cancel context.CancelFunc, idle chan struct{}, turnID
 	rt.running = false
 	rt.cancel = nil
 	rt.reg = nil
+	rt.imageCallID = ""
+	rt.imageOnly = false
 	if rt.parked == nil {
 		rt.workerAccounting = nil
 	}
@@ -202,6 +206,8 @@ func (rt *runtime) occupyLocked(reg *swarm.Registry, cancel context.CancelFunc, 
 	rt.ask, rt.askStash, rt.askStashCallID, rt.askCompletedCallID = nil, nil, "", ""
 	rt.acceptedAsk, rt.acceptedContinue = nil, nil
 	rt.userStopped = false
+	rt.imageCallID = ""
+	rt.imageOnly = false
 	rt.planImplement = false
 	rt.failureRetry = false
 	rt.engine.noteTurnOccupied(rt.threadID)
@@ -285,6 +291,11 @@ func (e *Engine) StartTurnInput(threadID string, in UserInput) (*store.Turn, err
 }
 
 func (e *Engine) startTurnInput(threadID string, in UserInput) (*store.Turn, error) {
+	if !in.ContinueGoal && !in.ContinueSchedule && !in.ImplementPlan && !in.queuedFollowup {
+		if prompt, ok := slash.Lookup(in.Text, "image"); ok {
+			return e.startImageCommand(threadID, in, prompt)
+		}
+	}
 	th, err := e.store.GetThread(threadID)
 	if err != nil {
 		return nil, err
@@ -548,6 +559,9 @@ func (e *Engine) Steer(threadID, text string) error {
 }
 
 func (e *Engine) SteerInput(threadID string, in UserInput) error {
+	if IsImageCommand(in.Text) {
+		return ErrBusy
+	}
 	if in.HistoryReport {
 		return fmt.Errorf("history report requests must start an idle turn")
 	}
@@ -565,10 +579,13 @@ func (e *Engine) steerInput(threadID string, in UserInput, interpretSlash bool) 
 		return ErrIdle
 	}
 	rt.mu.Lock()
-	reg, running, turnID := rt.reg, rt.running, rt.turnID
+	reg, running, turnID, generating := rt.reg, rt.running, rt.turnID, rt.imageOnly
 	rt.mu.Unlock()
 	if !running || reg == nil {
 		return ErrIdle
+	}
+	if generating {
+		return ErrBusy
 	}
 	if interpretSlash {
 		if _, planCommand := slash.Lookup(in.Text, "plan"); !planCommand {
@@ -771,6 +788,11 @@ func (rt *runtime) run(ctx context.Context, cancel context.CancelFunc, idle chan
 	// Decide before releasing, which cancels the context. Freeze and this
 	// decision share rt.mu so a restart cancellation cannot become user Stop.
 	status, errText, abandoned := rt.turnOutcome(ctx, runErr)
+	if !abandoned {
+		if err := rt.settleLiveImage(turn, status == store.TurnCancelled); err != nil {
+			e.log.Warn("could not settle image tool receipt", "turn", turn.ID, "err", err)
+		}
+	}
 	if abandoned {
 		if !e.restarting() {
 			_ = reg.Cleanup()

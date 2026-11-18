@@ -89,7 +89,7 @@ export function Composer({
   textRef.current = text
   const speechAnchor = useRef({ text: "", caret: 0 })
   const [speechBusy, setSpeechBusy] = useState(false)
-  const [commandRejected, setCommandRejected] = useState(false)
+  const [commandRejected, setCommandRejected] = useState<"text" | "prompt">()
   const [attached, setAttached] = useState<File[]>([])
   const [pick, setPick] = useState(() => chosen(models, providerId, model))
   const explicitPick = useRef(false)
@@ -104,8 +104,12 @@ export function Composer({
   const hasDraft = text.trim().length > 0 || attached.length > 0 || quotes.some((quote) => quote.trim().length > 0)
   const suggestion = !hasDraft && !disabled && !pending && prediction?.turnId !== dismissedPrediction ? prediction : undefined
   const insertSuggestion = () => { if (suggestion) { setText(suggestion.text); box.current?.focus() } }
-  const command = quotes.some((quote) => quote.trim()) ? parseSlashSubmit(text) : null
-  const quotedCommand = command?.id === "goal" || command?.id === "plan"
+  const command = parseSlashSubmit(text)
+  const imageCommand = command?.id === "image"
+  const hasQuotes = quotes.some((quote) => quote.trim())
+  const textOnlyRefusal = imageCommand
+    ? hasQuotes || attached.length > 0
+    : hasQuotes && (command?.id === "goal" || command?.id === "plan")
   const ready = hasDraft && !disabled && !pending && !speechBusy
   const showStop = Boolean(onStop && stopLabel && (pending || !hasDraft))
   const showModel = !hideModel && (models.length > 0 || catalogBusy || Boolean(onRefreshModels))
@@ -150,11 +154,11 @@ export function Composer({
     if (images.length > 0 && !imageAllowed) return
     // The quote envelope hides the command from the PC. Refuse before clearing
     // or uploading any part of this draft, as the desktop composer does.
-    if (quotedCommand) {
-      setCommandRejected(true)
+    if (textOnlyRefusal || (imageCommand && !command.arg)) {
+      setCommandRejected(textOnlyRefusal ? "text" : "prompt")
       return
     }
-    setCommandRejected(false)
+    setCommandRejected(undefined)
     const payload = formatQuotedMessage(quotes, text)
     if ((!payload && attached.length === 0) || disabled || pending || speechBusy) return
     const shot = attached
@@ -236,8 +240,10 @@ export function Composer({
           ))}
         </ul>
       ) : null}
-      {commandRejected && quotedCommand ? (
+      {commandRejected === "text" && textOnlyRefusal ? (
         <p role="alert" className="mb-2 text-sm text-destructive">{t("composer.commandTextOnly")}</p>
+      ) : commandRejected === "prompt" && imageCommand && !command.arg ? (
+        <p role="alert" className="mb-2 text-sm text-destructive">{t("composer.imagePrompt")}</p>
       ) : null}
       <form
         className={cn(

@@ -339,7 +339,7 @@ endpoint:
 |---|---|
 | `signed_out` | no device login on this machine |
 | `pending` | signed in; the model catalog has not been read yet |
-| `ready` | the catalog was read (`models` is the total count). `kinds` counts `chat`, `unclassified`, `embedding`, `ocr`, `decisions`, `transcription`, `speech` and `other`; `embedding_models`, `transcription_models` and `speech_models` list their respective model names. `source_id` is the runtime `gateway:<32 hex>` id. Conversation rows in `GET /api/models` are the `chat` and unclassified names. When the server publishes fixed roles, `roles` is the read-only list `{id,enabled,label}` and a FOFA install uses those names instead of the catalog. The list may include `transcription`, `speech`, `image` and `translation`. Voice uses `transcription` and `speech` when separately enabled in Settings → Models; see `F-148` / `C-048`. Image generation remains display-only. An enabled `translation` role posts Chat Completions JSON to the account base `/translations`; an enabled `title` role posts conversation and schedule naming to `/naming`. While those roles are off, selection translation keeps the conversation model and naming follows `conversation`; retired `naming` is ignored. An old server omits `roles` or returns only the first six, eight or nine roles. LOCAL ignores the field. The account card omits the `decisions` count and role |
+| `ready` | the catalog was read (`models` is the total count). `kinds` counts `chat`, `unclassified`, `embedding`, `ocr`, `decisions`, `transcription`, `speech`, `image` and `other`; `embedding_models`, `transcription_models` and `speech_models` list their respective model names. `source_id` is the runtime `gateway:<32 hex>` id. Conversation rows in `GET /api/models` are the `chat` and unclassified names. When the server publishes fixed roles, `roles` is the read-only list `{id,enabled,label}` and a FOFA install uses those names instead of the catalog. The list may include `transcription`, `speech`, `image` and `translation`. Voice uses `transcription` and `speech` when separately enabled in Settings → Models; see `F-148` / `C-048`. Image generation uses the authorized `image` role and the `images` endpoint. `image_models` lists typed image names. An enabled `translation` role posts Chat Completions JSON to the account base `/translations`; an enabled `title` role posts conversation and schedule naming to `/naming`. While those roles are off, selection translation keeps the conversation model and naming follows `conversation`; retired `naming` is ignored. An old server omits `roles` or returns only the first six, eight or nine roles. LOCAL ignores the field. The account card omits the `decisions` count and role |
 | `no_access` | signed in but the account may not use the model API |
 | `unavailable` | signed in but the catalog could not be used; `reason` is one of `rejected`, `unsupported`, `network`, `gateway`, `unsafe_response`, `no_models` |
 
@@ -3448,6 +3448,25 @@ outside the workspace through a link is `400`.
 Body `{"path": "optional/relative/path"}`, defaulting to the workspace root.
 Opens the platform file manager. **Desktop only**: in a browser this is `501`
 and `capabilities.reveal` is false, so the UI offers a download instead.
+
+### `GET /api/threads/:id/generated-images/:image_id`
+
+Serves the original validated PNG, JPEG or WebP bytes with their detected
+`Content-Type` and `X-Content-Type-Options: nosniff`. The ID must identify a
+committed image on that thread. Unknown IDs and different owners return 404.
+
+Submit a leading `/image <description>` through the normal turn API. It starts a
+cancellable image-only turn. The stream and history expose `image_generation`
+events keyed by `thread_id`, `turn_id` and `tool_call_id`. `text` carries
+`running`, `completed`, `failed`, `cancelled` or `unknown`. `completed` carries
+one entry in `images` with `id`, `name`, `mime`, `width` and `height`.
+Failures carry a bounded machine reason in `err`.
+
+The phone sees the same event identity and a single `generated_image` reference.
+Encrypted `generated_image_chunk` takes `{thread_id,image_id,before?}` and
+returns the existing `file_chunk` envelope with the image ID in `path`. Each
+response contains at most one bounded chunk. Composition advances by
+`next_offset` until `more` is false.
 
 ### `GET /api/threads/:id/terminal`
 

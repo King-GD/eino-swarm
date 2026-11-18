@@ -34,7 +34,13 @@ export function InputThumbs({
   )
 }
 
-function InputImageThumb({ src, name }: { src: string; name?: string }) {
+export function InputImageThumb({ src, name, large = false, onLoad, onError }: {
+  src: string
+  name?: string
+  large?: boolean
+  onLoad?: () => void
+  onError?: () => void
+}) {
   const t = useT()
   const [open, setOpen] = useState(false)
   const label = name || t("image.pasted")
@@ -47,7 +53,7 @@ function InputImageThumb({ src, name }: { src: string; name?: string }) {
           className="h-auto max-w-full cursor-zoom-in p-0 hover:bg-transparent"
           aria-label={t("image.enlarge", { name: label })}
         >
-          <img src={src} alt={label} className="max-h-40 max-w-full rounded-md border border-border" />
+          <img src={src} alt={label} onLoad={onLoad} onError={onError} className={cn("max-w-full rounded-md border border-border object-contain", large ? "max-h-96" : "max-h-40")} />
         </Button>
       </DialogTrigger>
       {open ? (
@@ -60,7 +66,7 @@ function InputImageThumb({ src, name }: { src: string; name?: string }) {
           <DialogClose asChild>
             <Button type="button" variant="ghost" size="icon-sm"
               className="absolute right-2 top-2" aria-label={t("image.close")}>
-              <X />
+              <X aria-hidden />
             </Button>
           </DialogClose>
           <ImagePreview src={src} name={label} />

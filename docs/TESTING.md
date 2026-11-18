@@ -1186,6 +1186,19 @@ set `IOS_LAYOUT_LOCALE=en|zh`, and select only the matching
 `testChineseReasoningRequiresItsOwnToggle` method. A fixed-locale fixture cannot
 run both methods. Record any native warmup separately; it is not cold-start QA.
 
+## Chat image generation (`F-182` / `C-051`)
+
+`internal/engine/image_generation_http_test.go` exercises an actual Registry
+tool call and the direct command. `internal/server/generated_images_test.go`
+compares decoded pixel dimensions and original bytes through HTTP and multiple
+paired chunks. For the Web UI, build the production frontend first, then run
+`ZWAI_E2E_IMAGE_GENERATION=1 npx playwright test` in `frontend/` with an isolated
+`ZWAI_E2E_PORT` and output directory. That worker starts an isolated Go engine
+and a loopback image gateway. The phone cases are `paired-image-generation.spec.ts`
+and `direct-image-generation.spec.ts`; the paired path uses walkthrough RPC
+events, and the direct path uses intercepted gateway HTTP. Use native packaged
+acceptance for platform window, storage and export integration.
+
 ## Chat Completions reasoning fields (`F-170`, `F-230`, `C-009`)
 
 `internal/provider/reasoning_fields_test.go` runs both Generate and Stream through

@@ -40,6 +40,7 @@ export const OpClients = "clients"
 export const OpClientRead = "client_read"
 export const OpFiles = "files"
 export const OpFileChunk = "file_chunk"
+export const OpGeneratedImageChunk = "generated_image_chunk"
 export const OpTaskPanels = "task_panels"
 export const OpTaskPanelRead = "task_panel_read"
 export const OpTaskPanelCancel = "task_panel_cancel"
@@ -86,6 +87,7 @@ export type RemoteRequest = {
   followup_id?: string
   task_id?: string
   file_path?: string
+  image_id?: string
   panel_id?: string
   base_revision?: number
   transfer_id?: string
@@ -223,6 +225,7 @@ export type RemoteEvent = {
   tool_call_id?: string
   err?: string
   has_images?: boolean
+  generated_image?: import("../../../frontend/src/lib/types").ImageRef
   created_at: string
 }
 

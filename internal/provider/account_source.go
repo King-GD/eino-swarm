@@ -82,11 +82,13 @@ type ModelKinds struct {
 	Decisions           int      `json:"decisions"`
 	Transcription       int      `json:"transcription"`
 	Speech              int      `json:"speech"`
+	Image               int      `json:"image"`
 	Other               int      `json:"other"`
 	Unclassified        int      `json:"unclassified"`
 	EmbeddingModels     []string `json:"embedding_models,omitempty"`
 	TranscriptionModels []string `json:"transcription_models,omitempty"`
 	SpeechModels        []string `json:"speech_models,omitempty"`
+	ImageModels         []string `json:"image_models,omitempty"`
 }
 
 // NewAccountSource builds the projection of one account catalog. The id must
@@ -259,6 +261,9 @@ func (s *AccountSource) Kinds() ModelKinds {
 		case "speech":
 			kinds.Speech++
 			kinds.SpeechModels = append(kinds.SpeechModels, name)
+		case "image":
+			kinds.Image++
+			kinds.ImageModels = append(kinds.ImageModels, name)
 		default:
 			kinds.Other++
 		}

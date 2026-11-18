@@ -53,6 +53,7 @@ const (
 	OpClientRead          = "client_read"
 	OpFiles               = "files"
 	OpFileChunk           = "file_chunk"
+	OpGeneratedImageChunk = "generated_image_chunk"
 	OpTaskPanels          = "task_panels"
 	OpTaskPanelRead       = "task_panel_read"
 	OpTaskPanelCancel     = "task_panel_cancel"
@@ -138,6 +139,7 @@ type Request struct {
 	TaskID string `json:"task_id,omitempty"`
 	// FilePath is workspace-relative; Before is the byte offset for file_chunk.
 	FilePath string `json:"file_path,omitempty"`
+	ImageID  string `json:"image_id,omitempty"`
 	// Directory is the workspace directory OpFiles lists. Empty is the root.
 	// Text on OpFiles searches the whole listed workspace instead of one directory.
 	Directory string `json:"directory,omitempty"`
@@ -339,20 +341,21 @@ type WakeView struct {
 // EventView is one conversation event on pairlink. Same kind/seq as the
 // desktop SSE payload; text may be clipped so a frame stays under MaxPushPayload.
 type EventView struct {
-	SourceThreadID string    `json:"source_thread_id,omitempty"`
-	SourceTurnID   string    `json:"source_turn_id,omitempty"`
-	ThreadID       string    `json:"thread_id"`
-	TurnID         string    `json:"turn_id,omitempty"`
-	Seq            int64     `json:"seq"`
-	Kind           string    `json:"kind"`
-	AgentID        string    `json:"agent_id,omitempty"`
-	Role           string    `json:"role,omitempty"`
-	Text           string    `json:"text"`
-	ToolCallID     string    `json:"tool_call_id,omitempty"`
-	MessageID      string    `json:"message_id,omitempty"`
-	Err            string    `json:"err,omitempty"`
-	HasImages      bool      `json:"has_images,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
+	SourceThreadID string          `json:"source_thread_id,omitempty"`
+	SourceTurnID   string          `json:"source_turn_id,omitempty"`
+	ThreadID       string          `json:"thread_id"`
+	TurnID         string          `json:"turn_id,omitempty"`
+	Seq            int64           `json:"seq"`
+	Kind           string          `json:"kind"`
+	AgentID        string          `json:"agent_id,omitempty"`
+	Role           string          `json:"role,omitempty"`
+	Text           string          `json:"text"`
+	ToolCallID     string          `json:"tool_call_id,omitempty"`
+	MessageID      string          `json:"message_id,omitempty"`
+	Err            string          `json:"err,omitempty"`
+	HasImages      bool            `json:"has_images,omitempty"`
+	GeneratedImage *store.ImageRef `json:"generated_image,omitempty"`
+	CreatedAt      time.Time       `json:"created_at"`
 }
 
 type ProjectView struct {

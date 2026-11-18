@@ -1,5 +1,5 @@
 import type { RemoteLink } from "./link"
-import { OpFileChunk, OpFiles, type WorkspaceFile } from "./rpc"
+import { OpFileChunk, OpFiles, OpGeneratedImageChunk, type RemoteRequest, type WorkspaceFile } from "./rpc"
 import { documentFormat } from "../../../frontend/src/lib/documents/kind"
 
 // One response is one directory or one search. A long path may leave room for
@@ -55,6 +55,23 @@ export async function readWorkspaceFile(
     onSlow: () => void
   },
 ): Promise<{ bytes: Uint8Array<ArrayBuffer>; mime: string }> {
+  return readFileChunks(link, path, { op: OpFileChunk, thread_id: threadId, file_path: path }, maxPhoneFileBytes, options)
+}
+
+export async function readGeneratedImage(link: RemoteLink, threadId: string, imageId: string, signal: AbortSignal): Promise<Blob> {
+  const { bytes, mime } = await readFileChunks(link, imageId,
+    { op: OpGeneratedImageChunk, thread_id: threadId, image_id: imageId }, maxInlinePreviewBytes, { signal })
+  if (!["image/png", "image/jpeg", "image/webp"].includes(mime) || bytes.length === 0) {
+    throw new RemoteFileError("image_invalid_response", "invalid generated image")
+  }
+  return new Blob([bytes], { type: mime })
+}
+
+async function readFileChunks(link: RemoteLink, id: string, request: Omit<RemoteRequest, "before" | "v" | "id">, maxBytes: number, options?: {
+  signal: AbortSignal
+  onProgress?: (loaded: number, total: number) => void
+  onSlow?: () => void
+}): Promise<{ bytes: Uint8Array<ArrayBuffer>; mime: string }> {
   const signal = options?.signal
   const rpcOptions = options && { signal, onSlow: options.onSlow }
   let assembled: Uint8Array<ArrayBuffer> | undefined
@@ -62,13 +79,13 @@ export async function readWorkspaceFile(
   let mime = "application/octet-stream"
   for (;;) {
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
-    const resp = await link.rpc({ op: OpFileChunk, thread_id: threadId, file_path: path, before: offset }, rpcOptions)
+    const resp = await link.rpc({ ...request, before: offset }, rpcOptions)
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
     const chunk = resp.file_chunk
     if (!resp.ok || !chunk) throw new RemoteFileError(resp.code || "remote_error", resp.error || "file read failed")
-    if (chunk.path !== path || chunk.offset !== offset || !Number.isSafeInteger(chunk.size) || chunk.size < 0 ||
+    if (chunk.path !== id || chunk.offset !== offset || !Number.isSafeInteger(chunk.size) || chunk.size < 0 ||
       (assembled && (chunk.size !== assembled.length || chunk.mime !== mime))) throw new Error("file changed while reading")
-    if (chunk.size > maxPhoneFileBytes) throw new RemoteFileError("file_too_large", "file exceeds the phone read limit")
+    if (chunk.size > maxBytes) throw new RemoteFileError("file_too_large", "file exceeds the phone read limit")
     if (typeof chunk.data !== "string" || typeof chunk.mime !== "string") throw new Error("file chunk is incomplete")
     const bytes = base64Bytes(chunk.data)
     if (chunk.next_offset !== offset + bytes.length || chunk.next_offset > chunk.size ||
@@ -80,7 +97,7 @@ export async function readWorkspaceFile(
     }
     assembled.set(bytes, offset)
     offset = chunk.next_offset
-    options?.onProgress(offset, chunk.size)
+    options?.onProgress?.(offset, chunk.size)
     if (!chunk.more) return { bytes: assembled, mime }
   }
 }

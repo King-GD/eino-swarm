@@ -1,4 +1,4 @@
-import { refreshGatewayVoiceModels } from "./gateway-account"
+import { refreshGatewayFunctionalModels } from "./gateway-account"
 import { publishGatewayCapabilities } from "./gateway-capabilities"
 import { GATEWAY_MODEL_REFRESH_EVENT } from "./gateway-models"
 import { invalidateGatewayCapabilities, GATEWAY_CAPABILITY_REFRESH_EVENT } from "./gateway-capabilities"
@@ -136,10 +136,10 @@ export function useGatewayAccount() {
         }
       }
       if (state.status === "authorized" && state.bootstrap) {
-        const speech = await refreshGatewayVoiceModels(state.session, state.bootstrap, gatewayFetch, controller.signal)
+        const functional = await refreshGatewayFunctionalModels(state.session, state.bootstrap, gatewayFetch, controller.signal)
         if (round === generation.current && !controller.signal.aborted && sameGatewaySession(current)) {
-          putBootstrap(speech)
-          publishGatewayCapabilities(state.session, speech)
+          putBootstrap(functional)
+          publishGatewayCapabilities(state.session, functional)
         }
       }
     } catch (err) {

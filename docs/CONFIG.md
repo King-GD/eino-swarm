@@ -417,6 +417,14 @@ when no functional override is set.
 
 The Settings API projects only the current scope as `models.bindings`; its PUT
 replaces that scope's map and accepts a bindings-only body. Other scopes survive.
+The `image` function uses the `images` capability of an authorized gateway
+source. A configurable source uses the explicit scoped image binding when saved.
+Otherwise the conversation's gateway source supplies the role default, then
+the first authorized typed image model in name order. Managed sources use
+their published fixed model or role. The picker requires a configurable image
+capability to create a binding. Revoked or stale choices stay saved and can be
+cleared with **Use default**.
+
 An ordinary gateway's first binding save retires legacy global `account_model`
 and `default_source` pins in favour of scoped selection. Legacy `account_model`
 and `default_source` remain readable for existing configurations until that save.

@@ -6,7 +6,7 @@ export type SourceCapabilities = { authorized: boolean; available: boolean; conf
 export type ClientCapabilities = { version: 1; model_roles_version: 3; sources: { preset?: SourceCapabilities; gateway?: SourceCapabilities } }
 const endpoints: Record<CapabilityRole, string[]> = {
   conversation: ["chat_completions", "responses"], title: ["chat_completions", "responses"], compact: ["chat_completions", "responses"], translation: ["chat_completions", "responses"],
-  ocr: ["chat_completions", "responses"], embedding: ["embeddings"], decisions: ["decisions"], transcription: ["audio_transcriptions"], speech: ["audio_speech"], image: [],
+  ocr: ["chat_completions", "responses"], embedding: ["embeddings"], decisions: ["decisions"], transcription: ["audio_transcriptions"], speech: ["audio_speech"], image: ["images"],
 }
 export function capabilityAllows(source: SourceCapabilities | undefined, role: CapabilityRole): boolean {
   const c = source?.capabilities?.[role]

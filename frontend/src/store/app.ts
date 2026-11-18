@@ -18,6 +18,8 @@ import {
   type Appearance,
 } from "@/lib/appearance"
 import { ApiError, api } from "@/lib/api"
+import { parseSlashSubmit } from "@/lib/slash-core"
+import { imageGenerationErrorKey } from "@/lib/messages-image-generation"
 import {
   ensureWorkspaceDir,
   refreshWorkspaceFiles,
@@ -32,6 +34,8 @@ import {
   applyLocale,
   normalizeLocalePref,
   readLocalePref,
+  resolveLocale,
+  t,
   writeLocalePref,
   type LocalePref,
 } from "@/lib/i18n"
@@ -586,6 +590,7 @@ export const useApp = create<AppState>((set, get) => ({
         return false
       }
     }
+    const command = opts?.command ?? (parseSlashSubmit(text)?.id === "image" ? "image" : undefined)
     const target = opts?.threadId ?? (creating ? undefined : get().activeId)
     const key = inflightKey(target, text)
     if (inflightDrafts.has(key)) return false
@@ -600,7 +605,7 @@ export const useApp = create<AppState>((set, get) => ({
       // A live question is not a follow-up: Enter is Other for every
       // unanswered prompt. Queueing here would wait for a turn that cannot
       // finish until this answer lands.
-      if (!opts?.command && !opts?.historyReport && status.awaiting_answer) {
+      if (!command && !opts?.historyReport && status.awaiting_answer) {
         if (images?.length || opts?.files?.length) {
           set({ error: "Attachments cannot be sent as an answer to a pending question. Answer the question with text first; the draft was kept." })
           return false
@@ -612,7 +617,7 @@ export const useApp = create<AppState>((set, get) => ({
       // Pasted images have nowhere to wait: the follow-up row is text. They
       // inject now rather than being dropped on the floor.
       const queue =
-        !opts?.command &&
+        !command &&
         !opts?.historyReport &&
         !opts?.steer &&
         status.running &&
@@ -631,7 +636,7 @@ export const useApp = create<AppState>((set, get) => ({
           if (!(e instanceof ApiError && e.code === "idle")) throw e
         }
       }
-      if (!opts?.command && opts?.steer && id === get().activeId) {
+      if (!command && opts?.steer && id === get().activeId) {
         const kept = dropMatchingFollowups(get().followups, text)
         if (kept.length !== get().followups.length) {
           const dropped = get().followups.filter((f) => !kept.includes(f))
@@ -648,7 +653,7 @@ export const useApp = create<AppState>((set, get) => ({
       const shown = shownComposerModel(get(), id)
       const accepted = opts?.historyReport
         ? { steered: false, turn: await api.startTurn(id, text, images, opts?.files, undefined, true, shown) }
-        : opts?.command === "plan"
+        : (command === "plan" || command === "image")
           ? { steered: false, turn: await api.startTurn(id, text, images, opts?.files, undefined, undefined, shown) }
           : await api.steer(id, text, images, opts?.files, shown)
       set((s) => {
@@ -666,7 +671,7 @@ export const useApp = create<AppState>((set, get) => ({
       void get().refreshThreads()
       return true
     } catch (e) {
-      set({ error: message(e) })
+      set({ error: command === "image" ? imageSendError(e, get().locale) : message(e) })
       return false
     } finally {
       inflightDrafts.delete(key)
@@ -901,6 +906,11 @@ export const useApp = create<AppState>((set, get) => ({
 async function currentThread(get: () => AppState): Promise<string | undefined> {
   if (creating) await creating
   return get().activeId
+}
+
+function imageSendError(error: unknown, locale: AppState["locale"]): string {
+  const key = error instanceof ApiError ? imageGenerationErrorKey(error.code) : undefined
+  return key ? t(resolveLocale(locale), key) : message(error)
 }
 
 function message(e: unknown): string {

@@ -42,6 +42,10 @@ export function turnsFromMessages(messages: DirectMessage[]): WireTurn[] {
 export function partsFromMessage(message: DirectMessage): WirePart[] {
   const parts: WirePart[] = []
   if (message.text) parts.push({ kind: "text", text: message.text })
+  if (message.role === "assistant" && message.image?.status === "completed") {
+    const image = message.image.image
+    if (image) parts.push({ kind: "text", text: `Generated one image (${image.width} × ${image.height}) in this conversation.` })
+  }
   for (const item of message.attachments ?? []) {
     if (item.kind === "image" && item.dataUrl) {
       parts.push({

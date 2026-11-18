@@ -1,5 +1,7 @@
 import { mintID } from "./direct-provider"
 import type { CloudToolEvent } from "./cloud-web-tools"
+import { removeDirectImage, type DirectImageRef } from "./direct-images"
+import { generatedImageFilename, isGeneratedImageMIME, validGeneratedImageSize } from "./gateway-image"
 
 const KEY = "zwai.phone.directThreads"
 
@@ -18,6 +20,12 @@ export type StoredAttachment = {
   text?: string
 }
 
+export type DirectImageState = {
+  status: "running" | "completed" | "failed" | "cancelled" | "unknown"
+  image?: DirectImageRef
+  code?: string
+}
+
 export type DirectMessage = {
   id: string
   role: "user" | "assistant"
@@ -26,6 +34,7 @@ export type DirectMessage = {
   attachments?: StoredAttachment[]
   error?: string
   tools?: CloudToolEvent[]
+  image?: DirectImageState
 }
 
 export type DirectThread = {
@@ -50,24 +59,19 @@ export function loadThreads(): DirectThread[] {
   }
 }
 
-export function saveThreads(rows: DirectThread[]) {
+export function saveThreads(rows: DirectThread[], previous = loadThreads()) {
   const slim = rows
     .map(slimThread)
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, maxThreads)
-  if (slim.length === 0) {
-    try {
-      localStorage.removeItem(KEY)
-    } catch {
-      // nothing stored is the empty state
-    }
-    return
-  }
+  const retained = imageIDs(slim)
+  const removed = [...imageIDs(previous)].filter(id => !retained.has(id))
   try {
-    localStorage.setItem(KEY, JSON.stringify(slim))
-  } catch {
-    // Losing a transcript is better than throwing over a quota.
-  }
+    if (slim.length === 0) localStorage.removeItem(KEY)
+    else localStorage.setItem(KEY, JSON.stringify(slim))
+  } catch { return false }
+  for (const id of removed) void removeDirectImage(id).catch(() => undefined)
+  return true
 }
 
 export function threadTitle(text: string, attachmentName: string): string {
@@ -139,12 +143,41 @@ function asMessage(value: unknown): DirectMessage | null {
       const parsed = asToolEvent(tool)
       return parsed ? [parsed] : []
     }) : undefined,
+    image: asImageState(row.image),
     attachments: Array.isArray(row.attachments)
       ? row.attachments.flatMap((item) => {
           const chip = asAttachment(item)
           return chip ? [chip] : []
         })
       : undefined,
+  }
+}
+
+function imageIDs(threads: DirectThread[]): Set<string> {
+  const ids = new Set<string>()
+  for (const thread of threads) {
+    for (const { image } of thread.messages) {
+      if (image?.image) ids.add(image.image.id)
+    }
+  }
+  return ids
+}
+
+function asImageState(value: unknown): DirectImageState | undefined {
+  if (!value || typeof value !== "object") return
+  const row = value as Partial<DirectImageState>
+  if (row.status === "running" || row.status === "unknown") return { status: "unknown" }
+  if (row.status === "cancelled") return { status: "cancelled" }
+  if (row.status === "failed") return { status: "failed", code: typeof row.code === "string" && row.code.length <= 64 ? row.code : undefined }
+  if (row.status !== "completed") return
+  const ref = row.image
+  if (!ref || typeof ref.id !== "string" || !/^img-[a-f0-9]{16}$/.test(ref.id) || !isGeneratedImageMIME(ref.mime) ||
+      !validGeneratedImageSize(ref.width, ref.height)) {
+    return { status: "failed", code: "image_invalid_response" }
+  }
+  return {
+    status: "completed",
+    image: { id: ref.id, mime: ref.mime, name: generatedImageFilename(ref.id, ref.mime), width: ref.width, height: ref.height },
   }
 }
 

@@ -841,6 +841,9 @@ export const api = {
   },
   downloadURL: (id: string, path: string) =>
     `/api/threads/${id}/download/${path.split("/").map(encodeURIComponent).join("/")}`,
+  generatedImageURL: (id: string, imageId: string) =>
+    `/api/threads/${encodeURIComponent(id)}/generated-images/${encodeURIComponent(imageId)}`,
+
   inputImageURL: (id: string, imageId: string) =>
     `/api/threads/${id}/input-images/${encodeURIComponent(imageId)}`,
   deleteFile: (id: string, path: string) =>

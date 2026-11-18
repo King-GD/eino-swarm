@@ -696,6 +696,15 @@ connections do not navigate. Per-PC issuance and pooled opening are shared with
 manual selection, and `saveLink(..., false)` leaves the active PC and its last
 thread unchanged. PC lists retain offline entries after online entries.
 
+Chat image generation is a gateway role adapter. The processor resolves the
+authorized image model and sends one nonstreaming request. The `generate_image`
+manager tool and leading `/image` command share that engine path. Stages are
+stored by the original turn and call. A completed stage publishes the media
+reference after the validated original bytes are saved under the thread's input
+tree. Reconnects replay the card. Paired phones read the pixels through bounded
+RPC chunks. Direct phone chat owns a separate request using its Mobile Bearer
+and persists the original bytes in IndexedDB.
+
 ## Phone remote (pairlink)
 
 Mobile account admission is separate from PC RPC. `gateway-account.ts` and

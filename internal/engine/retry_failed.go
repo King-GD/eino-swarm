@@ -136,7 +136,7 @@ func (e *Engine) retryableFailure(threadID, wantID string) (*store.Turn, error) 
 	if strings.TrimSpace(wantID) == "" || last.ID != wantID || last.Status != store.TurnError {
 		return nil, ErrNoFailedTurn
 	}
-	if last.GoalContinue || last.ScheduleContinue || strings.TrimSpace(last.ScheduleRunID) != "" {
+	if last.ImageCommand || last.GoalContinue || last.ScheduleContinue || strings.TrimSpace(last.ScheduleRunID) != "" {
 		return nil, ErrNoFailedTurn
 	}
 	return &last, nil

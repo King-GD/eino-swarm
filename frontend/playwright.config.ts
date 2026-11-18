@@ -3,6 +3,7 @@ import { defineConfig, devices } from "@playwright/test"
 // The suite drives the real binary against the scripted offline provider, in a
 // throwaway data directory. The opt-in API-error spec uses a keyless loopback
 // endpoint through the real SDK; the default suite stays on the offline script.
+const imageFixture = process.env.ZWAI_E2E_IMAGE_GENERATION === "1"
 const reasoningFields = process.env.ZWAI_E2E_REASONING_FIELDS === "1"
 const port = Number(process.env.ZWAI_E2E_PORT ?? 8799)
 const dataDir = process.env.ZWAI_E2E_DATA_DIR ?? ".e2e-data"
@@ -28,7 +29,7 @@ const seedLocal = fofaMode ? "" : `printf '%s\\n' 'product:' '  mode: local' > $
 export default defineConfig({
   testDir: "./e2e",
   globalSetup: "./e2e/engine-presence.ts",
-  testMatch: fofaMode ? "product-mode.spec.ts" : mcpProgress ? "mcp-progress.spec.ts" : nuwa ? "nuwa.spec.ts" : reasoningFields ? "reasoning-fields.spec.ts" : workerCompletion ? "worker-completion.spec.ts" : scheduleAnswer ? "schedule-answer.spec.ts" : generationInterruption ? "generation-interruption.spec.ts" : workerOwnership ? "schedule-worker-ownership.spec.ts" : builtinTools ? "builtin-tools.spec.ts" : memoryReview ? "memory-review.spec.ts" : modelAPIError ? ["api-error.spec.ts", "route-recovery.spec.ts", "transcript-error-retry.spec.ts"] : workerRoster ? "worker-roster-history.spec.ts" : goalPause ? "goal-pause.spec.ts" : goalSchedule ? "goal-schedule.spec.ts" : humanWakePolicy ? "human-wake-policy.spec.ts" : projectHistory ? "project-history.spec.ts" : undefined,
+  testMatch: imageFixture ? "generated-image.spec.ts" : fofaMode ? "product-mode.spec.ts" : mcpProgress ? "mcp-progress.spec.ts" : nuwa ? "nuwa.spec.ts" : reasoningFields ? "reasoning-fields.spec.ts" : workerCompletion ? "worker-completion.spec.ts" : scheduleAnswer ? "schedule-answer.spec.ts" : generationInterruption ? "generation-interruption.spec.ts" : workerOwnership ? "schedule-worker-ownership.spec.ts" : builtinTools ? "builtin-tools.spec.ts" : memoryReview ? "memory-review.spec.ts" : modelAPIError ? ["api-error.spec.ts", "route-recovery.spec.ts", "transcript-error-retry.spec.ts"] : workerRoster ? "worker-roster-history.spec.ts" : goalPause ? "goal-pause.spec.ts" : goalSchedule ? "goal-schedule.spec.ts" : humanWakePolicy ? "human-wake-policy.spec.ts" : projectHistory ? "project-history.spec.ts" : undefined,
   timeout: 90_000,
   expect: { timeout: 20_000 },
   fullyParallel: false,
@@ -47,7 +48,9 @@ export default defineConfig({
     // web server first, so a setup hook would delete the directory the server
     // had already opened.
     // Workers pause so wait_agents stays pending long enough to Steer.
-    command: `rm -rf ${dataDir} && mkdir -p ${dataDir} && ${seedLocal}ZWAI_MOCK_WORKER_DELAY_MS=1500 ZWAI_MOCK_SCHEDULE_ACK=${scheduledAck} go run ../cmd/zwai web --addr 127.0.0.1:${port} --no-open ${loopbackModel ? "" : "--mock"} --data-dir ${dataDir}`,
+    command: imageFixture
+      ? `ZWAI_IMAGE_BROWSER_FIXTURE=127.0.0.1:${port} go test ../internal/server -run '^TestImageGenerationBrowserFixture$' -count=1 -v`
+      : `rm -rf ${dataDir} && mkdir -p ${dataDir} && ${seedLocal}ZWAI_MOCK_WORKER_DELAY_MS=1500 ZWAI_MOCK_SCHEDULE_ACK=${scheduledAck} go run ../cmd/zwai web --addr 127.0.0.1:${port} --no-open ${loopbackModel ? "" : "--mock"} --data-dir ${dataDir}`,
     env: loopbackModel ? { OPENAI_BASE_URL: "", OPENAI_API_KEY: "", OPENAI_MODEL: "" } : undefined,
     url: `http://127.0.0.1:${port}/api/meta`,
     // Never reuse: a server left over from a previous run holds an open handle

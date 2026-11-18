@@ -7,6 +7,8 @@ import type { PhoneView } from "./session"
 import { markRunning } from "./session"
 import { sendComposed } from "./turn-send"
 import { pcWebSelection } from "./pc-web-execution"
+import { gatewayImageCode } from "./paired-image-generation"
+import { imageGenerationLabel } from "./image-generation-labels"
 
 type TurnDeps = {
   link: () => RemoteLink | null
@@ -120,7 +122,8 @@ export async function sendPhoneTurn(
   try {
     const r = await sendComposed((req) => target.rpc(req), { op, thread_id: threadId, text, ...await pcWebSelection(target) }, extra)
     if (!r.ok) {
-      deps.setError(remoteError(r.error || r.code || ""))
+      const imageCode = gatewayImageCode(r.code)
+      deps.setError(imageCode ? imageGenerationLabel(imageCode) : remoteError(r.error || r.code || ""))
       throw new Error("refused")
     }
     const queued = op === OpSend ? markRunning(deps.view()) : deps.view()

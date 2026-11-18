@@ -1,3 +1,4 @@
+import { mockGeneratedImageChunk, mockGeneratedImageTurn } from "./mock-generated-image"
 import { MockProjects } from "./mock-projects"
 import { MockProductMode } from "./mock-product-mode"
 import { MockSpeech } from "./mock-speech"
@@ -22,6 +23,7 @@ import {
   OpEvent,
   OpFiles,
   OpFileChunk,
+  OpGeneratedImageChunk,
   OpFollowupSteer,
   OpHello,
   OpMeta,
@@ -591,7 +593,7 @@ export class MockHost {
     th.running = true
     th.waiting = false
     th.minutesAgo = 0
-    const steps = scriptedTurn(prompt)
+    const steps = mockGeneratedImageTurn(prompt) ?? scriptedTurn(prompt)
     if (th.goal && new URLSearchParams(location.search).get("history") === "goal-complete") {
       steps.splice(-1, 0, { kind: "goal_complete", text: JSON.stringify({ summary: "Current evidence verified." }) })
     }
@@ -697,6 +699,7 @@ export class MockHost {
       role: step.role,
       text: step.text ?? "",
       tool_call_id: callID,
+      generated_image: step.generatedImage,
       err: step.err,
       created_at: step.at ?? new Date().toISOString(),
     }
@@ -817,6 +820,11 @@ export class MockLink {
       case OpFiles: {
         if (!thread()) return this.missing(id)
         return this.ok({ id, files: mockListedFiles(this.outputFiles, req.directory, req.text), more: false })
+      }
+      case OpGeneratedImageChunk: {
+        if (!thread()) return this.missing(id)
+        const file_chunk = await mockGeneratedImageChunk(req.image_id, req.before ?? 0)
+        return file_chunk ? this.ok({ id, file_chunk }) : this.missing(id)
       }
       case OpFileChunk: {
         if (!thread()) return this.missing(id)

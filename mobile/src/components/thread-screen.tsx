@@ -1,3 +1,4 @@
+import { parseSlashSubmit } from "../../../frontend/src/lib/slash-core"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { ArrowDown, ChevronLeft, ChevronRight, FileText, Loader2 } from "lucide-react"
 
@@ -446,6 +447,7 @@ export function ThreadScreen({
                 </div>
               ) : (
                 <ThreadLog blocks={selectedAgent ? selectedAgent.blocks : manager}
+                  imageOwner={fileLink ? { link: fileLink, threadId: detail.id } : undefined}
                   running={selectedAgent ? selectedAgent.status === "running" : running}
                   onContinue={agentPage === "chat" && detail.running?.awaiting_continue !== false ? onContinue : undefined}
                   activeTurnId={detail.running?.turn_id} continueDisabled={composerPending || restoring} />
@@ -541,7 +543,10 @@ export function ThreadScreen({
         refreshError={refreshError}
         hideModel={hideModel}
         onTune={onTune}
-        onSubmit={asking ? onAnswer : onSend}
+        onSubmit={asking ? (text, extra) => {
+          if (parseSlashSubmit(text)?.id !== "image") return onAnswer(text)
+          return extra ? onSend(text, extra) : onSend(text)
+        } : onSend}
       /> : null}
     </main><PhoneTaskPanelSheet view={taskPanels} /></>
   )

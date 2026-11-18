@@ -27,6 +27,12 @@ and open the desktop app, sign in to the same gateway and keep it online. There
 is no direct gateway Chat fallback. Disconnecting returns to that page; the draft
 and history remain mounted for reconnection.
 
+In a PC conversation or the phone's direct Chat, ask for an image or enter
+`/image` followed by a description. The selected chat needs an authorized
+gateway image source. The paired PC owns its generation. Direct Chat sends
+using this phone's account and saves the pixels on this device. Tap the finished
+image to enlarge it or use the save action to export the original file.
+
 Voice input and read aloud automatically use this phone account’s authorized
 Gateway models, even if the PC has no voice configuration. Each direction follows
 its own advertised role and source. Missing role defaults are resolved from the

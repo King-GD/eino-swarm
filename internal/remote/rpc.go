@@ -80,6 +80,8 @@ func dispatch(eng *engine.Engine, cfg config.RemoteConfig, stage *Staging, req R
 		return handleFiles(eng, req, path, sessionID)
 	case OpFileChunk:
 		return handleFileChunk(eng, req, path, sessionID)
+	case OpGeneratedImageChunk:
+		return handleGeneratedImageChunk(eng, req, path, sessionID)
 	case OpOpen:
 		return handleOpen(eng, cfg, req, path, sessionID)
 	case OpRead:
@@ -263,6 +265,14 @@ func mapErr(id, path, sessionID string, err error) Response {
 		return fail(id, path, sessionID, "restoring", err.Error())
 	case errors.Is(err, engine.ErrBackupBusy):
 		return fail(id, path, sessionID, "backup_busy", err.Error())
+	case errors.Is(err, engine.ErrImageUnavailable):
+		return fail(id, path, sessionID, "image_generation_unavailable", err.Error())
+	case errors.Is(err, engine.ErrImagePrompt):
+		return fail(id, path, sessionID, "image_generation_invalid_prompt", err.Error())
+	case errors.Is(err, engine.ErrImageTextOnly):
+		return fail(id, path, sessionID, "image_generation_text_only", err.Error())
+	case errors.Is(err, engine.ErrImageReadOnly):
+		return fail(id, path, sessionID, "image_generation_read_only", err.Error())
 	case errors.Is(err, engine.ErrBusy):
 		return fail(id, path, sessionID, "busy", err.Error())
 	case errors.Is(err, engine.ErrIdle):

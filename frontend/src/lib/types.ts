@@ -20,6 +20,7 @@ export type EventKind =
   | "tool_call"
   | "builtin_tool"
   | "tool_result"
+  | "image_generation"
   | "ask_recovered"
   | "tool_delta"
   | "tool_call_delta"
@@ -102,6 +103,8 @@ export interface ImageRef {
   id: string
   name?: string
   mime: string
+  width?: number
+  height?: number
 }
 
 export interface Project {
@@ -422,6 +425,7 @@ export interface Turn {
   quiet?: boolean
   /** Engine-started /goal session. Not a human send; the jump rail
    *  stays on the last user_message. */
+  image_command?: boolean
   goal_continue?: boolean
   schedule_continue?: boolean
   schedule_run_id?: string
@@ -487,6 +491,7 @@ export interface AccountModelKinds {
   other: number
   unclassified: number
   embedding_models?: string[]
+  image_models?: string[]
   transcription_models?: string[]
   speech_models?: string[]
 }

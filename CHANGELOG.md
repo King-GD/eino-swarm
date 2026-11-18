@@ -6,6 +6,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ## Unreleased
 
+### Added
+
+- Gateway image generation in desktop, Web, paired phone and phone-direct chat. Ask for an image or use `/image`. The result opens and downloads from the chat and remains available in history. (`F-182`, `C-051`)
+
 ### Changed
 
 - Nuwa collaboration paints tasks, facts and results with different backgrounds, so a fact is no longer the same surface as a result. (`F-136`)

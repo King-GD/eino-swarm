@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"reflect"
+	"slices"
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/provider"
@@ -33,10 +34,21 @@ func (s *Server) currentSettingsView() settingsView {
 // A sanitized hidden row can round-trip during an unrelated autosave. Preserve
 // its private selection; a new concrete model must never change a managed preset.
 func validatePresetSettings(old, next *config.Config, policy provider.ModelPolicy) error {
+	scope := policy.Scope
+	if next.Product.Resolved() == config.ProductModeLocal {
+		scope = config.ProductModeLocal
+	}
+	image := next.Models.Bindings[scope]["image"]
+	if image != (config.ModelRef{}) && image != old.Models.Bindings[scope]["image"] && !imageBindingAllowed(policy, image) {
+		return errCustomModelsDisabled
+	}
 	if next.Product.Resolved() != config.ProductModeLocal && policy.CapabilityStatus != "" {
 		previous, incoming := old.Models.Bindings[policy.Scope], next.Models.Bindings[policy.Scope]
 		for _, role := range config.ModelRoles() {
 			if reflect.DeepEqual(previous[role], incoming[role]) {
+				continue
+			}
+			if role == "image" && policy.Configurable && image == (config.ModelRef{}) {
 				continue
 			}
 			if policy.Capabilities == nil || !policy.Capabilities.Allows(role) || !policy.Capabilities.Capabilities[role].Configurable {
@@ -65,6 +77,19 @@ func validatePresetSettings(old, next *config.Config, policy provider.ModelPolic
 		return errCustomModelsDisabled
 	}
 	return nil
+}
+
+func imageBindingAllowed(policy provider.ModelPolicy, ref config.ModelRef) bool {
+	source := policy.AccountSources[ref.ProviderID]
+	if !source.Allows("image") || !source.Configurable || !source.Capabilities["image"].Configurable {
+		return false
+	}
+	for _, catalog := range policy.FunctionalCatalogs {
+		if catalog.ProviderID == ref.ProviderID {
+			return slices.Contains(catalog.ImageModels, ref.Model)
+		}
+	}
+	return false
 }
 
 func (s *Server) refreshCapabilities(c *gin.Context) {

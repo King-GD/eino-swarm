@@ -40,6 +40,8 @@ import { TurnNav } from "@/components/app/turn-nav"
 import { CopyButton } from "@/components/app/copy-button"
 import { TranscriptError } from "@/components/app/transcript-error"
 import { InputThumbs } from "@/components/app/input-thumbs"
+import { GeneratedImageCard } from "@/components/app/generated-image-card"
+import { imageGenerationErrorKey } from "@/lib/messages-image-generation"
 import { FIND_REPAINT_MS, revealBlockIds } from "@/lib/find"
 import {
   applyFindHighlights,
@@ -377,7 +379,14 @@ const BlockView = memo(function BlockView({
     case "answer":
       return <Answer block={block} showClock={showClock} />
 
+    case "image_generation":
+      return block.imageGeneration && threadId ? <GeneratedImageCard data={block.imageGeneration} threadId={threadId} /> : null
+
     case "tool":
+      if (block.tool?.name === "generate_image") {
+        const isImageError = block.tool.result?.includes('"ok":false')
+        return isImageError ? <ToolRow block={block} reveal={reveal} defaultCollapsed={collapseProcess} /> : null
+      }
       // A spawn shows up twice — once as the call, once as the sub-agent row
       // that follows it. The row is the better of the two, so the call is
       // dropped here; the Trace tab's Full log still lists it.
@@ -399,15 +408,17 @@ const BlockView = memo(function BlockView({
     case "spawn":
       return <SpawnRow block={block} onSelect={onSelectAgent} />
 
-    case "error":
+    case "error": {
+      const imageError = imageGenerationErrorKey(block.text)
       return (
         <TranscriptError
-          text={block.text}
+          text={imageError ? t(imageError) : block.text}
           turnId={block.turnId}
           onRetry={onRetry}
           retrying={retrying}
         />
       )
+    }
 
     case "confirm":
       return <IterationLimitCard block={block} />

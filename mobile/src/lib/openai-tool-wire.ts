@@ -1,4 +1,5 @@
 import { cloudToolDefinitions, type CloudToolCall } from "./cloud-web-tools"
+import { imageToolDefinition, imageToolName } from "./gateway-image"
 import { ModelCallError, type ApiStyle, type StreamPiece } from "./openai-wire"
 
 const maxArguments = 64 << 10
@@ -40,7 +41,7 @@ export class ToolRoundCollector {
   finish(): ToolRound {
     if (this.calls.size && (!this.terminal || this.incomplete)) fail("cloud_tools_incomplete")
     const calls = [...this.calls.entries()].sort(([a], [b]) => a - b).map(([, call]) => {
-      if (!call.id || call.id.length > 256 || /\s/.test(call.id) || !["web_search", "web_fetch"].includes(call.name) || !call.arguments) fail("cloud_tools_arguments")
+      if (!call.id || call.id.length > 256 || /\s/.test(call.id) || !["web_search", "web_fetch", imageToolName].includes(call.name) || !call.arguments) fail("cloud_tools_arguments")
       return { id: call.id, name: call.name, arguments: call.arguments }
     })
     if (new Set(calls.map((call) => call.id)).size !== calls.length) fail("cloud_tools_arguments")
@@ -178,9 +179,13 @@ export class ToolContinuation {
     })) fail("cloud_tools_replay")
   }
 
-  request(body: Record<string, unknown>, style: ApiStyle) {
-    body.tools = cloudToolDefinitions(style)
-    body.tool_choice = "auto"
+  request(body: Record<string, unknown>, style: ApiStyle, web = true, image = false) {
+    const definitions = web ? cloudToolDefinitions(style) : []
+    if (image) definitions.push(imageToolDefinition(style))
+    if (definitions.length) {
+      body.tools = definitions
+      body.tool_choice = "auto"
+    }
     if (style === "chat") body.messages = [...body.messages as unknown[], ...this.chat]
     else if (this.previousID) {
       body.previous_response_id = this.previousID

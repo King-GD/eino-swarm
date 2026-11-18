@@ -4,7 +4,7 @@
  *  same prefix. Paths (`foo/bar`) and URLs (`https://`) are not a menu.
  *  The catalog is data, not a switch on ad-hoc strings in the textarea. */
 
-export type SlashCommandId = "goal" | "plan" | "compact" | "side"
+export type SlashCommandId = "goal" | "plan" | "compact" | "side" | "image"
 
 export interface SlashCommand {
   id: SlashCommandId
@@ -26,6 +26,12 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     id: "plan",
     name: "plan",
     description: "Explore and write a plan before changing anything",
+    leadingOnly: true,
+  },
+  {
+    id: "image",
+    name: "image",
+    description: "Generate an image from a description",
     leadingOnly: true,
   },
   {
@@ -222,7 +228,7 @@ function isCommandNameChar(ch: string): boolean {
 }
 
 export function commandNeedsArgument(id: SlashCommandId): boolean {
-  return id === "goal" || id === "plan"
+  return id === "goal" || id === "plan" || id === "image"
 }
 
 /** `/goal` / `/plan` with no argument yet — the box is prompting, not ready. */

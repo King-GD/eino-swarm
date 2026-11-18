@@ -49,6 +49,13 @@
 
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
+
+  --animate-generated-image: generated-image-appear 180ms ease-out both;
+
+  @keyframes generated-image-appear {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
 }
 
 /*

@@ -59,6 +59,10 @@ func eventView(ev store.Event, cfg config.RemoteConfig) EventView {
 	default:
 		text = truncate(ev.Text, eventChars(cfg))
 	}
+	var image *store.ImageRef
+	if ev.Kind == "image_generation" && len(ev.Images) == 1 {
+		image = &ev.Images[0]
+	}
 	return EventView{
 		SourceThreadID: ev.SourceThreadID,
 		SourceTurnID:   ev.SourceTurnID,
@@ -73,6 +77,7 @@ func eventView(ev store.Event, cfg config.RemoteConfig) EventView {
 		MessageID:      ev.MessageID,
 		Err:            ev.Err,
 		HasImages:      len(ev.Images) > 0,
+		GeneratedImage: image,
 		CreatedAt:      ev.CreatedAt,
 	}
 }

@@ -1,3 +1,4 @@
+import { imageGenerationZh } from "./messages-image-generation"
 import { modelSettingsZh } from "./messages-model-settings"
 import { backoffZh } from "./messages-backoff"
 import { modelPolicyZh } from "./messages-model-policy"
@@ -18,6 +19,7 @@ import { speechZh } from "./messages-speech"
 
 export const zh: { [K in keyof typeof en]: string } = {
   ...modelPolicyZh,
+  ...imageGenerationZh,
   ...modelSettingsZh,
   ...speechZh,
   ...backupZh,
@@ -171,6 +173,7 @@ export const zh: { [K in keyof typeof en]: string } = {
   "composer.placeholderRunning": "工作中… Enter 排队，⌘Enter 注入",
   "composer.placeholderGoal": "这次会话要一直追求的目标",
   "composer.placeholderPlan": "要规划什么？",
+  "composer.placeholderImage": "描述你想生成的图片。",
   "composer.placeholderAsk": "输入回答，或点上面的选项",
   "composer.attach": "附加文件",
   "composer.attachHint": "把文件放到工作区",
@@ -257,6 +260,7 @@ export const zh: { [K in keyof typeof en]: string } = {
   "slash.commands": "命令",
   "slash.goal": "设置一个持续追求直到完成的目标",
   "slash.plan": "先探索并写出计划，再动手改",
+  "slash.image": "根据描述生成图片",
   "slash.compact": "压缩这次会话的上下文",
   "slash.full": "已用 {pct}%",
 

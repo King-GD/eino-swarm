@@ -1,7 +1,7 @@
 import { BackoffNotice } from "./backoff-notice"
 import { GenerationNotice } from "./generation-notice"
 import { IterationLimitCard } from "./iteration-limit-card"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { ChevronRight, Loader2 } from "lucide-react"
 
 import { PhoneMarkdown } from "@/components/markdown"
@@ -26,6 +26,10 @@ import {
 } from "@/lib/tool-preview"
 import { cn } from "@/lib/cn"
 import { SpeechActions } from "./speech-actions"
+import { GeneratedImageResult } from "./generated-image-result"
+import { readGeneratedImage } from "@/lib/remote-files"
+import type { RemoteLink } from "@/lib/link"
+import { gatewayImageCode } from "@/lib/paired-image-generation"
 
 export function renderBlock(b: CompactBlock) {
   if (b.kind === "turn_end") {
@@ -78,7 +82,7 @@ export function renderBlock(b: CompactBlock) {
     return <PhoneThought text={text} />
   }
   if (b.kind === "tool") {
-    if (b.toolName === "close_agent") return null
+    if (b.toolName === "close_agent" || (b.toolName === "generate_image" && !b.failed && !b.text.includes('"ok":false'))) return null
     const notice = scheduleToolNotice(b.toolName || "", b.args || b.text)
     if (notice !== undefined) {
       if (!notice) return null
@@ -265,6 +269,19 @@ function localizeNotice(text: string): string {
   }
 }
 
+function PairedImageResult({ data, link, threadId }: {
+  data: NonNullable<CompactBlock["imageGeneration"]>
+  link?: RemoteLink
+  threadId?: string
+}) {
+  const id = data.media?.id
+  const load = useCallback((signal: AbortSignal) => {
+    if (!link || !threadId || !id) return Promise.reject(new Error("image_unavailable"))
+    return readGeneratedImage(link, threadId, id, signal)
+  }, [link, threadId, id])
+  return <GeneratedImageResult status={data.status} code={gatewayImageCode(data.code)} media={data.media} load={load} />
+}
+
 /** Phone default is compact: adjacent thoughts and tools are one row.
  *  Answers stay outside that row. */
 export function ThreadLog({
@@ -273,12 +290,14 @@ export function ThreadLog({
   onContinue,
   continueDisabled,
   activeTurnId,
+  imageOwner,
 }: {
   blocks: CompactBlock[]
   running?: boolean
   onContinue?: (proceed: boolean) => Promise<void>
   continueDisabled?: boolean
   activeTurnId?: string
+  imageOwner?: { link: RemoteLink; threadId: string }
 }) {
   const items = foldPhoneItems(blocks)
   let lastWork = -1
@@ -307,8 +326,10 @@ export function ThreadLog({
         }
         const pause = item.block.confirm
         const actionable = running && pause?.pending && (!activeTurnId || !item.block.turnId || item.block.turnId === activeTurnId)
-        const node = pause ? <IterationLimitCard pause={pause}
-          onContinue={actionable ? onContinue : undefined} disabled={continueDisabled} /> : renderBlock(item.block)
+        const node = item.block.imageGeneration
+          ? <PairedImageResult data={item.block.imageGeneration} link={imageOwner?.link} threadId={imageOwner?.threadId} />
+          : pause ? <IterationLimitCard pause={pause}
+              onContinue={actionable ? onContinue : undefined} disabled={continueDisabled} /> : renderBlock(item.block)
         if (!node) return null
         return (
           <div key={item.block.id} className="min-w-0 max-w-full">

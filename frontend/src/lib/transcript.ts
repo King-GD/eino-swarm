@@ -1,4 +1,5 @@
 import type { ImageRef, ReviewOutcome, SwarmEvent } from "./types"
+import { imageGeneration, imageGenerationIsNewer, type ImageGeneration } from "./image-generation"
 import { applyGenerationEvent, applyInterruptedOutput, recoverLegacyGeneration, type GenerationInterruption } from "./transcript-generation"
 import { cloudToolSummary, parseCloudTool } from "./cloud-tool"
 import { isMCPTool } from "./mcp-progress"
@@ -71,6 +72,7 @@ export type BlockKind =
   | "reasoning"
   | "answer"
   | "tool"
+  | "image_generation"
   | "question"
   | "spawn"
   | "notice"
@@ -139,6 +141,7 @@ export interface Block {
   at: string
   /** Pasted vision inputs on user / steer blocks. */
   images?: ImageRef[]
+  imageGeneration?: ImageGeneration
 }
 
 export type AgentStatus = "running" | "done" | "failed" | "cancelled"
@@ -449,6 +452,17 @@ export function reduceEvent(
   if (applyInterruptedOutput(agent, ev)) return next
 
   switch (ev.kind) {
+    case "image_generation": {
+      const nextImage = imageGeneration(ev, ev.images?.[0])
+      if (!nextImage) break
+      const index = agent.blocks.findIndex((row) => row.imageGeneration?.id === nextImage.id)
+      const prior = agent.blocks[index]
+      if (!imageGenerationIsNewer(nextImage, prior?.imageGeneration)) break
+      const row = { ...block(ev, "image_generation", ""), id: nextImage.id, imageGeneration: nextImage }
+      if (prior) agent.blocks[index] = { ...prior, imageGeneration: nextImage }
+      else append(agent, row)
+      break
+    }
     case "generation_interrupted":
     case "generation_recovered":
       applyGenerationEvent(agent, ev)
@@ -742,13 +756,21 @@ export function reduceEvent(
       closeStreaming(manager, "reasoning")
       closeStreaming(manager, "answer")
       closePendingTools(manager, ev.err)
+      manager.blocks = manager.blocks.map((row) =>
+        row.turnId === ev.turn_id && row.imageGeneration?.status === "running"
+          ? { ...row, imageGeneration: { ...row.imageGeneration, status: cancelled ? "cancelled" : "unknown" } }
+          : row,
+      )
       // A clean `done` parks leftover workers for the next /goal session.
       // Closing their exec here made Agents say Done while wait_agents was
       // still blocked on that same worker. A failed check may also retain
       // explicitly named workers; Stop and cleanup remain authoritative.
       if (failed) {
         settleFailedWorkers(next, ev)
-        if (ev.err && !rosterOnly) append(manager, block(ev, cancelled ? "notice" : "error", ev.err))
+        if (ev.err && !rosterOnly &&
+          !(ev.err.startsWith("image_generation_") && manager.blocks.some((row) => row.turnId === ev.turn_id && row.imageGeneration))) {
+          append(manager, block(ev, cancelled ? "notice" : "error", ev.err))
+        }
       }
       break
     }

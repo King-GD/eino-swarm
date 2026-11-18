@@ -393,7 +393,7 @@ func (p *LinkPump) pushEvent(threadID string, ev store.Event) bool {
 
 func carriesWatchStatus(kind string) bool {
 	switch kind {
-	case "turn", "done", "error",
+	case "turn", "done", "error", "image_generation",
 		"schedule", "schedule_fired", "schedule_skipped", "schedule_cancelled",
 		"goal", "goal_complete", "goal_blocked", "goal_capped", "goal_idle",
 		"goal_resumed", "goal_continued", "goal_edited":

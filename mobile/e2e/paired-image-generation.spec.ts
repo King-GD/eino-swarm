@@ -1,0 +1,33 @@
+import { expect, test } from "@playwright/test"
+
+test("a paired image replaces its live card and reopens from PC history", async ({ page }, info) => {
+  await page.goto("/?mock=1&tick=700&images=1")
+  await page.getByRole("button", { name: "返回", exact: true }).click()
+  await page.getByTestId("project-stack").getByRole("button", { name: "打开 Sweep the unused exports", exact: true }).click()
+  const input = page.getByLabel("消息", { exact: true })
+  await input.fill("/image")
+  await page.locator("form").getByRole("button", { name: "发送", exact: true }).click()
+  await expect(page.getByText("请在 /image 后输入图片描述。")).toBeVisible()
+  await expect(input).toHaveValue("/image")
+  await input.fill("/image Draw the coast")
+  await page.locator("form").getByRole("button", { name: "发送", exact: true }).click()
+
+  const card = page.getByTestId("generated-image-result")
+  await expect(card).toHaveAttribute("data-status", "running")
+  await expect(card).toContainText("正在生成图片")
+  await page.screenshot({ path: info.outputPath("waiting.png"), animations: "disabled" })
+
+  const picture = card.getByAltText("生成的图片")
+  await expect(picture).toBeInViewport({ ratio: 0.9 })
+  await expect.poll(() => picture.evaluate((img: HTMLImageElement) => [img.naturalWidth, img.naturalHeight])).toEqual([1200, 800])
+  await card.getByRole("button", { name: "查看大图" }).click()
+  await expect(page.getByRole("dialog").getByTestId("phone-image-viewport")).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await page.getByRole("button", { name: "返回", exact: true }).click()
+  await page.getByTestId("project-stack").getByRole("button", { name: "打开 Sweep the unused exports", exact: true }).click()
+  await expect(card).toHaveCount(1)
+  await expect(card).toHaveAttribute("data-status", "completed")
+  await expect(picture).toBeInViewport({ ratio: 0.9 })
+  await page.screenshot({ path: info.outputPath("paired-reopened.png") })
+})

@@ -53,9 +53,8 @@ it("explains missing translation and image capabilities instead of hiding their 
  render(<FunctionalModels settings={value} onChange={vi.fn()} />)
  expect(screen.getByText("Translation", { exact: true })).toBeInTheDocument()
  expect(screen.getByText("Image generation", { exact: true })).toBeInTheDocument()
- expect(screen.getByText(/client does not yet support image generation/)).toBeInTheDocument()
- expect(screen.getByRole("combobox", { name: "Image generation" })).toBeDisabled()
- expect(screen.getAllByText(/gateway has not provided an editable/)).toHaveLength(2)
+ expect(screen.queryByRole("combobox", { name: "Image generation" })).toBeNull()
+ expect(screen.getAllByText(/gateway has not provided an editable/)).toHaveLength(3)
  expect(screen.queryByLabelText("Image generation Provider")).toBeNull()
 })
 
@@ -79,7 +78,6 @@ it("lists gateway, third-party and local models in separate groups", () => {
   expect(screen.getByText("Local")).toBeInTheDocument()
   fireEvent.click(screen.getByRole("option", { name: "partner-chat" }))
   expect(onChange.mock.lastCall?.[0].models.bindings.translation).toEqual({ provider_id: "gateway:partner", model: "partner-chat" })
-  expect(screen.getByRole("combobox", { name: "Image generation" })).toBeEnabled()
 })
 
 it("titles a third-party speech catalog with the gateway name", () => {

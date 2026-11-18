@@ -12,11 +12,14 @@ describe("negotiated gateway controls", () => {
     expect(capabilityAllows(voice(), "transcription")).toBe(false)
     expect(capabilityAllows(undefined, "speech")).toBe(false)
   })
-  it("does not enable an unknown endpoint or an unimplemented image adapter", () => {
+  it("requires the image endpoint and source authorization", () => {
     const source = voice()
     source.capabilities.speech!.endpoints = ["private_executor"]
     source.capabilities.image = { supported: true, available: true, configurable: true, endpoints: ["images"] }
     expect(capabilityAllows(source, "speech")).toBe(false)
+    expect(capabilityAllows(source, "image")).toBe(true)
+    expect(capabilityAllows({ ...source, authorized: false }, "image")).toBe(false)
+    source.capabilities.image.endpoints = ["chat_completions"]
     expect(capabilityAllows(source, "image")).toBe(false)
   })
   it("refuses unknown versions and malformed permissions while retaining independent LOCAL", () => {

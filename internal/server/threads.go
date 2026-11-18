@@ -411,6 +411,15 @@ func (s *Server) steer(c *gin.Context) {
 	if s.rejectSignedOut(c) {
 		return
 	}
+	if engine.IsImageCommand(in.Text) {
+		turn, err := s.engine.StartTurnInput(th.ID, in)
+		if err != nil {
+			s.fail(c, err)
+			return
+		}
+		c.JSON(http.StatusAccepted, gin.H{"steered": false, "turn": turn})
+		return
+	}
 	err = s.engine.SteerInput(th.ID, in)
 	if err == nil {
 		c.JSON(http.StatusAccepted, gin.H{"steered": true})

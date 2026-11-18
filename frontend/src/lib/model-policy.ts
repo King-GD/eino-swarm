@@ -22,6 +22,7 @@ export interface FunctionalCatalog {
   label?: string
   catalog_group?: string
   embedding_models?: string[]
+  image_models?: string[]
   transcription_models?: string[]
   speech_models?: string[]
 }

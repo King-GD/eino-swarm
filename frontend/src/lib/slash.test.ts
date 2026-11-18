@@ -72,7 +72,7 @@ describe("slash menu after other text", () => {
     expect(filterSlashCommands(draft?.query ?? "", SLASH_COMMANDS, draft?.afterText).map((c) => c.id)).toEqual(["goal", "compact"])
     expect(filterSlashCommands("pl", SLASH_COMMANDS, true)).toEqual([])
     expect(slashDraft("  /")?.afterText).toBe(false)
-    expect(filterSlashCommands("", SLASH_COMMANDS, false).map((c) => c.id)).toEqual(["goal", "plan", "compact"])
+    expect(filterSlashCommands("", SLASH_COMMANDS, false).map((c) => c.id)).toEqual(["goal", "plan", "image", "compact"])
   })
 })
 
@@ -121,7 +121,7 @@ describe("slashSubmitReady", () => {
 describe("filterSlashCommands", () => {
   it("lists every command for a bare slash", () => {
     const names = filterSlashCommands("").map((c) => c.name)
-    expect(names).toEqual(["goal", "plan", "compact"])
+    expect(names).toEqual(["goal", "plan", "image", "compact"])
   })
 
   it("filters by prefix without requiring a particular sample task", () => {

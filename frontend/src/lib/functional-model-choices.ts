@@ -1,4 +1,4 @@
-import { capabilityAllows } from "./capabilities"
+import { capabilityAllows, capabilityConfigurable } from "./capabilities"
 import { selectedFeatureAllows, type FunctionalCatalog, type ModelPolicy, type ModelRole } from "./model-policy"
 import type { AccountModels, ModelInfo, ProviderSettings } from "./types"
 
@@ -21,14 +21,13 @@ export function functionalSourceGroup(row: { source?: string; provider_id: strin
   return "local"
 }
 
-/** Image generation has no client adapter yet. Its picker lists the same
- *  authorized chat catalogs translation can use, so the control matches the
- *  other rows before that call exists. */
-function admissionRole(role: ModelRole): ModelRole {
-  return role === "image" ? "translation" : role
-}
-
 function sourceAllows(policy: ModelPolicy | undefined, providerId: string, role: ModelRole, models: ModelInfo[]): boolean {
+  if (role === "image") {
+    return providerId.startsWith("gateway:") && capabilityConfigurable(
+      policy?.account_sources?.[providerId] ?? models.find(row => row.provider_id === providerId)?.capabilities,
+      role,
+    )
+  }
   if (policy?.mode !== "local") return selectedFeatureAllows(policy, providerId, role)
   if (!providerId.startsWith("gateway:")) return true
   const published = policy.account_sources?.[providerId]
@@ -36,17 +35,21 @@ function sourceAllows(policy: ModelPolicy | undefined, providerId: string, role:
   return capabilityAllows(models.find(row => row.provider_id === providerId)?.capabilities, role)
 }
 
-function typedRole(role: ModelRole): role is "embedding" | "transcription" | "speech" {
-  return role === "embedding" || role === "transcription" || role === "speech"
+type TypedRole = "embedding" | "transcription" | "speech" | "image"
+
+function typedRole(role: ModelRole): role is TypedRole {
+  return role === "embedding" || role === "transcription" || role === "speech" || role === "image"
 }
 
-function catalogNames(role: "embedding" | "transcription" | "speech", catalog: FunctionalCatalog): string[] {
+function catalogNames(role: TypedRole, catalog: FunctionalCatalog): string[] {
+  if (role === "image") return catalog.image_models ?? []
   if (role === "embedding") return catalog.embedding_models ?? []
   if (role === "transcription") return catalog.transcription_models ?? []
   return catalog.speech_models ?? []
 }
 
-function legacyKindNames(role: "embedding" | "transcription" | "speech", account?: AccountModels): string[] {
+function legacyKindNames(role: TypedRole, account?: AccountModels): string[] {
+  if (role === "image") return account?.kinds?.image_models ?? []
   if (role === "embedding") return account?.kinds?.embedding_models ?? []
   if (role === "transcription") return account?.kinds?.transcription_models ?? []
   return account?.kinds?.speech_models ?? []
@@ -89,7 +92,7 @@ export function functionalModelChoices(input: {
   const { role, policy, models, providers, account, selected } = input
   const out: FunctionalModelChoice[] = []
   const seen = new Set<string>()
-  const roleAllows = (providerId: string) => sourceAllows(policy, providerId, admissionRole(role), models)
+  const roleAllows = (providerId: string) => sourceAllows(policy, providerId, role, models)
   const typed = typedRole(role) ? role : undefined
   const catalogs = typed ? policy?.functional_catalogs : undefined
   for (const row of models) {

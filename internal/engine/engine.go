@@ -330,12 +330,16 @@ func (e *Engine) DeleteThread(id string) error {
 	e.closeRuntime(id)
 	ws := e.WorkspaceDir(id)
 	e.generations.Lock()
-	if err := e.store.DeleteThread(id); err != nil {
-		e.generations.Unlock()
+	e.recordMu.Lock()
+	err := e.store.DeleteThread(id)
+	e.recordMu.Unlock()
+	if err == nil {
+		delete(e.generations.threads, id)
+	}
+	e.generations.Unlock()
+	if err != nil {
 		return err
 	}
-	delete(e.generations.threads, id)
-	e.generations.Unlock()
 	e.dropIndex(id)
 	if e.ownsWorkspace(ws) {
 		if err := os.RemoveAll(ws); err != nil {

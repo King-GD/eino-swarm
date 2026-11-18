@@ -64,8 +64,7 @@ func ParseCapabilities(raw []byte) (*ClientCapabilities, error) {
 	return &envelope.Data, nil
 }
 
-// ImplementedEndpoints describes actual adapters. Image generation has no client
-// adapter; image input uses the existing OCR Chat/Responses adapter instead.
+// ImplementedEndpoints describes the public protocol adapters in this client.
 func ImplementedEndpoints(role string) []string {
 	switch role {
 	case "conversation", "title", "compact", "translation", "ocr":
@@ -78,6 +77,8 @@ func ImplementedEndpoints(role string) []string {
 		return []string{"audio_transcriptions"}
 	case "speech":
 		return []string{"audio_speech"}
+	case "image":
+		return []string{"images"}
 	default:
 		return nil
 	}
@@ -243,6 +244,10 @@ func (p *Pool) NotifyCapabilityRejection(status int) {
 		return
 	}
 	p.InvalidateCapabilities()
+	p.triggerCapabilityRefresh()
+}
+
+func (p *Pool) triggerCapabilityRefresh() {
 	p.mu.Lock()
 	trigger := p.capabilitiesTrigger
 	p.mu.Unlock()

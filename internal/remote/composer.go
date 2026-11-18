@@ -109,6 +109,9 @@ func acceptPut(stage *Staging, req Request, path, sessionID string) Response {
 }
 
 func composeStart(eng *engine.Engine, cfg config.RemoteConfig, stage *Staging, req Request, path, sessionID string) Response {
+	if engine.IsImageCommand(req.Text) && len(req.Puts) > 0 {
+		return mapErr(req.ID, path, sessionID, engine.ErrImageTextOnly)
+	}
 	if err := requireStage(stage, req); err != nil {
 		return mapErr(req.ID, path, sessionID, err)
 	}
@@ -134,6 +137,9 @@ func composeStart(eng *engine.Engine, cfg config.RemoteConfig, stage *Staging, r
 }
 
 func composeSend(eng *engine.Engine, stage *Staging, req Request, path, sessionID string) Response {
+	if engine.IsImageCommand(req.Text) && len(req.Puts) > 0 {
+		return mapErr(req.ID, path, sessionID, engine.ErrImageTextOnly)
+	}
 	if strings.TrimSpace(req.ThreadID) == "" {
 		return fail(req.ID, path, sessionID, "bad_request", "thread_id required")
 	}
@@ -155,6 +161,9 @@ func composeSend(eng *engine.Engine, stage *Staging, req Request, path, sessionI
 }
 
 func composeSteer(eng *engine.Engine, stage *Staging, req Request, path, sessionID string) Response {
+	if engine.IsImageCommand(req.Text) {
+		return composeSend(eng, stage, req, path, sessionID)
+	}
 	if strings.TrimSpace(req.ThreadID) == "" {
 		return fail(req.ID, path, sessionID, "bad_request", "thread_id required")
 	}
@@ -338,6 +347,10 @@ func materialize(eng *engine.Engine, threadID string, blobs []StagedBlob) (engin
 }
 
 func deliverUser(eng *engine.Engine, threadID string, in engine.UserInput, running bool) error {
+	if engine.IsImageCommand(in.Text) {
+		_, err := eng.StartTurnInput(threadID, in)
+		return err
+	}
 	// Goal commands change the current task's lifetime immediately, even when
 	// an ordinary phone Send would queue behind the current manager turn.
 	if _, goal := slash.Lookup(in.Text, "goal"); goal {

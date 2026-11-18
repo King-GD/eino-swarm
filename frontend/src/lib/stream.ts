@@ -33,6 +33,7 @@ export const KINDS = [
   "tool_call",
   "builtin_tool",
   "tool_result",
+  "image_generation",
   "ask_recovered",
   "tool_delta",
   "tool_call_delta",

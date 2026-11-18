@@ -48,20 +48,21 @@ export function FunctionalModels({ settings, onChange, query = "" }: {
   }
   return <SettingsSection title={t("modelPolicy.title")} description={t("modelPolicy.description")}>
     {configurableModelRoles.filter(role => role === "image" || role === "translation" || role === "embedding" || policyConfigurable(settings.model_policy, role)).map(role => {
-      if (role !== "image" && !policyConfigurable(settings.model_policy, role)) {
+      if (!policyConfigurable(settings.model_policy, role)) {
         const managed = policyAllows(settings.model_policy, role)
         return <SettingsRow key={role} query={query} label={t(labels[role])}
           hint={t(managed ? "modelPolicy.roleManagedHint" : "modelPolicy.roleUnavailable")}>
           <span className="text-muted-foreground">{t(managed ? "modelPolicy.roleManaged" : "modelPolicy.unavailable")}</span>
+          {role === "image" && (settings.models.bindings?.image ?? settings.model_policy?.bindings?.image)?.model
+            ? <Button type="button" variant="ghost" size="sm" onClick={() => update(role)}>{t("modelPolicy.default")}</Button> : null}
         </SettingsRow>
       }
-      const imageLocked = role === "image" && !policyConfigurable(settings.model_policy, role)
       const fallback = settings.model_policy?.defaults?.[role]
       const legacy = role === "embedding" && !fallback && settings.search?.embedding_model?.trim()
         ? { provider_id: settings.search.embedding_provider || settings.models.default, model: settings.search.embedding_model } : undefined
       const ref = settings.models.bindings?.[role] ?? settings.model_policy?.bindings?.[role] ?? legacy
       const off = role === "embedding" && ref?.provider_id === "" && ref.model === ""
-      const choices = imageLocked ? [] : functionalModelChoices({
+      const choices = functionalModelChoices({
         role, policy: settings.model_policy, models, providers: settings.models.providers, account,
         selected: ref?.provider_id && ref.model ? ref : undefined,
       })
@@ -70,8 +71,8 @@ export function FunctionalModels({ settings, onChange, query = "" }: {
       const names = choices.filter(choice => choice.providerId === ref?.provider_id).map(choice => choice.model)
       const value = off ? "__disabled" : ref?.provider_id && ref.model ? modelChoiceId(ref.provider_id, ref.model) : "__default"
       return <div key={role} data-settings-key={`model-${role}`}>
-        <SettingsChoice label={t(labels[role])} disabled={imageLocked}
-          hint={role === "image" ? t("modelPolicy.imageUnavailable") : role === "embedding" ? t("modelPolicy.embeddingHint") : undefined}
+        <SettingsChoice label={t(labels[role])}
+          hint={role === "image" ? t("modelPolicy.imageHint") : role === "embedding" ? t("modelPolicy.embeddingHint") : undefined}
           query={query} value={value}
           ariaLabel={role === "image" ? t(labels[role]) : `${t(labels[role])} ${t("modelPolicy.provider")}`}
           onValueChange={next => {
@@ -96,7 +97,7 @@ export function FunctionalModels({ settings, onChange, query = "" }: {
             })}
           </SelectGroup>)}
         </SettingsChoice>
-        {ref?.provider_id && ref.model && !imageLocked ? <SettingsRow label={t("modelPolicy.model")} query={query} search={[t(labels[role])]}>
+        {ref?.provider_id && ref.model && role !== "image" ? <SettingsRow label={t("modelPolicy.model")} query={query} search={[t(labels[role])]}>
           <Input aria-label={`${t(labels[role])} ${t("modelPolicy.model")}`} key={`${ref.provider_id}:${ref.model}`}
             defaultValue={ref.model} list={`${id}-${role}`}
             onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur() } }}

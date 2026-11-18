@@ -27,6 +27,7 @@ This is the current user-facing capability map. The code and tests named below a
     - `F-176` External MCP tools
     - `F-180` PC text quoting
     - `F-181` Selection reading and translation
+    - `F-182` Generate images in chat
     - `F-190` Desktop updates
   - `F-200` Phone
     - `F-210` Pair a phone with a PC
@@ -368,6 +369,10 @@ This is the current user-facing capability map. The code and tests named below a
 ### F-181 Selection reading and translation
 
 - 目的：在 PC 和配对手机选区菜单中朗读已选文字，并在中文界面把英文选区译成简体中文。使用者：桌面、Web 和配对手机用户。入口：选中可引用来源中的文字后出现的菜单；输入：已经稳定的选区；输出：朗读，或仍留在菜单里的译文；前置条件：朗读需要语音输出已启用且就绪，翻译需要界面语言为中文、当前打开了会话，且选区判定为英文。网关来源必须协商到可用 `translation` 角色，使用该角色发布的 Chat Completions／Responses 协议和预置或显式模型；角色缺失、未知或不可用时隐藏入口并拒绝回退。独立 LOCAL provider 保持原有翻译能力。失败表现：朗读显示可重试错误，翻译在菜单内显示失败。两者都不加入引用，也不创建回合、事件或跟进。关联契约：`C-048`、`C-049`。实现证据：`frontend/src/components/app/selection-menu.tsx`、`frontend/src/lib/selection-language.ts`、`frontend/src/lib/speech-media.ts`、`internal/engine/selection_translation.go`、`internal/server/selection_translation.go`。验证：`frontend/src/components/app/selection-menu.test.tsx`、`frontend/src/lib/selection-language.test.ts`、`internal/engine/selection_translation_test.go`、`internal/server/selection_translation_http_test.go`、`internal/server/selection_translation_limit_test.go`。
+
+### F-182 Generate images in chat
+
+- PC desktop, Web, paired phone and phone-direct chat support a natural-language image request through `generate_image` or a text-only `/image` command. The selected account source needs an authorized image model and the `images` endpoint. A generation card shows pending, completed, stopped or failed state. A completed result supports preview, export and history. 入口：聊天输入框。关联契约：`C-051`。实现证据：`internal/engine/image_generation_http_test.go`、`frontend/e2e/generated-image.spec.ts`、`mobile/e2e/direct-image-generation.spec.ts`。
 
 ### F-190 Desktop updates
 

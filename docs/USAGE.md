@@ -108,8 +108,8 @@ See [Configuration](CONFIG.md).
 
 **Settings → Models → Functional models** selects conversation, title, compression,
 translation, embedding, recognition, spoken-answer, OCR and image-generation
-models. Image generation uses the same selector; this client does not call it
-yet, and a choice is kept. The decisions role is a
+models. The image picker lists authorized image models from configurable gateway
+sources. The decisions role is a
 background call and is not listed. Unchanged gateway
 roles follow updated server defaults. An explicit choice stays until **Use default**
 removes it. In LOCAL the menu groups models you can already use: the signed-in
@@ -226,6 +226,17 @@ On a Chinese interface, an English selection also offers **翻译**. The result
 stays in the menu. It is not added to the conversation and does not start a
 turn. A selection that contains Chinese or another non-Latin script does not
 offer it. The offline app repeats the selected text instead of translating it.
+
+### Generate an image in chat
+
+Ask for an image in an interactive conversation to let the Agent call the
+image tool. To send the description directly, enter `/image` followed by your
+description. The command takes text only and requires an idle, writable
+conversation and an authorized gateway image model. Each turn generates at most
+one image. The card displays a waiting animation until the gateway returns a
+complete image. Open the image at full size or save its original pixels. Finished
+images remain in the conversation when it is reopened. If an interruption leaves
+the result unconfirmed, send a new request when you want to generate again.
 
 ## One turn
 

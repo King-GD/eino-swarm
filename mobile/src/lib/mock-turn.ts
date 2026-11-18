@@ -1,4 +1,6 @@
-export type Step = { kind: string; turnID?: string; messageID?: string; text?: string; callID?: string; err?: string; agentID?: string; role?: string; at?: string; sourceThreadID?: string; sourceTurnID?: string }
+import type { ImageRef } from "../../../frontend/src/lib/types"
+
+export type Step = { kind: string; turnID?: string; messageID?: string; text?: string; callID?: string; err?: string; agentID?: string; role?: string; at?: string; sourceThreadID?: string; sourceTurnID?: string; generatedImage?: ImageRef }
 
 /** A turn the phone can replay: a thought, work, then an answer. Generic on
  *  purpose — this is a rendering fixture, not a task the product knows. */

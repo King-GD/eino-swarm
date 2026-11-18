@@ -137,3 +137,70 @@ func TestOrdinaryGatewayBindingsCanBePatchedAndRestoredWithoutProviders(t *testi
 		t.Fatal("ordinary gateway settings hidden or override retained")
 	}
 }
+
+func TestImageBindingAcceptsTypedGatewayChoicesAndRetainsOldPinsOnGrantLoss(t *testing.T) {
+	cfg, err := config.Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(cfg.DBPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	const sourceID = "gateway:0123456789abcdef0123456789abcdef"
+	pool := provider.New(cfg)
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	eng := engine.New(cfg, st, pool, log)
+	defer eng.Shutdown()
+	srv, err := New(Options{Engine: eng, Logger: log})
+	if err != nil {
+		t.Fatal(err)
+	}
+	publish := func(image bool) {
+		src, err := provider.NewAccountSource(sourceID, "Gateway", "https://gateway.invalid/v1", "fixture", provider.Catalog{
+			Names: []string{"chat", "picture"},
+			Types: map[string]string{"chat": "chat", "picture": "image"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		caps := map[string]provider.RoleCapability{
+			"conversation": {Supported: true, Available: true, Configurable: true, Endpoints: []string{"chat_completions"}},
+		}
+		if image {
+			caps["image"] = provider.RoleCapability{Supported: true, Available: true, Configurable: true, Endpoints: []string{"images"}}
+		}
+		src.SetCapabilities(&provider.SourceCapabilities{Authorized: true, Available: true, Configurable: true, Capabilities: caps})
+		pool.SetAccountSource(src)
+	}
+	put := func(body string, status int) {
+		t.Helper()
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		srv.Handler().ServeHTTP(w, req)
+		if w.Code != status {
+			t.Fatalf("settings returned %d, want %d: %s", w.Code, status, w.Body.String())
+		}
+	}
+	pin := func(providerID, model string) string {
+		return `{"models":{"bindings":{"image":{"provider_id":"` + providerID + `","model":"` + model + `"}}}}`
+	}
+	publish(true)
+	put(pin(sourceID, "chat"), http.StatusForbidden)
+	put(pin("default", "picture"), http.StatusForbidden)
+	put(pin(sourceID, "picture"), http.StatusOK)
+	if !pool.ImageAvailable(sourceID) {
+		t.Fatal("accepted pin did not admit image generation")
+	}
+	publish(false)
+	put(pin(sourceID, "picture"), http.StatusOK)
+	if pool.ImageAvailable(sourceID) || pool.ModelPolicy().Bindings["image"].Model != "picture" {
+		t.Fatal("grant loss should close calls while keeping the old pin")
+	}
+	put(`{"models":{"bindings":{}}}`, http.StatusOK)
+	if _, exists := pool.ModelPolicy().Bindings["image"]; exists {
+		t.Fatal("disabled capability prevented clearing an old pin")
+	}
+}

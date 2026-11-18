@@ -9,7 +9,10 @@ import {
   type AskQuestion,
 } from "./ask"
 import type { RemoteEvent } from "./rpc"
+import { imageGeneration, imageGenerationIsNewer, type ImageGeneration } from "../../../frontend/src/lib/image-generation"
 import { t } from "./i18n"
+import { gatewayImageCode } from "./paired-image-generation"
+import { imageGenerationLabel } from "./image-generation-labels"
 import { iterationConfirmationText, parseIterationConfirmation, settleIterationLimits, type IterationConfirmation } from "./iteration-limit"
 import { flatten, jsonPreview, looksPacked } from "./tool-preview"
 import { scheduleToolNotice } from "./inbox-preview"
@@ -21,6 +24,7 @@ export type BlockKind =
   | "answer"
   | "reasoning"
   | "tool"
+  | "image_generation"
   | "question"
   | "notice"
   | "spawn"
@@ -41,6 +45,7 @@ export type CompactBlock = {
   callId?: string
   args?: string
   hasImages?: boolean
+  imageGeneration?: ImageGeneration
   questions?: AskQuestion[]
   answers?: Record<string, string>
   recoveredSeq?: number
@@ -57,6 +62,17 @@ export type CompactBlock = {
 
 export function applyEvent(blocks: CompactBlock[], ev: RemoteEvent): CompactBlock[] {
   if (ev.kind === "engine_restore") return blocks
+  if (ev.kind === "image_generation") {
+    const next = imageGeneration(ev, ev.generated_image)
+    if (!next) return blocks
+    const prior = blocks.find((block) => block.imageGeneration?.id === next.id)
+    if (!imageGenerationIsNewer(next, prior?.imageGeneration)) return blocks
+    if (prior) return blocks.map((block) => block === prior ? { ...block, imageGeneration: next } : block)
+    return blocks.concat({
+      id: next.id, kind: "image_generation", text: "", turnId: ev.turn_id,
+      agentId: ev.agent_id && ev.agent_id !== "manager" ? ev.agent_id : undefined, imageGeneration: next,
+    })
+  }
   if (ev.kind === "model_backoff") {
     const notice = modelBackoffNotice(ev.text)
     if (!notice || notice.cooldownId && blocks.some((block) => block.cooldownId === notice.cooldownId)) return blocks
@@ -386,13 +402,23 @@ function applyEventForAgent(blocks: CompactBlock[], ev: RemoteEvent): CompactBlo
     case "cleanup":
       return next.map((b) => settleMCPTool(b))
     case "error":
-      return next.map((b) => settleMCPTool(b, ev.turn_id)).concat(
-        { id: blockId(ev), kind: ev.err === "interrupted" || ev.err === "stopped before collecting worker results" ? "notice" : "error", text: ev.err || ev.text },
-        { id: `${blockId(ev)}:end`, kind: "turn_end", text: ev.created_at },
-      )
-    case "done":
-      return next.map((b) => settleMCPTool(b.streaming ? { ...b, streaming: false } : b, ev.turn_id))
-        .concat({ id: blockId(ev), kind: "turn_end", text: ev.created_at })
+    case "done": {
+      const cancelled = ev.err === "interrupted" || ev.err === "stopped before collecting worker results"
+      const pendingStatus = cancelled ? "cancelled" : "unknown"
+      const ended = { id: ev.kind === "done" ? blockId(ev) : `${blockId(ev)}:end`, kind: "turn_end" as const, text: ev.created_at }
+      const settled = next.map((block): CompactBlock => {
+        const current = ev.kind === "done" && block.streaming ? { ...block, streaming: false } : block
+        if (current.turnId === ev.turn_id && current.imageGeneration?.status === "running") {
+          return { ...current, imageGeneration: { ...current.imageGeneration, status: pendingStatus } }
+        }
+        return settleMCPTool(current, ev.turn_id)
+      })
+      if (ev.kind === "done" || ev.err?.startsWith("image_generation_") &&
+        settled.some((block) => block.turnId === ev.turn_id && block.imageGeneration)) return settled.concat(ended)
+      const code = gatewayImageCode(ev.err)
+      return settled.concat({ id: blockId(ev), kind: cancelled ? "notice" : "error",
+        text: code ? imageGenerationLabel(code) : ev.err || ev.text }, ended)
+    }
     case "goal_complete":
       next.push({ id: blockId(ev), kind: "notice", text: t("notice.goalCompleted") })
       return next

@@ -1,6 +1,7 @@
+import { discoverGatewayImageModels, type GatewayImageModels } from "./gateway-image-models"
 import { discoverGatewayVoiceModels, type GatewayVoiceModels, type GatewayAudioParameters } from "./gateway-speech"
 import { parseCapabilities, type ClientCapabilities } from "../../../frontend/src/lib/capabilities"
-import { publishGatewayCapabilities, knownGatewayVoiceModels, knownGatewayAudioParameters } from "./gateway-capabilities"
+import { publishGatewayCapabilities, knownGatewayVoiceModels, knownGatewayAudioParameters, knownGatewayImageModels } from "./gateway-capabilities"
 import { Browser } from "@capacitor/browser"
 import { AppLauncher } from "@capacitor/app-launcher"
 import { Capacitor } from "@capacitor/core"
@@ -48,6 +49,7 @@ export type GatewayModelSourceDescriptor = { source_id: string; source_kind: "ga
 export type GatewayBootstrap = {
   voice_parameters?: GatewayAudioParameters
   voice_models?: GatewayVoiceModels
+  image_models?: GatewayImageModels
   capabilities_url?: string
   capabilities?: ClientCapabilities
   capability_status?: "ready" | "unavailable"
@@ -277,6 +279,7 @@ export async function refreshGatewaySession(session: GatewaySession, fetcher: ty
   validateBootstrap(session.origin, bootstrap, current)
   bootstrap.capability_status = "unavailable"
   delete bootstrap.capabilities
+  delete bootstrap.image_models
   try {
     const url = bootstrap.capabilities_url && new URL(bootstrap.capabilities_url)
     if (url && url.origin === session.origin && !url.username && !url.password && !url.search && !url.hash) {
@@ -288,6 +291,7 @@ export async function refreshGatewaySession(session: GatewaySession, fetcher: ty
     if (signal?.aborted || error instanceof GatewayError && (error.status === 401 || error.status === 403)) throw error
     // Discovery failure closes gateway features without discarding account PCs.
   }
+  bootstrap.image_models = knownGatewayImageModels(current)
   bootstrap.voice_models = knownGatewayVoiceModels(current)
   bootstrap.voice_parameters = knownGatewayAudioParameters(current)
   publishGatewayCapabilities(current, bootstrap)
@@ -305,15 +309,19 @@ export async function refreshGatewaySession(session: GatewaySession, fetcher: ty
   return { status: "authorized", session: current, bootstrap, hosts }
 }
 
-export async function refreshGatewayVoiceModels(session: GatewaySession, bootstrap: GatewayBootstrap, fetcher: typeof fetch = gatewayFetch, signal?: AbortSignal): Promise<GatewayBootstrap> {
+export async function refreshGatewayFunctionalModels(session: GatewaySession, bootstrap: GatewayBootstrap, fetcher: typeof fetch = gatewayFetch, signal?: AbortSignal): Promise<GatewayBootstrap> {
   const voice_parameters: GatewayAudioParameters = {}
-  const voice_models = await discoverGatewayVoiceModels(bootstrap, async url => {
+  const readCatalog = async (url: string) => {
     const target = new URL(url)
     if (target.origin !== session.origin || target.username || target.password || target.search || target.hash) throw new GatewayError(0, "invalid_gateway_response")
     return (await request<unknown>(session.origin, "", fetcher, session.token, undefined, signal, target.href)).data
-  }, voice_parameters)
+  }
+  const [voice_models, image_models] = await Promise.all([
+    discoverGatewayVoiceModels(bootstrap, readCatalog, voice_parameters),
+    discoverGatewayImageModels(bootstrap, readCatalog),
+  ])
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
-  return { ...bootstrap, voice_models, voice_parameters }
+  return { ...bootstrap, voice_models, voice_parameters, image_models }
 }
 
 function validateBootstrap(origin: string, bootstrap: GatewayBootstrap, session: GatewaySession) {

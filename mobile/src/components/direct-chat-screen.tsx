@@ -1,9 +1,10 @@
 import { usePhoneAccount } from "@/components/gateway-account-shell"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { ChevronLeft } from "lucide-react"
 
 import { AccountButton } from "@/components/account-button"
 import { Composer, type ComposerExtra } from "@/components/composer"
+import { GeneratedImageResult } from "@/components/generated-image-result"
 import { HostChrome } from "@/components/host-chrome"
 import { PhoneMarkdown } from "@/components/markdown"
 import { ThreadLog } from "@/components/thread-blocks"
@@ -13,7 +14,7 @@ import {
   readComposerFiles,
   turnsFromMessages,
 } from "@/lib/attachments"
-import { findProvider, mintID, providerChoices, type DirectProvider } from "@/lib/direct-provider"
+import { defaultTimeoutSeconds, findProvider, mintID, providerChoices, type DirectProvider } from "@/lib/direct-provider"
 import {
   loadThreads,
   newThread,
@@ -22,7 +23,11 @@ import {
   type DirectMessage,
   type DirectThread,
 } from "@/lib/direct-threads"
+import { loadDirectImage, removeDirectImage, saveDirectImage, type DirectImageRef } from "@/lib/direct-images"
+import { assertGatewayImageTarget, gatewayImageTarget, generatedImageFilename, generateGatewayImage, ImageGenerationError, validateImagePrompt } from "@/lib/gateway-image"
+import { imageGenerationLabel } from "@/lib/image-generation-labels"
 import { t } from "@/lib/i18n"
+import { parseSlashSubmit } from "../../../frontend/src/lib/slash-core"
 import type { CompactBlock } from "@/lib/transcript"
 import { streamCompletion } from "@/lib/openai-client"
 import { ModelCallError, redact } from "@/lib/openai-wire"
@@ -75,6 +80,7 @@ export function DirectChatScreen({
   const sourceIDs = new Set(gatewaySourceIDs ?? [sourceID, ...providers.filter(row => row.sourceKind === "gateway").map(row => row.id)])
   const visible = (row: DirectThread) => (account.mode !== "account" && !row.providerId.startsWith("gateway:")) || sourceIDs.has(row.providerId)
   const [threads, setThreads] = useState(loadThreads)
+  const threadsRef = useRef(threads)
   const [openID, setOpenID] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [notice, setNotice] = useState("")
@@ -126,9 +132,10 @@ export function DirectChatScreen({
     }
   }, [])
 
-  const remember = (next: DirectThread[]) => {
+  const remember = (next: DirectThread[], required = false) => {
+    if (!saveThreads(next, threadsRef.current) && required) throw new ImageGenerationError("image_storage_failed")
+    threadsRef.current = next
     setThreads(next)
-    saveThreads(next)
   }
 
   const stop = () => {
@@ -146,6 +153,20 @@ export function DirectChatScreen({
     const model = extra?.model || pick.model
     const reasoning = extra?.reasoning ?? pick.reasoning
     const provider = findProvider(providers, providerId)
+    const command = parseSlashSubmit(text)
+    let imageCommand: { prompt: string; target: NonNullable<ReturnType<typeof gatewayImageTarget>> } | undefined
+    if (command?.id === "image") {
+      try {
+        if (extra?.images.length || extra?.files.length) throw new ImageGenerationError("image_text_only")
+        const prompt = validateImagePrompt(command.arg)
+        const target = provider && gatewayImageTarget(provider)
+        if (!target) throw new ImageGenerationError("image_unavailable")
+        imageCommand = { prompt, target }
+      } catch (error) {
+        if (error instanceof ImageGenerationError) setNotice(imageGenerationLabel(error.code))
+        throw error
+      }
+    }
     if (!provider || !model) throw new Error("no-model")
     busyRef.current = true
     setPending(true)
@@ -181,27 +202,50 @@ export function DirectChatScreen({
       base.reasoning = reasoning
       base.updatedAt = Date.now()
       base.messages = [...base.messages, user, assistant]
-      const next = [base, ...threads.filter((row) => row.id !== base.id)]
-      remember(next)
+      const next = [base, ...threadsRef.current.filter((row) => row.id !== base.id)]
+      remember(next, Boolean(imageCommand))
       setOpenID(base.id)
       setPick({ providerId, model, reasoning })
       committed = true
       const latest: DirectMessage = { ...assistant }
-      const patch = (message: DirectMessage) => {
-        setThreads((cur) => {
-          const updated = cur.map((row) =>
-            row.id !== base.id
-              ? row
-              : {
-                  ...row,
-                  messages: row.messages.map((item) => (item.id === assistant.id ? message : item)),
-                },
-          )
-          saveThreads(updated)
-          return updated
-        })
+      const patch = (message: DirectMessage, required = false) => {
+        const updated = threadsRef.current.map(row =>
+          row.id !== base.id ? row : {
+            ...row,
+            messages: row.messages.map(item => item.id === assistant.id ? message : item),
+          })
+        remember(updated, required)
+      }
+      const runImage: NonNullable<Parameters<typeof streamCompletion>[0]["generateImage"]> = async (target, prompt, signal, timeout, transport) => {
+        let saved: DirectImageRef | undefined
+        try {
+          latest.image = { status: "running" }
+          patch({ ...latest }, true)
+          const result = await generateGatewayImage(target, prompt, signal, timeout, transport)
+          const id = mintID("img")
+          const ref = { id, name: generatedImageFilename(id, result.mime), mime: result.mime, width: result.width, height: result.height }
+          await saveDirectImage(ref, result.blob)
+          saved = ref
+          if (signal.aborted) throw new ImageGenerationError("image_cancelled")
+          assertGatewayImageTarget(target)
+          latest.image = { status: "completed", image: ref }
+          patch({ ...latest }, true)
+          return ref
+        } catch (error) {
+          if (saved) await removeDirectImage(saved.id).catch(() => undefined)
+          const failure = error instanceof ImageGenerationError ? error : new ImageGenerationError("image_storage_failed")
+          const status = failure.kind === "abort" ? "cancelled" : failure.code === "image_result_unknown" ? "unknown" : "failed"
+          latest.image = { status, code: failure.code }
+          patch({ ...latest })
+          throw failure
+        }
       }
       try {
+        if (imageCommand) {
+          const timeout = provider.timeoutSeconds > 0 ? provider.timeoutSeconds : defaultTimeoutSeconds
+          await runImage(imageCommand.target, imageCommand.prompt, ctrl.signal, timeout * 1000)
+          return
+        }
         // Chips already carry the bytes. Rebuilding from them sends a file once.
         const history = turnsFromMessages(base.messages.filter((item) => item.id !== assistant.id))
         await complete({
@@ -210,6 +254,7 @@ export function DirectChatScreen({
           reasoning,
           turns: history,
           signal: ctrl.signal,
+          generateImage: runImage,
           onDelta: (piece) => {
             latest.text = piece.text
             latest.reasoning = piece.reasoning
@@ -225,10 +270,17 @@ export function DirectChatScreen({
         })
       } catch (err) {
         if (err instanceof ModelCallError && err.kind === "abort") return
+        if (err instanceof ImageGenerationError) {
+          if (!latest.image) patch({ ...latest, image: { status: "failed", code: err.code } })
+          return
+        }
         patch({ ...latest, error: explain(err, provider.apiKey) })
       }
     } catch (err) {
-      if (!committed) throw err
+      if (!committed) {
+        if (err instanceof ImageGenerationError) setNotice(imageGenerationLabel(err.code))
+        throw err
+      }
     } finally {
       if (stopRef.current === ctrl) { stopRef.current = null; activeSource.current = null }
       busyRef.current = false
@@ -341,7 +393,7 @@ export function DirectChatScreen({
         onTune={(next) => {
           setPick(next)
           if (!open) return
-          const updated = threads.map((row) =>
+          const updated = threadsRef.current.map((row) =>
             row.id === open.id
               ? { ...row, providerId: next.providerId, model: next.model, reasoning: next.reasoning }
               : row,
@@ -355,6 +407,11 @@ export function DirectChatScreen({
 }
 
 function MessageRow({ message, live }: { message: DirectMessage; live: boolean }) {
+  const image = message.image?.image
+  const load = useCallback((signal: AbortSignal) => {
+    if (!image) return Promise.reject(new ImageGenerationError("image_storage_failed"))
+    return loadDirectImage(image, signal)
+  }, [image])
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
@@ -368,6 +425,7 @@ function MessageRow({ message, live }: { message: DirectMessage; live: boolean }
   return (
     <div className="min-w-0 max-w-full">
       <AttachmentChips items={message.attachments} />
+      {message.image ? <GeneratedImageResult status={message.image.status} code={message.image.code} media={image} load={load} /> : null}
       <ThreadLog blocks={assistantBlocks(message, live)} running={live && !message.error} />
       {message.error ? (
         <p className="text-sm text-destructive" role="alert">
@@ -381,7 +439,7 @@ function MessageRow({ message, live }: { message: DirectMessage; live: boolean }
 function assistantBlocks(message: DirectMessage, live: boolean): CompactBlock[] {
   const blocks: CompactBlock[] = []
   const thought = message.reasoning ?? ""
-  const thinking = live && !message.text && !message.error
+  const thinking = live && !message.text && !message.error && !message.image
   if (thought || thinking) {
     blocks.push({
       id: `${message.id}:thought`,
