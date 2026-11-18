@@ -143,6 +143,14 @@ class RegistrationGuards(unittest.TestCase):
             with self.subTest(case=name):
                 self.assert_case_table_fails("test_every_safety_invariant_is_shown_to_catch_something", remaining)
 
+    def test_device_login_keeps_launch_boundary_and_manual_paths(self):
+        remaining = [c for c in mc.CASES if c.name != "device-login-unrequested-launch"]
+        self.assert_case_table_fails("test_every_safety_invariant_is_shown_to_catch_something", remaining)
+        for name in ("default-with-launcher", "opted-in-launch", "opted-in-fallback"):
+            with self.subTest(witness=name):
+                remaining = [c for c in mc.CASES if c.name != "device-login-reach-" + name]
+                self.assert_case_table_fails("test_every_witness_is_checked_alone_on_the_current_design", remaining)
+
     def test_inspector_registry_keeps_observed_faults_and_focus_witnesses(self):
         for name in ("fallback", "project-status", "foreign-row", "signal-owner", "signal-replaced", "signal-deleted", "signal-replayed"):
             with self.subTest(case=name):

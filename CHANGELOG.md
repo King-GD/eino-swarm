@@ -12,6 +12,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Web Gateway sign-in no longer opens the host's system browser on a shared loopback engine. Native desktop still opts in; both surfaces retain the validated manual link. (`F-210`, `C-006`)
+
 - Switching Nuwa projects no longer shows the previous project's connection status or error while the new subscription starts. (`F-136`)
 
 - The local composer model menu stays open after a fixed third-party conversation model is selected, so the conversation can switch back to a personal or original gateway model. Gateway mode still hides the menu when conversation selection is not allowed. (`F-171`, `C-040`)

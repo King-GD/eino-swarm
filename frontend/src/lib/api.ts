@@ -1,5 +1,5 @@
 import { notifyEngineRestoring } from "./engine-startup"
-import { desktopProcessID } from "./shell"
+import { desktopProcessID, desktopShell } from "./shell"
 import { readLocalePref, resolveLocale, t } from "./i18n"
 
 import type {
@@ -905,6 +905,7 @@ export const api = {
     body: JSON.stringify({
       ...(newDevice ? { new_device: true, confirmed: true } : {}),
       ...(enableAccount ? { enable_account: true } : {}),
+      ...(desktopShell() ? { open_browser: true } : {}),
     }),
   }),
   cancelRemoteLogin: () => request<RemoteStatus>("/api/remote/login", { method: "DELETE" }),

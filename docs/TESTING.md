@@ -9169,17 +9169,25 @@ credential activation only after approval. `internal/server/remote_manual_login_
 crosses the real local HTTP adapter: explicit enable, validated public URL,
 unsafe-response refusal, cancellation and manual-token refusal.
 `frontend/e2e/headless-login.spec.ts` runs an offline loopback Gateway and opens
-its confirmation page in the user's browser; no native host browser is available.
+its confirmation page in the user's browser. It asserts the Web request omits
+`open_browser`, even on the loopback engine that can serve desktop windows.
+`TestSharedEngineLoginLaunchesHostBrowserOnlyOnExplicitRequest` uses a real local
+HTTP handler with an instrumented launcher: default and explicit false requests
+leave authorization in the initiating browser, while explicit true with a
+launcher opens exactly the validated link. Opt-in with no launcher still polls.
 It does not establish physical NAS support or live Gateway availability.
 
 `models/account/DeviceLogin.tla` maps Start to `startAccountLogin`/`startLogin`,
-Response to `verifyLoginResponse` then `publishLogin`, HumanApproves/Activate to
+Response to `verifyLoginResponse` then `publishLogin`, OpenHostBrowser to the
+explicit launch intent at the HTTP boundary and the optional Host callback,
+HumanApproves/Activate to
 the Gateway's authorized poll plus private receipt activation, and CancelOrExpire
 to replacement of local terminal status. One attempt ranges over safe/unsafe
 responses and missing/failed/working launchers. TLC checks manual admission,
 validated-only URL publication, terminal link clearing and approval before
-activation; the original browser gate and three seeded missing guards must fail.
-Manual authorization, unsafe refusal and cancellation witnesses establish
+activation and explicit launcher opt-in; the old browser gate and
+unconditional-launch behavior plus the seeded missing guards must fail.
+Manual authorization, explicit launch, unsafe refusal and cancellation witnesses establish
 reachability. No fairness or eventual remote approval is assumed. This bounded
 protocol does not prove URL parser correctness, Go/storage atomicity, cross-attempt
 ownership or unbounded network liveness; the HTTP/race regressions cover those

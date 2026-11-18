@@ -788,7 +788,9 @@ Gateway is an explicit `remote.auth_mode` alongside compatible `legacy` hubs.
 Go stages a private candidate credential before starting a Gateway flow,
 validates the Gateway-returned same-origin verification URL before publishing it
 and optionally opening the host browser, then polls with its secret device code
-and S256 proof. A missing or failed host browser does not stop polling. The
+and S256 proof. The login HTTP handler passes the launcher only on explicit
+request; the desktop shell opts in and Web does not, even on the same listener.
+A missing or failed host browser does not stop polling. The
 renderer receives safe status, the validated public link, code, fingerprint and
 account metadata; terminal status clears the link. The user can authorize a
 headless host from their own browser. Pending/rejected accounts do not

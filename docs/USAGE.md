@@ -887,9 +887,9 @@ supports this explicit switch. Switching closes the old phone page/connection.
 
 The circular **Account** button at the bottom of the left rail opens the
 account menu, even when the conversation list is hidden. **Sign in with
-Gateway** starts sign-in in its own account dialog and optionally opens the host
-browser. For a NAS, container or other headless host, choose **Open sign-in page**
-or copy the displayed link into your own browser. Missing host browser support
+Gateway** starts sign-in in its own account dialog. The desktop app can open the
+system browser. In Web, including a NAS, container or other headless host, choose
+**Open sign-in page** or copy the displayed link into your own browser. Missing host browser support
 does not stop authorization polling. Opening the menu does not start sign-in. Compare the public code and the PC fingerprint
 before authorizing the device. Explicit sign-in enables Gateway and phone
 connections and preserves your configured Hub and other settings. The address

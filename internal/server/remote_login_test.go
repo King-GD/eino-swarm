@@ -44,7 +44,7 @@ func TestAccountLoginLocalLoginUsesStrictIntentAndSafeStatus(t *testing.T) {
 	local := httptest.NewServer(service.Handler())
 	defer local.Close()
 	defer h.app.Remote.Stop()
-	for _, body := range []string{`null`, `{"new_device":true}`, `{"new_device":true,"confirmed":false}`, `{"candidate_token":"must-not-enter-ui"}`, `{} {}`, `{`} {
+	for _, body := range []string{`null`, `{"new_device":true}`, `{"new_device":true,"confirmed":false}`, `{"candidate_token":"must-not-enter-ui"}`, `{"open_browser":"true"}`, `{} {}`, `{`} {
 		response, err := local.Client().Post(local.URL+"/api/remote/login", "application/json", strings.NewReader(body))
 		if err != nil {
 			t.Fatal(err)

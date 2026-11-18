@@ -18,7 +18,7 @@ decisions, asynchronous classification and exact-ID cancellation deduplication.
 models/stream/ManagerCommentary.tla checks the order and privacy of admitted
 manager commentary before it enters the event stream.
 models/account/DeviceLogin.tla checks validated public-link publication, manual
-headless authorization, terminal link clearing and required human approval.
+authorization, explicit browser launch intent, terminal link clearing and required human approval.
 models/release/LinuxRelease.tla checks both Linux architecture targets, name/machine
 agreement, exact runtime evidence for new uploads and immutable public bytes.
 models/account/AccountCatalog.tla checks that a published account catalog
@@ -216,8 +216,8 @@ MODELS = {
         ),
         Model(
             "device-login", ROOT / "models" / "account" / "DeviceLogin.tla",
-            ("RequireBrowser", "PublishUnsafe", "RetainTerminalURL", "BypassApproval"),
-            ("TypeOK", "ManualLoginAvailable", "OnlyValidatedURL", "TerminalHidesURL", "ApprovalRequired"),
+            ("RequireBrowser", "PublishUnsafe", "RetainTerminalURL", "BypassApproval", "LaunchWithoutOptIn"),
+            ("TypeOK", "ManualLoginAvailable", "OnlyValidatedURL", "TerminalHidesURL", "ApprovalRequired", "BrowserLaunchRequiresOptIn"),
             (),
         ),
         Model(
@@ -682,7 +682,7 @@ CASES: tuple[Case, ...] = (
           ("IgnoreActiveController",), "ActiveControllerBusy", model="peer-inventory"),
     _case("peer-inventory-reach-quiet", "witness", witness="NeverForeignQuiet", model="peer-inventory"),
     _case("peer-inventory-reach-refusal", "witness", witness="NeverUnresolvedRefused", model="peer-inventory"),
-    _case("device-login-current", "validated manual login survives absent or failed browser", model="device-login"),
+    _case("device-login-current", "validated manual login and explicit host browser launch", model="device-login"),
     _case("device-login-browser-required", "old browser gate refuses a headless login",
           ("RequireBrowser",), "ManualLoginAvailable", model="device-login"),
     _case("device-login-unsafe-url", "unvalidated Gateway URL reaches local status",
@@ -691,8 +691,13 @@ CASES: tuple[Case, ...] = (
           ("RetainTerminalURL",), "TerminalHidesURL", model="device-login"),
     _case("device-login-bypass", "credentials activate without human approval",
           ("BypassApproval",), "ApprovalRequired", model="device-login"),
+    _case("device-login-unrequested-launch", "observed: login invokes an available host launcher without launch intent",
+          ("LaunchWithoutOptIn",), "BrowserLaunchRequiresOptIn", model="device-login"),
     *(_case(name, "witness", witness=witness, model="device-login") for name, witness in (
         ("device-login-reach-manual", "NeverManualAuthorized"),
+        ("device-login-reach-default-with-launcher", "NeverDefaultAuthorizedWithLauncher"),
+        ("device-login-reach-opted-in-launch", "NeverOptedInLaunch"),
+        ("device-login-reach-opted-in-fallback", "NeverOptedInFallback"),
         ("device-login-reach-unsafe", "NeverUnsafeRejected"),
         ("device-login-reach-cancel", "NeverCancelledPending"),
     )),

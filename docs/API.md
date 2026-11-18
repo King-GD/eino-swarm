@@ -1136,7 +1136,9 @@ It returns `202` with the same safe status. Pending status includes the public
 `user_code`, PC fingerprint and `verification_uri`. The URL must pass the existing
 same-origin path/query allowlist before either publication or optional system-browser
 launch: only the single matching public `desktop_code` parameter is permitted.
-The UI offers a link that can be opened or copied on the user's own device.
+Only an explicit `"open_browser":true` requests a host launch. The desktop shell
+sends this flag; browser tabs and callers that omit it use the public link on
+their own device, even when served by a loopback engine with a launcher.
 A missing host browser or failed launch does not end polling; `browser_unavailable`
 is an advisory on pending status. No Host Token, secret device code or verifier
 is returned to the renderer. Authorized, cancelled, expired, denied and error
