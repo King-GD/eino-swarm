@@ -9,6 +9,7 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 ### Changed
 
 - EASM asset portraits now use a conversation task panel. Cumulative snapshots update the graph, heat trend and supply-chain table, with zoom and selected nodes preserved across live updates. Refresh restores the latest saved portrait.
+- EASM lays out the first batch before drawing it, even when the panel has been open and empty long enough for the graph simulation to stop.
 - Paired phones now open the shared React EASM view in the full-screen Task panels sheet. The graph supports pinch zoom and fit-to-view, keeps the selected node and zoom across snapshots, and picks up the latest saved data when reopened.
 
 - Nuwa collaboration paints tasks, facts and results with different backgrounds, so a fact is no longer the same surface as a result. (`F-136`)

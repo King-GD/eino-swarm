@@ -323,7 +323,8 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
       retainedViewport.current = pendingFit.current ? null : { zoom: graph.zoom(), ...graph.centerAt() }
       const links = view.edges.map((edge) => ({ source: byId.get(edge.source)!, target: byId.get(edge.target)!, confirmed: !!edge.confirmed }))
       stage.dataset.layouts = String(Number(stage.dataset.layouts ?? 0) + 1)
-      graph.warmupTicks(pendingFit.current && !cached ? 300 : 0).graphData({ nodes, links })
+      // An empty panel can finish its simulation before the first results arrive.
+      graph.warmupTicks(pendingFit.current && !cached?.size ? 300 : 0).graphData({ nodes, links })
     } else {
       previousLinks.forEach((link, i) => { link.confirmed = !!view.edges[i].confirmed })
       graph.nodeCanvasObject(graph.nodeCanvasObject()).linkCanvasObject(graph.linkCanvasObject())
