@@ -900,6 +900,11 @@ then releases the final model reply and checks that the latest state persists
 through completion and page reload. It also verifies zoom and node selection
 during live updates and direct rendering in the host page.
 
+When testing larger cumulative batches, verify that new nodes appear around
+their connected branch and that an untouched viewport follows the growing
+layout. After a manual pan or zoom, subsequent snapshots must preserve that
+viewport, the selected node and the existing canvas.
+
 ```sh
 cd frontend
 ZWAI_E2E_EASM=1 npm run e2e -- easm.spec.ts

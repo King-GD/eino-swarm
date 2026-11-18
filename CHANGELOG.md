@@ -17,6 +17,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- New EASM nodes spread from their connected branch as cumulative snapshots arrive. The viewport follows the growing graph until the user pans or zooms.
+
 - The EASM asset portrait tab remains available alongside registered project and conversation task panels after synchronizing main; both graph dependency sets are retained.
 
 - Web Gateway sign-in no longer opens the host's system browser on a shared loopback engine. Native desktop still opts in; both surfaces retain the validated manual link. (`F-210`, `C-006`)

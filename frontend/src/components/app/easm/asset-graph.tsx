@@ -82,6 +82,7 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
   const viewKeyRef = useRef("")
   const labelTimer = useRef(0)
   const lastLabels = useRef(0)
+  const lastAutoFit = useRef(0)
   const retainedViewport = useRef<{ zoom: number; x: number; y: number } | null>(null)
   const activeRef = useRef(active)
   activeRef.current = active
@@ -151,12 +152,12 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
 
   // Fit the whole visible view; the reference never zooms past 1:1, where one
   // node and its label would fill the canvas.
-  const fit = useCallback((duration = 0) => {
+  const fit = useCallback(() => {
     const graph = graphRef.current
     if (!graph || !nodesRef.current.length || !Number.isFinite(nodesRef.current[0].x)) return
     retainedViewport.current = null
-    graph.zoomToFit(duration, 40, (n) => visibleRef.current.has(n.id))
-    if (graph.zoom() > 1) graph.zoom(1, duration)
+    graph.zoomToFit(0, 40, (n) => visibleRef.current.has(n.id))
+    if (graph.zoom() > 1) graph.zoom(1)
     queueLabels()
   }, [queueLabels])
 
@@ -238,6 +239,10 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
       .onEngineTick(() => {
         stage.dataset.layoutMoving = "true"
         if (pendingFit.current) settleFit()
+        if (fitOnStop.current && !userMoved.current && performance.now() - lastAutoFit.current >= 200) {
+          lastAutoFit.current = performance.now()
+          fitRef.current()
+        }
         if (!stage.dataset.viewportMoving && performance.now() - lastLabels.current >= 100) updateLabels()
       })
       .onEngineStop(() => {
@@ -305,6 +310,33 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
       })
     })
     const byId = new Map(nodes.map((n) => [n.id, n]))
+    if (!changedScope && previousNodes.length) {
+      const neighbors = new Map<string, string[]>()
+      for (const { source, target } of view.edges) {
+        const sources = neighbors.get(source) ?? []
+        const targets = neighbors.get(target) ?? []
+        sources.push(target)
+        targets.push(source)
+        neighbors.set(source, sources)
+        neighbors.set(target, targets)
+      }
+      const siblings = new Map([...neighbors].map(([id, ids]) => [id, ids.filter((id) => previousById.has(id)).length]))
+      const root = byId.get(index.rootId ?? "") ?? previousNodes[0]
+      // Grow each new branch from its connected node instead of the layout origin.
+      for (const node of nodes) {
+        if (Number.isFinite(node.x) && Number.isFinite(node.y)) continue
+        const anchor = (neighbors.get(node.id) ?? []).map((id) => byId.get(id))
+          .find((neighbor) => neighbor && Number.isFinite(neighbor.x) && Number.isFinite(neighbor.y)) ?? root
+        const sibling = siblings.get(anchor.id) ?? 0
+        siblings.set(anchor.id, sibling + 1)
+        const outward = Math.atan2((anchor.y ?? 0) - (root.y ?? 0), (anchor.x ?? 0) - (root.x ?? 0))
+        const angle = outward + sibling * Math.PI * (3 - Math.sqrt(5))
+        const distance = 40 * Math.sqrt(sibling + 1)
+        const branchOffset = anchor === root ? 0 : 90
+        node.x = (anchor.x ?? 0) + Math.cos(outward) * branchOffset + Math.cos(angle) * distance
+        node.y = (anchor.y ?? 0) + Math.sin(outward) * branchOffset + Math.sin(angle) * distance
+      }
+    }
     const previousLinks = graph.graphData().links
     const changedTopology = changedScope ||
       nodes.length !== previousNodes.length || nodes.some((node, i) => node !== previousNodes[i]) ||
@@ -312,8 +344,8 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
       view.edges.some((edge, i) => previousLinks[i].source.id !== edge.source || previousLinks[i].target.id !== edge.target)
     nodesRef.current = nodes
     drawState.current.labels = new Map()
-    fitOnStop.current = changedScope || !previousNodes.length
-    pendingFit.current = fitOnStop.current && nodes.length > 0
+    if (changedTopology) fitOnStop.current = changedScope || !previousNodes.length || !userMoved.current
+    pendingFit.current = (changedScope || !previousNodes.length) && nodes.length > 0
     if (pendingFit.current) {
       delete stage.dataset.ready
       stage.style.opacity = "0"
@@ -418,7 +450,7 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
               <button type="button" className={toolButton} aria-label="缩小关联网络" title="缩小" onClick={() => zoomBy(-0.3)}><MaskIcon src={shrinkIcon} /></button>
             </> : null}
             {onExpand ? <button type="button" className={toolButton} aria-label="展开资产图" title="展开资产图" onClick={onExpand}><MaskIcon src={expandIcon} /></button> : null}
-            <button type="button" className={toolButton} aria-label="适配视图" title="适配视图" onClick={() => fit(mobile ? 0 : 1000)}><MaskIcon src={fitIcon} /></button>
+            <button type="button" className={toolButton} aria-label="适配视图" title="适配视图" onClick={fit}><MaskIcon src={fitIcon} /></button>
           </div>
           <button type="button" aria-pressed={local} onClick={() => setLocal(!local)}
             className="absolute top-3 right-3 z-10 h-7 rounded-full border bg-card/95 px-2.5 text-xs text-muted-foreground hover:border-primary hover:text-primary aria-pressed:border-primary aria-pressed:text-primary">
