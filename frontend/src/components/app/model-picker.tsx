@@ -1,5 +1,4 @@
 import { refreshCapabilities } from "@/lib/refresh-capabilities"
-import { capabilityConfigurable } from "@/lib/capabilities"
 import { policyConfigurable } from "@/lib/model-policy"
 import { FocusScope } from "@radix-ui/react-focus-scope"
 import { Check, ChevronDown, Loader2, Pencil, RefreshCw } from "lucide-react"
@@ -50,8 +49,10 @@ export function ModelPicker({
   const t = useT()
   const account = useApp((s) => s.meta?.account_models)
   const policy = useApp((s) => s.meta?.model_policy)
-  const selectedRow = models.find(row => row.provider_id === providerId && (!model || row.model === model)) ?? models.find(row => row.default)
-  const locked = officialModelLock(account, policy) || (policy?.mode === "gateway" && !policyConfigurable(policy, "conversation")) || (selectedRow?.source === "account" && !capabilityConfigurable(selectedRow.capabilities, "conversation"))
+  // A fixed third-party conversation binding stays selectable in local mode.
+  // Locking the whole menu from that row's capabilities traps the composer
+  // on the first choice. Gateway policy and an official profile still hide it.
+  const locked = officialModelLock(account, policy) || (policy?.mode === "gateway" && !policyConfigurable(policy, "conversation"))
   const [open, setOpen] = useState(false)
   const [dialogMenu, setDialogMenu] = useState(false)
   const [busy, setBusy] = useState(false)

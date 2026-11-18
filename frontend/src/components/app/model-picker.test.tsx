@@ -155,6 +155,65 @@ describe("ModelPicker", () => {
     expect(headings).toEqual(["Server", "One", "Two"])
   })
 
+  it("keeps the menu open after a fixed third-party conversation model is selected", () => {
+    useApp.setState({
+      meta: {
+        version: "test", mode: "desktop", mock: false, configured: true, default_provider: "a",
+        reasoning_levels: [], data_dir: "", capabilities: {}, swarm: {} as Meta["swarm"],
+        model_policy: { mode: "local", configurable: true, ready: true, scope: "local" },
+      },
+    })
+    const onChange = vi.fn()
+    const fixed: ModelInfo = {
+      id: "gateway:partner\tconversation",
+      provider_id: "gateway:partner",
+      provider_label: "Partner",
+      label: "conversation",
+      model: "conversation",
+      ready: true,
+      source: "account",
+      catalog_group: "third_party",
+      capabilities: {
+        authorized: true, available: true, configurable: false,
+        capabilities: { conversation: { supported: true, available: true, configurable: false, endpoints: ["chat_completions"] } },
+      },
+    }
+    const rows = [fixed, ...models.map((row) => ({ ...row, source: "provider" as const, default: false }))]
+    const view = render(<ModelPicker models={rows} providerId="a" model="alpha" onChange={onChange} />)
+    fireEvent.click(screen.getByRole("button", { name: "Model" }))
+    fireEvent.click(screen.getByRole("option", { name: /conversation/ }))
+    expect(onChange).toHaveBeenCalledWith("gateway:partner", "conversation")
+    view.rerender(<ModelPicker models={rows} providerId="gateway:partner" model="conversation" onChange={onChange} />)
+    const button = screen.getByRole("button", { name: "Model" })
+    expect(button).toHaveTextContent("conversation")
+    expect(button).toHaveAttribute("aria-haspopup", "listbox")
+    fireEvent.click(button)
+    expect(screen.getByRole("option", { name: /alpha/ })).toBeTruthy()
+    useApp.setState({ meta: undefined })
+  })
+
+  it("hides the menu when gateway policy disallows conversation selection", () => {
+    useApp.setState({
+      meta: {
+        version: "test", mode: "desktop", mock: false, configured: true, default_provider: "",
+        reasoning_levels: [], data_dir: "", capabilities: {}, swarm: {} as Meta["swarm"],
+        model_policy: {
+          mode: "gateway", configurable: true, ready: true, scope: "gateway:managed",
+          capabilities: {
+            authorized: true, available: true, configurable: false,
+            capabilities: { conversation: { supported: true, available: true, configurable: false, endpoints: ["chat_completions"] } },
+          },
+        },
+      },
+    })
+    render(<ModelPicker models={models} providerId="a" model="alpha" onChange={vi.fn()} />)
+    const button = screen.getByRole("button", { name: "Model" })
+    expect(button).not.toHaveAttribute("aria-haspopup")
+    fireEvent.click(button)
+    expect(screen.queryByPlaceholderText("Search models")).toBeNull()
+    useApp.setState({ meta: undefined })
+  })
+
   it("shows the official name and does not open a menu", () => {
     useApp.setState({
       meta: {

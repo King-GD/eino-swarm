@@ -8,6 +8,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- The local composer model menu stays open after a fixed third-party conversation model is selected, so the conversation can switch back to a personal or original gateway model. Gateway mode still hides the menu when conversation selection is not allowed. (`F-171`, `C-040`)
+
 - Mermaid diagrams that exceed the SVG paint budget stay as source instead of
   becoming an image. An unbounded diagram was painted on the WebKit page thread
   and could leave the desktop window unable to accept clicks or resizing.
