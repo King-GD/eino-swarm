@@ -54,7 +54,7 @@ test("embedding configuration alone enables search and clearing it survives relo
     const dialog = page.getByRole("dialog")
     await dialog.getByRole("tab", { name: "Models", exact: true }).click()
     await expect(dialog.getByText("Image generation", { exact: true })).toBeVisible()
-    await expect(dialog.getByText(/client does not yet support image generation/)).toBeVisible()
+    await expect(dialog.getByRole("combobox", { name: "Image generation", exact: true })).toContainText("Use default")
     await expect(dialog.getByLabel("Translation Provider", { exact: true })).toBeVisible()
     await expect(dialog.getByRole("switch", { name: "Semantic search", exact: true })).toHaveCount(0)
     await expect(dialog.getByRole("heading", { name: "Conversation search", exact: true })).toHaveCount(0)
