@@ -25,8 +25,12 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
   do not save or reset the cap to its default. (`F-330`, `C-009`, #175)
 
 - MCP attempts one session renewal for a verified expiry. A failed renewal
-  or other tool failure stops the task and prompts the user to repair the
-  connection before retrying. (`F-176`, `C-041`, #176)
+  stops the task and prompts the user to repair the connection before
+  retrying. (`F-176`, `C-041`, #176)
+
+- A Streamable HTTP MCP call deadline now records an unknown remote outcome
+  without replaying the call. The same turn can make a later independent call
+  on the session. (`F-176`, `C-041`, #177)
 
 - An automatic worker-collection resume withdraws its waiter before releasing the runtime lock. A human decline that arrives after that receipt is refused, so the wait log cannot contain both terminal receipts. (`F-150`, `C-019`)
 

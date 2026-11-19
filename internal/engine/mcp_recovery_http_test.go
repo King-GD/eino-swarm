@@ -34,7 +34,10 @@ func TestMCPToolReauthenticatesOnlyForAnExpiredSession(t *testing.T) {
 		{name: "direct renews one expired binding", first: http.StatusNotFound, direct: true, wantCalls: 2, wantExec: 1, ok: true},
 		{name: "repeat expiration pauses the task", first: http.StatusNotFound, next: http.StatusNotFound, wantCalls: 2},
 		{name: "authentication failure pauses the task", first: http.StatusUnauthorized, wantCalls: 1},
-		{name: "timeout pauses without retry", timeout: true, wantCalls: 1, wantExec: 1},
+		{name: "proxy continues after a call deadline", timeout: true, wantCalls: 2, wantExec: 2, ok: true},
+		{name: "direct continues after a call deadline", timeout: true, direct: true, wantCalls: 2, wantExec: 2, ok: true},
+		{name: "expiry after a deadline renews only the later call", timeout: true, next: http.StatusNotFound, wantCalls: 3, wantExec: 2, ok: true},
+		{name: "authentication failure after a deadline stops the task", timeout: true, next: http.StatusUnauthorized, wantCalls: 2, wantExec: 1},
 		{name: "remote tool error pauses without retry", toolError: true, wantCalls: 1, wantExec: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -54,9 +57,15 @@ func TestMCPToolReauthenticatesOnlyForAnExpiredSession(t *testing.T) {
 					}
 					return &mcp.CallToolResult{IsError: tc.toolError, Content: []mcp.Content{&mcp.TextContent{Text: "lookup verified"}}}, nil
 				})
+			server.AddTool(&mcp.Tool{Name: "verify", InputSchema: map[string]any{"type": "object"}},
+				func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+					ran.Add(1)
+					return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "independent lookup verified"}}}, nil
+				})
 			handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
 			var mu sync.Mutex
 			var requestedSessions []string
+			var requestedTools []string
 			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method == http.MethodPost {
 					raw, err := io.ReadAll(r.Body)
@@ -65,7 +74,10 @@ func TestMCPToolReauthenticatesOnlyForAnExpiredSession(t *testing.T) {
 						w.WriteHeader(http.StatusBadRequest)
 						return
 					}
-					var method struct{ Method string }
+					var method struct {
+						Method string
+						Params struct{ Name string }
+					}
 					if err := json.Unmarshal(raw, &method); err != nil {
 						t.Errorf("decode fixture request: %v", err)
 						w.WriteHeader(http.StatusBadRequest)
@@ -75,11 +87,15 @@ func TestMCPToolReauthenticatesOnlyForAnExpiredSession(t *testing.T) {
 					if method.Method == "tools/call" {
 						mu.Lock()
 						requestedSessions = append(requestedSessions, r.Header.Get("Mcp-Session-Id"))
+						requestedTools = append(requestedTools, method.Params.Name)
 						count := len(requestedSessions)
 						mu.Unlock()
-						code := tc.next
-						if count == 1 {
+						var code int
+						switch count {
+						case 1:
 							code = tc.first
+						case 2:
+							code = tc.next
 						}
 						if tc.first == http.StatusUnauthorized && r.Header.Get("Authorization") != "Bearer repaired-fixture" {
 							code = http.StatusUnauthorized
@@ -98,15 +114,25 @@ func TestMCPToolReauthenticatesOnlyForAnExpiredSession(t *testing.T) {
 			s := config.MCPServer{ID: "evidence", Enabled: true, Transport: "streamable_http", URL: remote.URL, TimeoutSeconds: 2}
 			_, toolName := mcpclient.ProxyNames(s.ID)
 			args := `{"name":"lookup","arguments":{}}`
+			nextTool, nextArgs := toolName, `{"name":"verify","arguments":{}}`
 			if tc.direct {
 				toolName = mcpclient.DirectToolName(s.ID, "lookup")
 				args = "{}"
+				nextTool, nextArgs = mcpclient.DirectToolName(s.ID, "verify"), "{}"
 			}
 			e, requests := newScheduleCompletionHTTPEngine(t, func(w http.ResponseWriter, _ *http.Request, step int, request scheduleCompletionRequest) {
 				switch step {
 				case 1:
 					nuwaValidationTool(w, request, "lookup-call", toolName, args)
 				case 2:
+					if tc.timeout {
+						receipt := nuwaValidationReceipt(request, "lookup-call")
+						if !strings.Contains(receipt, `"code":"timeout"`) || !strings.Contains(receipt, `"outcome":"unknown"`) {
+							t.Errorf("the model lost the timeout or uncertain outcome: %q", receipt)
+						}
+						nuwaValidationTool(w, request, "independent-call", nextTool, nextArgs)
+						return
+					}
 					if tc.first == http.StatusUnauthorized {
 						nuwaValidationTool(w, request, "repaired-lookup", toolName, args)
 						return
@@ -116,6 +142,9 @@ func TestMCPToolReauthenticatesOnlyForAnExpiredSession(t *testing.T) {
 					}
 					nuwaValidationTool(w, request, "next-tool", "exec", `{"command":"printf should-run-only-after-a-success"}`)
 				default:
+					if tc.timeout && !strings.Contains(nuwaValidationReceipt(request, "independent-call"), "independent lookup verified") {
+						t.Error("the model did not receive the later independent result")
+					}
 					if tc.first == http.StatusUnauthorized && !strings.Contains(nuwaValidationReceipt(request, "repaired-lookup"), "lookup verified") {
 						t.Error("the human retry did not receive the repaired result")
 					}
@@ -146,20 +175,59 @@ func TestMCPToolReauthenticatesOnlyForAnExpiredSession(t *testing.T) {
 			waitSettled(t, e, thread.ID)
 			mu.Lock()
 			ids := append([]string(nil), requestedSessions...)
+			toolNames := append([]string(nil), requestedTools...)
 			mu.Unlock()
-			if len(ids) != tc.wantCalls || ids[0] == "" || (len(ids) == 2 && ids[0] == ids[1]) || ran.Load() != tc.wantExec {
-				t.Errorf("MCP wire attempts=%d, distinct second session=%t, executed=%d", len(ids), len(ids) == 2 && ids[0] != ids[1], ran.Load())
+			if len(ids) != tc.wantCalls || ids[0] == "" || ran.Load() != tc.wantExec {
+				t.Fatalf("MCP wire calls=%v, executed=%d, status=%s", toolNames, ran.Load(), finished.Status)
+			}
+			if tc.timeout {
+				if toolNames[0] != "lookup" || toolNames[1] != "verify" || ids[1] != ids[0] {
+					t.Error("the deadline replayed the original call or changed the session for the next call")
+				}
+				if len(ids) == 3 && (toolNames[2] != "verify" || ids[2] == "" || ids[2] == ids[0]) {
+					t.Error("confirmed expiry did not renew the session for just the later call")
+				}
+				events, err := e.store.ListTurnEvents(turn.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var timeoutReceipts int
+				for _, event := range events {
+					if event.Kind == store.KindMCPExecutionBlocked && event.ToolCallID == "lookup-call" {
+						t.Error("the timeout left a durable execution block")
+					}
+					if event.Kind == "tool_result" && event.ToolCallID == "lookup-call" &&
+						strings.Contains(event.Text, `"code":"timeout"`) && strings.Contains(event.Text, `"outcome":"unknown"`) {
+						timeoutReceipts++
+					}
+				}
+				if timeoutReceipts != 1 {
+					t.Errorf("durable timeout receipts = %d, want 1", timeoutReceipts)
+				}
+			} else if len(ids) == 2 && (ids[1] == "" || ids[0] == ids[1]) {
+				t.Error("confirmed expiry did not renew the session")
 			}
 			if !tc.ok {
 				recovered := e.restoredMCPFailure(turn.ID, nil)
 				if recovered == nil || !strings.Contains(recovered.Error(), "MCP") {
 					t.Errorf("restore lost the blocking failure: %v", recovered)
 				}
-				if finished.Status != store.TurnError || len(requests.snapshot()) != 1 || !strings.Contains(finished.Error, "MCP") {
+				wantRequests := 1
+				if tc.timeout {
+					wantRequests = 2
+					if recovered == nil || !strings.Contains(recovered.Error(), "call_failed") {
+						t.Errorf("restore did not retain the later authentication failure: %v", recovered)
+					}
+				}
+				if finished.Status != store.TurnError || len(requests.snapshot()) != wantRequests || !strings.Contains(finished.Error, "MCP") {
 					t.Fatalf("MCP failure did not stop the task: status=%s model calls=%d error=%q", finished.Status, len(requests.snapshot()), finished.Error)
 				}
 			} else if finished.Status != store.TurnDone || len(requests.snapshot()) != 3 {
 				t.Fatalf("recovered task did not finish: status=%s model calls=%d error=%q", finished.Status, len(requests.snapshot()), finished.Error)
+			} else if tc.timeout {
+				if recovered := e.restoredMCPFailure(turn.ID, nil); recovered != nil {
+					t.Errorf("recovery would block after a call deadline: %v", recovered)
+				}
 			}
 
 			if tc.first == http.StatusUnauthorized {

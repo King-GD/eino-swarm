@@ -1176,10 +1176,16 @@ workspace, retaining at most eight idle workspace sessions per server/configurat
 Different servers do not evict each other's sessions. Reload retires unused old
 configurations without interrupting calls in flight, and engine shutdown closes
 remaining sessions. Cache eviction or connection failure can also close an entry.
-Existing tools then return `session_expired`: they never silently reconnect a
-stateful server or replay an uncertain call. A later turn rebuilds its toolset;
-there is no promise that a session survives between tool calls. The composer
-and Settings publish the same built-in exception lists immediately. Settings
+Existing tools report `session_expired` for a stale entry. An executing task can
+renew a binding once after local rejection of a stale entry or
+protocol-confirmed expiry.
+A Streamable HTTP tool call's local deadline records `timeout` with an unknown
+remote outcome and guidance to verify it before repeating the operation.
+It leaves the session and task admission available for subsequent independent
+calls. A confirmed closure or failed renewal follows the task failure path.
+A later turn rebuilds its toolset, and idle eviction can retire a session
+between calls. The composer and Settings publish the same built-in exception
+lists immediately. Settings
 owns each MCP server's `enabled` flag. The composer lists that server's remote
 tools and stores switched-off names on `disabled_tools`. A directly mounted
 function with that name is removed from the next model request. On the catalog

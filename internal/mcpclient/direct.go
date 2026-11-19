@@ -209,6 +209,13 @@ func (h *sessionHolder) runCall(ctx context.Context, name string, arguments map[
 	if code == "ok" {
 		return jsonResult(result)
 	}
+	if code == "timeout" && h.server.Transport == "streamable_http" {
+		return jsonResult(map[string]any{"error": &Error{
+			Code: code, ServerID: h.server.ID,
+			Outcome: "unknown",
+			Message: "Verify the remote operation's outcome before repeating it.",
+		}})
+	}
 	markExecutionFailed(ctx, code, h.server.ID)
 	if result != nil {
 		return jsonResult(result)
@@ -277,10 +284,13 @@ func (h *sessionHolder) callOnce(ctx context.Context, name string, arguments map
 			code = "cancelled"
 		case errors.Is(err, mcp.ErrSessionMissing):
 			code = "session_expired"
-		case e.ctx.Err() != nil:
+		case e.ctx.Err() != nil || errors.Is(err, mcp.ErrConnectionClosed):
 			code = "closed"
-		case errors.Is(callCtx.Err(), context.DeadlineExceeded):
+		case errors.Is(callCtx.Err(), context.DeadlineExceeded) && errors.Is(err, context.DeadlineExceeded):
 			code = "timeout"
+			// Streamable HTTP binds this deadline to the individual POST.
+			// The SDK retires the request without closing the shared session.
+			broken = e.server.Transport != "streamable_http"
 		default:
 			code = "call_failed"
 		}
@@ -289,7 +299,7 @@ func (h *sessionHolder) callOnce(ctx context.Context, name string, arguments map
 	}
 	// Block admission at the adapter's observation, before logging or
 	// releasing this entry can let a sibling try another action.
-	if code != "ok" && code != "session_expired" {
+	if broken && code != "session_expired" || code == "tool_error" {
 		markExecutionFailed(ctx, code, h.server.ID)
 	}
 	h.logCall(ctx, started, e.server.Timeout(), name, "call", code, digest)

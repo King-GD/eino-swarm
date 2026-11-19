@@ -1,21 +1,21 @@
 ---------------------------- MODULE MCPCallRecovery ----------------------------
 EXTENDS Naturals
 
-(* A mounted execution tool sees one of three verified outcomes. "expired"
-   is a protocol rejection before execution, "unknown" may have an effect.
-   One replacement session is allowed for the call. Other failures reserve
-   the task's admission gate until the human starts an explicit retry.
+(* "expired" is a protocol rejection before execution. A Streamable HTTP
+   call's local "deadline" leaves the effect unknown and the session usable
+   by independent work. Other failures reserve the task's admission gate.
    A manager request already admitted receives cancellation on block. *)
 CONSTANTS
     RetryUncertain,
     IgnoreBlock,
     RenewAgain,
-    LeaveManagerRunning
+    LeaveManagerRunning,
+    BlockDeadline
 
 VARIABLES phase, attempts, first, result, nextWork, cancelManager
 vars == <<phase, attempts, first, result, nextWork, cancelManager>>
 
-Outcomes == {"ok", "expired", "unknown"}
+Outcomes == {"ok", "expired", "deadline", "unknown"}
 TypeOK ==
     /\ phase \in {"send", "resolve", "blocked", "done"}
     /\ attempts \in 0..4
@@ -27,7 +27,9 @@ VerifiedBeforeRetry == attempts < 2 \/ first = "expired"
 OneReplacement == attempts <= 2
 NoWorkAfterBlock == phase /= "blocked" \/ ~nextWork
 ManagerCancellationRequested == phase /= "blocked" \/ cancelManager
-NeverRecovered == ~(phase = "done" /\ attempts = 2)
+DeadlineKeepsAdmission == result /= "deadline" \/ phase # "blocked"
+NoWorkAfterDeadline == ~(result = "deadline" /\ nextWork)
+NeverRecovered == ~(phase = "done" /\ attempts = 2 /\ result = "ok")
 NeverBlocked == phase /= "blocked"
 
 Init ==
@@ -52,7 +54,8 @@ Decide ==
     /\ phase' = IF result = "ok" THEN "done"
        ELSE IF (result = "expired" \/ RetryUncertain) /\ (attempts = 1 \/ RenewAgain)
             THEN "send"
-            ELSE "blocked"
+            ELSE IF result = "deadline" /\ ~BlockDeadline THEN "done"
+                 ELSE "blocked"
     /\ cancelManager' = (phase' = "blocked" /\ ~LeaveManagerRunning)
     /\ UNCHANGED <<attempts, first, result, nextWork>>
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -18,9 +19,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// A support trace needs to distinguish a deadline on the wire from subsequent
-// refusals by the retired toolset without copying task data into the engine log.
-func TestMCPDiagnosticsCorrelateTimeoutAndExpiredSessionWithoutSecrets(t *testing.T) {
+// A support trace distinguishes the timed-out request from later work on the
+// same session without copying task data into the engine log.
+func TestMCPDiagnosticsCorrelateTimeoutAndLaterSuccessWithoutSecrets(t *testing.T) {
 	const (
 		argumentSecret = "private-tool-argument"
 		headerSecret   = "private-auth-header"
@@ -28,12 +29,19 @@ func TestMCPDiagnosticsCorrelateTimeoutAndExpiredSessionWithoutSecrets(t *testin
 	)
 	var calls atomic.Int32
 	var verifiedRequest atomic.Bool
+	sessions := make(chan string, 4)
 	release := make(chan struct{})
 	server := mcp.NewServer(&mcp.Implementation{Name: "diagnostics", Version: "test"}, nil)
 	server.AddTool(&mcp.Tool{Name: "lookup", InputSchema: map[string]any{"type": "object"}}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args struct {
+			Request     string
+			Independent bool
+		}
+		verifiedRequest.Store(json.Unmarshal(req.Params.Arguments, &args) == nil && args.Request == argumentSecret)
 		calls.Add(1)
-		var args map[string]string
-		verifiedRequest.Store(json.Unmarshal(req.Params.Arguments, &args) == nil && args["request"] == argumentSecret)
+		if args.Independent {
+			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "verified"}}}, nil
+		}
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -46,6 +54,19 @@ func TestMCPDiagnosticsCorrelateTimeoutAndExpiredSessionWithoutSecrets(t *testin
 	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") == headerSecret && r.URL.Query().Get("key") == endpointSecret {
 			verifiedEndpoint.Store(true)
+		}
+		if r.Method == http.MethodPost {
+			var request struct{ Method string }
+			var raw bytes.Buffer
+			if err := json.NewDecoder(io.TeeReader(r.Body, &raw)).Decode(&request); err != nil {
+				t.Errorf("decode MCP request: %v", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			r.Body = io.NopCloser(io.MultiReader(&raw, r.Body))
+			if request.Method == "tools/call" {
+				sessions <- r.Header.Get("Mcp-Session-Id")
+			}
 		}
 		handler.ServeHTTP(w, r)
 	}))
@@ -69,23 +90,23 @@ func TestMCPDiagnosticsCorrelateTimeoutAndExpiredSessionWithoutSecrets(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, tc := range []struct{ callID, code string }{
-		{callID: "call-timeout", code: "timeout"},
-		{callID: "call-expired", code: "session_expired"},
-	} {
-		resultBody := invokeDiagnosticTool(t, ctx, node, tc.callID, toolName(configured.ID, "call_tool"), `{"name":"lookup","arguments":{"request":"`+argumentSecret+`"}}`)
-		var result struct {
-			Error *Error `json:"error"`
-		}
-		if err := json.Unmarshal([]byte(resultBody), &result); err != nil || result.Error == nil || result.Error.Code != tc.code {
-			t.Fatalf("call %s: want %s, got %q (%v)", tc.callID, tc.code, resultBody, err)
-		}
+	proxy := toolName(configured.ID, "call_tool")
+	result := invokeDiagnosticTool(t, ctx, node, "call-timeout", proxy, `{"name":"lookup","arguments":{"request":"`+argumentSecret+`"}}`)
+	if !strings.Contains(result, `"code":"timeout"`) || !strings.Contains(result, `"outcome":"unknown"`) {
+		t.Errorf("missing timeout and unknown outcome: %q", result)
 	}
-	if calls.Load() != 1 || !verifiedRequest.Load() || !verifiedEndpoint.Load() {
+	next := invokeDiagnosticTool(t, ctx, node, "call-verify", proxy, `{"name":"lookup","arguments":{"request":"`+argumentSecret+`","independent":true}}`)
+	if !strings.Contains(next, "verified") {
+		t.Errorf("session did not serve the next call: %q", next)
+	}
+	if calls.Load() != 2 || !verifiedRequest.Load() || !verifiedEndpoint.Load() || len(sessions) != 2 {
 		t.Fatalf("wire calls = %d, argument delivered = %v, endpoint/header delivered = %v", calls.Load(), verifiedRequest.Load(), verifiedEndpoint.Load())
 	}
+	if first, second := <-sessions, <-sessions; first == "" || first != second {
+		t.Fatal("the two calls did not use the same MCP session")
+	}
 	outcomes := readDiagnosticOutcomes(t, output.String(), argumentSecret, headerSecret, endpointSecret, httpServer.URL)
-	for callID, code := range map[string]string{"call-timeout": "timeout", "call-expired": "session_expired"} {
+	for callID, code := range map[string]string{"call-timeout": "timeout", "call-verify": "ok"} {
 		record := outcomes[callID]
 		if record.ServerID != configured.ID || record.Transport != configured.Transport || record.Code != code {
 			t.Errorf("call %s: missing correlated %s diagnostic, got %+v", callID, code, record)

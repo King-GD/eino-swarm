@@ -37,6 +37,8 @@ type Catalog struct {
 type Error struct {
 	Code     string `json:"code"`
 	ServerID string `json:"server_id"`
+	Outcome  string `json:"outcome,omitempty"`
+	Message  string `json:"message,omitempty"`
 }
 
 func (e *Error) Error() string { return fmt.Sprintf("mcp: %s (%s)", e.Code, e.ServerID) }

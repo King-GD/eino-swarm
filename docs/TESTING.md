@@ -289,17 +289,25 @@ respond to cancellation. The idle cache does not guarantee continuous
 state between tool calls. `TestMCPToolReauthenticatesOnlyForAnExpiredSession`
 drives direct and proxy mounting through the real model HTTP adapter and MCP
 Streamable HTTP server. It checks that confirmed session expiry renews once,
-persistent expiry, rejection, timeout and remote errors block the task, and
-a failure is retained across recovery until the user repairs the connection
-and requests a retry. `TestWorkerMCPFailureBlocksItsManagerAndKeepsTheOriginalCall`
+persistent expiry, rejection and remote errors block the task, and a blocking
+failure is retained across recovery until the user repairs the connection and
+requests a retry. A call deadline leaves one durable `timeout` receipt with
+an unknown outcome. The next independent call uses the original session in
+both mounting modes, and a subsequent confirmed expiry renews only that later
+call. Later authentication failures still block the task.
+`TestMCPDiagnosticsCorrelateTimeoutAndLaterSuccessWithoutSecrets` checks both
+call IDs in the engine log and verifies that secrets stay out of diagnostics.
+`TestWorkerMCPFailureBlocksItsManagerAndKeepsTheOriginalCall`
 confirms that the worker failure cancels the manager's in-flight HTTP request
 and preserves the worker's original tool call.
 `TestExpiredBindingRefreshesSavedHeadersWithoutRedirecting`
 checks the new wire credentials and refuses a changed URL.
 `models/mcp/MCPCallRecovery.tla` limits a modeled call to one replacement
-after a verified rejection and blocks subsequent work after failure. Its
+after a verified rejection and admits independent work after a call deadline.
+Other failures block subsequent work. Its
 negative cases reintroduce uncertain replay, unlimited renewal, continued
-admission and a missing cancellation request. The model covers one logical
+admission after a blocking failure, a missing cancellation request and the
+old deadline block. The model covers one logical
 call and its admission and cancellation decisions. Go tests cover the wire
 sessions and cancellation of the active model request.
 `internal/engine/tool_offer_http_test.go` drives a real manager turn through
