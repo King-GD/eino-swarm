@@ -265,6 +265,7 @@ func (t *externalTool) InvokableRun(ctx context.Context, args string, _ ...tool.
 	defer cancel()
 	stop := context.AfterFunc(e.ctx, cancel)
 	defer stop()
+	complete := t.holder.manager.startToolCall(ctx, t.holder.server.ID, request.Name, request.Arguments)
 	result, err, digest := e.callTool(callCtx, session, &mcp.CallToolParams{Name: request.Name, Arguments: request.Arguments}, t.holder.manager.log)
 	if err != nil {
 		broken = true
@@ -284,6 +285,9 @@ func (t *externalTool) InvokableRun(ctx context.Context, args string, _ ...tool.
 		code = "tool_error"
 	}
 	t.logCall(ctx, started, request.Name, "call", code, digest)
+	if complete != nil {
+		complete(result)
+	}
 	return jsonResult(result), nil
 }
 

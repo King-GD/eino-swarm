@@ -9,6 +9,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 ### Changed
 
 - EASM asset portraits now use a conversation task panel. Cumulative snapshots update the graph, heat trend and supply-chain table, with zoom and selected nodes preserved across live updates. Refresh restores the latest saved portrait.
+- EASM can show a known subject when the panel opens and grow its graph during collection. FOFA organization lookups add returned organizations and their domains as each lookup completes. Short-name searches retain the returned legal entities with pending links to the target.
+- EASM preserves ICP evidence as registrant → ICP filing → domain. Domain cards show the filing as a linked trait and omit the domain's own identity from effective traits.
+- EASM publishes heat, supply-chain product counts and asset/IP totals directly from supported MCP replies before the model continues. Each metric request selects its query automatically, isolating current metrics from late replies for earlier ranges; rule names remain bound to the provider that returned their product IDs.
+- EASM preserves legal parent/subsidiary direction, branches under their legal owner, and explicit certificate validity and matching flags from structured source records. Shared certificates retain each service's observations, with summary flags only for consistent known values. Ordinary portrait tasks use the panel workflow, with bulk ledgers and file reports loaded only for those requested deliverables.
 - EASM lays out the first batch before drawing it, even when the panel has been open and empty long enough for the graph simulation to stop.
 - Paired phones now open the shared React EASM view in the full-screen Task panels sheet. The graph supports pinch zoom and fit-to-view, keeps the selected node and zoom across snapshots, and picks up the latest saved data when reopened.
 
@@ -16,6 +20,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - The desktop and Web inspector registers project collaboration and conversation task panels through one entry point. If a selected entry disappears, the inspector shows Agents without changing the requested tab. (`F-136`, `F-137`)
 
 ### Fixed
+
+- The EASM sidebar draws the latest graph when reopened after snapshots arrive while its tab is hidden.
 
 - New EASM nodes spread from their connected branch as cumulative snapshots arrive. The viewport follows the growing graph until the user pans or zooms.
 
@@ -199,9 +205,7 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
   result (`frontend/public/easm-data.json`, gitignored because it is real
   enterprise data): relationship graph with kind filters, local view, search and
   per-node details, an asset-heat trend, and the third-party supply table with
-  tag evidence. The result shape is documented in
-  [docs/EASM_PROTOCOL.md](docs/EASM_PROTOCOL.md); there is no publish endpoint,
-  event or stored copy — the tab is a viewer for that file.
+  tag evidence. The tab reads the local file directly.
 
 - Desktop and phone negotiate independent preset/Gateway capabilities with
   schema 1 and ten-role defaults. Features and selectors follow actual grants,

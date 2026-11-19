@@ -59,7 +59,7 @@ need one.
 Open **Task panels → EASM** in a conversation with an active asset portrait.
 For example, ask the task to publish a first snapshot with the subject and
 update the portrait as each batch of results arrives. See the
-[EASM schema and example](docs/EASM_PROTOCOL.md).
+[task panel guide](docs/TASK_PANELS.md#easm).
 
 ```bash
 export OPENAI_BASE_URL=https://your-endpoint/v1

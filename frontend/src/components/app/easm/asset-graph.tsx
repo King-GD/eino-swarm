@@ -6,8 +6,9 @@ import expandIcon from "../../../assets/easm/expand.svg"
 import shrinkIcon from "../../../assets/easm/shrink.svg"
 import fitIcon from "../../../assets/easm/zoomfit.svg"
 import { Input } from "../../ui/input"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip"
 import {
-  displayKind, graphLabel, highlightIds, kindLabel, layoutOrder, localView, nodeRadius, searchNodes, summaryStats, visibleIds, wrapLabel,
+  displayKind, graphLabel, highlightIds, kindLabel, layoutOrder, nodeRadius, searchNodes, summaryStats, visibleIds, wrapLabel,
   type EasmIndex,
 } from "../../../lib/easm/model"
 import type { DisplayKind, EasmResult } from "../../../lib/easm/types"
@@ -20,7 +21,6 @@ import { KindIcon, NodeCard } from "./node-card"
 export interface GraphElement extends HTMLDivElement { __easmNodePoint?: (id: string) => { x: number; y: number } | undefined }
 
 type Focus = { id: string; mode: "path" | "node" } | null
-type Position = { x: number; y: number; vx?: number; vy?: number }
 
 const MIN_ZOOM = 0.01
 const MAX_ZOOM = 1.5
@@ -61,7 +61,6 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
   onExpand?: () => void
 }) {
   const [hidden, setHidden] = useState<Set<DisplayKind>>(() => new Set())
-  const [local, setLocal] = useState(false)
   const [selected, setSelected] = useState<string | null>(index.rootId ?? result.nodes[0]?.id ?? null)
   const [focus, setFocus] = useState<Focus>(null)
   const [cardId, setCardId] = useState<string | null>(null)
@@ -78,8 +77,6 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
   const visibleRef = useRef<Set<string>>(new Set())
   const hoveredRef = useRef<string | null>(null)
   const focusRef = useRef({ selected, cardId })
-  const positions = useRef(new Map<string, Map<string, Position>>())
-  const viewKeyRef = useRef("")
   const labelTimer = useRef(0)
   const lastLabels = useRef(0)
   const lastAutoFit = useRef(0)
@@ -87,21 +84,13 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
   const activeRef = useRef(active)
   activeRef.current = active
   const fitOnStop = useRef(false)
-  // First data and an explicitly changed scope are fitted before they appear.
+  // First data is fitted before it appears.
   const pendingFit = useRef(false)
   // The settled layout is fitted again unless the user has panned or zoomed.
   const userMoved = useRef(false)
   focusRef.current = { selected: currentSelection, cardId }
 
-  // Large graphs only show direct neighbours in the local view, as in the reference.
-  const hops = result.nodes.length > 500 ? 1 : 2
-  // A click in the full view must not rebuild the graph: that restarts the
-  // layout and the canvas goes blank. Only the local view depends on selection.
-  const scope = local ? currentSelection : null
-  const view = useMemo(() => {
-    const scoped = scope ? localView(result.nodes, result.edges, scope, hops) : result
-    return layoutOrder(scoped.nodes, scoped.edges, index.rootId)
-  }, [result, scope, hops, index.rootId])
+  const view = useMemo(() => layoutOrder(result.nodes, result.edges, index.rootId), [result, index.rootId])
   const visible = useMemo(() => visibleIds(view.nodes, view.edges, hidden), [view, hidden])
   const stats = summaryStats(result.summary)
   const legend = index.legend.filter((kind) => kind !== "root")
@@ -169,7 +158,10 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
   // to sit at the origin, then the real graph.
   const settleFit = useCallback(() => {
     const stage = stageRef.current
-    if (!stage || !nodesRef.current.length || !Number.isFinite(nodesRef.current[0].x)) return
+    const graph = graphRef.current
+    if (!stage?.clientWidth || !stage.clientHeight || !graph ||
+      graph.width() !== stage.clientWidth || graph.height() !== stage.clientHeight ||
+      !nodesRef.current.length || !Number.isFinite(nodesRef.current[0].x)) return
     pendingFit.current = false
     fitRef.current()
     stage.style.opacity = "1"
@@ -183,12 +175,12 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
     if (open) setCardId(id)
     const graph = graphRef.current
     const node = nodesRef.current.find((n) => n.id === id)
-    if (locate && !local && graph && node && visibleRef.current.has(id)) {
+    if (locate && graph && node && visibleRef.current.has(id)) {
       retainedViewport.current = null
       userMoved.current = true
       graph.centerAt(node.x, node.y, 1000).zoom(MAX_ZOOM, 1000)
     }
-  }, [index.byId, local])
+  }, [index.byId])
   const selectRef = useRef(select)
   selectRef.current = select
 
@@ -209,7 +201,7 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
     stage.addEventListener("pointerdown", moved)
     const graph = new ForceGraph<GraphNode, GraphLink>(stage)
       .width(stage.clientWidth).height(stage.clientHeight)
-      .backgroundColor(palette().background).minZoom(MIN_ZOOM).maxZoom(MAX_ZOOM).cooldownTime(15000)
+      .minZoom(MIN_ZOOM).maxZoom(MAX_ZOOM).cooldownTime(15000)
       .nodeId("id").nodeVal((n) => n.radius * 2.5)
       .nodeLabel(() => "")
       .nodeVisibility((n) => visibleRef.current.has(n.id))
@@ -247,7 +239,6 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
       })
       .onEngineStop(() => {
         stage.dataset.layoutMoving = "false"
-        positions.current.set(viewKeyRef.current, new Map(nodesRef.current.map(({ id, x, y, vx, vy }) => [id, { x: x ?? 0, y: y ?? 0, vx, vy }])))
         if (pendingFit.current || (fitOnStop.current && !userMoved.current)) settleFit()
         fitOnStop.current = false
         updateLabels()
@@ -265,8 +256,11 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
       if (pendingFit.current || (fitOnStop.current && !userMoved.current)) settleFit()
     })
     resize.observe(stage)
-    // Theme switches change the tokens the canvas resolved at mount.
-    const theme = new MutationObserver(() => { paletteRef.current = readPalette(stage); graph.backgroundColor(paletteRef.current.background) })
+    // The transparent canvas uses the card background. Repaint the drawn colors on theme changes.
+    const theme = new MutationObserver(() => {
+      paletteRef.current = readPalette(stage)
+      graph.nodeCanvasObject(graph.nodeCanvasObject())
+    })
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-palette"] })
     const pause = () => (document.hidden || !activeRef.current ? graph.pauseAnimation() : graph.resumeAnimation())
     document.addEventListener("visibilitychange", pause)
@@ -293,24 +287,17 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
     const graph = graphRef.current
     const stage = stageRef.current
     if (!graph || !stage) return
-    const key = scope ? `local:${scope}` : "global"
     const previousNodes = nodesRef.current
-    const changedScope = viewKeyRef.current !== key
-    if (changedScope && viewKeyRef.current) {
-      positions.current.set(viewKeyRef.current, new Map(previousNodes.map(({ id, x, y, vx, vy }) => [id, { x: x ?? 0, y: y ?? 0, vx, vy }])))
-    }
-    const previousById = new Map(changedScope ? [] : previousNodes.map((node) => [node.id, node] as const))
-    viewKeyRef.current = key
-    const cached = positions.current.get(key)
+    const previousById = new Map(previousNodes.map((node) => [node.id, node] as const))
     const nodes: GraphNode[] = view.nodes.map((node) => {
       const lines = wrapLabel(graphLabel(node), measure, MAX_LABEL_WIDTH)
-      return Object.assign(previousById.get(node.id) ?? { ...cached?.get(node.id) }, {
+      return Object.assign(previousById.get(node.id) ?? {}, {
         id: node.id, node, kind: displayKind(node), radius: nodeRadius(node.ip_count), lines,
         labelWidth: Math.max(...lines.map(measure)), degree: index.degree.get(node.id) ?? 0,
       })
     })
     const byId = new Map(nodes.map((n) => [n.id, n]))
-    if (!changedScope && previousNodes.length) {
+    if (previousNodes.length) {
       const neighbors = new Map<string, string[]>()
       for (const { source, target } of view.edges) {
         const sources = neighbors.get(source) ?? []
@@ -338,15 +325,16 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
       }
     }
     const previousLinks = graph.graphData().links
-    const changedTopology = changedScope ||
+    const changedTopology =
       nodes.length !== previousNodes.length || nodes.some((node, i) => node !== previousNodes[i]) ||
       view.edges.length !== previousLinks.length ||
       view.edges.some((edge, i) => previousLinks[i].source.id !== edge.source || previousLinks[i].target.id !== edge.target)
     nodesRef.current = nodes
     drawState.current.labels = new Map()
-    if (changedTopology) fitOnStop.current = changedScope || !previousNodes.length || !userMoved.current
-    pendingFit.current = (changedScope || !previousNodes.length) && nodes.length > 0
-    if (pendingFit.current) {
+    if (changedTopology) fitOnStop.current = !previousNodes.length || !userMoved.current
+    // A hidden tab can receive more snapshots before its first fit runs.
+    if (!previousNodes.length && nodes.length) {
+      pendingFit.current = true
       delete stage.dataset.ready
       stage.style.opacity = "0"
       userMoved.current = false
@@ -356,7 +344,7 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
       const links = view.edges.map((edge) => ({ source: byId.get(edge.source)!, target: byId.get(edge.target)!, confirmed: !!edge.confirmed }))
       stage.dataset.layouts = String(Number(stage.dataset.layouts ?? 0) + 1)
       // An empty panel can finish its simulation before the first results arrive.
-      graph.warmupTicks(pendingFit.current && !cached?.size ? 300 : 0).graphData({ nodes, links })
+      graph.warmupTicks(pendingFit.current ? 300 : 0).graphData({ nodes, links })
     } else {
       previousLinks.forEach((link, i) => { link.confirmed = !!view.edges[i].confirmed })
       graph.nodeCanvasObject(graph.nodeCanvasObject()).linkCanvasObject(graph.linkCanvasObject())
@@ -369,7 +357,7 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
     } else if (pendingFit.current) queueMicrotask(settleFit)
     queueLabels()
     if (document.hidden || !activeRef.current) graph.pauseAnimation()
-  }, [view, scope, index.degree, settleFit, queueLabels])
+  }, [view, index.degree, settleFit, queueLabels])
 
   useEffect(() => {
     visibleRef.current = visible
@@ -397,7 +385,7 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
   }
 
   const search = () => {
-    const first = searchNodes(result.nodes, query, local ? visibleIds(result.nodes, result.edges, hidden) : visible)[0]
+    const first = searchNodes(result.nodes, query, visible)[0]
     if (first) select(first.id, false, true, "node")
   }
 
@@ -418,49 +406,57 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
           onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") search() }} />
       </div>
       <section ref={sectionRef} aria-label="资产关联知识库" className={cn("relative flex min-h-0 flex-col overflow-hidden rounded-xl border bg-card", expanded ? "flex-1" : "")}>
-        <div className="flex flex-col gap-1 border-b px-3 py-2.5">
-          <div role="group" aria-label="节点类型筛选，点击隐藏或显示" className="flex flex-wrap gap-x-2 gap-y-0.5">
-            {legend.map((kind) => (
-              <button key={kind} type="button" aria-pressed={!hidden.has(kind)} title={hidden.has(kind) ? "点击显示" : "点击隐藏"} onClick={() => toggleKind(kind)}
-                className="inline-flex min-h-7 items-center gap-1.5 rounded-md border border-transparent px-1.5 text-xs whitespace-nowrap hover:border-border hover:bg-accent aria-[pressed=false]:text-muted-foreground aria-[pressed=false]:line-through aria-[pressed=false]:[&>span]:opacity-40 aria-[pressed=false]:[&>span]:grayscale">
-                <KindIcon kind={kind} className="size-[18px]" />{kindLabel(kind)}
-              </button>
+        {stats.length ? (
+          <p className="m-0 flex flex-wrap items-center gap-x-1 border-b px-3 py-2.5 text-[11px] text-muted-foreground">
+            {stats.map(([count, label], i) => (
+              <span key={label} className="whitespace-nowrap">
+                {i ? <span aria-hidden className="mx-1.5">·</span> : null}
+                <b className="text-xs font-semibold text-foreground tabular-nums">{count}</b> {label}
+              </span>
             ))}
-          </div>
-          {stats.length ? (
-            <p className="m-0 flex flex-wrap items-center gap-x-1 text-[11px] text-muted-foreground">
-              {stats.map(([count, label], i) => (
-                <span key={label} className="whitespace-nowrap">
-                  {i ? <span aria-hidden className="mx-1.5">·</span> : null}
-                  <b className="text-xs font-semibold text-foreground tabular-nums">{count}</b> {label}
-                </span>
-              ))}
-            </p>
-          ) : null}
-        </div>
+          </p>
+        ) : null}
         <div className={cn("relative", expanded ? "min-h-0 flex-1" : "h-[460px]")}>
           {/* Hidden until the first fit (settleFit reveals it): the frames
               between mount and fit would otherwise paint whatever node sits at
               the origin. */}
           <div ref={stageRef} data-testid="easm-graph" role="group" aria-label="资产与具体特征网络" className="absolute inset-0" style={{ opacity: 0 }} />
           {!result.nodes.length ? <p className="pointer-events-none absolute inset-0 m-0 grid place-items-center text-sm text-muted-foreground">等待资产数据</p> : null}
-          <div role="toolbar" aria-label="关联网络操作" className="absolute top-3 left-3 z-10 flex gap-1.5">
-            {!mobile ? <>
-              <button type="button" className={toolButton} aria-label="放大关联网络" title="放大" onClick={() => zoomBy(0.3)}><MaskIcon src={enlargeIcon} /></button>
-              <button type="button" className={toolButton} aria-label="缩小关联网络" title="缩小" onClick={() => zoomBy(-0.3)}><MaskIcon src={shrinkIcon} /></button>
-            </> : null}
-            {onExpand ? <button type="button" className={toolButton} aria-label="展开资产图" title="展开资产图" onClick={onExpand}><MaskIcon src={expandIcon} /></button> : null}
-            <button type="button" className={toolButton} aria-label="适配视图" title="适配视图" onClick={fit}><MaskIcon src={fitIcon} /></button>
+          <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-between gap-2">
+            <div role="group" aria-label="关联网络操作" className="flex shrink-0 items-start gap-1.5 [&>button]:pointer-events-auto">
+              {!mobile ? <>
+                <button type="button" className={toolButton} aria-label="放大关联网络" title="放大" onClick={() => zoomBy(0.3)}><MaskIcon src={enlargeIcon} /></button>
+                <button type="button" className={toolButton} aria-label="缩小关联网络" title="缩小" onClick={() => zoomBy(-0.3)}><MaskIcon src={shrinkIcon} /></button>
+              </> : null}
+              {onExpand ? <button type="button" className={toolButton} aria-label="展开资产图" title="展开资产图" onClick={onExpand}><MaskIcon src={expandIcon} /></button> : null}
+              <button type="button" className={toolButton} aria-label="适配视图" title="适配视图" onClick={fit}><MaskIcon src={fitIcon} /></button>
+            </div>
+            {legend.length ? (
+              <div role="group" aria-label="节点类型筛选，点击隐藏或显示" className="flex min-w-0 flex-wrap justify-end gap-1.5">
+                <TooltipProvider delayDuration={300}>
+                  {legend.map((kind) => {
+                    const label = kindLabel(kind)
+                    return (
+                      <Tooltip key={kind}>
+                        <TooltipTrigger asChild aria-describedby={undefined}>
+                          <button type="button" aria-label={label} aria-pressed={!hidden.has(kind)} onClick={() => toggleKind(kind)}
+                            className={cn(toolButton, "pointer-events-auto shrink-0 rounded-full aria-[pressed=false]:[&>span]:opacity-35")}>
+                            <KindIcon kind={kind} />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">{label}</TooltipContent>
+                      </Tooltip>
+                    )
+                  })}
+                </TooltipProvider>
+              </div>
+            ) : null}
           </div>
-          <button type="button" aria-pressed={local} onClick={() => setLocal(!local)}
-            className="absolute top-3 right-3 z-10 h-7 rounded-full border bg-card/95 px-2.5 text-xs text-muted-foreground hover:border-primary hover:text-primary aria-pressed:border-primary aria-pressed:text-primary">
-            {local ? "显示全局网络" : "只看当前关联"}
-          </button>
         </div>
         {cardNode ? (
           <NodeCard key={cardNode.id} ref={mobile ? undefined : cardRef}
             className={mobile ? "bottom-3 left-3 max-h-[400px]" : undefined}
-            node={cardNode} index={index} summary={result.summary}
+            node={cardNode} index={index}
             onSelect={(id) => select(id, true, true)} onClose={() => { setCardId(null); setFocus(null) }} />
         ) : null}
       </section>

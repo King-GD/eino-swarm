@@ -1,4 +1,4 @@
-/** The EASM result shape documented in docs/EASM_PROTOCOL.md. */
+/** The EASM result shape from the task-panel catalog. */
 
 export type NodeKind = "root" | "company" | "org" | "domain" | "feature"
 export type FeatureKind = "org" | "cert" | "mx" | "asn" | "icp" | "icon_hash" | "ipc" | "fid"
@@ -18,6 +18,15 @@ export interface EasmDetail {
   issuer?: string
   not_before?: string
   not_after?: string
+  is_valid?: boolean
+  is_match?: boolean
+  observations?: {
+    host: string
+    source?: string
+    is_valid?: boolean
+    is_match?: boolean
+    is_expired?: boolean
+  }[]
   names?: string[]
   subject_name?: string
 }
@@ -57,6 +66,7 @@ export interface EasmComponent {
 export interface EasmResult {
   schema_version: 1
   title: string
+  query_scope?: { id: string; query: string; components_server_id?: string }
   nodes: EasmNode[]
   edges: EasmEdge[]
   summary?: { clues?: number; fofa_assets?: number; fofa_ips?: number }

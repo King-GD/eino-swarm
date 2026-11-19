@@ -898,7 +898,67 @@ the EASM panel before the first synthetic batch arrives. The case observes
 three cumulative snapshots on the same canvas while the turn is still working,
 then releases the final model reply and checks that the latest state persists
 through completion and page reload. It also verifies zoom and node selection
-during live updates and direct rendering in the host page.
+during live updates, direct rendering in the host page, and that the graph
+canvas shows the card background in light and dark themes.
+The sidebar case receives the first graph and a statistics revision while the
+tab is hidden, then checks for painted pixels when the tab is opened and after
+returning from the enlarged view.
+
+The seeded-open case checks that the root is painted while the turn is still
+working, before releasing any publication. The incremental case checks root
+and domain pixels before releasing the next batch. The engine's loopback
+model and MCP cases exercise live organization results through both MCP
+mount modes and check revisions before model completion.
+Short-name lookup regressions return multiple legal entities and shared domains,
+then verify separate company branches and pending target links across batches
+before another model publication.
+The manager's subject clarification case loads the workflow through
+`skill_view`, opens the actual ask form, and checks that the root appears
+after the user answers.
+ICP regressions preserve the registrant → filing → domain path and the domain's
+linked filing trait through the real MCP boundary. Node-card tests and the EASM
+browser case cover filing navigation, stored judgment, confirmed filing evidence
+in older snapshots, and the icon filters' hover, keyboard and click behavior.
+The browser case checks that root cards show the introduction, organizations
+and effective features. It verifies a decoded logo in the card header and
+a short introduction before and after reopening the saved panel.
+Domain and certificate cards show judgment and effective features with links
+to their graph neighbours.
+Corporate MCP cases preserve the reported legal parent/subsidiary direction
+and reuse company nodes across source identifiers. Branch cases exercise the
+actual request and paged reply through both MCP mount modes, retaining the
+legal owner rather than attaching branches to a brand root. Asset-rule cases
+preserve domain attribution evidence without turning an untyped product name
+into a legal entity or inventing a target relationship. Certificate cases cover
+explicit false flags with future dates, source-local observations without a
+certificate identifier, tuple field mapping and publication before the model
+continues. A domain card can open a saved certificate through its graph link
+without requiring the same reference in the node detail. The browser case
+checks the certificate's identity and expiry in effective features.
+TLS asset-lookup cases exercise nested certificate records through both MCP
+mount modes and retain explicit validity, matching and expiry observations.
+Cross-batch certificate cases retain conflicting per-service flags on one
+certificate identity, omit ambiguous summary flags, preserve unknown values
+and keep repeated observations idempotent.
+Agent-tool regressions reject new IDs for existing companies, normalized domains
+and certificates, and reject identity-free certificate summaries. Existing-node
+verification and accepted idempotent retries remain available.
+Source-confidence regressions reject new or upgraded Agent confirmations while
+allowing explicit pending links, retained source confirmations and downgrades.
+Typed MCP publication continues to confirm its reported relationships.
+The browser fixture retains opposite service flags under one serial in the
+saved snapshot and checks that the simplified card omits the observation table.
+
+Query-scope regressions select the exact asset query through the real panel
+tool and automatically from dedicated MCP metric requests without an extra
+model publication or scope-selection call. They check that a changed query clears the previous metric sections and
+retains graph evidence, while selecting the same query retains its results.
+MCP regressions publish heat, product1/product5 components and dedicated IP
+statistics as their results return, before another model publication. They
+check explicit FOFA routing, product identifier resolution, late replies from
+replaced scopes and model publications attempting to replace protected metrics.
+Bound-callback regressions distinguish successful equal-valued results from
+invalid results, so an older reply cannot replace a newer accepted observation.
 
 When testing larger cumulative batches, verify that new nodes appear around
 their connected branch and that an untouched viewport follows the growing

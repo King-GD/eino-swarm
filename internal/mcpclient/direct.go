@@ -240,6 +240,7 @@ func (h *sessionHolder) runCall(ctx context.Context, name string, arguments map[
 	defer cancel()
 	stop := context.AfterFunc(e.ctx, cancel)
 	defer stop()
+	complete := h.manager.startToolCall(ctx, h.server.ID, name, arguments)
 	result, err, digest := e.callTool(callCtx, session, &mcp.CallToolParams{Name: name, Arguments: arguments}, h.manager.log)
 	if err != nil {
 		broken = true
@@ -259,6 +260,9 @@ func (h *sessionHolder) runCall(ctx context.Context, name string, arguments map[
 		code = "tool_error"
 	}
 	h.logCall(ctx, started, name, "call", code, digest)
+	if complete != nil {
+		complete(result)
+	}
 	return jsonResult(result)
 }
 

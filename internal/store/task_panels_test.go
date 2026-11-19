@@ -44,6 +44,34 @@ func (f panelFixture) open(t *testing.T) taskpanel.Panel {
 func (f panelFixture) update(p taskpanel.Panel, id string, n int) taskpanel.Update {
 	return taskpanel.Update{ProtocolVersion: 1, PanelID: p.ID, OperationID: id, BaseRevision: p.Revision, Kind: "patch", Operations: json.RawMessage(fmt.Sprintf(`[{"op":"add","path":"/count","value":%d}]`, n))}
 }
+
+func TestTaskPanelSeedIsValidatedAndKeepsThePinnedDefinition(t *testing.T) {
+	f := newPanelFixture(t)
+	if _, err := f.s.OpenTaskPanel(t.Context(), f.def, f.src, json.RawMessage(`{"count":"invalid"}`)); err == nil {
+		t.Fatal("invalid seed was accepted")
+	}
+	if _, err := f.s.TaskPanelByPlugin(t.Context(), f.thread.ID, f.def.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("invalid seed created a panel: %v", err)
+	}
+	seed := json.RawMessage(`{"count":7}`)
+	opened, err := f.s.OpenTaskPanel(t.Context(), f.def, f.src, seed)
+	if err != nil || opened.Revision != 1 || string(opened.State) != string(seed) ||
+		string(opened.Definition.InitialState) != string(f.def.InitialState) {
+		t.Fatalf("seeded panel state=%s definition=%s revision=%d: %v", opened.State, opened.Definition.InitialState, opened.Revision, err)
+	}
+	again, err := f.s.OpenTaskPanel(t.Context(), f.def, f.src, json.RawMessage(`{"count":11}`))
+	if err != nil || again.ID != opened.ID || again.Revision != 1 || string(again.State) != string(seed) {
+		t.Fatalf("reopen changed state=%s revision=%d: %v", again.State, again.Revision, err)
+	}
+	saved, err := f.s.TaskPanelByPlugin(t.Context(), f.thread.ID, f.def.ID)
+	if err != nil || saved.ID != opened.ID || string(saved.State) != string(seed) {
+		t.Fatalf("saved panel state=%s: %v", saved.State, err)
+	}
+	if _, err := f.s.TaskPanel(t.Context(), f.thread.ID, ""); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing panel identity returned a binding: %v", err)
+	}
+}
+
 func TestTaskPanelReplayAndDuplicateKeepOriginalReceipt(t *testing.T) {
 	f := newPanelFixture(t)
 	p := f.open(t)

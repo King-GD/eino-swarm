@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
-  displayKind, graphLabel, highlightIds, hotDays, indexResult, isSafeLink, kindLabel, layoutOrder, localView,
+  displayKind, graphLabel, highlightIds, hotDays, indexResult, isSafeLink, kindLabel, layoutOrder,
   nodeRadius, searchNodes, sortComponents, summaryStats, validity, visibleIds, wrapLabel,
 } from "./model"
 import type { EasmNode, EasmResult } from "./types"
@@ -26,7 +26,7 @@ describe("EASM model", () => {
     // Root leads the legend; an org node and an org feature share one entry.
     expect(index.legend).toEqual(["root", "company", "domain", "org", "cert", "mx"])
     expect(kindLabel("root")).toBe("目标企业")
-    expect(kindLabel("cert")).toBe("证书")
+    expect(kindLabel("cert")).toBe("域名证书")
     expect(displayKind(result.nodes[4])).toBe("cert")
   })
 
@@ -34,11 +34,6 @@ describe("EASM model", () => {
     expect(visibleIds(result.nodes, result.edges, new Set()).size).toBe(6)
     // Hiding company leaves domain connected only through the feature.
     expect([...visibleIds(result.nodes, result.edges, new Set(["company"]))].sort()).toEqual(["cert", "d", "o", "r"])
-  })
-
-  it("limits the local view to the requested hops", () => {
-    expect(localView(result.nodes, result.edges, "d", 1).nodes.map((n) => n.id).sort()).toEqual(["c", "cert", "d"])
-    expect(localView(result.nodes, result.edges, "d", 2).nodes.map((n) => n.id).sort()).toEqual(["c", "cert", "d", "r"])
   })
 
   it("highlights the path back to the root and the direct children", () => {

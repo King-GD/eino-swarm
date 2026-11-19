@@ -95,10 +95,18 @@ func panelAnchor(tx *gorm.DB, threadID string) (int64, error) {
 	return anchor, err
 }
 
-// OpenTaskPanel creates a binding once; reopening returns its pinned definition.
-func (s *Store) OpenTaskPanel(ctx context.Context, d taskpanel.Definition, src taskpanel.Source) (out taskpanel.Panel, err error) {
+// OpenTaskPanel creates a binding once. An optional starting state seeds only a
+// new binding or one reopened after rewind; a visible binding keeps its state.
+func (s *Store) OpenTaskPanel(ctx context.Context, d taskpanel.Definition, src taskpanel.Source, initialState ...json.RawMessage) (out taskpanel.Panel, err error) {
 	if err = taskpanel.ValidateDefinition(d); err != nil {
 		return
+	}
+	state := d.InitialState
+	if len(initialState) != 0 {
+		state = initialState[0]
+		if err = taskpanel.ValidateState(d, state); err != nil {
+			return
+		}
 	}
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := validatePanelOwner(tx, src); err != nil {
@@ -120,7 +128,7 @@ func (s *Store) OpenTaskPanel(ctx context.Context, d taskpanel.Definition, src t
 		row.ThreadID, row.PluginID = src.ThreadID, d.ID
 		row.DefinitionJSON, _ = json.Marshal(d)
 		row.SourceJSON, _ = json.Marshal(src)
-		row.State = bytes.Clone(d.InitialState)
+		row.State = bytes.Clone(state)
 		if len(row.State) == 0 {
 			row.State = []byte(`{}`)
 		}
@@ -152,8 +160,17 @@ func (s *Store) OpenTaskPanel(ctx context.Context, d taskpanel.Definition, src t
 
 // TaskPanel loads only a visible instance owned by this conversation.
 func (s *Store) TaskPanel(ctx context.Context, threadID, panelID string) (taskpanel.Panel, error) {
+	return s.taskPanel(ctx, threadID, "id = ?", panelID)
+}
+
+// TaskPanelByPlugin reads the visible instance for one plugin in a conversation.
+func (s *Store) TaskPanelByPlugin(ctx context.Context, threadID, pluginID string) (taskpanel.Panel, error) {
+	return s.taskPanel(ctx, threadID, "plugin_id = ?", pluginID)
+}
+
+func (s *Store) taskPanel(ctx context.Context, threadID, match, value string) (taskpanel.Panel, error) {
 	var row TaskPanelRow
-	err := s.db.WithContext(ctx).Where("id = ? AND thread_id = ? AND hidden = ?", panelID, threadID, false).Take(&row).Error
+	err := s.db.WithContext(ctx).Where("thread_id = ? AND hidden = ?", threadID, false).Where(match, value).Take(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return taskpanel.Panel{}, ErrNotFound
 	}

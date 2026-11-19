@@ -4,11 +4,11 @@ export const KIND_LABELS: Record<"root" | "company" | "org" | "domain", string> 
   root: "目标企业", company: "企业组织", org: "证书组织", domain: "主域名",
 }
 export const FEATURE_LABELS: Record<FeatureKind, string> = {
-  org: "证书组织", cert: "证书", asn: "ASN", icon_hash: "网站图标", ipc: "IP 段", fid: "FID", icp: "ICP 备案", mx: "MX 记录",
+  org: "证书组织", cert: "域名证书", asn: "ASN", icon_hash: "网站图标", ipc: "IP 段", fid: "FID", icp: "ICP 备案", mx: "MX 记录",
 }
 /** Card feature groups, in the reference order; asset cards also list domains. */
 export const FEATURE_GROUPS: [FeatureKind | "domain", string][] = [
-  ["cert", "证书"], ["org", "证书组织"], ["asn", "ASN"], ["icon_hash", "图标指纹"], ["domain", "域名"],
+  ["cert", "域名证书"], ["org", "证书组织"], ["asn", "ASN"], ["icon_hash", "图标指纹"], ["domain", "域名"],
   ["ipc", "IP 段"], ["fid", "FID"], ["icp", "ICP 备案"], ["mx", "MX 记录"],
 ]
 export const TAG_LABELS: Record<TagType, string> = { hot: "热搜", kev: "KEV", cve: "CVE" }
@@ -28,6 +28,9 @@ export interface EasmIndex {
   degree: Map<string, number>
   /** Feature id → the non-feature nodes it connects. */
   members: Map<string, string[]>
+  related: Map<string, Set<string>>
+  filingDomains: Map<string, Set<string>>
+  confirmedLinks: Map<string, Set<string>>
   /** Root first, then each kind in first-appearance order. */
   legend: DisplayKind[]
 }
@@ -36,19 +39,39 @@ export function indexResult(result: EasmResult): EasmIndex {
   const byId = new Map(result.nodes.map((node) => [node.id, node]))
   const degree = new Map(result.nodes.map((node) => [node.id, 0]))
   const members = new Map<string, string[]>()
+  const related = new Map<string, Set<string>>()
+  const filingDomains = new Map<string, Set<string>>()
+  const confirmedLinks = new Map<string, Set<string>>()
   for (const edge of result.edges) {
     degree.set(edge.source, (degree.get(edge.source) ?? 0) + 1)
     degree.set(edge.target, (degree.get(edge.target) ?? 0) + 1)
     for (const [a, b] of [[edge.source, edge.target], [edge.target, edge.source]]) {
-      if (byId.get(a)?.kind !== "feature" || byId.get(b)?.kind === "feature" || !byId.has(b)) continue
+      if (a !== b && byId.has(a) && byId.has(b)) {
+        const neighbors = related.get(a) ?? new Set<string>()
+        neighbors.add(b)
+        related.set(a, neighbors)
+      }
+      if (edge.confirmed === true && a !== b && byId.has(a) && byId.has(b)) {
+        const links = confirmedLinks.get(a) ?? new Set<string>()
+        links.add(b)
+        confirmedLinks.set(a, links)
+      }
+      if (!["feature", "org"].includes(byId.get(a)?.kind ?? "") || ["feature", "org"].includes(byId.get(b)?.kind ?? "") || !byId.has(b)) continue
       const list = members.get(a) ?? []
       if (!list.includes(b)) list.push(b)
       members.set(a, list)
+      const feature = byId.get(a)?.featureKind
+      if (byId.get(b)?.kind !== "domain") continue
+      if (feature === "icp" && a === edge.source && edge.confirmed === true) {
+        const domains = filingDomains.get(a) ?? new Set()
+        domains.add(b)
+        filingDomains.set(a, domains)
+      }
     }
   }
   const kinds = [...new Set(result.nodes.map(displayKind))]
   const legend = kinds.includes("root") ? ["root" as DisplayKind, ...kinds.filter((k) => k !== "root")] : kinds
-  return { byId, rootId: result.nodes.find((node) => node.kind === "root")?.id ?? null, degree, members, legend }
+  return { byId, rootId: result.nodes.find((node) => node.kind === "root")?.id ?? null, degree, members, related, filingDomains, confirmedLinks, legend }
 }
 
 /** Nodes left after hiding kinds. With anything hidden, a node also needs a
@@ -64,21 +87,6 @@ export function visibleIds(nodes: EasmNode[], edges: EasmEdge[], hidden: Readonl
     }
   }
   return connected
-}
-
-/** The neighbourhood within `hops` edges of one node ("只看当前关联"). */
-export function localView(nodes: EasmNode[], edges: EasmEdge[], id: string, hops: number) {
-  const included = new Set([id])
-  for (let hop = 0; hop < hops; hop++) {
-    const current = new Set(included)
-    for (const edge of edges) {
-      if (current.has(edge.source) || current.has(edge.target)) {
-        included.add(edge.source)
-        included.add(edge.target)
-      }
-    }
-  }
-  return { nodes: nodes.filter((node) => included.has(node.id)), edges: edges.filter((edge) => included.has(edge.source) && included.has(edge.target)) }
 }
 
 /** The path from the selected node back to the root plus its direct children. */

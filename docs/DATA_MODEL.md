@@ -1249,5 +1249,5 @@ its bounded working tool output in memory.
 
 The task panel projection stores the latest conversation-owned EASM snapshot.
 Its existing revision and delivery records retain accepted updates. The
-catalog pins the business Schema for the panel. The [EASM field reference and
-example](EASM_PROTOCOL.md) describe the graph, trend and component records.
+[catalog](../frontend/src/task-panels/catalog.json) pins the JSON Schema for
+its graph, trend and component records.

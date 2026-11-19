@@ -14,6 +14,8 @@ import (
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/tools"
 	"github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/compose"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // ToolDescriptor describes a remote tool discovered from an MCP server.
@@ -30,6 +32,15 @@ type Catalog struct {
 	// Skipped are remote names whose schema cannot be a function. They stay
 	// out of the model tool list and do not fail the rest of the catalog.
 	Skipped []string `json:"skipped,omitempty"`
+}
+
+// ToolCall describes the actual catalog-validated remote invocation. Arguments
+// are an owned JSON copy, independent of the request sent to the remote server.
+type ToolCall struct {
+	ServerID  string
+	Name      string
+	CallID    string
+	Arguments json.RawMessage
 }
 
 // Error deliberately omits transport errors: those may contain credentials,
@@ -51,6 +62,7 @@ type Manager struct {
 	entries     map[string]*entry
 	current     map[string]bool
 	switches    func() []config.MCPServer
+	observer    func(context.Context, ToolCall) func(*mcp.CallToolResult)
 	inspections sync.WaitGroup
 	log         *slog.Logger
 	catalogDir  string
@@ -66,6 +78,33 @@ func NewManager(loggers ...*slog.Logger) *Manager {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Manager{ctx: ctx, cancel: cancel, entries: map[string]*entry{}, log: log}
+}
+
+// ObserveToolCalls binds each remote call before dispatch. Its returned callback
+// receives that call's complete successful result before model limits apply.
+func (m *Manager) ObserveToolCalls(observer func(context.Context, ToolCall) func(*mcp.CallToolResult)) {
+	m.mu.Lock()
+	m.observer = observer
+	m.mu.Unlock()
+}
+
+func (m *Manager) startToolCall(ctx context.Context, serverID, name string, arguments map[string]json.RawMessage) func(*mcp.CallToolResult) {
+	m.mu.Lock()
+	observer := m.observer
+	m.mu.Unlock()
+	if observer == nil || ctx.Err() != nil {
+		return nil
+	}
+	raw, _ := json.Marshal(arguments)
+	complete := observer(ctx, ToolCall{ServerID: serverID, Name: name, CallID: compose.GetToolCallID(ctx), Arguments: raw})
+	if complete == nil {
+		return nil
+	}
+	return func(result *mcp.CallToolResult) {
+		if result != nil && !result.IsError && ctx.Err() == nil {
+			complete(result)
+		}
+	}
 }
 
 func fingerprint(s config.MCPServer) string {

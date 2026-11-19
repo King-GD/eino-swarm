@@ -220,7 +220,7 @@
     "id": "easm-asset-portrait",
     "version": "1",
     "name": "EASM",
-    "description": "Display an enterprise asset portrait with its relationship graph, heat trend and supply-chain components. Open during an asset-portrait task and publish a cumulative snapshot after each batch of observed results, keeping node IDs stable across batches.",
+    "description": "Display a live enterprise asset portrait. The host automatically selects the query from metric requests; open_task_panel(query=...) is an optional explicit selection. Use the same query for asset statistics, heat and product1/product5 requests. The host publishes supported MCP results directly, preserving organization domains, registrant-to-ICP-to-domain paths, legal parent-to-subsidiary direction, branches and asset attribution rules, and observed certificate validity/matching flags from search or TLS asset lookup. Supplementary Agent edges explicitly use confirmed:false; structured source updates confirm relationships. Existing reported confirmations may be retained, lowered or removed with evidence. Read the latest revision before publishing supplementary evidence; keep existing node IDs, source flags and host-published metrics.",
     "entry": "",
     "schema": {
       "type": "object",
@@ -239,6 +239,16 @@
         },
         "title": {
           "$ref": "#/$defs/nonempty"
+        },
+        "query_scope": {
+          "type": "object",
+          "required": ["id", "query"],
+          "properties": {
+            "id": { "$ref": "#/$defs/nonempty" },
+            "query": { "$ref": "#/$defs/nonempty" },
+            "components_server_id": { "$ref": "#/$defs/nonempty" }
+          },
+          "additionalProperties": false
         },
         "nodes": {
           "type": "array",
@@ -401,6 +411,27 @@
             },
             "not_after": {
               "type": "string"
+            },
+            "is_valid": {
+              "type": "boolean"
+            },
+            "is_match": {
+              "type": "boolean"
+            },
+            "observations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["host"],
+                "properties": {
+                  "host": { "$ref": "#/$defs/nonempty" },
+                  "source": { "$ref": "#/$defs/nonempty" },
+                  "is_valid": { "type": "boolean" },
+                  "is_match": { "type": "boolean" },
+                  "is_expired": { "type": "boolean" }
+                },
+                "additionalProperties": false
+              }
             },
             "names": {
               "type": "array",

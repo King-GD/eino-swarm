@@ -16,17 +16,18 @@
 
 @layer base {
   :root {
-    --easm-root: 201 100% 50%;
-    --easm-company: 218 89% 61%;
-    --easm-domain: 122 55% 42%;
-    --easm-org: 37 85% 48%;
-    --easm-cert: 45 68% 50%;
-    --easm-icp: 268 100% 63%;
-    --easm-asn: 259 66% 50%;
-    --easm-ipc: 188 100% 40%;
-    --easm-fid: 17 76% 58%;
-    --easm-icon-hash: 234 82% 64%;
-    --easm-mx: 84 56% 53%;
+    /* The same type palette colors the bundled glyphs in the canvas, filters and cards. */
+    --easm-root: 201.41 100% 50%;
+    --easm-company: 217.84 88.89% 61.18%;
+    --easm-domain: 121.53 55.14% 41.96%;
+    --easm-org: 36.63 85.25% 47.84%;
+    --easm-cert: 44.56 67.59% 49.61%;
+    --easm-icp: 267.91 100% 63.33%;
+    --easm-asn: 258.68 66.01% 50.39%;
+    --easm-ipc: 187.94 100% 40%;
+    --easm-fid: 17.04 76.42% 58.43%;
+    --easm-icon-hash: 234 82.42% 64.31%;
+    --easm-mx: 83.91 55.65% 53.14%;
     --easm-edge: 212 18% 62%;
     --easm-highlight: 40 100% 35%;
   }

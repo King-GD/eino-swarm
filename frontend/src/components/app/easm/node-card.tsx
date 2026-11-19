@@ -1,9 +1,9 @@
 import { X } from "lucide-react"
-import { useId, type ReactNode, type Ref } from "react"
+import { useId, useState, type ReactNode, type Ref } from "react"
 import { Badge } from "../../ui/badge"
 import { Button } from "../../ui/button"
-import { FEATURE_GROUPS, displayKind, formatCount, isSafeLink, kindLabel, summaryStats, validity, type EasmIndex } from "../../../lib/easm/model"
-import type { DisplayKind, EasmNode, EasmResult } from "../../../lib/easm/types"
+import { FEATURE_GROUPS, displayKind, formatCount, kindLabel, validity, type EasmIndex } from "../../../lib/easm/model"
+import type { DisplayKind, EasmNode } from "../../../lib/easm/types"
 import { cn } from "@/lib/cn"
 import { KIND_ICONS, kindColor } from "./kind-style"
 
@@ -13,6 +13,14 @@ export function KindIcon({ kind, className }: { kind: DisplayKind; className?: s
       <img src={KIND_ICONS[kind]} alt="" className="size-[60%]" />
     </span>
   )
+}
+
+function NodeIcon({ node }: { node: EasmNode }) {
+  const logo = node.kind === "root" ? node.detail?.logo : undefined
+  const [failedLogo, setFailedLogo] = useState<string>()
+  return logo && logo !== failedLogo
+    ? <img src={logo} alt={`${node.label}标识`} className="h-10 w-24 shrink-0 rounded-md bg-white object-contain p-1" onError={() => setFailedLogo(logo)} />
+    : <KindIcon kind={displayKind(node)} className="size-10" />
 }
 
 /** A clickable reference to another node in the graph. */
@@ -58,79 +66,110 @@ function SectionTitle({ children }: { children: ReactNode }) {
   return <h3 className="mt-4 mb-1.5 flex items-center gap-2 text-xs font-semibold text-muted-foreground after:flex-1 after:border-t after:content-['']">{children}</h3>
 }
 
-function AssetBody({ node, index, summary, onSelect }: { node: EasmNode; index: EasmIndex; summary: EasmResult["summary"]; onSelect: (id: string) => void }) {
-  const detail = node.detail ?? {}
-  const root = node.kind === "root"
-  const corporate = node.kind === "root" || node.kind === "company" || node.kind === "org"
-  const orgByName = new Map([...index.byId.values()].filter((n) => n.kind === "org").map((n) => [n.label, n]))
-  const groups = FEATURE_GROUPS.map(([kind, title]) => [kind, title, (detail.features ?? []).filter((f) => f.kind === kind)] as const).filter(([, , items]) => items.length)
+const domainName = (value: string) => value.trim().toLowerCase().replace(/\.$/, "")
+
+function AssetJudgment({ node, index }: { node: EasmNode; index: EasmIndex }) {
+  const reason = node.detail?.reason?.trim()
+  const filingDomains = [...new Set([...(index.filingDomains.get(node.id) ?? [])].map((id) => index.byId.get(id)!.label))]
+  const linked = [...(index.confirmedLinks.get(node.id) ?? [])].map((id) => index.byId.get(id)!)
+  const filings = linked.filter((other) => index.filingDomains.get(other.id)?.has(node.id))
+  const evidence = filings.length ? filings : linked
+  const hasJudgment = Boolean(reason || filingDomains.length)
+  const limit = 6
   return (
-    <div className="space-y-3">
-      {corporate && (detail.logo || detail.description) ? (
-        <div className="flex items-start gap-3">
-          {detail.logo ? <img src={detail.logo} alt={`${node.label}标识`} className="size-10 shrink-0 rounded-md border bg-muted p-1" /> : null}
-          {detail.description ? <p className="m-0 leading-relaxed text-muted-foreground">{detail.description}</p> : null}
+    <section className="space-y-1 rounded-r-md border-l-2 border-primary bg-muted/40 px-3 py-2">
+      <h3 className="text-xs font-semibold">资产判断详情</h3>
+      {reason ? <p className="m-0 whitespace-pre-line break-words text-muted-foreground">{reason}</p> : null}
+      {filingDomains.length ? <p className="m-0 break-words text-muted-foreground">已确认关联的备案域名：{filingDomains.join("、")}</p> : null}
+      {!hasJudgment && evidence.length ? (
+        <div className="text-muted-foreground">
+          <p className="m-0">{filings.length ? "关联的 ICP 备案" : "图谱中已确认的关联"}</p>
+          <ul className="m-0 list-disc pl-4">
+            {evidence.slice(0, limit).map((other) => (
+              <li key={other.id} className="break-words">
+                {other.label}{filings.length && other.detail?.subject_name ? `（备案主体 ${other.detail.subject_name}）` : ""}
+              </li>
+            ))}
+          </ul>
+          {evidence.length > limit ? <p className="m-0">另有 {evidence.length - limit} 项</p> : null}
         </div>
       ) : null}
-      {root ? <Fields rows={[["官网", isSafeLink(detail.website) ? <a href={detail.website} target="_blank" rel="noreferrer" className="text-primary hover:underline">{detail.website}</a> : detail.website], ["国家 / 地区", detail.region]]} /> : null}
-      {root && detail.industry?.length ? (
-        <Group title="行业" count={detail.industry.length}>
-          {detail.industry.map((item) => <p key={item} className="m-0 py-1 font-medium">{item}</p>)}
-        </Group>
-      ) : null}
-      {root && summaryStats(summary).length ? (
-        <>
-          <SectionTitle>节点信息</SectionTitle>
-          <Fields rows={([["线索数", summary?.clues], ["FOFA 资产数", summary?.fofa_assets], ["FOFA 资产 IP 数", summary?.fofa_ips]] as const)
-            .filter(([, count]) => Number.isFinite(count)).map(([label, count]) => [label, formatCount(count as number)])} />
-        </>
-      ) : null}
-      {root && detail.organizations?.length ? (
-        <Group kind="org" title="组织列表" count={detail.organizations.length}>
-          {detail.organizations.map((org) => (
-            <NodeLink key={org.name} node={orgByName.get(org.name)} onSelect={onSelect}>
-              {org.name}{org.count != null ? <span className="ml-2 text-xs text-muted-foreground">{formatCount(org.count)}</span> : null}
-            </NodeLink>
-          ))}
-        </Group>
-      ) : null}
-      {!root && detail.reason ? <p className="m-0 rounded-r-md border-l-2 border-primary bg-muted/40 px-3 py-2 text-muted-foreground">{detail.reason}</p> : null}
-      {groups.length ? <SectionTitle>有效特征</SectionTitle> : null}
+      {!hasJudgment && !evidence.length ? <p className="m-0 text-muted-foreground">暂无已保存的判断依据</p> : null}
+    </section>
+  )
+}
+
+function RootProfile({ node, index, onSelect }: { node: EasmNode; index: EasmIndex; onSelect: (id: string) => void }) {
+  const detail = node.detail ?? {}
+  const organizations = [...index.byId.values()].filter((other) => other.kind === "company" || displayKind(other) === "org")
+  const saved = detail.organizations
+  const rows = saved?.length
+    ? saved.map((entry) => {
+      const matches = organizations.filter((other) => other.label === entry.name)
+      return { ...entry, node: matches.length === 1 ? matches[0] : undefined }
+    })
+    : organizations.filter((other) => index.related.get(node.id)?.has(other.id)).map((other) => ({ name: other.label, node: other, count: undefined }))
+  return (
+    <>
+      <SectionTitle>简介</SectionTitle>
+      <p className="m-0 whitespace-pre-line leading-relaxed text-muted-foreground">{detail.description || "暂无已保存的企业简介"}</p>
+      <Group title="组织列表" count={rows.length} open>
+        {rows.length ? rows.map((org, i) => (
+          <NodeLink key={org.node?.id ?? `${org.name}:${i}`} node={org.node} onSelect={onSelect}>
+            {org.name}{org.count != null ? <span className="ml-2 text-xs text-muted-foreground">{formatCount(org.count)}</span> : null}
+          </NodeLink>
+        )) : <p className="m-0 text-muted-foreground">暂无已保存的组织</p>}
+      </Group>
+    </>
+  )
+}
+
+function EffectiveFeatures({ node, index, onSelect }: { node: EasmNode; index: EasmIndex; onSelect: (id: string) => void }) {
+  const detail = node.detail ?? {}
+  const features: { kind: DisplayKind; value: string; node_id?: string }[] = (detail.features ?? []).filter((feature) => feature.node_id !== node.id && !(
+    node.kind === "domain" && feature.kind === "domain" && domainName(feature.value) === domainName(node.label)
+  ))
+  for (const id of index.related.get(node.id) ?? []) {
+    const other = index.byId.get(id)!
+    if (other.kind === "root" || other.kind === "company" && node.kind !== "feature" && node.kind !== "org") continue
+    const kind = displayKind(other)
+    if (features.some((feature) => feature.node_id === id)) continue
+    const entry = { kind, value: other.label, node_id: id }
+    const unlinked = features.findIndex((feature) => feature.kind === kind && !feature.node_id && feature.value === other.label)
+    if (unlinked >= 0) features[unlinked] = entry
+    else features.push(entry)
+  }
+  const sections: [DisplayKind, string][] = [...FEATURE_GROUPS, ["company", "企业组织"]]
+  const groups = sections.map(([kind, title]) => [kind, title, features.filter((feature) => feature.kind === kind)] as const).filter(([, , items]) => items.length)
+  const certificate = node.featureKind === "cert"
+  const rows: [string, ReactNode][] = certificate
+    ? [["序列号", detail.serial], ["签发机构", detail.issuer], ["有效期", validity(detail.not_before, detail.not_after)], ["覆盖名称", detail.names?.join("、")]]
+    : node.featureKind === "icp" ? [["备案主体", detail.subject_name]] : []
+  const hasFields = rows.some(([, value]) => value !== "" && value != null)
+  return (
+    <>
+      <SectionTitle>有效特征</SectionTitle>
+      {hasFields ? <Fields rows={rows} /> : null}
       {groups.map(([kind, title, items]) => (
-        <Group key={kind} kind={kind === "domain" ? "domain" : kind} title={title} count={items.length} open={kind === "cert" || items.length <= 3}>
+        <Group key={kind} kind={kind} title={title} count={items.length} open={kind === "cert" || items.length <= 3}>
           {items.map((feature) => (
-            <NodeLink key={`${feature.value}:${feature.node_id ?? ""}`} node={feature.node_id && feature.node_id !== node.id ? index.byId.get(feature.node_id) : undefined} onSelect={onSelect}>
+            <NodeLink key={`${feature.value}:${feature.node_id ?? ""}`} node={feature.node_id ? index.byId.get(feature.node_id) : undefined} onSelect={onSelect}>
               <span className="font-mono text-xs">{feature.value}</span>
             </NodeLink>
           ))}
         </Group>
       ))}
-    </div>
-  )
-}
-
-function FeatureBody({ node, index, onSelect }: { node: EasmNode; index: EasmIndex; onSelect: (id: string) => void }) {
-  const detail = node.detail ?? {}
-  const rows: [string, ReactNode][] = node.featureKind === "cert"
-    ? [["证书名称", node.label], ["序列号", detail.serial], ["签发机构", detail.issuer], ["有效期", validity(detail.not_before, detail.not_after)], ["覆盖名称", detail.names?.join("、")]]
-    : [["特征值", node.label], ["备案主体", detail.subject_name]]
-  const members = index.members.get(node.id) ?? []
-  return (
-    <div className="space-y-1.5">
-      <Fields rows={rows} />
-      <SectionTitle>具有该特征的资产 <Badge className="tabular-nums">{members.length}</Badge></SectionTitle>
-      {members.length ? members.map((id) => <NodeLink key={id} node={index.byId.get(id)} onSelect={onSelect}>{index.byId.get(id)?.label ?? id}</NodeLink>) : <p className="m-0 text-muted-foreground">暂无记录</p>}
-    </div>
+      {!hasFields && !groups.length ? <p className="m-0 text-muted-foreground">暂无已保存的有效特征</p> : null}
+    </>
   )
 }
 
 /** Details for the node the user clicked. */
-export function NodeCard({ ref, className, node, index, summary, onSelect, onClose }: {
+export function NodeCard({ ref, className, node, index, onSelect, onClose }: {
   ref?: Ref<HTMLElement>
   className?: string
   node: EasmNode
   index: EasmIndex
-  summary: EasmResult["summary"]
   onSelect: (id: string) => void
   onClose: () => void
 }) {
@@ -141,7 +180,7 @@ export function NodeCard({ ref, className, node, index, summary, onSelect, onClo
       className={cn("absolute z-20 flex max-h-[min(560px,calc(100%-24px))] w-[min(400px,calc(100%-24px))] flex-col overflow-hidden rounded-xl border bg-popover text-sm text-popover-foreground shadow-xl", className)}
       onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onClose() } }}>
       <header className="flex items-center gap-3 border-b bg-muted/40 py-3 pr-2 pl-4">
-        <KindIcon kind={kind} className="size-10" />
+        <NodeIcon node={node} />
         <div className="min-w-0 flex-1">
           <h2 id={titleId} className="m-0 text-base leading-snug font-semibold break-all">{node.label}</h2>
           <Badge className="mt-1">{kindLabel(kind)}</Badge>
@@ -149,7 +188,8 @@ export function NodeCard({ ref, className, node, index, summary, onSelect, onClo
         <Button size="icon" variant="ghost" aria-label="关闭节点卡片" className="self-start" onClick={onClose} autoFocus><X className="size-4" /></Button>
       </header>
       <div className="overflow-y-auto px-4 pt-3.5 pb-4 leading-relaxed">
-        {node.kind === "feature" ? <FeatureBody node={node} index={index} onSelect={onSelect} /> : <AssetBody node={node} index={index} summary={summary} onSelect={onSelect} />}
+        {node.kind === "root" ? <RootProfile node={node} index={index} onSelect={onSelect} /> : <AssetJudgment node={node} index={index} />}
+        <EffectiveFeatures node={node} index={index} onSelect={onSelect} />
       </div>
     </section>
   )

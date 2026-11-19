@@ -2,13 +2,12 @@ package frontend
 
 import (
 	"encoding/json"
-	"os"
 	"testing"
 
 	"github.com/LubyRuffy/eino-swarm/internal/taskpanel"
 )
 
-func TestEASMPanelSchemaMatchesTheDocumentedExample(t *testing.T) {
+func TestEASMPanelSchemaRejectsInvalidSnapshots(t *testing.T) {
 	var definitions []taskpanel.Definition
 	if err := json.Unmarshal(TaskPanelCatalog(), &definitions); err != nil {
 		t.Fatal(err)
@@ -28,11 +27,9 @@ func TestEASMPanelSchemaMatchesTheDocumentedExample(t *testing.T) {
 	if definition.Entry != "" {
 		t.Fatal("the EASM panel uses the bundled host renderer")
 	}
-	example, err := os.ReadFile("../docs/examples/easm-result-full.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = taskpanel.ValidateState(definition, example); err != nil {
+	// The bundled contract stays covered when prose examples are removed.
+	example := json.RawMessage(`{"schema_version":1,"title":"Synthetic inventory","nodes":[{"id":"subject","kind":"root","label":"Fixture organization","ip_count":1}],"edges":[],"heat":[],"components":[]}`)
+	if err := taskpanel.ValidateState(definition, example); err != nil {
 		t.Fatal(err)
 	}
 	for _, test := range []struct {

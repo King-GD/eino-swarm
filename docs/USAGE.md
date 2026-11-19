@@ -67,7 +67,7 @@ available. **Task panels → EASM** shows the conversation's relationship graph,
 heat trend and supply-chain components. Search, filter by node kind or select a
 node for details. New batches preserve the graph's zoom and selected node while
 that node remains present. Reopening the conversation loads its latest saved
-portrait. [EASM_PROTOCOL.md](EASM_PROTOCOL.md) describes the input format.
+portrait. See [EASM task panel](TASK_PANELS.md#easm).
 
 Drag the conversation list or the right panel to resize them. Conversations
 and projects sort by last update; drag a row to pin a custom order. On the

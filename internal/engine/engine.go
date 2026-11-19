@@ -110,7 +110,8 @@ type Engine struct {
 	// remoteRoutes holds this turn's progressive catalog names until the
 	// manager run copies them into its context. They are not persisted.
 	remoteRoutes sync.Map
-	panelRuns    sync.Map // one registered source per panel instance
+	panelRuns    sync.Map                 // one registered source per panel instance
+	easmCalls    map[string]easmCallOrder // guarded by recordMu
 
 	// now is the wall clock the ticker reads. Tests install a fake so a
 	// wait does not sleep a real cadence. Default is time.Now.
@@ -172,6 +173,7 @@ func NewWithAnswerRecoveryClock(cfg *config.Config, st *store.Store, pool *provi
 	if cfg != nil {
 		e.mcp.SetCatalogDir(cfg.DataDir())
 	}
+	e.mcp.ObserveToolCalls(e.beginEASMToolCall)
 	e.mcp.UseRemoteSwitches(func() []config.MCPServer {
 		if e.cfg == nil {
 			return nil

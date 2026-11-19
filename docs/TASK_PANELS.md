@@ -56,10 +56,89 @@ The Vite task-panel builder bundles scripts/styles/data into one HTML document. 
 
 后端验收使用隔离数据，经真实工具入口覆盖首次打开、幂等重试、版本冲突；专用 producer 另外覆盖输入拒绝、运行进度、取消和失败。端到端检查见 [Validation](#validation)。
 
-The [EASM asset portrait](EASM_PROTOCOL.md) uses this tool-based route. One
-panel receives cumulative snapshots as the asset task produces each batch.
+### EASM
+
+The EASM asset portrait uses the `easm-asset-portrait` JSON Schema in
+[catalog.json](../frontend/src/task-panels/catalog.json). The panel displays
+the supplied subject as the graph root. The EASM skill defines how to resolve
+the subject.
+Successful organization lookups append returned organizations and their reported domains, including when
+the target is a short name. Discovered organizations retain separate nodes and
+pending links to the target until that relationship is verified. A unique
+organization named by the root can report its domains directly on that root.
+ICP records preserve the reported registrant → ICP filing → domain path.
+Domain detail cards list the evidenced filing or other traits with links to
+their feature nodes. The enterprise root card contains its sourced introduction,
+organization list and effective features.
+The root header uses the saved company logo at its original aspect ratio, with
+the category icon as a fallback when no logo is saved or the image cannot load.
+Company introductions are sourced summaries of at most 100 characters; storing
+the official logo as an image data URI also keeps it available when reopening
+history without a network connection.
+Other node cards contain judgment details and effective features; certificate identity and linked assets are
+grouped under effective features. Organization references retain their actual
+type: legal entities use the company glyph, certificate subject organizations
+use the orange certificate-organization glyph for both historical `org` nodes
+and `featureKind:"org"` nodes. Node cards show the saved judgment. Older domain cards
+without a note show confirmed incoming ICP filings and their saved registrants.
+Filing cards show confirmed linked domains. Other cards without a note can
+show confirmed graph relationships or say when no judgment evidence was saved.
+Corporate relationship replies preserve the legal parent and returned direct
+subsidiaries independently of the brand root. Branch replies attach returned
+branches to the requested legal entity, preserving their registration status
+and source. Enterprise asset rules retain their reported name and creation time
+as domain evidence. Only an unambiguous existing subject or company with that
+exact name receives a rule-based domain edge; unknown names do not create companies
+or imply a relationship to the target. Certificate search rows and TLS asset
+lookup records retain
+their reported validity and matching flags. When no certificate identifier is
+returned, the graph keeps an asset-local certificate observation rather than
+merging unrelated domains into one certificate. Explicit false flags remain
+visible and their certificate associations stay pending.
+Certificate observations retain each service's source, validity, matching and
+expiry flags. A certificate shared by several services keeps one identity;
+top-level validity or matching flags are present only when every observation
+reports the same known value. Per-service observations remain saved in the
+panel data; the compact card omits a separate service-observation table.
+Domain cards also link certificate nodes already attached to that domain in
+the saved graph. A statistical count or a missing TLS response does not
+establish a certificate identity.
+The icons in the upper right of the graph filter the node types present in
+that result. Hover or focus reveals the category name.
+
+Each dedicated metric request selects the current asset range from its query
+before remote dispatch. An agent can also select it explicitly with
+`open_task_panel({plugin_id:"easm-asset-portrait", query})`.
+The resulting `query_scope` binds the exact query and a scope
+identity to the panel. Selecting a different query clears summary, heat and
+components while retaining graph evidence. Selecting the same query retains
+its results. A request binds its scope when it starts, so a delayed result
+from an older range cannot overwrite the current range.
+Within one range, a successful equal-valued reply still fences older in-flight
+results without creating a redundant revision. Invalid replies do not advance
+that fence.
+
+Successful `mcp_fofa_asset_heat` replies publish heat directly. Successful
+`mcp_fofa_stats` replies publish components for `tool:"fofa"` and
+`fields:"product1,product5"`, or asset/IP summary for `fields:"ip"` with
+`uniq_count:"ip"`. These calls must use the selected exact query. Rule lookup
+replies resolve returned product identifiers. The host commits each accepted
+result before returning it to the model. The agent supplements graph evidence,
+verified display names and tags with small patches. Protected scope and metric
+fields retain host ownership during those publications.
+Supplementary nodes must reuse known company, domain and certificate
+identities. A new certificate needs a reported issuer and serial, or one
+service-specific observation when its identity is incomplete. The agent tool
+rejects duplicate identities and anonymous certificate summaries before writing;
+structured source reducers can still retain genuinely ambiguous source entities.
+New supplementary Agent links explicitly remain pending. An Agent cannot raise
+an existing link's confidence or remove its pending marker. Structured source
+updates supply confirmations; existing confirmations may be retained, lowered
+or removed when supplementary evidence contests them. This keeps a website
+declaration or inferred association from appearing as a verified registry fact.
+
 Its empty catalog entry path selects the shared React renderer on desktop,
-Web and paired phones. Bundled HTML plugins declare a file entry.
+Web and paired phones.
 
 ## Protocol v1
 

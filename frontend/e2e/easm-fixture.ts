@@ -12,10 +12,16 @@ const company = { id: "company|sample", kind: "company" as const, label: "示例
 const domain = { id: "domain|example.test", kind: "domain" as const, label: "example.test", detail: { reason: "示例域名归属依据" } }
 const certificate = {
   id: "feature|certificate", kind: "feature" as const, featureKind: "cert" as const, label: "*.example.test",
-  detail: { serial: "sample-certificate", issuer: "示例 CA", not_before: "2026-01-01", not_after: "2027-01-01" },
+  detail: {
+    serial: "sample-certificate", issuer: "示例 CA", not_before: "2026-01-01", not_after: "2099-01-01",
+    observations: [
+      { host: "https://one.example.test:443", source: "mcp_fofa_asset_lookup", is_valid: false, is_match: false, is_expired: false },
+      { host: "https://two.example.test:8443", source: "mcp_fofa_asset_lookup", is_valid: true, is_match: true },
+    ],
+  },
 }
 
-/** Three complete accumulated results, never a request to collect real assets. */
+/** Synthetic Agent batches keep relations pending; typed MCP projections confirm real sources. */
 export const easmSnapshots: EasmResult[] = [
   {
     schema_version: 1, title: "EASM", nodes: [root], edges: [],
@@ -25,8 +31,8 @@ export const easmSnapshots: EasmResult[] = [
   {
     schema_version: 1, title: "EASM", nodes: [root, company, domain],
     edges: [
-      { source: root.id, target: company.id, confirmed: true },
-      { source: company.id, target: domain.id, confirmed: true },
+      { source: root.id, target: company.id, confirmed: false },
+      { source: company.id, target: domain.id, confirmed: false },
     ],
     summary: { clues: 3, fofa_assets: 24, fofa_ips: 6 },
     heat: [{ date: "2026-11-10", value: 3 }, { date: "2026-11-17", value: 5 }],
@@ -36,9 +42,9 @@ export const easmSnapshots: EasmResult[] = [
     schema_version: 1, title: "EASM",
     nodes: [{ ...root, ip_count: 120 }, company, { ...domain, ip_count: 42, detail: { reason: "第三批已复核的域名归属依据" } }, certificate],
     edges: [
-      { source: root.id, target: company.id, confirmed: true },
-      { source: company.id, target: domain.id, confirmed: true },
-      { source: domain.id, target: certificate.id },
+      { source: root.id, target: company.id, confirmed: false },
+      { source: company.id, target: domain.id, confirmed: false },
+      { source: domain.id, target: certificate.id, confirmed: false },
     ],
     summary: { clues: 4, fofa_assets: 120, fofa_ips: 30 },
     heat: [{ date: "2026-11-10", value: 3 }, { date: "2026-11-17", value: 5 }, { date: "2026-11-18", value: 8 }],
@@ -68,11 +74,11 @@ function reply(response: ServerResponse, input: ModelInput, message: object, fin
 }
 
 /** Drives the real model/tool boundary, with each next batch released by its UI observation. */
-export async function startEasmFixture() {
+export async function startEasmFixture(snapshots = easmSnapshots, subject?: string) {
   const errors: string[] = []
   const receipts = new Map<string, Receipt>()
   const releases: (() => void)[] = []
-  const gates = easmSnapshots.map(() => new Promise<void>((resolve) => releases.push(resolve)))
+  const gates = snapshots.map(() => new Promise<void>((resolve) => releases.push(resolve)))
   let finish!: () => void
   const finalReply = new Promise<void>((resolve) => { finish = resolve })
   let requests = 0
@@ -106,7 +112,7 @@ export async function startEasmFixture() {
         if (!input.messages.some((message) => message.role === "user" && message.content?.includes(easmPrompt))) {
           throw new Error("The model did not receive the exposure inventory request")
         }
-        call("easm-open", "open_task_panel", { plugin_id: "easm-asset-portrait" })
+        call("easm-open", "open_task_panel", { plugin_id: "easm-asset-portrait", ...(subject ? { subject } : {}) })
         return
       }
       const opened = receipts.get("easm-open")!
@@ -116,7 +122,7 @@ export async function startEasmFixture() {
         call("easm-read", "read_panel_state", { panel_id: panelId })
         return
       }
-      for (let index = 0; index < easmSnapshots.length; index++) {
+      for (let index = 0; index < snapshots.length; index++) {
         const id = `easm-batch-${index + 1}`
         if (receipts.has(id)) continue
         const previous = receipts.get(index === 0 ? "easm-read" : `easm-batch-${index}`)!
@@ -129,7 +135,7 @@ export async function startEasmFixture() {
         if (response.destroyed) return
         call(id, "publish_panel_update", {
           protocol_version: 1, panel_id: panelId, operation_id: id,
-          base_revision: previous.revision, kind: "snapshot", state: easmSnapshots[index],
+          base_revision: previous.revision, kind: "snapshot", state: snapshots[index],
         })
         return
       }
