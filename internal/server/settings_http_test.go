@@ -236,6 +236,44 @@ func TestSwitchingAProviderOffHidesItFromTheComposer(t *testing.T) {
 	}
 }
 
+func TestSettingsRejectsInvalidSubagentCapWithoutSaving(t *testing.T) {
+	h := newHarness(t)
+	h.json(http.MethodPut, "/api/settings", map[string]any{
+		"swarm": map[string]any{"max_concurrent": 2},
+	}, http.StatusOK)
+	before, err := os.ReadFile(h.app.Config.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range []any{0, -1, 1.5} {
+		h.json(http.MethodPut, "/api/settings", map[string]any{
+			"swarm": map[string]any{"max_concurrent": value, "agent_timeout_seconds": 500},
+		}, http.StatusBadRequest)
+		after, err := os.ReadFile(h.app.Config.Path())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(after) != string(before) || h.app.Config.SwarmSnapshot().MaxConcurrent != 2 {
+			t.Fatalf("bad cap %v changed saved settings", value)
+		}
+	}
+	for _, fields := range []map[string]any{
+		{"agent_timeout_seconds": 61},
+		{"max_concurrent": nil, "agent_timeout_seconds": 62},
+	} {
+		h.json(http.MethodPut, "/api/settings", map[string]any{"swarm": fields}, http.StatusOK)
+		if got := h.app.Config.SwarmSnapshot().MaxConcurrent; got != 2 {
+			t.Fatalf("partial save changed the cap to %d", got)
+		}
+	}
+	h.json(http.MethodPut, "/api/settings", map[string]any{
+		"swarm": map[string]any{"max_concurrent": 1},
+	}, http.StatusOK)
+	if got := h.app.Config.SwarmSnapshot().MaxConcurrent; got != 1 {
+		t.Fatalf("minimum cap did not apply: %d", got)
+	}
+}
+
 func TestSettingsPersistAndValidate(t *testing.T) {
 	h := newHarness(t)
 	h.json(http.MethodPut, "/api/settings", map[string]any{

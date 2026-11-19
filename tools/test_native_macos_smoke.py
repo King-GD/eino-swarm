@@ -658,8 +658,9 @@ static BOOL check(NSString *label, FixtureNode *root, NSUInteger expectedRows, N
     // clears an unknown subtree in a running native action.
     axReadFailed=NO; axReadStatus=kAXErrorSuccess; axReadKey=nil; axReadReason=nil;
     NSMutableArray *tree=[NSMutableArray array], *areas=[NSMutableArray array], *sends=[NSMutableArray array], *urls=[NSMutableArray array];
-    BOOL visible=NO,truncated=NO;
-    collect((__bridge AXUIElementRef)root,tree,areas,sends,urls,@"",CGRectZero,&visible,&truncated,0);
+    NSMutableArray *matches=[NSMutableArray array];
+    BOOL truncated=NO;
+    collect((__bridge AXUIElementRef)root,tree,areas,sends,urls,@"",matches,&truncated,0);
     BOOL passed=!axReadFailed && truncated==expectedTruncated && (expectedTruncated || (tree.count==expectedRows && sends.count==expectedSends));
     if (!passed) fprintf(stderr,"%s: rows=%lu sends=%lu truncated=%d\\n",label.UTF8String,(unsigned long)tree.count,(unsigned long)sends.count,truncated);
     return passed;
@@ -667,8 +668,9 @@ static BOOL check(NSString *label, FixtureNode *root, NSUInteger expectedRows, N
 static BOOL refused(FixtureNode *root, CFStringRef key) {
     axReadFailed=NO; axReadStatus=kAXErrorSuccess; axReadKey=nil; axReadReason=nil;
     NSMutableArray *tree=[NSMutableArray array],*areas=[NSMutableArray array],*sends=[NSMutableArray array],*urls=[NSMutableArray array];
-    BOOL visible=NO,truncated=NO;
-    collect((__bridge AXUIElementRef)root,tree,areas,sends,urls,@"",CGRectZero,&visible,&truncated,0);
+    NSMutableArray *matches=[NSMutableArray array];
+    BOOL truncated=NO;
+    collect((__bridge AXUIElementRef)root,tree,areas,sends,urls,@"",matches,&truncated,0);
     return axReadFailed && axReadStatus==kAXErrorCannotComplete && [axReadKey isEqual:(__bridge NSString *)key]
         && [axReadReason isEqual:@"api_error"] && failAXRead()==2;
 }

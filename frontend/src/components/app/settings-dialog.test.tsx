@@ -661,6 +661,24 @@ describe("Settings dialog", () => {
     expect(toggle).not.toBeChecked()
   })
 
+  it("does not autosave an invalid sub-agent cap and saves a correction", async () => {
+    renderDialog()
+    await waitSettingsLoaded()
+    fireEvent.click(screen.getByRole("tab", { name: "Swarm" }))
+    const cap = screen.getByRole("spinbutton", { name: "Sub-agents at once" })
+    for (const value of ["", "0", "-1", "1.5"]) {
+      fireEvent.change(cap, { target: { value } })
+      expect(cap).toHaveAttribute("aria-invalid", "true")
+      expect(screen.getByText("Enter a whole number of at least 1.")).toBeVisible()
+    }
+    await new Promise((resolve) => setTimeout(resolve, 450))
+    expect(api.saveSettings).not.toHaveBeenCalled()
+    fireEvent.change(cap, { target: { value: "2" } })
+    expect(cap).not.toHaveAttribute("aria-invalid", "true")
+    await waitFor(() => expect(api.saveSettings).toHaveBeenCalled())
+    expect(vi.mocked(api.saveSettings).mock.calls.at(-1)?.[0].swarm?.max_concurrent).toBe(2)
+  })
+
   it("keeps invalid cloud tool JSON across pages and blocks auto-save and leaving", async () => {
     vi.mocked(api.settings).mockResolvedValue({
       ...base,

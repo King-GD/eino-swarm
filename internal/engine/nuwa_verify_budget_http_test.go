@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -122,19 +123,38 @@ func TestNuwaVerificationBudgetRefusesAnotherCheckBeforeAWorkerStarts(t *testing
 		if workID == "" || strings.Contains(nuwaValidationReceipt(request, "budget-work"), `"error"`) {
 			t.Errorf("ordinary work was charged against the verification allowance: %s", nuwaValidationReceipt(request, "budget-work"))
 		}
-		body, err := json.Marshal(map[string]any{"agent_ids": []string{verifyID, fixID, workID}, "timeout_s": 5})
-		if err != nil {
-			t.Error(err)
-		}
-		// wait_agents settles only the generation it actually observes. A worker
-		// that finishes after the first receipt still needs another wait.
-		if nuwaValidationReceipt(request, "budget-wait") == "" {
-			nuwaValidationTool(w, request, "budget-wait", "wait_agents", string(body))
-			return
-		}
-		if nuwaValidationReceipt(request, "budget-wait-again") == "" {
-			nuwaValidationTool(w, request, "budget-wait-again", "wait_agents", string(body))
-			return
+		// A completed ID makes wait_agents return immediately. Wait only on
+		// workers whose current generations have not appeared in a receipt.
+		pending := []string{verifyID, fixID, workID}
+		for round := 1; len(pending) != 0; round++ {
+			callID := fmt.Sprintf("budget-wait-%d", round)
+			receipt := nuwaValidationReceipt(request, callID)
+			if receipt == "" {
+				body, _ := json.Marshal(map[string]any{"agent_ids": pending, "timeout_s": 5})
+				nuwaValidationTool(w, request, callID, "wait_agents", string(body))
+				return
+			}
+			var result struct {
+				Agents []struct {
+					ID     string `json:"agent_id"`
+					Status string `json:"status"`
+				} `json:"agents"`
+			}
+			if err := json.Unmarshal([]byte(receipt), &result); err != nil {
+				t.Errorf("decode worker collection receipt: %v", err)
+				break
+			}
+			var unresolved []string
+			for _, agent := range result.Agents {
+				if agent.Status != "done" {
+					unresolved = append(unresolved, agent.ID)
+				}
+			}
+			if len(result.Agents) != len(pending) || len(unresolved) >= len(pending) {
+				t.Errorf("expected at least one new completed worker: %s", receipt)
+				break
+			}
+			pending = unresolved
 		}
 		writeContextFlowReply(w, request.Stream, map[string]any{"content": "The unmet criterion remains after the allowed check and repair."}, "stop")
 	})

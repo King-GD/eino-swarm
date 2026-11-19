@@ -206,6 +206,8 @@ func (s *Server) getSettings(c *gin.Context) {
 
 type putSwarmSettings struct {
 	config.SwarmConfig
+	// An explicit non-positive value is invalid; an omitted cap keeps the current value.
+	MaxConcurrent       *int `json:"max_concurrent"`
 	AgentTimeoutSeconds *int `json:"agent_timeout_seconds"`
 	// Absent keeps the stored choice. A missing bool would otherwise
 	// unmarshal as false and turn the next-step call off.
@@ -288,6 +290,10 @@ func (s *Server) putSettings(c *gin.Context) {
 		badRequest(c, "could not read the request body: %v", err)
 		return
 	}
+	if req.Swarm != nil && req.Swarm.MaxConcurrent != nil && *req.Swarm.MaxConcurrent < 1 {
+		badRequest(c, "swarm.max_concurrent must be a whole number of at least 1")
+		return
+	}
 	policy := s.engine.Providers().ModelPolicy()
 	err := s.engine.UpdateConfigForMode(req.Product, func(cfg *config.Config) error {
 		next := *cfg
@@ -296,6 +302,10 @@ func (s *Server) putSettings(c *gin.Context) {
 		}
 		if req.Swarm != nil {
 			next.Swarm = req.Swarm.SwarmConfig
+			next.Swarm.MaxConcurrent = cfg.Swarm.MaxConcurrent
+			if req.Swarm.MaxConcurrent != nil {
+				next.Swarm.MaxConcurrent = *req.Swarm.MaxConcurrent
+			}
 			// Desktop autosave omits timeouts the user did not edit, so it
 			// does not overwrite a phone save made while the sheet was open.
 			next.Swarm.AgentTimeoutSeconds = cfg.Swarm.AgentTimeoutSeconds

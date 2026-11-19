@@ -116,6 +116,8 @@ make native-smoke APP="$CANDIDATE_APP" \
 
 初始 readiness 仅对空 snapshot 的结构化（`AXRole` 或 `AXWindows`）／`-25204`／`api_error`，在核对本次完整独立调用收据后，沿原 pause 和 shared deadline 重新取得全新完整观察。失败图不证明 absence／unique／ready，原 code2 和原始流保持，后续完整窗口／像素证明前不输入；不是重跑已失败业务或整个 case。snapshot 仍可能执行原有每调用一次 activation／raise；带 expected 的滚动观察、fill／Send／Press、证据损坏、超时及库存 EIO 不适用。不要由此改写旧失败或清理 latch。
 
+最终结果的 AX 观测先完成整棵树和窗口归属验证，再读匹配文本节点的几何。已有节点与窗口相交时直接记录可见；否则在这个观测中最多滚动一个匹配节点，随后只复核该节点的角色、文字和位置，避免继续读取滚动前获得的兄弟节点。输出记录 `result_scroll_attempted` 和原始 `result_scroll_status`。滚动本身不能证明可见，匹配节点失效会保留原始 AX 错误并拒绝观测，最终截图仍然必需。
+
 ### 场景触发矩阵
 
 | 改动／目标 | 必须补的原生观察 | 现有入口或定位 |

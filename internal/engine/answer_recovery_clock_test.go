@@ -18,7 +18,9 @@ func awaitAnswerClockTimer(t *testing.T, clock *timingtest.ManualClock) {
 	t.Helper()
 	select {
 	case <-clock.Registered():
-	case <-time.After(time.Second):
+	// The timer's logical schedule is asserted separately. Allow the real
+	// HTTP fixture and SQLite receipt to reach registration under race.
+	case <-time.After(5 * time.Second):
 		t.Fatal("answer recovery did not register its actual retry timer")
 	}
 }

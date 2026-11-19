@@ -752,6 +752,7 @@ export const en = {
   "settings.swarm.maxConcurrent": "Sub-agents at once",
   "settings.swarm.maxConcurrentHint":
     "Takes effect immediately. One task runs at most this many sub-agents at once. Lowering it stops the workers that took a slot last; the earlier ones keep running, and a stopped worker needs a free slot before it can resume. Workers already queued still start when a slot opens. New spawns and resumes past this number are refused. More means faster fan-out and more tokens in parallel.",
+  "settings.swarm.maxConcurrentInvalid": "Enter a whole number of at least 1.",
   "settings.swarm.agentTimeout": "Sub-agent timeout (seconds)",
   "settings.swarm.agentTimeoutHint":
     "How long one sub-agent may keep working before it is stopped.",

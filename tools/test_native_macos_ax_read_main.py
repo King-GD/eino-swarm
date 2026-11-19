@@ -24,7 +24,7 @@ static NSString *testMode, *testAction;
 static double testClock=10;
 static int kernelReads, trustedReads, captureReads, bundleReads;
 static int globalCreates, globalSets, globalReleases, appSets, systemAttributeReads;
-static int remoteReads, focusCalls, keyPosts, pressCalls, activationCalls, raiseCalls;
+static int remoteReads, focusCalls, keyPosts, pressCalls, activationCalls, raiseCalls, scrollCalls, siblingRoleReads;
 static BOOL timeoutOrderOK=YES;
 @interface MainNode:NSObject
 @property(nonatomic,strong) NSDictionary *attributes;
@@ -32,7 +32,7 @@ static BOOL timeoutOrderOK=YES;
 @end
 @implementation MainNode
 @end
-static MainNode *testApp, *testWindow, *testUnknown, *testSystem;
+static MainNode *testApp, *testWindow, *testUnknown, *testSystem, *testResult;
 static MainNode *makeNode(NSString *role,NSDictionary *extra) {
     MainNode *n=[MainNode new];NSMutableDictionary *attrs=[@{@"AXRole":role} mutableCopy];
     [attrs addEntriesFromDictionary:extra ?: @{}];n.attributes=attrs;n.nodes=@[];return n;
@@ -111,6 +111,26 @@ static AXError mainCopy(AXUIElementRef element,CFStringRef key,CFTypeRef *out) {
     MainNode *node=(__bridge MainNode *)element;
     if (node==testSystem) {systemAttributeReads++;return kAXErrorCannotComplete;}
     if (globalSets!=1 || globalReleases!=1) timeoutOrderOK=NO;
+    if (node==testResult && CFEqual(key,kAXPositionAttribute)) {
+        if ([testMode isEqual:@"result-frame-refused"]) return kAXErrorInvalidUIElement;
+        if ([testMode hasPrefix:@"result-offscreen"] && !scrollCalls) {
+            CGPoint offscreen = CGPointMake(10, 900);
+            *out = AXValueCreate(kAXValueCGPointType, &offscreen);
+            return kAXErrorSuccess;
+        }
+    }
+    if (node==testResult && scrollCalls && [testMode isEqual:@"result-offscreen-invalidates-result"]
+            && CFEqual(key,kAXRoleAttribute)) return kAXErrorInvalidUIElement;
+    if (node==testResult && scrollCalls && [testMode isEqual:@"result-offscreen-changes-text"]
+            && CFEqual(key,kAXValueAttribute)) {
+        *out=CFBridgingRetain(@"Different answer"); return kAXErrorSuccess;
+    }
+    if (node==testUnknown && CFEqual(key,kAXRoleAttribute)) {
+        siblingRoleReads++;
+        if ([testMode isEqual:@"result-offscreen-stale-sibling"] ||
+            (scrollCalls && [@[@"scroll-invalidates-sibling", @"result-offscreen-invalidates-sibling"] containsObject:testMode]))
+            return kAXErrorInvalidUIElement;
+    }
     if (node==testUnknown) {
         if ([testMode isEqual:@"role-failure"] && CFEqual(key,kAXRoleAttribute)) return kAXErrorCannotComplete;
         if ([testMode isEqual:@"children-failure"] && CFEqual(key,kAXChildrenAttribute)) return kAXErrorCannotComplete;
@@ -130,6 +150,7 @@ static AXError mainSet(AXUIElementRef element,CFStringRef key,CFTypeRef value) {
 }
 static AXError mainAction(AXUIElementRef element,CFStringRef action) {
     if (CFEqual(action,kAXPressAction)) pressCalls++;
+    if (CFEqual(action,CFSTR("AXScrollToVisible"))) scrollCalls++;
     if (CFEqual(action,kAXRaiseAction)) raiseCalls++;
     return kAXErrorSuccess;
 }
@@ -182,9 +203,14 @@ int main(int argc,const char **argv) {@autoreleasepool {
     // A second composer hidden behind an unreadable child must never disappear.
     if([testMode isEqual:@"children-failure"])testUnknown.nodes=@[makeNode(@"AXTextArea",@{@"AXValue":@"hidden"})];
     testWindow.nodes=@[testUnknown,web,area,button];
-    const char *args[]={"helper","41",argv[2],"case-main","/private/case","http://127.0.0.1:42",[testAction isEqual:@"snapshot"] ? "" : "draft"};
+    if ([testMode hasPrefix:@"result-offscreen"] || [@[@"scroll-invalidates-sibling", @"result-frame-refused"] containsObject:testMode]) {
+        testResult=makeNode(@"AXStaticText",@{@"AXValue":@"Rendered answer",
+            @"AXPosition":testWindow.attributes[@"AXPosition"], @"AXSize":testWindow.attributes[@"AXSize"]});
+        web.nodes=@[testResult,testUnknown]; testWindow.nodes=@[web,area,button];
+    }
+    const char *args[]={"helper","41",argv[2],"case-main","/private/case","http://127.0.0.1:42",[testAction isEqual:@"snapshot"] ? (testResult ? "Rendered answer" : "") : "draft"};
     int code=helper_actual_main(7,args);
-    NSDictionary *stats=@{@"global_creates":@(globalCreates),@"global_sets":@(globalSets),@"global_releases":@(globalReleases),@"app_sets":@(appSets),@"system_attribute_reads":@(systemAttributeReads),@"timeout_order_ok":@(timeoutOrderOK),@"remote_reads":@(remoteReads),@"focus":@(focusCalls),@"key_posts":@(keyPosts),@"press":@(pressCalls),@"activation":@(activationCalls),@"raise":@(raiseCalls)};
+    NSDictionary *stats=@{@"global_creates":@(globalCreates),@"global_sets":@(globalSets),@"global_releases":@(globalReleases),@"app_sets":@(appSets),@"system_attribute_reads":@(systemAttributeReads),@"timeout_order_ok":@(timeoutOrderOK),@"remote_reads":@(remoteReads),@"focus":@(focusCalls),@"key_posts":@(keyPosts),@"press":@(pressCalls),@"activation":@(activationCalls),@"raise":@(raiseCalls),@"scroll":@(scrollCalls),@"sibling_role_reads":@(siblingRoleReads)};
     NSData *data=[NSJSONSerialization dataWithJSONObject:stats options:0 error:nil];fwrite(data.bytes,1,data.length,stderr);fputc('\n',stderr);
     return code;
 }}
@@ -215,6 +241,49 @@ class AXReadMainTests(unittest.TestCase):
 
     def assert_no_input(self, stats):
         self.assertEqual([stats[key] for key in ("focus", "key_posts", "press")], [0, 0, 0])
+
+    def test_result_already_in_view_does_not_invalidate_sibling(self):
+        code, row, stats = self.observe("scroll-invalidates-sibling")
+        self.assertEqual((code, row.get("expected_visible"), stats["scroll"]), (0, True, 0), (row, stats))
+        self.assertNotIn("result_scroll_attempted", next(x for x in row["tree"] if x.get("result_intersects_window")))
+        self.assert_no_input(stats)
+
+    def test_offscreen_result_still_scrolls_and_measures_geometry(self):
+        code, row, stats = self.observe("result-offscreen")
+        self.assertEqual((code, row.get("expected_visible"), stats["scroll"]), (0, True, 1), (row, stats))
+        self.assertIs(next(x for x in row["tree"] if x.get("result_intersects_window"))["result_scroll_attempted"], True)
+        self.assert_no_input(stats)
+
+    def test_offscreen_scroll_happens_after_the_last_sibling_read(self):
+        code, row, stats = self.observe("result-offscreen-invalidates-sibling")
+        self.assertEqual((code, row.get("expected_visible"), stats["scroll"]), (0, True, 1), (row, stats))
+        self.assertEqual(stats["sibling_role_reads"], 1)
+        self.assert_no_input(stats)
+
+    def test_invalid_sibling_before_scroll_rejects_the_partial_graph(self):
+        code, row, stats = self.observe("result-offscreen-stale-sibling")
+        self.assertEqual((code, row.get("ax_attribute"), row.get("ax_error")), (2, "AXRole", -25202))
+        self.assertEqual(stats["scroll"], 0)
+        self.assert_no_input(stats)
+
+    def test_invalid_expected_result_after_scroll_cannot_be_accepted(self):
+        code, row, stats = self.observe("result-offscreen-invalidates-result")
+        self.assertEqual((code, row.get("ax_attribute"), row.get("ax_error")), (2, "AXRole", -25202))
+        self.assertEqual(stats["scroll"], 1)
+        self.assertIs(row["result_scroll_attempted"], True)
+        self.assertEqual(row["result_scroll_status"], 0)
+        self.assert_no_input(stats)
+
+    def test_changed_text_after_scroll_cannot_prove_the_expected_result(self):
+        code, row, stats = self.observe("result-offscreen-changes-text")
+        self.assertEqual((code, row.get("expected_visible"), stats["scroll"]), (0, False, 1), (row, stats))
+        self.assert_no_input(stats)
+
+    def test_unverified_result_geometry_refuses_before_scrolling(self):
+        code, row, stats = self.observe("result-frame-refused")
+        self.assertEqual((code, row.get("ax_attribute"), row.get("ax_error")), (2, "AXPosition", -25202))
+        self.assertEqual(stats["scroll"], 0)
+        self.assert_no_input(stats)
 
     def test_process_default_is_set_checked_and_released_before_remote_reads(self):
         for mode in ("leaf-no-value", "leaf-unsupported"):

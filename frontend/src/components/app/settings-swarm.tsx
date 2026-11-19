@@ -1,3 +1,5 @@
+import { useId, useState } from "react"
+
 import { Input } from "@/components/ui/input"
 import { SelectItem } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
@@ -7,6 +9,43 @@ import type { Settings } from "@/lib/types"
 import { useT } from "@/lib/use-t"
 
 import { Field, SettingsChoice, SettingsPage, SettingsSection } from "./settings-field"
+
+function SubagentCapInput({ id, value, onChange }: {
+  id?: string
+  value: number
+  onChange: (cap: number) => void
+}) {
+  const t = useT()
+  const errorId = useId()
+  const [invalidDraft, setInvalidDraft] = useState<string>()
+  const invalid = invalidDraft !== undefined
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Input
+        id={id}
+        type="number"
+        min={1}
+        value={invalidDraft ?? value}
+        aria-invalid={invalid || undefined}
+        aria-describedby={invalid ? errorId : undefined}
+        onChange={(event) => {
+          const cap = event.currentTarget.valueAsNumber
+          if (!Number.isSafeInteger(cap) || cap < 1) {
+            setInvalidDraft(event.currentTarget.value)
+            return
+          }
+          setInvalidDraft(undefined)
+          onChange(cap)
+        }}
+      />
+      {invalid && (
+        <p id={errorId} role="alert" className="max-w-44 text-right text-xs text-destructive">
+          {t("settings.swarm.maxConcurrentInvalid")}
+        </p>
+      )}
+    </div>
+  )
+}
 
 export function SwarmTab({
   settings,
@@ -65,11 +104,9 @@ export function SwarmTab({
           label={t("settings.swarm.maxConcurrent")}
           hint={t("settings.swarm.maxConcurrentHint")}
         >
-          <Input
-            type="number"
-            min={1}
+          <SubagentCapInput
             value={settings.swarm.max_concurrent}
-            onChange={(e) => update({ max_concurrent: Number(e.target.value) })}
+            onChange={(max_concurrent) => update({ max_concurrent })}
           />
         </Field>
         <Field

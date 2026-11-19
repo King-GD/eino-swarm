@@ -659,12 +659,14 @@ loaded with More.
 
 Every top-level section is optional; omitted sections keep their current value.
 The file is rewritten atomically and the model pool is invalidated, so the next
-turn uses the new endpoint without a restart. `swarm.max_concurrent` is also
-pushed onto every live or parked registry in this process. `spawn_agent` and
-`resume_agent` refuse past the new cap instead of parking another worker.
-Workers already queued by a programmatic spawn start as soon as a slot opens;
-lowering it does not
-kill in-flight workers. A language-only write is
+turn uses the new endpoint without a restart. `swarm.max_concurrent` accepts
+integers of at least 1. Omission or null preserves the current cap. A value
+outside that range or a non-integer returns HTTP 400 before any settings are
+saved. The cap is pushed onto every live or parked registry in this process.
+`spawn_agent` and `resume_agent` refuse past the new cap. Workers already
+queued by a programmatic spawn start as soon as a slot opens. Lowering the
+cap stops the newest holders until the number of running workers fits.
+A language-only write is
 `{"ui":{"locale":"zh"}}` and must not wipe swarm, models, the typeface, or the
 conversation column. Unknown locale values become `system`; unknown `font` /
 `ui_font_size` / `font_size` / `content_width` / `transcript_mode` / `palette` become `system` / `medium` /

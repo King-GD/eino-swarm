@@ -12,6 +12,7 @@
 static BOOL axReadFailed;
 static AXError axReadStatus;
 static NSString *axReadKey, *axReadReason;
+static NSNumber *resultScrollStatus;
 static void rememberAXRead(AXError status, CFStringRef key, NSString *reason) {
     if (axReadFailed) return;
     axReadFailed = YES; axReadStatus = status;
@@ -67,6 +68,10 @@ static CGRect frame(AXUIElementRef element) {
         AXValueGetValue((__bridge AXValueRef)size, kAXValueCGSizeType, &extent);
     return (CGRect){origin, extent};
 }
+static BOOL resultIntersectsWindow(AXUIElementRef element, CGRect window) {
+    CGRect intersection = CGRectIntersection(frame(element), window);
+    return !CGRectIsNull(intersection) && intersection.size.width > 0 && intersection.size.height > 0;
+}
 static NSString *normalized(NSString *value) {
     NSArray *pieces = [value componentsSeparatedByCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     return [[pieces filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"length > 0"]] componentsJoinedByString:@" "];
@@ -77,9 +82,14 @@ static void emit(id value) {
 }
 static int fail(NSString *message) { emit(@{@"error": message}); return 2; }
 static int failAXRead(void) {
-    emit(@{@"error": @"native AX read cannot establish a complete observation",
+    NSMutableDictionary *failure = [@{@"error": @"native AX read cannot establish a complete observation",
         @"ax_read_failed": @YES, @"ax_error": @(axReadStatus),
-        @"ax_attribute": axReadKey, @"ax_read_reason": axReadReason});
+        @"ax_attribute": axReadKey, @"ax_read_reason": axReadReason} mutableCopy];
+    if (resultScrollStatus) {
+        failure[@"result_scroll_attempted"] = @YES;
+        failure[@"result_scroll_status"] = resultScrollStatus;
+    }
+    emit(failure);
     return 2;
 }
 static int failSnapshot(AXUIElementRef app, NSMutableDictionary *result, NSString *message) {
@@ -136,7 +146,7 @@ static BOOL pageMatches(NSString *value, NSString *origin, pid_t pid) {
 }
 static void collectUnique(AXUIElementRef element, NSMutableArray *tree, NSMutableArray *areas,
                     NSMutableArray *sends, NSMutableArray *urls, NSString *expected,
-                    CGRect window, BOOL *visible, BOOL *truncated, int depth,
+                    NSMutableArray *matches, BOOL *truncated, int depth,
                     CFMutableSetRef seen, NSUInteger *visits) {
     if (*truncated || axReadFailed) return;
     if (++*visits > 5000) { *truncated = YES; return; }
@@ -167,14 +177,8 @@ static void collectUnique(AXUIElementRef element, NSMutableArray *tree, NSMutabl
          [@[@"Send", @"发送"] containsObject:row[@"AXDescription"]])) [sends addObject:(__bridge id)element];
     if (expected.length && [@[@"AXStaticText", @"AXHeading"] containsObject:row[@"AXRole"]]) {
         NSString *content = row[@"AXValue"] ?: row[@"AXTitle"] ?: @"";
-        if ([normalized(content) containsString:expected]) {
-            AXUIElementPerformAction(element, CFSTR("AXScrollToVisible"));
-            CGRect intersection = CGRectIntersection(frame(element), window);
-            if (!CGRectIsNull(intersection) && intersection.size.width > 0 && intersection.size.height > 0) {
-                *visible = YES;
-                row[@"result_intersects_window"] = @YES;
-            }
-        }
+        if ([normalized(content) containsString:expected])
+            [matches addObject:@{@"element": (__bridge id)element, @"row": row}];
     }
     if (row.count) [tree addObject:row];
     if (axReadFailed) return;
@@ -185,18 +189,52 @@ static void collectUnique(AXUIElementRef element, NSMutableArray *tree, NSMutabl
             rememberAXRead(kAXErrorSuccess, kAXChildrenAttribute, @"wrong_child_type"); return;
         }
         collectUnique((__bridge AXUIElementRef)child, tree, areas, sends, urls,
-                      expected, window, visible, truncated, depth+1, seen, visits);
+                      expected, matches, truncated, depth+1, seen, visits);
         if (*truncated || axReadFailed) break;
     }
 }
 static void collect(AXUIElementRef element, NSMutableArray *tree, NSMutableArray *areas,
                     NSMutableArray *sends, NSMutableArray *urls, NSString *expected,
-                    CGRect window, BOOL *visible, BOOL *truncated, int depth) {
+                    NSMutableArray *matches, BOOL *truncated, int depth) {
     CFMutableSetRef seen = CFSetCreateMutable(kCFAllocatorDefault, 0, &kCFTypeSetCallBacks);
     NSUInteger visits = 0;
-    collectUnique(element, tree, areas, sends, urls, expected, window, visible, truncated, depth, seen, &visits);
+    collectUnique(element, tree, areas, sends, urls, expected, matches, truncated, depth, seen, &visits);
     CFRelease(seen);
 }
+// Scrolling can invalidate descendants already returned by the WebView. Finish
+// the window proof first, then read only the matched element after one scroll.
+static BOOL observeResult(NSArray *matches, NSString *expected, CGRect window) {
+    for (NSDictionary *match in matches) {
+        AXUIElementRef element = (__bridge AXUIElementRef)match[@"element"];
+        BOOL inWindow = resultIntersectsWindow(element, window);
+        if (axReadFailed) return NO;
+        if (inWindow) {
+            match[@"row"][@"result_intersects_window"] = @YES;
+            return YES;
+        }
+    }
+    NSDictionary *match = matches.firstObject;
+    if (!match) return NO;
+    AXUIElementRef element = (__bridge AXUIElementRef)match[@"element"];
+    NSMutableDictionary *row = match[@"row"];
+    resultScrollStatus = @(AXUIElementPerformAction(element, CFSTR("AXScrollToVisible")));
+    row[@"result_scroll_attempted"] = @YES;
+    row[@"result_scroll_status"] = resultScrollStatus;
+    id role = readAttribute(element, kAXRoleAttribute, NO);
+    if (axReadFailed) return NO;
+    if (![role isEqual:row[@"AXRole"]]) {
+        rememberAXRead(kAXErrorSuccess, kAXRoleAttribute, @"result_role_changed");
+        return NO;
+    }
+    NSString *content = text(element, kAXValueAttribute);
+    if (!content.length) content = text(element, kAXTitleAttribute);
+    if (axReadFailed || ![normalized(content) containsString:expected])
+        return NO;
+    BOOL inWindow = resultIntersectsWindow(element, window);
+    if (inWindow && !axReadFailed) row[@"result_intersects_window"] = @YES;
+    return inWindow && !axReadFailed;
+}
+
 static CGEventRef keyboard(CGEventSourceRef source, bool down, UniChar character) {
     CGEventRef event = CGEventCreateKeyboardEvent(source, 0, down);
     CGEventSetFlags(event, 0); CGEventKeyboardSetUnicodeString(event, 1, &character);
@@ -308,9 +346,10 @@ int main(int argc, const char **argv) { @autoreleasepool {
     if (axReadFailed) { CFRelease(app); return failAXRead(); }
     NSMutableArray *tree = [NSMutableArray array], *areas = [NSMutableArray array], *sends = [NSMutableArray array];
     NSMutableArray *urls = [NSMutableArray array], *cg = [NSMutableArray array], *values = [NSMutableArray array];
-    BOOL visible = NO, truncated = NO;
+    NSMutableArray *matches = [NSMutableArray array];
+    BOOL truncated = NO;
     if (window) collect(window, tree, areas, sends, urls, [action isEqual:@"snapshot"] ? value : @"",
-                        bounds, &visible, &truncated, 0);
+                        matches, &truncated, 0);
     if (axReadFailed) { CFRelease(app); return failAXRead(); }
     if (truncated) { CFRelease(app); return fail(@"native AX tree exceeded its bounded traversal"); }
     for (NSString *url in urls) if (!pageMatches(url, origin, pid)) { CFRelease(app); return fail(@"native webview origin, shell or PID mismatch"); }
@@ -335,7 +374,7 @@ int main(int argc, const char **argv) { @autoreleasepool {
         @"textareas": @(areas.count), @"area_values": values, @"send_count": @(sends.count),
         @"send_enabled": @(sendEnabled), @"rect": @[@(bounds.origin.x), @(bounds.origin.y), @(bounds.size.width), @(bounds.size.height)],
         @"window_count": @(windows.count), @"windows": cg, @"screen_capture_allowed": @YES,
-        @"expected_visible": @(visible), @"tree": tree} mutableCopy];
+        @"expected_visible": @NO, @"tree": tree} mutableCopy];
     if (axReadFailed) { CFRelease(app); return failAXRead(); }
     if (cg.count == 1) { result[@"window_id"] = cg[0][@"id"]; result[@"window_owner_pid"] = @(pid); }
     if (!activationReady) return failSnapshot(app, result, @"native activation did not become active before its deadline");
@@ -361,6 +400,11 @@ int main(int argc, const char **argv) { @autoreleasepool {
         AXError error = AXUIElementPerformAction((__bridge AXUIElementRef)sends[0], kAXPressAction);
         if (error != kAXErrorSuccess) return failSnapshot(app, result, @"native Send action failed");
         result[@"submitted"] = @YES;
-    } else if (![action isEqual:@"snapshot"]) { CFRelease(app); return fail(@"unsupported native action"); }
+    } else if ([action isEqual:@"snapshot"]) {
+        if (ready && matches.count) {
+            result[@"expected_visible"] = @(observeResult(matches, value, bounds));
+            if (axReadFailed) { CFRelease(app); return failAXRead(); }
+        }
+    } else { CFRelease(app); return fail(@"unsupported native action"); }
     emit(result); CFRelease(app); return 0;
 } }

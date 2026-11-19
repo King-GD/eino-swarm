@@ -158,6 +158,48 @@ test("settings round-trip through the config file", async ({ page }) => {
   await page.getByRole("dialog").getByRole("button", { name: "Back to app" }).click()
 })
 
+test("an invalid sub-agent cap is never autosaved", async ({ page, request }) => {
+  const { settings } = await (await request.get("/api/settings")).json()
+  const previous = settings.swarm.max_concurrent as number
+  const valid = previous === 2 ? 3 : 2
+  const sent: number[] = []
+  page.on("request", (outgoing) => {
+    if (outgoing.method() !== "PUT" || !outgoing.url().endsWith("/api/settings")) return
+    const value = outgoing.postDataJSON()?.swarm?.max_concurrent
+    if (typeof value === "number") sent.push(value)
+  })
+
+  try {
+    await page.goto("/")
+    await page.getByRole("button", { name: "Settings", exact: true }).click()
+    const dialog = page.getByRole("dialog")
+    await dialog.getByRole("tab", { name: "Swarm" }).click()
+    const cap = dialog.getByRole("spinbutton", { name: "Sub-agents at once" })
+    await expect(cap).toHaveValue(String(previous))
+    await cap.fill("0")
+    await expect(cap).toHaveAttribute("aria-invalid", "true")
+    await expect(dialog.getByRole("alert")).toHaveText("Enter a whole number of at least 1.")
+    // Closing flushes any pending autosaves and reopening reads the server.
+    await dialog.getByRole("button", { name: "Back to app" }).click()
+    await expect(dialog).toBeHidden()
+    expect(sent).toEqual([])
+    await page.getByRole("button", { name: "Settings", exact: true }).click()
+    await dialog.getByRole("tab", { name: "Swarm" }).click()
+    await expect(cap).toHaveValue(String(previous))
+    await cap.fill("0")
+    await cap.fill(String(valid))
+    await expect(cap).not.toHaveAttribute("aria-invalid", "true")
+    await dialog.getByRole("button", { name: "Back to app" }).click()
+    await expect(dialog).toBeHidden()
+    expect(sent).toEqual([valid])
+    const saved = await (await request.get("/api/settings")).json()
+    expect(saved.settings.swarm.max_concurrent).toBe(valid)
+  } finally {
+    const restored = await request.put("/api/settings", { data: { swarm: settings.swarm } })
+    expect(restored.ok()).toBe(true)
+  }
+})
+
 test("per-note memory cap round-trips through settings", async ({
   page,
   request,

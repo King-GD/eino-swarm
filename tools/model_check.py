@@ -52,7 +52,7 @@ models/lifecycle/WorkerCollectionView.tla checks that a live collection pause
 stays actionable when the transcript flag is idle, and that a decline is
 closing rather than the idle stopped sentence while the turn is still running.
 models/swarm/ConcurrencyCap.tla checks that one task's running sub-agents stay
-within the live cap, including after the cap is lowered (C-009).
+within the live cap when lowered, and invalid Settings saves are refused (C-009).
 Every case sets its model's switch constants and states
 the expected outcome: the current design must pass every safety invariant;
 each historical or seeded behaviour must break the named invariant (checked
@@ -146,8 +146,8 @@ MODELS = {
               ("TypeOK", "SwitchIsIdle", "BoundCatalogSurvives", "RecoveryKeepsBinding", "RecoveryWaitsForDiscovery", "RevocationClosesSource"), ()),
         Model(
             "concurrency-cap", ROOT / "models" / "swarm" / "ConcurrencyCap.tla",
-            ("ShrinkKeepsHolders",),
-            ("TypeOK", "HoldersWithinCap"),
+            ("ShrinkKeepsHolders", "NormalizeInvalidSave"),
+            ("TypeOK", "HoldersWithinCap", "InvalidSaveRefused"),
             (("MaxWorkers", 3),),
         ),
         Model(
@@ -540,6 +540,10 @@ CASES: tuple[Case, ...] = (
     _case("concurrency-cap-shrink-keeps-holders",
           "historical, shipped through v0.1.77: lowering the cap left workers that already held a slot running",
           ("ShrinkKeepsHolders",), "HoldersWithinCap", model="concurrency-cap"),
+    _case("concurrency-cap-normalize-invalid-save",
+          "historical d62315b: Settings acknowledged an invalid cap and applied the default",
+          ("NormalizeInvalidSave",), "InvalidSaveRefused", model="concurrency-cap"),
+    _case("concurrency-cap-reach-refusal", "witness", witness="NeverRefused", model="concurrency-cap"),
     _case("concurrency-cap-reach-preempt", "witness", witness="NeverPreempted", model="concurrency-cap"),
     _case("ios-startup-current", "iOS binds static cookie and HTTP flags before the page starts",
           model="ios-startup"),

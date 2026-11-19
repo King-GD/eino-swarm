@@ -224,6 +224,13 @@ full-race results still determine whole-run status. The Windows command/job
 adapter was cross-compiled separately; this is not Windows native acceptance,
 and the full Windows package build remains blocked by existing Unix-only syscall
 usage in upstream `eino-tools` exec/pythonrunner code.
+When running the full race check on a shared host, use `-p 2` to limit
+concurrently running Go packages while retaining all tests and the 25-minute
+deadline. Run browser and Python suites after the race check when the host is
+busy. The goal retry fixture waits for a durable successor or hold decision.
+The Nuwa verification fixture waits only on agents still outstanding in the
+previous receipt, so an already completed ID cannot return a wait early.
+
 The 2026-11-05 whole-repository `go test -p 2 -race -cover -count=1 -timeout 25m ./...`
 passed. On the same Darwin host and flags, the fetched `e20562b6` baseline's
 `internal/tools` measured 94.3%, compared with this change's 94.6%; the older
@@ -6692,6 +6699,14 @@ Agents on starting with an empty pane.
 Settings → Swarm → sub-agents at once takes effect on the live and
 parked registry: a higher cap starts waiters immediately, and a lower cap
 stops the newest holders until the task is back within the number.
+`TestSettingsRejectsInvalidSubagentCapWithoutSaving` checks the real HTTP
+adapter, live config and saved file. The Settings browser case checks that
+the invalid draft is never sent and a correction survives closing the sheet.
+TLC `concurrency-cap-current` checks the live cap and rejection of invalid
+writes for up to three workers, `concurrency-cap-normalize-invalid-save`
+recreates the old silent default, and `concurrency-cap-reach-refusal` proves
+that refusal is reachable. The model abstracts the PUT as one decision and
+does not verify persistence or Go locking.
 `TestSpawnToolRefusesPastTheConcurrencyCap` /
 `TestParallelSpawnsAdmitOnlyTheCap` /
 `TestSameRoleSteerDoesNotNeedAFreeSlot` /

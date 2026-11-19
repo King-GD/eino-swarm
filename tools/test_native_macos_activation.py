@@ -184,7 +184,13 @@ class NativeActivationTests(unittest.TestCase):
                             ("resilience", "native_macos_resilience_ax.m")):
             source = (ROOT / name).read_text()
             first_read = ("static BOOL axReadFailed; static AXError axReadStatus; static NSString *axReadKey,*axReadReason;\n"
-                          + function(source, "static void rememberAXRead(")) if label == "smoke" else ""
+                          "static NSNumber *resultScrollStatus;\n"
+                          + function(source, "static void rememberAXRead(")
+                          + function(source, "static id readAttribute(")
+                          + function(source, "static CGRect frame(")
+                          + function(source, "static BOOL resultIntersectsWindow(")
+                          + function(source, "static NSString *normalized(")
+                          + function(source, "static BOOL observeResult(")) if label == "smoke" else ""
             helpers = (first_read + function(source, "static void emit(")
                        + function(source, "static int fail(")
                        + function(source, "static int failAXRead(")
@@ -212,10 +218,10 @@ class NativeActivationTests(unittest.TestCase):
     NSMutableArray *sends=[NSMutableArray arrayWithObject:[NSObject new]];
     NSMutableArray *urls=[NSMutableArray arrayWithObject:@"http://127.0.0.1:42"];
     NSMutableArray *cg=[NSMutableArray arrayWithObject:@{@"id":@17,@"owner_pid":@41}];
-    NSMutableArray *tree=[NSMutableArray array];
+    NSMutableArray *tree=[NSMutableArray array], *matches=[NSMutableArray array];
     NSArray *values=[mode isEqual:@"bad-draft"] ? @[@"other"] : @[value];
     if ([action isEqual:@"fill"]) values=@[@"occupied"];
-    BOOL sendEnabled=![mode isEqual:@"disabled"],visible=NO;
+    BOOL sendEnabled=![mode isEqual:@"disabled"];
 ''' + action
             else:
                 body = ""

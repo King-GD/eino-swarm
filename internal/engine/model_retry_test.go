@@ -417,17 +417,9 @@ func TestARetryableModelErrorContinuesTheGoalAfterRetriesAreExhausted(t *testing
 	if got.Status != store.TurnError {
 		t.Fatalf("status=%s err=%s", got.Status, got.Error)
 	}
-	waitSettled(t, e, th.ID)
-	th, err = e.Store().GetThread(th.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if th.GoalBlocked {
-		t.Fatal("truncated tool JSON is a retry, not a stuck objective")
-	}
 	for _, leak := range []string{"NodeRunError", "ChatModel", "node path"} {
-		if strings.Contains(got.Error, leak) || strings.Contains(th.GoalBlockReason, leak) {
-			t.Fatalf("the graph dump leaked into the banner: turn=%q reason=%q", got.Error, th.GoalBlockReason)
+		if strings.Contains(got.Error, leak) {
+			t.Fatalf("the graph dump leaked into the turn banner: %q", got.Error)
 		}
 	}
 	events, err := e.Store().ListEvents(th.ID, 0, 0)
@@ -443,12 +435,28 @@ func TestARetryableModelErrorContinuesTheGoalAfterRetriesAreExhausted(t *testing
 	if n != modelErrorRetries {
 		t.Fatalf("retry events on the failed turn=%d want %d", n, modelErrorRetries)
 	}
-	turns, err := e.Store().ListTurns(th.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(turns) < 2 && !th.GoalIdle && !th.GoalCapped {
-		t.Fatalf("the objective must auto-continue or hold, turns=%d idle=%v capped=%v", len(turns), th.GoalIdle, th.GoalCapped)
+	// The first turn becomes idle before its auto-continue goroutine admits
+	// a successor. Wait for a durable continuation decision.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		th, err := e.Store().GetThread(th.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if th.GoalBlocked {
+			t.Fatalf("truncated tool JSON blocked the objective: %q", th.GoalBlockReason)
+		}
+		turns, err := e.Store().ListTurns(th.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(turns) >= 2 || th.GoalIdle || th.GoalCapped {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no successor or terminal goal decision: turns=%d idle=%v capped=%v", len(turns), th.GoalIdle, th.GoalCapped)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
