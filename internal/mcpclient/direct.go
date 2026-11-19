@@ -166,7 +166,7 @@ func (t *directTool) Info(context.Context) (*schema.ToolInfo, error) {
 	}
 	described := t.remote
 	described.Name = t.modelName
-	described.Description = "MCP server " + quoteLabel(label) + " (id " + quoteLabel(t.holder.server.ID) + "), remote tool " + quoteLabel(remoteName) + ". " + t.remote.Description
+	described.Description = "MCP server " + quoteLabel(label) + " (id " + quoteLabel(t.holder.server.ID) + "), remote tool " + quoteLabel(remoteName) + ". A session_expired result requires a new turn; calls are never automatically replayed. " + t.remote.Description
 	return toolInfo(described)
 }
 

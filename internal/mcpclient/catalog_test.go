@@ -223,6 +223,9 @@ func TestDirectToolConnectsOnlyWhenCalled(t *testing.T) {
 	if err != nil || !strings.Contains(info.Desc, "direct") || !strings.Contains(info.Desc, "lookup") {
 		t.Fatalf("description %v %v", info, err)
 	}
+	if !strings.Contains(info.Desc, "A session_expired result requires a new turn; calls are never automatically replayed.") {
+		t.Fatalf("model-facing direct tool omitted its session lifecycle contract: %q", info.Desc)
+	}
 	out, err := tools[0].(tool.InvokableTool).InvokableRun(t.Context(), `{"q":"example.test"}`)
 	if err != nil || calls != 1 || !strings.Contains(out, "found") {
 		t.Fatalf("call %s %v calls=%d", out, err, calls)
