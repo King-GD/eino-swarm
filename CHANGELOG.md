@@ -22,6 +22,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - Swarm settings show the valid range for the sub-agent cap. Invalid entries
   do not save or reset the cap to its default. (`F-330`, `C-009`, #175)
 
+- MCP attempts one session renewal for a verified expiry. A failed renewal
+  or other tool failure stops the task and prompts the user to repair the
+  connection before retrying. (`F-176`, `C-041`, #176)
+
 - The phone composer's voice button matches the one-line field, so the rounded row no longer leaves empty space above the text. (`F-148`)
 
 - Switching LOCAL to a third-party Gateway preset preserves an authorized original Gateway model for the current turn and workers, including catalog refresh and restart recovery; new turns apply the preset. (`F-171`, `C-040`)

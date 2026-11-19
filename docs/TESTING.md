@@ -270,11 +270,23 @@ versus exact-schema list, and that a direct tool connects only when called.
 The two static proxy tools connect only during actual runtime calls. List
 supports query, exact-name selection and paging; an unfiltered page omits
 input schemas. Call uses the listed remote name. Connection waiters must
-respond to cancellation. Proxy tools
-must remain bound to their first session entry: reload, idle eviction or
-connection failure returns `session_expired`, without a silent reconnect or
-replay. A later toolset may reconnect/discover; no test may assume the idle cache
-guarantees continuous state between tool calls.
+respond to cancellation. The idle cache does not guarantee continuous
+state between tool calls. `TestMCPToolReauthenticatesOnlyForAnExpiredSession`
+drives direct and proxy mounting through the real model HTTP adapter and MCP
+Streamable HTTP server. It checks that confirmed session expiry renews once,
+persistent expiry, rejection, timeout and remote errors block the task, and
+a failure is retained across recovery until the user repairs the connection
+and requests a retry. `TestWorkerMCPFailureBlocksItsManagerAndKeepsTheOriginalCall`
+confirms that the worker failure cancels the manager's in-flight HTTP request
+and preserves the worker's original tool call.
+`TestExpiredBindingRefreshesSavedHeadersWithoutRedirecting`
+checks the new wire credentials and refuses a changed URL.
+`models/mcp/MCPCallRecovery.tla` limits a modeled call to one replacement
+after a verified rejection and blocks subsequent work after failure. Its
+negative cases reintroduce uncertain replay, unlimited renewal, continued
+admission and a missing cancellation request. The model covers one logical
+call and its admission and cancellation decisions. Go tests cover the wire
+sessions and cancellation of the active model request.
 `internal/engine/tool_offer_http_test.go` drives a real manager turn through
 Registry, ADK and the offline model adapter: unchecking `web_search` and an MCP
 server removes them from the next request, checking them again restores them,

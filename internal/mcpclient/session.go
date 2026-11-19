@@ -3,6 +3,7 @@ package mcpclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -118,7 +119,11 @@ func (e *entry) connect(caller context.Context) (*mcp.ClientSession, Catalog, er
 	for remote, err := range session.Tools(ctx, nil) {
 		if err != nil {
 			_ = session.Close()
-			return nil, Catalog{}, &Error{Code: "discovery_failed", ServerID: e.server.ID}
+			code := "discovery_failed"
+			if errors.Is(err, mcp.ErrSessionMissing) {
+				code = "session_expired"
+			}
+			return nil, Catalog{}, &Error{Code: code, ServerID: e.server.ID}
 		}
 		if remote == nil || remote.Name == "" || seen[remote.Name] {
 			_ = session.Close()

@@ -157,7 +157,7 @@ func TestResumeClearsAHeldGoal(t *testing.T) {
 	}
 	waitForTurn(t, e, turn.ID)
 	turns := waitForTurnCount(t, e, th.ID, 2)
-	waitSettled(t, e, th.ID)
+	waitForRecordedGoalCap(t, e, th.ID)
 	got, _ = e.Store().GetThread(th.ID)
 	if !turns[0].GoalContinue || !turns[1].GoalContinue || got.GoalIdle || !got.GoalCapped || got.GoalAutoTurns != 1 {
 		t.Fatalf("explicit resume must grant a new continuation budget: thread=%+v turns=%+v", got, turns)

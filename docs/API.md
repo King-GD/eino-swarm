@@ -1032,6 +1032,17 @@ the saved servers unchanged. The error names the rule; it does not include a
 credential, URL or command. Failed persistence returns `500 mcp_save_failed`
 and does not publish the document.
 
+In a running task, a mounted MCP tool can renew an expired session once on the
+same configured endpoint or command, using the latest saved credentials.
+Streamable HTTP session-missing responses and locally retired bindings establish
+expiry before a tool ran. Other results, including unknown transport outcomes,
+are never retried automatically. An unrecovered failure cancels the manager's
+active work and stops later model and tool admissions for the task. Its public
+terminal error carries the server ID,
+failure class and repair guidance. The `mcp_execution_blocked` Trace event
+preserves the original tool call and the safe `code` and `server_id` fields.
+The chat displays the terminal error.
+
 ### `DELETE /api/mcp/:id`
 
 Delete the saved server and return `200 {"deleted":true}`. Missing IDs return

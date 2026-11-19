@@ -1111,8 +1111,11 @@ that server's remote tools and can switch each one off without disabling the
 server. A tool switched off during a turn leaves the next request. Plan and
 Nuwa read-only toolsets do not mount MCP tools. Other Nuwa turns make the
 mounted names available to workers and keep the planner's toolset separate.
-If a captured session is closed, old tools return `session_expired` without
-reconnecting. Continue with a new turn. Keep secrets
+A confirmed expired session is renewed once with the current saved credentials
+for the same MCP connection. If it cannot be renewed, or the tool fails for
+another reason, the task stops. Repair the connection in Settings and retry
+the task. Check for an external effect before retrying a call that timed out.
+Keep secrets
 in the write-only environment and header fields. Blank preserves the saved
 map. `{}` clears it. Local commands run with the conversation workspace as
 their working directory and retain the application's filesystem access. This

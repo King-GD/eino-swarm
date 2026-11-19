@@ -10,6 +10,7 @@ import (
 	"time"
 
 	swarm "github.com/LubyRuffy/eino-swarm"
+	"github.com/LubyRuffy/eino-swarm/internal/mcpclient"
 	"github.com/LubyRuffy/eino-swarm/internal/slash"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 	"github.com/LubyRuffy/eino-swarm/internal/tools"
@@ -72,7 +73,10 @@ type runtime struct {
 	planted []swarm.FinishedWorker
 	// parked is a swarm left running across /goal sessions or scheduled
 	// wakes so in-flight sub-agents survive the manager's turn boundary.
-	parked           *swarm.Registry
+	parked *swarm.Registry
+	// MCP admission is tied to the same Registry across live and parked work.
+	mcpRegistry      *swarm.Registry
+	mcpExecution     *mcpclient.Execution
 	workerAccounting *workerAccounting
 	imageCallID      string // owned by the current turn; guarded by mu
 	imageOnly        bool
@@ -101,6 +105,7 @@ func (rt *runtime) release(cancel context.CancelFunc, idle chan struct{}, turnID
 	rt.imageOnly = false
 	if rt.parked == nil {
 		rt.workerAccounting = nil
+		rt.mcpRegistry, rt.mcpExecution = nil, nil
 	}
 	rt.mu.Unlock()
 	if wasRunning {
@@ -717,14 +722,15 @@ func (rt *runtime) run(ctx context.Context, cancel context.CancelFunc, idle chan
 					Kind: KindUser, AgentID: swarm.DefaultManagerID, Text: turn.UserText, Images: images})
 			}
 		}
-		e.closeOrphanedToolCalls(turn, snapshots...)
-		messages, resumeErr = rt.resolveOrphanedAsk(ctx, turn, messages, snapshots...)
-		kind, notice := KindResumed, resumeNotice
-		if e.checkpointForTurn(turn.ID, snapshots...) != nil {
-			kind, notice = KindRestartResumed, "Saved task progress restored; continuing."
+		messages, resumeErr = rt.recoverTurnTools(ctx, turn, messages, snapshots...)
+		if resumeErr == nil {
+			kind, notice := KindResumed, resumeNotice
+			if e.checkpointForTurn(turn.ID, snapshots...) != nil {
+				kind, notice = KindRestartResumed, "Saved task progress restored; continuing."
+			}
+			e.record(store.Event{ThreadID: rt.threadID, TurnID: turn.ID,
+				Kind: kind, AgentID: swarm.DefaultManagerID, Text: notice})
 		}
-		e.record(store.Event{ThreadID: rt.threadID, TurnID: turn.ID,
-			Kind: kind, AgentID: swarm.DefaultManagerID, Text: notice})
 	} else if turn.GoalContinue {
 		e.record(store.Event{ThreadID: rt.threadID, TurnID: turn.ID,
 			Kind: KindGoalContinued, AgentID: swarm.DefaultManagerID, Text: goalContinuedNotice})
@@ -803,6 +809,10 @@ func (rt *runtime) run(ctx context.Context, cancel context.CancelFunc, idle chan
 
 	if status == store.TurnError && isContextOverflow(runErr) {
 		errText = e.noteContextOverflow(turn, errText)
+	}
+	var mcpFailure *mcpclient.ExecutionError
+	if status == store.TurnError && errors.As(runErr, &mcpFailure) && e.pauseRepeatingSchedule(turn) {
+		errText += " The scheduled check is paused."
 	}
 	if status == store.TurnError && e.pauseScheduledWorkerTimeout(turn, runErr) {
 		errText += "; this recurring check is paused to avoid repeating the worker timeout loop. Inspect the worker trace, model and task before resuming it"

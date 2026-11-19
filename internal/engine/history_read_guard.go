@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/LubyRuffy/eino-swarm/internal/history"
+	"github.com/LubyRuffy/eino-swarm/internal/mcpclient"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 	"github.com/cloudwego/eino/compose"
 	"gorm.io/gorm"
@@ -33,6 +34,7 @@ func withHistoryReadOwner(ctx context.Context, threadID, turnID string) context.
 }
 
 func historyWorkerContextValues(parent, detached context.Context) context.Context {
+	detached = mcpclient.InheritExecution(parent, detached)
 	owner, ok := parent.Value(historyReadOwnerKey{}).(historyReadOwner)
 	if !ok {
 		return detached

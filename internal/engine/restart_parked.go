@@ -82,6 +82,9 @@ func (e *Engine) resumeParkedThreadContext(ctx context.Context, th *store.Thread
 	if turn.Status != store.TurnDone && len(retained) == 0 {
 		return 0, nil
 	}
+	if err := e.restoredMCPFailure(turn.ID, snapshot); err != nil {
+		return 0, err
+	}
 	checkpoint := e.checkpointForTurn(turn.ID, snapshot)
 	if checkpoint == nil || checkpoint.HumanStopped || checkpoint.Pause != "" || e.turnHasKind(turn.ID, KindUserStopRequested, snapshot) {
 		return 0, nil
@@ -138,7 +141,7 @@ func (e *Engine) resumeParkedThreadContext(ctx context.Context, th *store.Thread
 		}
 	}
 	for _, w := range running {
-		ownerContext := withHistoryReadOwner(ctx, th.ID, turn.ID)
+		ownerContext := withHistoryReadOwner(rt.withMCPExecution(ctx, reg), th.ID, turn.ID)
 		restoredTools := workerTools
 		if w.ConfigTag != "" {
 			restoredTools = nil

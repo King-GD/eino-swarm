@@ -61,8 +61,8 @@ describe("ToolRow", () => {
   })
 
   it.each([
-    ["en", "The MCP connection has expired. Retry in a new turn."],
-    ["zh", "MCP 连接已失效，请在新轮次重试。"],
+    ["en", "The MCP connection has expired. Check it in Settings, then retry the task."],
+    ["zh", "MCP 连接已失效。请在设置中检查连接，再重试任务。"],
   ] as const)("explains an expired MCP session in %s without suggesting an automatic replay", (locale, message) => {
     useApp.setState({ locale })
     render(<ToolRow block={toolBlock({ name: "mcp_local_echo_012345abcdef", args: "{}",

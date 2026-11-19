@@ -44,17 +44,18 @@ func (e *Error) Error() string { return fmt.Sprintf("mcp: %s (%s)", e.Code, e.Se
 // Manager shares sessions only within the same configuration and working
 // directory. Tool wrappers retain a configuration snapshot, never a live pointer.
 type Manager struct {
-	mu          sync.Mutex
-	ctx         context.Context
-	cancel      context.CancelFunc
-	closed      bool
-	entries     map[string]*entry
-	current     map[string]bool
-	switches    func() []config.MCPServer
-	inspections sync.WaitGroup
-	log         *slog.Logger
-	catalogDir  string
-	direct      map[string]directBinding
+	mu             sync.Mutex
+	ctx            context.Context
+	cancel         context.CancelFunc
+	closed         bool
+	entries        map[string]*entry
+	current        map[string]bool
+	currentServers map[string]config.MCPServer
+	switches       func() []config.MCPServer
+	inspections    sync.WaitGroup
+	log            *slog.Logger
+	catalogDir     string
+	direct         map[string]directBinding
 }
 
 const maxIdleSessions = 8
@@ -133,7 +134,7 @@ func (m *Manager) acquire(s config.MCPServer, workspace string) (*entry, error) 
 	if m.current != nil && !m.current[fp] {
 		return nil, &Error{Code: "session_expired", ServerID: s.ID}
 	}
-	if e := m.entries[key]; e != nil {
+	if e := m.entries[key]; e != nil && !e.broken {
 		e.uses++
 		return e, nil
 	}
@@ -160,7 +161,7 @@ func (m *Manager) release(e *entry, broken bool) {
 	e.broken = e.broken || broken
 	retired := m.current != nil && !m.current[e.fingerprint]
 	remove := e.uses == 0 && (e.broken || retired || m.closed || m.sessionCount(e.fingerprint) > maxIdleSessions)
-	if remove {
+	if remove && m.entries[e.key] == e {
 		delete(m.entries, e.key)
 	}
 	m.mu.Unlock()
@@ -181,17 +182,19 @@ func (m *Manager) sessionCount(fingerprint string) int {
 }
 
 // Reload retires unused old sessions without interrupting a tool in flight.
-// A retired tool returns session_expired on its next call; it never silently
-// creates a fresh stateful session or executes with changed credentials.
+// Existing holders keep their original binding. An execution retry may read
+// the latest credentials for the same configured destination.
 func (m *Manager) Reload(servers []config.MCPServer) {
 	current := map[string]bool{}
+	connections := map[string]config.MCPServer{}
 	for _, s := range servers {
 		if s.Enabled {
 			current[fingerprint(s)] = true
+			connections[s.ID] = cloneServer(s)
 		}
 	}
 	m.mu.Lock()
-	m.current = current
+	m.current, m.currentServers = current, connections
 	var retired []*entry
 	for k, e := range m.entries {
 		if e.uses == 0 && !current[e.fingerprint] {
@@ -203,6 +206,24 @@ func (m *Manager) Reload(servers []config.MCPServer) {
 	for _, e := range retired {
 		e.close()
 	}
+}
+
+// refreshServer cannot redirect a mounted function to a different destination.
+func (m *Manager) refreshServer(original config.MCPServer) (config.MCPServer, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return config.MCPServer{}, false
+	}
+	if m.current == nil {
+		return original, true
+	}
+	current, ok := m.currentServers[original.ID]
+	if !ok || current.Transport != original.Transport || current.URL != original.URL ||
+		current.Command != original.Command || !slices.Equal(current.Args, original.Args) {
+		return config.MCPServer{}, false
+	}
+	return current, true
 }
 
 func (m *Manager) Close() {

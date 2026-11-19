@@ -95,6 +95,7 @@ func (rt *runtime) reapParked() bool {
 		rt.recordParkedStop(reg, turnID)
 	}
 	rt.parked = nil
+	rt.dropParkedMCPExecutionLocked(reg)
 	if rt.workerAccounting != nil && rt.workerAccounting.registry == reg {
 		rt.workerAccounting = nil
 	}

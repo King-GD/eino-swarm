@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/LubyRuffy/eino-swarm/internal/mcpclient"
 	"github.com/LubyRuffy/eino-swarm/internal/tools"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/tool"
@@ -41,6 +42,9 @@ func (e *Engine) toolOfferAllowed(name string) bool {
 }
 
 func (o *liveToolOffer) BeforeModelRewriteState(ctx context.Context, state *adk.ChatModelAgentState, _ *adk.ModelContext) (context.Context, *adk.ChatModelAgentState, error) {
+	if failure := mcpclient.ExecutionFailure(ctx); failure != nil {
+		return ctx, state, failure
+	}
 	if o == nil || state == nil {
 		return ctx, state, nil
 	}
@@ -50,20 +54,28 @@ func (o *liveToolOffer) BeforeModelRewriteState(ctx context.Context, state *adk.
 }
 
 func (o *liveToolOffer) WrapInvokableToolCall(_ context.Context, next adk.InvokableToolCallEndpoint, tCtx *adk.ToolContext) (adk.InvokableToolCallEndpoint, error) {
-	if o.allows(tCtx) {
-		return next, nil
-	}
-	return func(context.Context, string, ...tool.Option) (string, error) {
-		return switchedOffToolResult(tCtx.Name), nil
+	allowed := o.allows(tCtx)
+	return func(ctx context.Context, args string, opts ...tool.Option) (string, error) {
+		if failure := mcpclient.ExecutionFailure(ctx); failure != nil {
+			return "", failure
+		}
+		if !allowed {
+			return switchedOffToolResult(tCtx.Name), nil
+		}
+		return next(ctx, args, opts...)
 	}, nil
 }
 
 func (o *liveToolOffer) WrapStreamableToolCall(_ context.Context, next adk.StreamableToolCallEndpoint, tCtx *adk.ToolContext) (adk.StreamableToolCallEndpoint, error) {
-	if o.allows(tCtx) {
-		return next, nil
-	}
-	return func(context.Context, string, ...tool.Option) (*schema.StreamReader[string], error) {
-		return schema.StreamReaderFromArray([]string{switchedOffToolResult(tCtx.Name)}), nil
+	allowed := o.allows(tCtx)
+	return func(ctx context.Context, args string, opts ...tool.Option) (*schema.StreamReader[string], error) {
+		if failure := mcpclient.ExecutionFailure(ctx); failure != nil {
+			return nil, failure
+		}
+		if !allowed {
+			return schema.StreamReaderFromArray([]string{switchedOffToolResult(tCtx.Name)}), nil
+		}
+		return next(ctx, args, opts...)
 	}, nil
 }
 

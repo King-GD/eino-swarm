@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	swarm "github.com/LubyRuffy/eino-swarm"
+	"github.com/LubyRuffy/eino-swarm/internal/mcpclient"
 	"github.com/LubyRuffy/eino-swarm/internal/provider"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 	"github.com/LubyRuffy/eino-swarm/internal/tools"
@@ -54,11 +55,23 @@ func isMaxIterations(err error) bool {
 func (rt *runtime) runManager(ctx context.Context, turn *store.Turn, reg *swarm.Registry,
 	acc *accumulator, toolset *tools.Set, pc *projectContext, messages []adk.Message, resumed bool,
 	snapshots ...*restoreSnapshot,
-) (swarm.RunResult, error) {
+) (_ swarm.RunResult, failureErr error) {
 	e := rt.engine
 	// Bind the actual owner before restoring or spawning workers. A worker may
 	// outlive this manager check and must keep this original turn identity.
 	ctx = withHistoryReadOwner(ctx, turn.ThreadID, turn.ID)
+	ctx = rt.withMCPExecution(ctx, reg)
+	ownerCtx := ctx
+	ctx, release := mcpclient.WatchExecution(ctx)
+	defer func() {
+		release()
+		if failure := mcpclient.AwaitExecutionFailure(ownerCtx); failure != nil {
+			failureErr = failure
+		}
+	}()
+	if failure := mcpclient.ExecutionFailure(ctx); failure != nil {
+		return swarm.RunResult{}, failure
+	}
 	ctx = e.bindRemoteToolRoutes(ctx, turn.ID)
 	rt.mu.Lock()
 	paused := rt.restartCap
@@ -303,6 +316,9 @@ func (rt *runtime) runManager(ctx context.Context, turn *store.Turn, reg *swarm.
 		used += rounds
 		if ctx.Err() != nil {
 			return answer.reject(res), ctx.Err()
+		}
+		if failure := mcpclient.ExecutionFailure(ctx); failure != nil {
+			return answer.reject(res), failure
 		}
 		if execSessions != nil && (runErr == nil || isMaxIterations(runErr)) && execSessions.Pending() {
 			// A final answer based on a running receipt cannot settle the

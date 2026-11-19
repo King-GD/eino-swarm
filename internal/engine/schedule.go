@@ -463,7 +463,7 @@ func (e *Engine) pauseRepeatingSchedule(turn *store.Turn) bool {
 		return false
 	}
 	if _, err := e.PatchSchedule(row.ID, store.SchedulePaused); err != nil {
-		e.log.Warn("could not pause a schedule after a context-window rejection",
+		e.log.Warn("could not pause a failed recurring schedule",
 			"schedule", row.ID, "err", err)
 		return false
 	}

@@ -48,7 +48,7 @@ func TestAHumanMessageDoesNotResumeABlockedGoal(t *testing.T) {
 	}
 	waitForTurn(t, e, resumed.ID)
 	waitForTurnCount(t, e, th.ID, 3)
-	waitSettled(t, e, th.ID)
+	waitForRecordedGoalCap(t, e, th.ID)
 	got, _ = e.Store().GetThread(th.ID)
 	if got.GoalBlocked || !got.GoalCapped || got.GoalAutoTurns != 1 {
 		t.Fatalf("explicit resume must clear the block and grant its own budget: %+v", got)

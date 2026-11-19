@@ -188,27 +188,46 @@ func (t *directTool) InvokableRun(ctx context.Context, args string, _ ...tool.Op
 		remoteName = t.remote.Name
 	}
 	if t.holder.manager != nil && t.holder.manager.remoteDisabled(t.holder.server.ID, remoteName) {
+		markExecutionFailed(ctx, "tool_switched_off", t.holder.server.ID)
 		return switchedOffRemoteResult(remoteName), nil
 	}
 	var arguments map[string]json.RawMessage
 	if args == "" || args == "null" {
 		arguments = map[string]json.RawMessage{}
 	} else if json.Unmarshal([]byte(args), &arguments) != nil || arguments == nil {
+		markExecutionFailed(ctx, "invalid_arguments", t.holder.server.ID)
 		return t.failure("invalid_arguments"), nil
 	}
-	return t.holder.runCall(ctx, remoteName, arguments), nil
+	return t.holder.runCall(ctx, remoteName, arguments, true), nil
 }
 
-func (h *sessionHolder) runCall(ctx context.Context, name string, arguments map[string]json.RawMessage) string {
-	started := time.Now()
-	fail := func(code string) string {
-		return jsonResult(map[string]any{"error": &Error{Code: code, ServerID: h.server.ID}})
+func (h *sessionHolder) runCall(ctx context.Context, name string, arguments map[string]json.RawMessage, direct bool) string {
+	e, result, code := h.callOnce(ctx, name, arguments, direct)
+	if h.renewExpired(ctx, e, code) {
+		_, result, code = h.callOnce(ctx, name, arguments, direct)
 	}
+	if code == "ok" {
+		return jsonResult(result)
+	}
+	markExecutionFailed(ctx, code, h.server.ID)
+	if result != nil {
+		return jsonResult(result)
+	}
+	if code == "tool_switched_off" {
+		return switchedOffRemoteResult(name)
+	}
+	return jsonResult(map[string]any{"error": &Error{Code: code, ServerID: h.server.ID}})
+}
+
+// callOnce returns the observed entry even on expiration, so the holder can
+// replace only that generation. Unknown execution outcomes never map to expiry.
+func (h *sessionHolder) callOnce(ctx context.Context, name string, arguments map[string]json.RawMessage, direct bool) (*entry, *mcp.CallToolResult, string) {
+	started := time.Now()
 	e, err := h.acquire()
 	if err != nil {
 		code := err.(*Error).Code
-		h.logCall(ctx, started, "", "session", code, "")
-		return fail(code)
+		h.logCall(ctx, started, h.server.Timeout(), "", "session", code, "")
+		return e, nil, code
 	}
 	broken := false
 	defer func() { h.manager.release(e, broken) }()
@@ -222,47 +241,62 @@ func (h *sessionHolder) runCall(ctx context.Context, name string, arguments map[
 		} else if failure, ok := err.(*Error); ok {
 			code = failure.Code
 		}
-		h.logCall(ctx, started, "", "connect", code, "")
-		return fail(code)
+		if code != "session_expired" {
+			markExecutionFailed(ctx, code, h.server.ID)
+		}
+		h.logCall(ctx, started, e.server.Timeout(), "", "connect", code, "")
+		return e, nil, code
 	}
 	found := false
 	for _, remote := range catalog.Tools {
-		if remote.OriginalName == name || remote.Name == name {
+		if remote.OriginalName == name || direct && remote.Name == name {
 			found = true
 			break
 		}
 	}
 	if !found {
-		return fail("unknown_tool")
+		return e, nil, "unknown_tool"
+	}
+	if h.manager.remoteDisabled(h.server.ID, name) {
+		return e, nil, "tool_switched_off"
+	}
+	if ExecutionFailure(ctx) != nil {
+		return e, nil, "task_blocked"
 	}
 	started = time.Now()
-	callCtx, cancel := context.WithTimeout(ctx, h.server.Timeout())
+	callCtx, cancel := context.WithTimeout(ctx, e.server.Timeout())
 	defer cancel()
 	stop := context.AfterFunc(e.ctx, cancel)
 	defer stop()
 	result, err, digest := e.callTool(callCtx, session, &mcp.CallToolParams{Name: name, Arguments: arguments}, h.manager.log)
+	code := "ok"
 	if err != nil {
 		broken = true
-		code := "call_failed"
-		if ctx.Err() != nil {
+		switch {
+		case ctx.Err() != nil:
 			code = "cancelled"
-		} else if e.ctx.Err() != nil {
+		case errors.Is(err, mcp.ErrSessionMissing):
+			code = "session_expired"
+		case e.ctx.Err() != nil:
 			code = "closed"
-		} else if errors.Is(callCtx.Err(), context.DeadlineExceeded) {
+		case errors.Is(callCtx.Err(), context.DeadlineExceeded):
 			code = "timeout"
+		default:
+			code = "call_failed"
 		}
-		h.logCall(ctx, started, name, "call", code, digest)
-		return fail(code)
-	}
-	code := "ok"
-	if result != nil && result.IsError {
+	} else if result != nil && result.IsError {
 		code = "tool_error"
 	}
-	h.logCall(ctx, started, name, "call", code, digest)
-	return jsonResult(result)
+	// Block admission at the adapter's observation, before logging or
+	// releasing this entry can let a sibling try another action.
+	if code != "ok" && code != "session_expired" {
+		markExecutionFailed(ctx, code, h.server.ID)
+	}
+	h.logCall(ctx, started, e.server.Timeout(), name, "call", code, digest)
+	return e, result, code
 }
 
-func (h *sessionHolder) logCall(ctx context.Context, started time.Time, name, phase, code, digest string) {
+func (h *sessionHolder) logCall(ctx context.Context, started time.Time, timeout time.Duration, name, phase, code, digest string) {
 	if h == nil || h.manager == nil || h.manager.log == nil {
 		return
 	}
@@ -277,7 +311,7 @@ func (h *sessionHolder) logCall(ctx context.Context, started time.Time, name, ph
 		slog.String("phase", phase),
 		slog.String("code", code),
 		slog.Int64("elapsed_ms", time.Since(started).Milliseconds()),
-		slog.Int64("timeout_ms", h.server.Timeout().Milliseconds()),
+		slog.Int64("timeout_ms", timeout.Milliseconds()),
 	}
 	if name != "" {
 		attrs = append(attrs, slog.String("tool", progressMessage(name)))

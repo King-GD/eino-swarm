@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
+	"github.com/LubyRuffy/eino-swarm/internal/mcpclient"
 	"github.com/LubyRuffy/eino-swarm/internal/provider"
 	einoopenai "github.com/cloudwego/eino-ext/components/model/openai"
 	openai "github.com/meguminnnnnnnnn/go-openai"
@@ -37,6 +38,10 @@ const publicContextOverflowPaused = publicContextOverflow + ". The scheduled che
 func publicTurnError(err error) string {
 	if err == nil {
 		return ""
+	}
+	var mcpFailure *mcpclient.ExecutionError
+	if errors.As(err, &mcpFailure) {
+		return mcpFailure.Error()
 	}
 	var admission *scheduleAnswerError
 	if errors.As(err, &admission) {

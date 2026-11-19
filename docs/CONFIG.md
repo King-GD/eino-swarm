@@ -801,10 +801,14 @@ phase description and optional total. Until a notification arrives, the
 desktop and Web transcript shows that it is waiting for progress.
 
 Stdio uses the conversation workspace as cwd, without confining filesystem access.
-A toolset fixes its configuration and the first session it uses. Plan mode and
-Nuwa read-only toolsets do not mount MCP. Configuration reload, connection failure
-or idle-cache eviction can close a session; existing tools return `session_expired`
-without reconnecting or replaying the call. A subsequent turn rebuilds the toolset.
+A toolset fixes its mounted names and the first session it uses. Plan mode and
+Nuwa read-only toolsets do not mount MCP. After confirmed session expiration,
+a running MCP tool makes one renewal attempt for the same configured endpoint
+or command and reads its current saved environment or headers. It retries the
+call only after a verified rejection before execution. Other failures,
+including timeouts and failed renewal, stop further requests for the task and
+show a repair message. Verify the outcome of a timed-out remote operation
+before manually retrying.
 Each server/configuration retains at most eight idle workspace sessions; other
 servers do not evict them, but survival between calls is not guaranteed. Calls
 and results use the normal tool transcript, result limit and Trace. Only MCP tools

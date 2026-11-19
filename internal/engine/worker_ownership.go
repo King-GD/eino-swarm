@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	swarm "github.com/LubyRuffy/eino-swarm"
+	"github.com/LubyRuffy/eino-swarm/internal/mcpclient"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 )
 
@@ -38,7 +39,9 @@ func (rt *runtime) workerOwner() (kind, id string) {
 
 func isolatedScheduledFailure(turn *store.Turn, status string, runErr error) bool {
 	var exhausted *swarm.WorkerTimeoutLimitError
-	return turn.ScheduleContinue && status == store.TurnError && !isContextOverflow(runErr) && !errors.As(runErr, &exhausted)
+	var mcpFailure *mcpclient.ExecutionError
+	return turn.ScheduleContinue && status == store.TurnError && !isContextOverflow(runErr) &&
+		!errors.As(runErr, &exhausted) && !errors.As(runErr, &mcpFailure)
 }
 
 func (rt *runtime) parkAfterTurn(turn *store.Turn, status string, runErr error, reg *swarm.Registry) bool {
@@ -97,6 +100,7 @@ func (rt *runtime) reapUnownedParked() {
 	reg, turnID := rt.parked, rt.turnID
 	rt.recordParkedStop(reg, turnID)
 	rt.parked = nil
+	rt.dropParkedMCPExecutionLocked(reg)
 	if rt.workerAccounting != nil && rt.workerAccounting.registry == reg {
 		rt.workerAccounting = nil
 	}

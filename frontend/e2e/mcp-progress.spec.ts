@@ -40,6 +40,7 @@ test("MCP progress is visible in folded work before the remote call returns", as
   let calls = 0
   let finalSent = false
   let modelResult = ""
+  let originalDirectLoadPercent: number | undefined
   let reportProgress!: () => void
   let finishCall!: () => void
   const progressGate = new Promise<void>((resolve) => { reportProgress = resolve })
@@ -139,6 +140,10 @@ test("MCP progress is visible in folded work before the remote call returns", as
     const address = endpoint.address()
     if (!address || typeof address === "string") throw new Error("Fixture did not listen")
     const baseURL = `http://127.0.0.1:${address.port}`
+    // This fixture exercises the catalog and call proxy names at the model.
+    const policy = await (await request.get("/api/mcp")).json()
+    originalDirectLoadPercent = policy.direct_load_percent
+    expect((await request.put("/api/mcp/policy", { data: { direct_load_percent: 0 } })).ok()).toBe(true)
     const { settings } = await (await request.get("/api/settings")).json()
     expect((await request.put("/api/settings", { data: {
       models: { default: "fixture-provider", providers: [{
@@ -169,7 +174,7 @@ test("MCP progress is visible in folded work before the remote call returns", as
     await composer(page).fill("Inspect the records")
     await composer(page).press("Enter")
     const { turn } = await (await accepted).json()
-    await expect.poll(() => calls).toBe(1)
+    await expect.poll(() => ({ calls, errors })).toEqual({ calls: 1, errors: [] })
     expect(typeof token).toBe("string")
     const transcript = page.getByTestId("transcript")
     const collapsed = transcript.getByTestId("work-fold")
@@ -203,10 +208,18 @@ test("MCP progress is visible in folded work before the remote call returns", as
   } finally {
     reportProgress()
     finishCall()
-    await request.delete(`/api/mcp/${serverID}`)
-    await new Promise<void>((resolve, reject) => {
-      endpoint.close((error) => error ? reject(error) : resolve())
-      endpoint.closeAllConnections()
-    })
+    try {
+      await request.delete(`/api/mcp/${serverID}`)
+      if (originalDirectLoadPercent !== undefined) {
+        expect((await request.put("/api/mcp/policy", {
+          data: { direct_load_percent: originalDirectLoadPercent },
+        })).ok()).toBe(true)
+      }
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        endpoint.close((error) => error ? reject(error) : resolve())
+        endpoint.closeAllConnections()
+      })
+    }
   }
 })

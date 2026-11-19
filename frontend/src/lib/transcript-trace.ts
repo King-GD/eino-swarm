@@ -3,12 +3,13 @@ import { block } from "./transcript-blocks"
 import type { SwarmEvent } from "./types"
 
 /** Engine receipts kept for Trace. History rows carry raw tool arguments;
- *  mcp_catalog and account_profile carry diagnostic JSON. None of them is a chat row. */
+ *  MCP and account receipts carry diagnostic JSON. None of them is a chat row. */
 const ENGINE_RECEIPT_KINDS = new Set([
   "history_read_started",
   "history_report_requested",
   "history_registry_inherited",
   "mcp_catalog",
+  "mcp_execution_blocked",
   "account_profile",
 ])
 

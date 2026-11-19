@@ -6,17 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 	"github.com/eino-contrib/jsonschema"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // ProxyNames are the two model-facing tools one configured server contributes.
@@ -92,6 +88,7 @@ type sessionHolder struct {
 	server    config.MCPServer
 	workspace string
 	entry     *entry
+	renewed   *config.MCPServer
 }
 
 func (h *sessionHolder) acquire() (*entry, error) {
@@ -100,11 +97,36 @@ func (h *sessionHolder) acquire() (*entry, error) {
 	if h.entry != nil {
 		return h.entry, h.manager.retain(h.entry)
 	}
-	e, err := h.manager.acquire(h.server, h.workspace)
+	server := h.server
+	if h.renewed != nil {
+		server = *h.renewed
+	}
+	e, err := h.manager.acquire(server, h.workspace)
 	if err == nil {
 		h.entry = e
 	}
 	return e, err
+}
+
+// Refresh only the binding this call observed. A sibling may already have
+// installed the replacement while the expired request was unwinding.
+func (h *sessionHolder) refresh(stale *entry) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.entry != stale {
+		return true
+	}
+	server, ok := h.manager.refreshServer(h.server)
+	if ok {
+		h.entry = nil
+		h.renewed = &server
+	}
+	return ok
+}
+
+func (h *sessionHolder) renewExpired(ctx context.Context, stale *entry, code string) bool {
+	return code == "session_expired" && execution(ctx) != nil && ctx.Err() == nil &&
+		ExecutionFailure(ctx) == nil && h.refresh(stale)
 }
 
 type externalTool struct {
@@ -117,7 +139,7 @@ const mcpRouteGuidance = "Before a local command or a direct API call, query thi
 
 func (t *externalTool) Info(context.Context) (*schema.ToolInfo, error) {
 	name := "call_tool"
-	description := "Call one tool on this configured MCP server. First use its list_tools proxy to inspect exact remote names and JSON input schemas. Copy a returned remote name into name and supply its arguments object. A session_expired result requires a new turn; calls are never automatically replayed."
+	description := "Call one tool on this configured MCP server. First use its list_tools proxy to inspect exact remote names and JSON input schemas. Copy a returned remote name into name and supply its arguments object. An expired session may be renewed once when the call was refused before execution."
 	input := map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string", "description": "Exact remote name returned by this server's list_tools proxy."}, "arguments": map[string]any{"type": "object", "description": "Arguments conforming to the remote tool's input_schema."}}, "required": []string{"name", "arguments"}}
 	if t.list {
 		name = "list_tools"
@@ -173,6 +195,7 @@ func (t *externalTool) InvokableRun(ctx context.Context, args string, _ ...tool.
 	}
 	var input map[string]json.RawMessage
 	if json.Unmarshal([]byte(args), &input) != nil || input == nil {
+		markExecutionFailed(ctx, "invalid_arguments", t.holder.server.ID)
 		return t.failure("invalid_arguments"), nil
 	}
 	var request struct {
@@ -186,132 +209,82 @@ func (t *externalTool) InvokableRun(ctx context.Context, args string, _ ...tool.
 		Limit  *int   `json:"limit"`
 	}
 	if t.list && (json.Unmarshal([]byte(args), &listing) != nil || listing.Offset < 0 || listing.Limit != nil && *listing.Limit < 1) {
+		markExecutionFailed(ctx, "invalid_arguments", t.holder.server.ID)
 		return t.failure("invalid_arguments"), nil
 	}
 	if !t.list && (json.Unmarshal([]byte(args), &request) != nil || request.Name == "" || request.Arguments == nil) {
+		markExecutionFailed(ctx, "invalid_arguments", t.holder.server.ID)
 		return t.failure("invalid_arguments"), nil
 	}
-	if !t.list && t.switchedOff(request.Name) {
-		return switchedOffRemoteResult(request.Name), nil
+	if !t.list {
+		if t.switchedOff(request.Name) {
+			markExecutionFailed(ctx, "tool_switched_off", t.holder.server.ID)
+			return switchedOffRemoteResult(request.Name), nil
+		}
+		return t.holder.runCall(ctx, request.Name, request.Arguments, false), nil
 	}
-	started := time.Now()
-	e, err := t.holder.acquire()
-	if err != nil {
-		code := err.(*Error).Code
-		t.logCall(ctx, started, "", "session", code, "")
+	e, catalog, code := t.holder.listOnce(ctx)
+	if t.holder.renewExpired(ctx, e, code) {
+		e, catalog, code = t.holder.listOnce(ctx)
+	}
+	if code != "ok" {
+		markExecutionFailed(ctx, code, t.holder.server.ID)
 		return t.failure(code), nil
 	}
-	broken := false
-	defer func() { t.holder.manager.release(e, broken) }()
-	session, catalog, err := e.connect(ctx)
-	if err != nil {
-		var waiting *waiterCancellation
-		broken = !errors.As(err, &waiting)
-		code := "connection_failed"
-		if ctx.Err() != nil {
-			code = "cancelled"
-		} else if failure, ok := err.(*Error); ok {
-			code = failure.Code
-		}
-		t.logCall(ctx, started, "", "connect", code, "")
-		return t.failure(code), nil
-	}
-	if t.list {
-		selected := withoutSwitchedOffTools(catalog.Tools, t.switchedOff)
-		if listing.Name != "" {
-			matched := []ToolDescriptor{}
-			for _, d := range selected {
-				if d.Name == listing.Name || d.OriginalName == listing.Name {
-					matched = append(matched, d)
-				}
-			}
-			selected = matched
-		} else {
-			selected = filterToolQuery(selected, listing.Query)
-		}
-		total := len(selected)
-		offset := min(listing.Offset, total)
-		limit := config.DefaultMCPToolPageSize
-		if listing.Limit != nil {
-			limit = *listing.Limit
-		}
-		end := offset + min(limit, total-offset)
-		page := append([]ToolDescriptor(nil), selected[offset:end]...)
-		if listing.Name == "" {
-			for i := range page {
-				page[i].InputSchema = nil
+	selected := withoutSwitchedOffTools(catalog.Tools, t.switchedOff)
+	if listing.Name != "" {
+		matched := []ToolDescriptor{}
+		for _, d := range selected {
+			if d.Name == listing.Name || d.OriginalName == listing.Name {
+				matched = append(matched, d)
 			}
 		}
-		t.holder.manager.RememberCatalog(t.holder.server, catalog)
-		return jsonResult(struct {
-			Catalog
-			Total  int  `json:"total"`
-			Offset int  `json:"offset"`
-			More   bool `json:"more"`
-		}{Catalog{ServerID: catalog.ServerID, Tools: page}, total, offset, end < total}), nil
+		selected = matched
+	} else {
+		selected = filterToolQuery(selected, listing.Query)
 	}
-	found := false
-	for _, remote := range catalog.Tools {
-		if remote.OriginalName == request.Name {
-			found = true
-			break
+	total := len(selected)
+	offset := min(listing.Offset, total)
+	limit := config.DefaultMCPToolPageSize
+	if listing.Limit != nil {
+		limit = *listing.Limit
+	}
+	end := offset + min(limit, total-offset)
+	page := append([]ToolDescriptor(nil), selected[offset:end]...)
+	if listing.Name == "" {
+		for i := range page {
+			page[i].InputSchema = nil
 		}
 	}
-	if !found {
-		return t.failure("unknown_tool"), nil
-	}
-	started = time.Now()
-	callCtx, cancel := context.WithTimeout(ctx, t.holder.server.Timeout())
-	defer cancel()
-	stop := context.AfterFunc(e.ctx, cancel)
-	defer stop()
-	result, err, digest := e.callTool(callCtx, session, &mcp.CallToolParams{Name: request.Name, Arguments: request.Arguments}, t.holder.manager.log)
-	if err != nil {
-		broken = true
-		code := "call_failed"
-		if ctx.Err() != nil {
-			code = "cancelled"
-		} else if e.ctx.Err() != nil {
-			code = "closed"
-		} else if errors.Is(callCtx.Err(), context.DeadlineExceeded) {
-			code = "timeout"
-		}
-		t.logCall(ctx, started, request.Name, "call", code, digest)
-		return t.failure(code), nil
-	}
-	code := "ok"
-	if result != nil && result.IsError {
-		code = "tool_error"
-	}
-	t.logCall(ctx, started, request.Name, "call", code, digest)
-	return jsonResult(result), nil
+	t.holder.manager.RememberCatalog(e.server, catalog)
+	return jsonResult(struct {
+		Catalog
+		Total  int  `json:"total"`
+		Offset int  `json:"offset"`
+		More   bool `json:"more"`
+	}{Catalog{ServerID: catalog.ServerID, Tools: page}, total, offset, end < total}), nil
 }
 
-func (t *externalTool) logCall(ctx context.Context, started time.Time, name, phase, code, digest string) {
-	if t.list {
-		return
+func (h *sessionHolder) listOnce(ctx context.Context) (*entry, Catalog, string) {
+	e, err := h.acquire()
+	if err != nil {
+		return e, Catalog{}, err.(*Error).Code
 	}
-	level := slog.LevelInfo
-	if code != "ok" {
-		level = slog.LevelWarn
+	_, catalog, err := e.connect(ctx)
+	var waiting *waiterCancellation
+	defer func() { h.manager.release(e, err != nil && !errors.As(err, &waiting)) }()
+	if err == nil {
+		return e, catalog, "ok"
 	}
-	server := t.holder.server
-	attrs := []slog.Attr{
-		slog.String("server_id", server.ID),
-		slog.String("transport", server.Transport),
-		slog.String("tool_call_id", compose.GetToolCallID(ctx)),
-		slog.String("phase", phase),
-		slog.String("code", code),
-		slog.Int64("elapsed_ms", time.Since(started).Milliseconds()),
-		slog.Int64("timeout_ms", server.Timeout().Milliseconds()),
+	if ctx.Err() != nil {
+		return e, Catalog{}, "cancelled"
 	}
-	if name != "" {
-		// Only catalog-confirmed names reach this point. Never log arguments,
-		// results, transport errors, or untrusted stderr.
-		attrs = append(attrs, slog.String("tool", progressMessage(name)))
+	code := "connection_failed"
+	if failure, ok := err.(*Error); ok {
+		code = failure.Code
 	}
-	if digest != "" {
-		attrs = append(attrs, slog.String("progress_token_sha256", digest))
+	if code != "session_expired" {
+		markExecutionFailed(ctx, code, h.server.ID)
 	}
-	t.holder.manager.log.LogAttrs(ctx, level, "MCP tool call", attrs...)
+	return e, Catalog{}, code
 }
