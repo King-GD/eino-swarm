@@ -13,6 +13,7 @@ import (
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/provider"
+	"github.com/LubyRuffy/eino-swarm/internal/store"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -41,6 +42,105 @@ func TestPhoneModeSwitchChangesThePCBeforeExposingItsCatalog(t *testing.T) {
 	p.Dispatch([]byte(`{"op":"set_product_mode","product_mode":"fofa"}`))
 	if !got.OK || got.ProductMode != "fofa" || e.Config().ProductSnapshot().Resolved() != config.ProductModeFOFA {
 		t.Fatalf("switching back did not restore the PC: %+v", got)
+	}
+}
+
+func TestPhoneLocalModeListsTheGatewayModelItsExistingConversationStillUses(t *testing.T) {
+	const selectedModel = "selected-chat"
+	requests := make(chan string, 16)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Model    string
+			Stream   bool
+			Messages []struct{ Content json.RawMessage }
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("invalid model request: %v", err)
+			http.Error(w, "bad fixture input", http.StatusBadRequest)
+			return
+		}
+		select {
+		case requests <- r.URL.Path + " " + request.Model:
+		default:
+		}
+		if !request.Stream {
+			w.Header().Set("Content-Type", "application/json")
+			if len(request.Messages) > 0 && strings.Contains(string(request.Messages[0].Content), "Schedule answer claims") {
+				_, _ = io.WriteString(w, `{"choices":[{"index":0,"message":{"role":"assistant","content":"{\"claims\":[]}"},"finish_reason":"stop"}]}`)
+				return
+			}
+			_, _ = io.WriteString(w, `{"choices":[{"index":0,"message":{"role":"assistant","content":"Gateway reply"},"finish_reason":"stop"}]}`)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, `data: {"id":"gateway-fixture","choices":[{"index":0,"delta":{"role":"assistant","content":"Gateway reply"},"finish_reason":null}]}`+"\n\n"+
+			`data: {"id":"gateway-fixture","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`+"\n\ndata: [DONE]\n\n")
+	}))
+	t.Cleanup(upstream.Close)
+	e := accountPhoneEngine(t, selectedModel)
+	capabilities := &provider.SourceCapabilities{Authorized: true, Available: true, Configurable: true, Capabilities: map[string]provider.RoleCapability{
+		"conversation": {Supported: true, Available: true, Configurable: true, Endpoints: []string{"chat_completions"}},
+	}}
+	primary, err := provider.NewAccountSource(accountModelsSourceID, "Signed-in gateway", upstream.URL+"/signed-in", "fixture", provider.Catalog{Names: []string{selectedModel}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	primary.SetCapabilities(capabilities)
+	e.Providers().SetAccountSource(primary)
+	extra, err := provider.NewAccountSource(localGatewaySourceID, "Original", upstream.URL+"/original", "fixture", provider.Catalog{Names: []string{selectedModel}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	extra.SetCatalogGroup("original")
+	extra.SetCapabilities(capabilities)
+	e.Providers().SetLocalAccountSources([]*provider.AccountSource{extra})
+	thread, err := e.CreateThread("Existing conversation", primary.ID(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.SetThreadProvider(thread.ID, primary.ID(), selectedModel); err != nil {
+		t.Fatal(err)
+	}
+	rpc := func(req Request) Response { return Handle(e, config.RemoteConfig{}, req, "relay", "session") }
+	if reply := rpc(Request{Op: OpSetProductMode, ProductMode: config.ProductModeLocal}); !reply.OK {
+		t.Fatalf("PC refused the mode switch: %+v", reply)
+	}
+	detail := rpc(Request{Op: OpOpen, ThreadID: thread.ID}).Detail
+	if detail == nil || detail.ProviderID != primary.ID() || detail.Model != selectedModel {
+		t.Fatalf("mode switch changed the conversation: %+v", detail)
+	}
+	send := rpc(Request{Op: OpDeliver, ThreadID: thread.ID, Text: "Continue", DeliveryMode: "queue", ProviderID: detail.ProviderID, Model: detail.Model})
+	if !send.OK || send.Delivery == nil || send.Delivery.TurnID == "" {
+		t.Fatalf("PC refused the selected model: %+v", send)
+	}
+	select {
+	case got := <-requests:
+		if got != "/signed-in/chat/completions "+selectedModel {
+			t.Fatalf("mode switch redirected the request: %q", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the selected gateway did not receive a model request")
+	}
+	waitFor(t, func() bool {
+		status := e.Status(thread.ID)
+		return !status.Running || status.AwaitingContinue || status.AwaitingAnswer
+	}, "the gateway reply to complete")
+	turn, err := e.Store().GetTurn(send.Delivery.TurnID)
+	if err != nil || turn.Status != store.TurnDone || turn.Final != "Gateway reply" {
+		t.Fatalf("gateway request did not complete with the fixture reply: %+v, %v", turn, err)
+	}
+	catalog := rpc(Request{Op: OpCatalog})
+	if !catalog.OK || catalog.ModelPolicy == nil || !catalog.ModelPolicy.AccountSources[primary.ID()].Allows("conversation") {
+		t.Fatalf("catalog omitted primary gateway capability: %+v", catalog)
+	}
+	found := map[string]int{}
+	for _, row := range catalog.Models {
+		if row.Model == selectedModel && row.Ready {
+			found[row.ProviderID]++
+		}
+	}
+	if found[primary.ID()] != 1 || found[extra.ID()] != 1 {
+		t.Fatalf("the executable gateway models did not each reach the phone catalog: %v", found)
 	}
 }
 

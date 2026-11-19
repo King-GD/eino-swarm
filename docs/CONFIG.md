@@ -399,6 +399,9 @@ computer control, shell execution, hosted MCP approvals or arbitrary tool types.
 Gateway catalogs, profiles and credentials remain in memory; they are never
 saved as `models.providers`. Provider IDs beginning with `gateway:` are reserved.
 LOCAL lists personal providers and separately authorized signed-in account catalogs.
+An additional catalog does not hide a distinct source's selectable conversation models.
+For the same source ID, the LOCAL projection controls both selection and execution;
+an explicit denial there is not bypassed with the signed-in projection.
 Each account catalog refreshes independently: a temporary outage retains only
 that same connection's previously authorized catalog. Fresh bootstrap revocations,
 denied responses and empty catalogs remove their own source even during a sibling outage.
@@ -667,8 +670,8 @@ See the "Full access" note in the [README](../README.md).
 
 ## External MCP servers
 
-Desktop and Web **Settings → Tools** manage external tool servers on the same
-page as built-in tools, separately from provider cloud tools. No MCP server is configured by default.
+Desktop and Web **Settings → Tools** keeps built-in tools and MCP connections
+on separate tabs, apart from provider cloud tools. No MCP server is configured by default.
 Opening Settings reads configuration; **Test connection and list tools** explicitly opens a short
 connection, lists the server's tools and closes it. Inspection does not execute a
 tool and is available even while that server is disabled.

@@ -43,10 +43,11 @@ func responsesReasoningOption(effort string) model.Option {
 // responsesModel keeps the Eino boundary while preserving the Responses output
 // items needed for a stateless follow-up (including encrypted reasoning).
 type responsesModel struct {
-	provider config.Provider
-	client   *http.Client
-	mu       sync.RWMutex
-	tools    []*schema.ToolInfo
+	provider     config.Provider
+	client       *http.Client
+	mu           sync.RWMutex
+	tools        []*schema.ToolInfo
+	continuation *ResponsesContinuation
 }
 
 func newResponsesModel(p config.Provider) (*responsesModel, error) {
@@ -66,7 +67,7 @@ func (m *responsesModel) WithTools(tools []*schema.ToolInfo) (model.ToolCallingC
 	if _, err := responsesTools(nil, tools); err != nil {
 		return nil, err
 	}
-	return &responsesModel{provider: m.provider, client: m.client, tools: append([]*schema.ToolInfo{}, tools...)}, nil
+	return &responsesModel{provider: m.provider, client: m.client, tools: append([]*schema.ToolInfo{}, tools...), continuation: m.continuation}, nil
 }
 
 func (m *responsesModel) BindTools(tools []*schema.ToolInfo) error {
@@ -79,15 +80,15 @@ func (m *responsesModel) BindTools(tools []*schema.ToolInfo) error {
 	return nil
 }
 
-func (m *responsesModel) request(ctx context.Context, in []*schema.Message, stream bool, opts ...model.Option) (*http.Response, error) {
-	response, err := m.requestOnce(ctx, in, stream, opts...)
+func (m *responsesModel) request(ctx context.Context, in []*schema.Message, stream bool, opts ...model.Option) (*http.Response, responsesRequest, error) {
+	response, plan, err := m.requestOnce(ctx, in, stream, opts...)
 	if retry, ok := systemOrderRetry(ctx, err, in); ok {
 		return m.requestOnce(ctx, retry, stream, opts...)
 	}
-	return response, err
+	return response, plan, err
 }
 
-func (m *responsesModel) requestOnce(ctx context.Context, in []*schema.Message, stream bool, opts ...model.Option) (*http.Response, error) {
+func (m *responsesModel) requestOnce(ctx context.Context, in []*schema.Message, stream bool, opts ...model.Option) (*http.Response, responsesRequest, error) {
 	m.mu.RLock()
 	bound := append([]*schema.ToolInfo(nil), m.tools...)
 	m.mu.RUnlock()
@@ -95,13 +96,13 @@ func (m *responsesModel) requestOnce(ctx context.Context, in []*schema.Message, 
 	specific := model.GetImplSpecificOptions(&responsesOptions{}, opts...)
 	input, err := responsesInput(in)
 	if err != nil {
-		return nil, err
+		return nil, responsesRequest{}, err
 	}
 	tools, err := responsesTools(m.provider.BuiltinTools, o.Tools)
 	if err != nil {
-		return nil, err
+		return nil, responsesRequest{}, err
 	}
-	body := map[string]any{"model": strings.TrimSpace(m.provider.Model), "input": input, "stream": stream, "store": false, "include": []string{"reasoning.encrypted_content"}}
+	body := map[string]any{"model": strings.TrimSpace(m.provider.Model), "include": []string{"reasoning.encrypted_content"}}
 	if o.Model != nil {
 		body["model"] = *o.Model
 	}
@@ -141,6 +142,10 @@ func (m *responsesModel) requestOnce(ctx context.Context, in []*schema.Message, 
 		}
 		body["tool_choice"] = map[string]any{"type": "allowed_tools", "mode": mode, "tools": allowed}
 	}
+	return m.sendResponses(ctx, body, input, stream)
+}
+
+func (m *responsesModel) postResponses(ctx context.Context, body map[string]any) (*http.Response, error) {
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("provider: responses request: %w", err)
@@ -169,7 +174,7 @@ func (m *responsesModel) requestOnce(ctx context.Context, in []*schema.Message, 
 }
 
 func (m *responsesModel) Generate(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.Message, error) {
-	resp, err := m.request(ctx, in, false, opts...)
+	resp, plan, err := m.request(ctx, in, false, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +191,11 @@ func (m *responsesModel) Generate(ctx context.Context, in []*schema.Message, opt
 	for _, item := range out.Output {
 		observer.item(item)
 	}
-	return out.message()
+	msg, err := out.message()
+	if err == nil {
+		plan.remember(ctx, out)
+	}
+	return msg, err
 }
 
 func responsesHTTPError(status int, statusText string, raw []byte) error {

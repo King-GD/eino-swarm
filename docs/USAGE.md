@@ -188,6 +188,8 @@ on the next request. A built-in tool or server that was off when the turn
 started is added when the next turn builds its tools. A call that still
 arrives after the switch returns `tool_switched_off` and does not run.
 
+**Tool settings** at the bottom of that menu opens **Settings → Tools**.
+
 After a visible reply, one likely next message can appear as the placeholder.
 Tab inserts it; Enter sends it. **Settings → Swarm → Suggest a next step**
 turns the extra call off. It is on by default.
@@ -1073,8 +1075,9 @@ machine. Settings does not show that page. The behavior of the list is in
 
 ## External MCP tools
 
-Open **Settings → Tools** on Desktop or Web. MCP connections are on that
-page, under the built-in tools. Add a local stdio command or a
+Open **Settings → Tools** on Desktop or Web, then the **MCP** tab.
+Built-in tools stay on the other tab, so the two lists are not one long
+page. Add a local stdio command or a
 remote Streamable HTTP/SSE server. Enter a display name and the connection.
 The app assigns the id and leaves the name, command, arguments and URL as
 typed. Save the connection, then choose **Test connection and list tools**. You can inspect a disabled server before enabling

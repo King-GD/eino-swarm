@@ -68,17 +68,11 @@ func (p *Pool) localExecution() bool {
 func (p *Pool) ModelPolicy() ModelPolicy {
 	if p.cfg.ProductSnapshot().Resolved() == config.ProductModeLocal {
 		sources := map[string]*SourceCapabilities{}
-		for _, source := range p.localAccountSources() {
-			if source == nil {
-				continue
-			}
+		for _, source := range p.effectiveLocalAccountSources() {
 			sources[source.id] = cloneCapabilities(source.capabilities)
 		}
 		status := ""
 		if primary := p.account.Load(); primary != nil && primary.negotiated {
-			if _, published := sources[primary.id]; primary.id != "" && !published {
-				sources[primary.id] = cloneCapabilities(primary.capabilities)
-			}
 			status = "unavailable"
 			if primary.capabilities != nil {
 				status = "ready"

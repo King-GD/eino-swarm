@@ -509,13 +509,18 @@ describe("Settings dialog", () => {
     expect(screen.queryByRole("tab", { name: "MCP" })).toBeNull()
     await user.click(screen.getByRole("tab", { name: "Tools" }))
     expect(await screen.findByRole("heading", { name: "Tools" })).toBeVisible()
-    expect(screen.getByRole("heading", { name: "MCP servers" })).toBeVisible()
+    expect(screen.getByRole("tab", { name: "Built-in" })).toHaveAttribute("aria-selected", "true")
+    expect(screen.queryByRole("button", { name: "Add server" })).toBeNull()
+    await user.click(screen.getByRole("tab", { name: "MCP" }))
+    expect(await screen.findByRole("button", { name: "Add server" })).toBeVisible()
+    expect(screen.queryByRole("heading", { name: "Proxy" })).toBeNull()
     await user.clear(screen.getByLabelText("Search settings"))
     await user.type(screen.getByLabelText("Search settings"), "stdio")
     await waitFor(() =>
       expect(screen.getByRole("tab", { name: "Tools" })).toHaveAttribute("data-state", "active"),
     )
-    expect(screen.getByRole("heading", { name: "MCP servers" })).toBeVisible()
+    expect(screen.getByRole("tab", { name: "MCP" })).toHaveAttribute("aria-selected", "true")
+    expect(screen.getByRole("button", { name: "Add server" })).toBeVisible()
   })
 
   it("lets every tab scroll inside a full-page sheet", async () => {

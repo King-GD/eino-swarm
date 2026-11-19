@@ -557,7 +557,6 @@ function chosen(
 
 function choiceLabel(models: ModelChoice[], pick: { providerId: string; model: string }) {
   const row = models.find((item) => item.provider_id === pick.providerId && item.model === pick.model)
-    ?? (models.length === 1 ? models[0] : undefined)
   return row?.label || pick.model
 }
 

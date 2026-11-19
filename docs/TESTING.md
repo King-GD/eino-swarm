@@ -325,7 +325,8 @@ thinking-level menu when Tools opens and the reverse, groups
 built-in tools together and starts them open, starts each MCP connection
 folded, filters by name, shows an enabled connection as its own group rather
 than a server switch, leaves a Settings-disabled server out, clears Read file,
-reloads, and restores the original tool settings.
+reloads, and restores the original tool settings. Tool settings at the bottom
+of the menu opens Settings → Tools on the Built-in tab.
 
 The SDK HTTP progress regression holds the final response until the client
 observes the matched notification. It also checks that progress cannot cross
@@ -344,7 +345,7 @@ go test -race -timeout 25m ./...
 python3 -B -m unittest discover -s tools -p 'test_native_macos_mcp*.py'
 ```
 
-The browser suite drives create/edit, private-field preservation, validation,
+The browser suite opens the MCP tab, then drives create/edit, private-field preservation, validation,
 connection/catalog expansion, JSON text import, its syntax color, and removal. Run the default user-visible E2E suite
 as well, with its own port/data/output and no concurrent rebuild of its served
 `dist`. A transport or browser test does not accept a native desktop window.
@@ -8795,6 +8796,26 @@ and a successful probe response is consumed without another send.
 through Responses, origin aliases/cache invalidation, and isolated policy calls
 that neither wait nor mutate origin health. A refusal fully observed before
 Stop remains outage evidence for optional post-turn admission.
+
+`internal/engine/gateway_responses_continuation_test.go` drives the PC manager
+through the real Registry, ADK, and HTTP adapter with a Responses Gateway
+fixture. It checks request bytes and full-history rebuild after an expired ID,
+continuation after rebuild, and upstream cached-token usage in the call trace.
+`internal/provider/responses_continuation_test.go` covers opaque replay and
+paired tool results, changed model or tool policy, unavailable state storage,
+native-mode negotiation, reasoning-content terminal verification and SSE
+failures after admission. Production first-text latency and actual
+upstream KV hits require paired requests against the same live model with
+equivalent history and a measured `cached_tokens` response.
+On 2026-11-19, the local PC adapter and Gateway candidate were connected to
+`qwen3.8-27b` through native Responses. Three alternating paired requests
+measured median PC request sizes of 16,916 B for full replay and 263 B for
+continuation. The corresponding Gateway outbound request sizes were 16,869 B
+and 396 B. The first nonempty reasoning or text delta arrived at median 132 ms
+and 96 ms, and the first visible text at 633 ms and 557 ms. The Provider
+reported 9,696 cached input tokens in every follow-up and returned the expected
+value defined by the inherited fixed instruction. The latency measurements
+cover these three pairs on one model and route.
 `internal/engine/route_recovery_http_test.go` drives StartTurn, Registry, ADK and
 HTTP across more than two routing refusals, recovery, and Stop during cooldown
 or an active probe. It checks the original turn/generation identity, actual
@@ -8945,6 +8966,13 @@ go test -race -timeout 25m ./internal/config ./internal/provider ./internal/serv
 cd frontend && npm run lint && npm test && npm run build
 ZWAI_E2E_BUILTIN_TOOLS=1 ZWAI_E2E_PORT=8819 npm run e2e -- builtin-tools.spec.ts
 ```
+
+`internal/provider/responses_continuation_test.go` covers capability negotiation,
+response acknowledgement and replay fallback. The PC engine test
+`internal/engine/gateway_responses_continuation_test.go` exercises actual
+manager turns through the Responses HTTP adapter. It checks the first
+`developer` message, incremental bytes and cached usage, stale-ID rebuild,
+and a fixed instruction edit that starts a new chain.
 
 `internal/config/provider_tools_test.go` and
 `internal/server/settings_provider_tools_test.go` verify old configuration,

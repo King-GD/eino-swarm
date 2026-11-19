@@ -196,6 +196,7 @@ export const zh: { [K in keyof typeof en]: string } = {
   "composer.toolsLoading": "正在加载工具…",
   "composer.toolsLoadFailed": "工具列表加载失败",
   "composer.toolsSaveFailed": "工具开关没有保存",
+  "composer.toolsConfigure": "工具设置",
   "composer.fullAccess": "完整权限",
   "composer.fullAccessHint":
     "代理可以读写这个会话工作区里的文件，并运行命令。",
@@ -788,6 +789,8 @@ export const zh: { [K in keyof typeof en]: string } = {
   "settings.swarm.policyThinkingHigh": "高",
 
   "settings.tools.title": "工具",
+  "settings.tools.builtin": "内置工具",
+  "settings.tools.mcp": "MCP",
   "settings.tools.execution": "联网工具执行位置",
   "settings.tools.executionLocation": "联网工具运行于",
   "settings.tools.executionHint": "自动模式登录服务器后使用云端，未登录时使用本机。适用于 web_search 和 web_fetch，从下一回合生效。",

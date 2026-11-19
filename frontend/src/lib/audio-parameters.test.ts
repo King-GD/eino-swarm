@@ -1,5 +1,5 @@
 import { expect, it } from "vitest"
-import { parseAudioDescriptor, playableAudio, resolveAudioParameters, safeAudioOverrides } from "./audio-parameters"
+import { audioOverridesWithoutControl, parseAudioDescriptor, playableAudio, resolveAudioParameters, safeAudioOverrides } from "./audio-parameters"
 const raw = {version:1,revision:"r",status:"configured",parameters:{voice:{values:["calm","bright"],default:"calm",configurable:true},speed:{min:0.1,max:10,default:2,configurable:true},response_format:{values:["pcm"],default:"pcm",configurable:false},instructions:{max_characters:2,configurable:true},max_input_characters:12}}
 it("keeps defaults off the wire and validates explicit Unicode choices without old speed limits",()=>{
  const d=parseAudioDescriptor(raw,"speech")
@@ -16,6 +16,12 @@ it("does not enable malformed, legacy or unknown declarations",()=>{
  expect(()=>resolveAudioParameters(parseAudioDescriptor({...raw,status:"incompatible"},"speech"),{})).toThrow("audio_configuration_unavailable")
  const required=parseAudioDescriptor({...raw,parameters:{voice:{values:["a"],configurable:true}}},"speech")
  expect(()=>resolveAudioParameters(required,{})).toThrow("invalid_audio_parameter")
+})
+it("keeps a reset only for values the visible control cannot clear",()=>{
+ const parameters=parseAudioDescriptor(raw,"speech").parameters
+ expect(audioOverridesWithoutControl(parameters,{voice:"bright",speed:8,instructions:""})).toEqual({})
+ expect(audioOverridesWithoutControl(parameters,{voice:"bright",response_format:"pcm"})).toEqual({response_format:"pcm"})
+ expect(audioOverridesWithoutControl(undefined,{voice:"gone"})).toEqual({voice:"gone"})
 })
 it("copies only bounded explicit preferences without trusting a foreign authority",()=>{
  expect(safeAudioOverrides({voice:"gone",speed:8,instructions:"",token:"private",url:"https://untrusted.test",parameters:raw})).toEqual({voice:"gone",speed:8,instructions:""})

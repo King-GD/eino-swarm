@@ -291,12 +291,15 @@ func (rt *runtime) runManager(ctx context.Context, turn *store.Turn, reg *swarm.
 				ManagerForkContextFilter: withoutPendingManagerProse, OrderManagerCommentary: true,
 			}
 			if recoveryModel == nil {
-				if builder := reg.WorkerConfiguration().ModelBuilder; turn.NuwaEnabled && builder != nil {
-					// Hosted provider tools execute upstream, outside ManagerTools.
-					// Restrict only this planner instance; workers retain the factory.
-					runConfig.Model = provider.WithoutBuiltinTools(builder(swarm.DefaultManagerID, swarm.DefaultManagerID))
+				if builder := reg.WorkerConfiguration().ModelBuilder; builder != nil {
+					runConfig.Model = builder(swarm.DefaultManagerID, swarm.DefaultManagerID)
+					if turn.NuwaEnabled {
+						// Hosted tools execute upstream. Restrict only this planner.
+						runConfig.Model = provider.WithoutBuiltinTools(runConfig.Model)
+					}
 				}
 			}
+			runConfig.Model = provider.WithResponsesContinuation(runConfig.Model, &rt.responses)
 			res, runErr = reg.RunWith(answerCtx, runConfig, swarm.Callback(func(n swarm.Notification) {
 				if n.Kind == swarm.NotifyGenerationStarted && isManagerAgent(n.AgentID) {
 					modelRounds.Add(1)

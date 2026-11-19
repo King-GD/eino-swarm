@@ -11,6 +11,7 @@ import (
 
 	swarm "github.com/LubyRuffy/eino-swarm"
 	"github.com/LubyRuffy/eino-swarm/internal/mcpclient"
+	"github.com/LubyRuffy/eino-swarm/internal/provider"
 	"github.com/LubyRuffy/eino-swarm/internal/slash"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 	"github.com/LubyRuffy/eino-swarm/internal/tools"
@@ -24,8 +25,9 @@ import (
 // a second request either steers the running turn or is rejected, which is
 // what keeps the transcript linear and the sub-agent set attributable.
 type runtime struct {
-	engine   *Engine
-	threadID string
+	engine    *Engine
+	threadID  string
+	responses provider.ResponsesContinuation
 
 	// Move and explicit goal resume must agree on ownership across the
 	// preflight, durable resume receipt and successor admission.

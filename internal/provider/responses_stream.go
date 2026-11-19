@@ -33,10 +33,11 @@ type responsesStreamState struct {
 	calls     map[int]schema.ToolCall
 	observer  *responsesObserver
 	send      func(*schema.Message) bool
+	complete  func(responsesResponse)
 }
 
 func (m *responsesModel) Stream(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
-	resp, err := m.request(ctx, in, true, opts...)
+	resp, plan, err := m.request(ctx, in, true, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +45,11 @@ func (m *responsesModel) Stream(ctx context.Context, in []*schema.Message, opts 
 	go func() {
 		defer resp.Body.Close()
 		defer sw.Close()
-		state := &responsesStreamState{calls: map[int]schema.ToolCall{}, observer: newResponsesObserver(ctx), send: func(msg *schema.Message) bool { return sw.Send(msg, nil) }}
+		state := &responsesStreamState{
+			calls: map[int]schema.ToolCall{}, observer: newResponsesObserver(ctx),
+			send:     func(msg *schema.Message) bool { return sw.Send(msg, nil) },
+			complete: func(response responsesResponse) { plan.remember(ctx, response) },
+		}
 		err := readResponsesStream(resp, state)
 		if ctx.Err() != nil {
 			err = ctx.Err()
@@ -156,6 +161,9 @@ func (s *responsesStreamState) event(e responsesEvent) (bool, error) {
 		out.ReasoningContent, err = responsesRemaining(s.reasoning, out.ReasoningContent)
 		if err != nil {
 			return true, err
+		}
+		if s.complete != nil {
+			s.complete(e.Response)
 		}
 		return true, s.emit(out)
 	case "response.failed", "response.incomplete", "response.cancelled":

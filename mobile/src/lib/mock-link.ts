@@ -901,7 +901,7 @@ export class MockLink {
         if (scenario === "legacy") return this.ok({ id, ok: false, code: "unknown_op" })
         if (scenario === "slow") await new Promise((resolve) => setTimeout(resolve, 1200))
         if (this.host.takeCatalogFailure()) return this.ok({ id, ok: false, code: "refresh_failed" })
-        return this.ok({ id, model_policy: { mode: "local", configurable: true, ready: true, scope: "local" }, models: scenario === "empty" ? [] : [{ provider_id: "walkthrough", provider_label: "Walkthrough", model: "scripted-next", default: true }], reasoning_levels: ["low", "medium", "high"], web_execution_status: { preference: "auto", execution: "local", cloud_account: "sign_in_required" } })
+        return this.ok({ id, model_policy: { mode: "local", configurable: true, ready: true, scope: "local" }, models: scenario === "empty" ? [] : [{ provider_id: "walkthrough", provider_label: "Walkthrough", model: "scripted-next", default: true, label: scenario === "named-default" ? "New PC default" : undefined }], reasoning_levels: ["low", "medium", "high"], web_execution_status: { preference: "auto", execution: "local", cloud_account: "sign_in_required" } })
       }
       case OpGetTimeouts:
       case OpSetTimeouts: {

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { useEffect, type ReactNode } from "react"
 import { Braces, ChevronDown, ChevronRight, Circle, Loader2, Pencil, Plus, Plug, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -19,6 +19,10 @@ export const mcpSettingsSearch =
   "mcp server external tools stdio streamable http sse connection command environment headers MCP 服务 外部工具 连接 命令 环境变量 请求头"
 
 type MCPMark = "on" | "off" | "connected" | "failed" | "checking" | "unchecked"
+
+export function mcpSettingsQueryMatches(query: string, t: Translate, servers: MCPServerView[] = []) {
+  return mcpBlockVisible(query, servers, t)
+}
 
 function mcpBlockVisible(query: string, servers: MCPServerView[], t: Translate) {
   if (settingsMatch(
@@ -51,21 +55,31 @@ function StatusMark({ mark }: { mark: MCPMark }) {
   return <Circle aria-hidden data-mcp-status={mark} className={cn("size-2.5 shrink-0 fill-current", tone)} />
 }
 
-export function MCPTab({ query = "", leading }: { query?: string; leading?: ReactNode }) {
+export function MCPTab({
+  query = "",
+  leading,
+  onMatch,
+  children,
+}: {
+  query?: string
+  leading?: ReactNode
+  onMatch?: (visible: boolean) => void
+  /** When set, the caller places the connection list and owns the page
+   *  chrome. JSON still has to be returned by itself: the document is the
+   *  whole right-hand pane, and a tab strip above it collapses the editor. */
+  children?: (pane: { connections: ReactNode; json: ReactNode }) => ReactNode
+}) {
   const t = useT()
   const state = useMCPSettings()
   const locked = !!state.busy || !!state.draft || state.jsonText !== undefined
-  // The JSON document is the whole right-hand pane. Leaving the tools list
-  // above it collapses the editor.
-  if (state.jsonText !== undefined) {
-    return <MCPJSONEditor text={state.jsonText} saving={state.busy === "json"} error={state.formError}
+  const visible = mcpBlockVisible(query, state.servers, t)
+  useEffect(() => { onMatch?.(visible) }, [onMatch, visible])
+  const editor = state.jsonText !== undefined ? (
+    <MCPJSONEditor text={state.jsonText} saving={state.busy === "json"} error={state.formError}
       onChange={state.setJsonText} onApply={() => void state.applyJSON()} onCancel={state.cancelJSON} />
-  }
-  return (
-    <>
-    {leading}
-    {mcpBlockVisible(query, state.servers, t) ? (
-    <SettingsPage title={t("mcp.title")} description={t("mcp.description")}>
+  ) : null
+  const connections = (
+    <div className="flex flex-col gap-8">
       <SettingsSection title={t("mcp.directLoad")}>
         <SettingsRow label={t("mcp.directLoad")} hint={t("mcp.directLoadHint")} htmlFor="mcp-direct-load">
           <Input id="mcp-direct-load" type="number" min={0} max={100} inputMode="numeric"
@@ -154,6 +168,18 @@ export function MCPTab({ query = "", leading }: { query?: string; leading?: Reac
         confirmLabel={t("mcp.delete")} cancelLabel={t("mcp.cancel")}
         onOpenChange={(open) => { if (!open) state.setPendingDelete(undefined) }}
         onConfirm={() => { if (state.pendingDelete) void state.remove(state.pendingDelete.id) }} />
+    </div>
+  )
+  if (children) return children({ connections: visible ? connections : null, json: editor })
+  // The JSON document is the whole right-hand pane. Leaving the tools list
+  // above it collapses the editor.
+  if (editor) return editor
+  return (
+    <>
+    {leading}
+    {visible ? (
+    <SettingsPage title={t("mcp.title")} description={t("mcp.description")}>
+      {connections}
     </SettingsPage>
     ) : null}
     </>

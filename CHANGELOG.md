@@ -14,12 +14,20 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
+- PC 主管与网关协商原生 Responses 固定指令继承后，用 `previous_response_id` 仅上传相同模型的增量。固定指令变化、历史改写或续接失效时，用本地完整历史重建。(`F-175`, `C-030`)
+
+- Settings → Tools shows built-in tools and MCP connections on separate tabs. The composer Tools menu opens that page. (`F-130`, `F-176`)
+
 - PC and paired phones queue ordinary follow-ups by default. Send options and each queue row offer insertion on the next model call or immediate insertion by interrupting the current manager step. (`C-002`)
 
 - Signed-in phones can open Chat directly with their authorized Gateway catalog while the PC page waits for a connection. Chat and PC keep their separate model sources. (`F-210`, `C-013`)
 - 网关模式下，普通网关和第三方接入会根据可用的识别、朗读模型分别默认开启语音。语音设置仅显示网关允许编辑的参数，录音格式和超时等设置默认折叠。(`F-148`, `C-048`)
 
 ### Fixed
+
+- PC 切到本地模式后，额外目录不再漏掉独立且仍获准对话的已登录网关来源；手机任务页也不再把唯一候选的标签套到其他已选模型上。会话选路不变。(`C-013`)
+
+- Speech settings no longer add a second “follow gateway default” row after choosing a voice, format, speed, or instruction. That control already returns to the gateway default. A saved value with no control keeps one reset action. (`F-148`, `C-048`)
 
 - Swarm settings show the valid range for the sub-agent cap. Invalid entries
   do not save or reset the cap to its default. (`F-330`, `C-009`, #175)

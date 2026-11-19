@@ -81,6 +81,15 @@ export function playableAudio(parameters: AudioOverrides, role: AudioRole): bool
   return (parameters.response_format === undefined || ["mp3", "wav", "pcm"].includes(parameters.response_format)) && (parameters.stream_format === undefined || parameters.stream_format === "audio" || parameters.stream_format === "sse" && parameters.response_format === "pcm")
 }
 
+/** Explicit values with no visible control. A shown select, speed field, or text follow button already restores the gateway default. */
+export function audioOverridesWithoutControl(parameters: AudioParameters | undefined, value: AudioOverrides): AudioOverrides {
+  const stuck: AudioOverrides = {}
+  for (const key of enumKeys) if (value[key] !== undefined && !parameters?.[key]?.configurable) stuck[key] = value[key]
+  if (value.speed !== undefined && !parameters?.speed?.configurable) stuck.speed = value.speed
+  for (const key of textKeys) if (value[key] !== undefined && !parameters?.[key]?.configurable) stuck[key] = value[key]
+  return stuck
+}
+
 /** Copy preferences only; a paired PC never supplies the phone's authority. */
 export function safeAudioOverrides(raw: unknown): AudioOverrides {
  const result:AudioOverrides={}

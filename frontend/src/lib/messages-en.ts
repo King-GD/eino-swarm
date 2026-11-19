@@ -199,6 +199,7 @@ export const en = {
   "composer.toolsLoading": "Loading tools…",
   "composer.toolsLoadFailed": "Could not load tools",
   "composer.toolsSaveFailed": "Could not update tools",
+  "composer.toolsConfigure": "Tool settings",
   "composer.fullAccess": "Full access",
   "composer.fullAccessHint":
     "Agents can read and write files in this conversation's workspace and run commands.",
@@ -823,6 +824,8 @@ export const en = {
   "settings.swarm.policyThinkingHigh": "High",
 
   "settings.tools.title": "Tools",
+  "settings.tools.builtin": "Built-in",
+  "settings.tools.mcp": "MCP",
   "settings.tools.execution": "Web tool execution",
   "settings.tools.executionLocation": "Web tools run on",
   "settings.tools.executionHint": "Cloud after server sign-in; this device while signed out. Applies to web_search and web_fetch from the next turn.",

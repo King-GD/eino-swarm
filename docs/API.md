@@ -992,7 +992,7 @@ Invalid input returns `400 invalid_mcp`; failed persistence returns
 ### `POST /api/mcp/import`
 
 Apply one JSON document in a single configuration update. The body is the
-document, up to 1 MiB, not a wrapper. Settings → Tools → Edit JSON posts the
+document, up to 1 MiB, not a wrapper. Settings → Tools → MCP → Edit JSON posts the
 textarea here. Either of these shapes is accepted, and `servers` may be an
 object with the same entry fields as `mcpServers`:
 
@@ -3967,6 +3967,21 @@ mode, non-object entries, missing/non-string/duplicate/unsupported types or tool
 on Chat Completions return `400` before changing configuration. API key omission,
 clearing and masking retain their existing semantics. Supported types and cloud
 resource limits are described in [configuration](CONFIG.md#provider-cloud-tools).
+
+The PC manager can use native Responses continuation when the Gateway
+conversation capability advertises `responses_developer_history: 1`. The
+initial `store:true` request places the fixed instructions in leading
+`developer` messages in `input`. Top-level `instructions` apply to the
+current request. The PC accepts a continuation ID only when the response
+confirms `X-AIGateway-Responses-Mode: native` and
+`X-AIGateway-Responses-Developer-History: 1`.
+
+For append-only history on the same model with the same request settings,
+`previous_response_id` references the saved history and `input` carries only
+the new items. Changes to fixed instructions or history, or a rejected
+continuation ID, trigger a rebuild from the complete local input. Without the
+negotiated capability the PC sends complete input. The cursor is process-local.
+Cache use is reported by upstream `usage.input_tokens_details.cached_tokens`.
 
 `builtin_tool` is a durable event kind returned by `GET /api/trace/:turn` and the
 conversation event log/SSE. Its `text` is JSON with `provider_id`, `model`,

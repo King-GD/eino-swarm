@@ -14,6 +14,8 @@ import {
   OpMore,
   OpOpen,
   OpDeliver,
+  OpMeta,
+  OpRefreshCapabilities,
   OpSend,
   OpStart,
   OpUnwatch,
@@ -731,6 +733,42 @@ describe("inbox window and thread loading", () => {
     cleanup()
     vi.useRealTimers()
     vi.mocked(openSaved).mockReset()
+  })
+
+  it("shows and submits each PC Local conversation's gateway model when only a PC default is listed", async () => {
+    seedLink()
+    const conversations = [
+      { id: "original", provider_id: "gateway:original", model: "original-model" },
+      { id: "partner", provider_id: "gateway:partner", model: "shared-model" },
+    ].map(row => ({ ...row, title: row.id }))
+    const threads = conversations.map(({ id, title }) => ({ id, title, running: false, last_active_at: "2026-01-01T00:00:00Z" }))
+    const send = vi.fn(async () => ({ v: 1, id: "s", ok: true }))
+    const link = hostLink({ threads, send })
+    const rpc = link.rpc.bind(link)
+    vi.spyOn(link, "rpc").mockImplementation(async (req, options): Promise<RemoteResponse> => {
+      const reply = { v: 1, id: "fixture", ok: true }
+      const model_policy = { mode: "local" as const, scope: "local", ready: true, configurable: true }
+      if (req.op === OpMeta) return { ...reply, startup: "ready", product_mode: "local", model_policy }
+      if (req.op === OpRefreshCapabilities) return { ...reply, model_policy, models: [
+        { provider_id: "personal", model: "shared-model", label: "PC default", default: true, ready: true },
+      ] }
+      const detail = conversations.find(row => row.id === req.thread_id)
+      if (req.op === OpWatch && detail) return { ...reply, op: "ready", thread_id: detail.id, detail, events: [] }
+      return rpc(req, options)
+    })
+    vi.mocked(openSaved).mockResolvedValue(link)
+    render(<App />)
+    for (const thread of conversations) {
+      fireEvent.click(await screen.findByRole("button", { name: t("home.open", { title: thread.title }) }))
+      const model = await screen.findByRole("button", { name: t("composer.model") })
+      await waitFor(() => expect(model.textContent).toBe(thread.model))
+      fireEvent.change(screen.getByLabelText(t("thread.message")), { target: { value: "Continue" } })
+      fireEvent.click(screen.getByRole("button", { name: t("thread.send") }))
+      await waitFor(() => expect(send).toHaveBeenLastCalledWith(expect.objectContaining({
+        op: OpDeliver, thread_id: thread.id, provider_id: thread.provider_id, model: thread.model,
+      })))
+      fireEvent.click(screen.getByRole("button", { name: t("thread.back") }))
+    }
   })
 
   it("keeps a row loaded with more after the inbox polls", async () => {

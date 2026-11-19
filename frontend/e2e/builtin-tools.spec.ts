@@ -37,7 +37,7 @@ test("Responses cloud search keeps citations and its own Trace after reload", as
     const { settings } = await (await request.get("/api/settings")).json()
     const configured = await request.put("/api/settings", { data: {
       models: { default: "cloud", providers: [{ id: "cloud", label: "Cloud fixture", base_url: `http://127.0.0.1:${address.port}`, model: "fixture", api_key: "", api_mode: "responses", builtin_tools: [{ type: "web_search", search_context_size: "low" }] }] },
-      swarm: { ...settings.swarm, auto_title: false },
+      swarm: { ...settings.swarm, auto_title: false, composer_predictions: false },
       memory: { ...settings.memory, auto_review: false },
     } })
     expect(configured.ok()).toBe(true)
@@ -54,6 +54,8 @@ test("Responses cloud search keeps citations and its own Trace after reload", as
     await expect(source).toBeVisible()
     expect(attempts).toHaveLength(1)
     expect(attempts[0].path).toBe("/responses")
+    expect(attempts[0].body.store).toBe(false)
+    expect(attempts[0].body.previous_response_id).toBeUndefined()
     const tools = attempts[0].body.tools as { type: string; search_context_size?: string }[]
     expect(tools).toContainEqual({ type: "web_search", search_context_size: "low" })
     expect(tools.some((tool) => tool.type === "function")).toBe(true)

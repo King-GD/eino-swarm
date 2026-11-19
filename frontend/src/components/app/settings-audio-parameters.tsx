@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { SelectItem } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { playableAudio, resolveAudioParameters, type AudioOverrides, type AudioParameterView, type AudioRole } from "@/lib/audio-parameters"
+import { audioOverridesWithoutControl, playableAudio, resolveAudioParameters, type AudioOverrides, type AudioParameterView, type AudioRole } from "@/lib/audio-parameters"
 import { chromeTypeClass } from "@/lib/chrome-type"
 import { Field, SettingsChoice, SettingsRow } from "./settings-field"
 
@@ -18,11 +18,15 @@ export function GatewayAudioSettings({ view, role, value, onChange, labels, quer
 }) {
   const id = useId()
   const parameters = view?.version === 1 && view.status === "configured" ? view.parameters : undefined
-  const hasOverrides = Object.keys(value).length > 0
-  const reset = hasOverrides ? <SettingsRow label={labels.follow} query={query}>
-    <Button type="button" variant="outline" size="sm" onClick={() => onChange({})}>{labels.follow}</Button>
+  const stuck = audioOverridesWithoutControl(parameters, value)
+  const reset = Object.keys(stuck).length > 0 ? <SettingsRow label={labels.follow} query={query}>
+    <Button type="button" variant="outline" size="sm" onClick={() => {
+      const next: AudioOverrides = { ...value }
+      for (const key of Object.keys(stuck) as (keyof AudioOverrides)[]) delete next[key]
+      onChange(next)
+    }}>{labels.follow}</Button>
   </SettingsRow> : null
-  if (!parameters) return hasOverrides ? <>
+  if (!parameters) return Object.keys(stuck).length > 0 ? <>
     <SettingsRow label={labels.unavailable} query={query} />
     <SettingsRow label={labels.invalid} hint={Object.entries(value).map(([key, v]) => `${labels[key] ?? key}: ${String(v).slice(0, 128)}`).join(" · ")} query={query} />
     {reset}

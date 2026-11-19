@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { api } from "@/lib/api"
+import { openSettings } from "@/store/settings-sheet"
 import { composerToolsMenuPlacement, filterRemoteTools, toolHoverText, toolMenuMatches, toolMenuQuery } from "@/lib/composer-menu"
 import { chromeTypeClass } from "@/lib/chrome-type"
 import { cn } from "@/lib/utils"
@@ -95,6 +96,7 @@ export function ComposerTools({
   const inspectRevision = useRef(0)
   const writes = useRef(Promise.resolve())
   const inspects = useRef<AbortController[]>([])
+  const openingSettings = useRef(false)
 
   const stopInspects = () => {
     inspects.current.forEach((controller) => controller.abort())
@@ -290,7 +292,12 @@ export function ComposerTools({
         sideOffset={placement.sideOffset}
         style={{ maxHeight: placement.maxHeight }}
         data-testid="composer-tools-menu"
-        className="z-[80] grid w-80 grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-0"
+        onCloseAutoFocus={(event) => {
+          if (!openingSettings.current) return
+          openingSettings.current = false
+          event.preventDefault()
+        }}
+        className="z-[80] grid w-80 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0"
       >
         <div className="space-y-1.5 border-b px-2 py-2">
           <Input
@@ -386,6 +393,20 @@ export function ComposerTools({
           ) : null}
         </div>
         </TooltipProvider>
+        <div className="border-t p-1">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+            onClick={() => {
+              openingSettings.current = true
+              changeOpen(false)
+              openSettings("tools")
+            }}
+          >
+            <span>{t("composer.toolsConfigure")}</span>
+            <ChevronRight className="size-3.5 shrink-0" />
+          </button>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   )

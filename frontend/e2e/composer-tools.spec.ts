@@ -86,6 +86,12 @@ test("the composer tool menu clears the input and lists MCP tools rather than se
     await expect(page.getByRole("menuitemcheckbox", { name: "Read file (read)" })).toHaveAttribute("aria-checked", "false")
     await expect(page.getByRole("menuitemcheckbox", { name: "Read file (read)" }).locator("[role=switch]")).toHaveAttribute("data-state", "unchecked")
     await expect(page.getByTestId("composer-tools-menu").getByRole("menuitemcheckbox", { name: "Composer desk" })).toHaveCount(0)
+    await page.getByRole("button", { name: "Tool settings", exact: true }).click()
+    await expect(page.getByRole("heading", { name: "Tools", exact: true })).toBeVisible()
+    await expect(page.getByRole("tab", { name: "Built-in", exact: true })).toHaveAttribute("aria-selected", "true")
+    await expect(page.getByRole("tab", { name: "MCP", exact: true })).toBeVisible()
+    await page.getByRole("button", { name: "Back to app", exact: true }).click()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
   } finally {
     await restoreTools(request, original.settings?.tools)
     await request.delete(`/api/mcp/${encodeURIComponent(id)}`)
