@@ -10,7 +10,7 @@ Install/configure a compatible local `fofa` CLI using its own credential mechani
 
 The inspector opens when it first discovers a new panel instance in the current conversation. Updates to known instances and reconnect replays do not switch the selected tab. Switching tabs keeps the iframe and map zoom. Local map filters, zoom and tooltips do not start tools. Closing the inspector does not stop the task; Stop cancels the task-owned collector and HTTP requests. The current implementation bundles plugins with the app rather than accepting external ZIPs or generated HTML at runtime.
 
-The example uses the local client's `dump --format=json` batch stream, then probes discovered Web endpoints while later batches are still being collected. The adapter supports the installed LubyRuffy/gofofa v0.2.22 behavior, including string-valued NDJSON fields and exit-zero collection errors. Client identity/capability should be revalidated after changing executable. The client path is configurable; credentials are neither passed in argv nor sent to the renderer.
+The example uses the local client's `dump --format=json` batch stream, then probes discovered Web endpoints while later batches are still being collected. The adapter supports the verified GoFOFA v0.2.22 and v0.2.29 behavior, including string-valued NDJSON fields and exit-zero collection errors. The newer progress suffix is accepted only when it names the current query exactly. Client identity/capability should be revalidated after changing executable. The client path is configurable; credentials are neither passed in argv nor sent to the renderer.
 
 ## Map semantics
 

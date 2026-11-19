@@ -100,6 +100,9 @@ func collect(ctx context.Context, input Input, events chan<- event) {
 		if strings.HasPrefix(text, "fetch error:") {
 			return emit(event{kind: "source_error", err: failure("collection_failed")})
 		}
+		// Newer clients repeat the query after progress. Another query's log
+		// cannot establish completeness for the rows this request collected.
+		text = strings.TrimSuffix(text, " for query: "+input.Query)
 		if match := progressLine.FindStringSubmatch(text); match != nil {
 			count, countErr := strconv.Atoi(match[1])
 			total, totalErr := strconv.Atoi(match[2])

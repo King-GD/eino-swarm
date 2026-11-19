@@ -297,6 +297,35 @@ func TestQueryCannotBecomeAClientFlag(t *testing.T) {
 	}
 }
 
+func TestCollectorConfirmsProgressOnlyForTheRequestedQuery(t *testing.T) {
+	const query = `protocol="ssh" && country="ZZ"`
+	for _, test := range []struct {
+		name, suffix, completeness string
+	}{
+		{"legacy_progress", "", "complete"},
+		{"current_query_progress", " for query: " + query, "complete"},
+		{"different_query_progress", " for query: other query", "unknown"},
+		{"extra_query_text", " for query: " + query + " extra", "unknown"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			// New CLI releases repeat the query in progress. Only this request's
+			// exact suffix can establish that its returned rows are complete.
+			input := fixtureInput(t, fixture{
+				Rows:   []json.RawMessage{row("127.0.0.1", 22, "ssh", "")},
+				Stderr: []string{"2026/11/18 12:00:00 size: 1/1, 100.00%" + test.suffix},
+			})
+			input.Query = query
+			sink, latest := snapshotSink(t)
+			if _, err := Run(t.Context(), input, sink); err != nil {
+				t.Fatal(err)
+			}
+			if got := latest().Collection; got.Completeness != test.completeness || got.Received != 1 {
+				t.Fatalf("query-specific progress changed completeness: %+v", got)
+			}
+		})
+	}
+}
+
 func TestRealCLIFlushesTheFirstBatchBeforeTheSecondAPIReply(t *testing.T) {
 	binary, err := exec.LookPath("fofa")
 	if err != nil {
