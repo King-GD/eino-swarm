@@ -295,6 +295,14 @@ requests a retry. A call deadline leaves one durable `timeout` receipt with
 an unknown outcome. The next independent call uses the original session in
 both mounting modes, and a subsequent confirmed expiry renews only that later
 call. Later authentication failures still block the task.
+`TestMCPMissingRequiredArgumentCanBeCorrectedInTheSameTurn` drives a direct
+tool and a proxy with a missing field and an independent sibling in one
+model response. It checks zero invalid wire calls, the field error bound to
+the first call, the sibling result, and a corrected call in the same turn.
+The remote-error regression runs an operation and then returns similar
+validation prose. It still blocks the task. The MCP progress Playwright
+fixture checks the field error in the expanded transcript and Trace while
+the corrected call runs.
 `TestMCPDiagnosticsCorrelateTimeoutAndLaterSuccessWithoutSecrets` checks both
 call IDs in the engine log and verifies that secrets stay out of diagnostics.
 `TestWorkerMCPFailureBlocksItsManagerAndKeepsTheOriginalCall`
@@ -303,13 +311,17 @@ and preserves the worker's original tool call.
 `TestExpiredBindingRefreshesSavedHeadersWithoutRedirecting`
 checks the new wire credentials and refuses a changed URL.
 `models/mcp/MCPCallRecovery.tla` limits a modeled call to one replacement
-after a verified rejection and admits independent work after a call deadline.
-Other failures block subsequent work. Its
-negative cases reintroduce uncertain replay, unlimited renewal, continued
-admission after a blocking failure, a missing cancellation request and the
-old deadline block. The model covers one logical
-call and its admission and cancellation decisions. Go tests cover the wire
-sessions and cancellation of the active model request.
+after verified session expiry. `RejectMissing` maps to the local check before
+`callTool`. It consumes no wire attempt and leaves admission open. A
+Streamable HTTP deadline also leaves admission open. A remote `tool_error`
+maps to the post-dispatch failure and blocks new work, including a
+cancellation request for the admitted manager. The historical and seeded
+variants reintroduce the missing-argument block, dispatch before local
+rejection, admission after a remote error, and other recovery faults. A
+reachability witness exercises independent work after local rejection. The
+model covers a single logical call, at most one replacement, and the
+admission decision for independent work. Go integration tests cover actual
+batch results, session reuse and in-flight cancellation.
 `internal/engine/tool_offer_http_test.go` drives a real manager turn through
 Registry, ADK and the offline model adapter: unchecking `web_search` and an MCP
 server removes them from the next request, checking them again restores them,

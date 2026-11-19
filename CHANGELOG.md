@@ -42,6 +42,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
   without replaying the call. The same turn can make a later independent call
   on the session. (`F-176`, `C-041`, #177)
 
+- MCP tools report missing required arguments before sending the call. The
+  model can supply the named fields in the same turn while other calls in
+  the batch finish. (`F-176`, `C-041`, #178)
+
 - The queue HTTP regression now exercises bodyless steering for missing rows
   and checks that malformed JSON returns `400` with the queue intact.
 

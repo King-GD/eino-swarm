@@ -12,6 +12,7 @@ type ModelRequest = {
 type ProgressEvent = { turn_id: string; tool_call_id: string; kind: string; seq: number; text?: string }
 
 const callID = "remote-inspection"
+const missingCallID = "missing-record-key"
 const phase = "Checking the source records"
 const resultText = "Source records verified"
 
@@ -32,13 +33,14 @@ function modelReply(response: ServerResponse, input: ModelRequest, message: obje
   response.end(`data: ${JSON.stringify(chunk(message, null))}\n\ndata: ${JSON.stringify(chunk({}, finish))}\n\ndata: [DONE]\n\n`)
 }
 
-test("MCP progress is visible in folded work before the remote call returns", async ({ page, request }, info) => {
+test("MCP missing arguments remain visible while the corrected call reports progress", async ({ page, request }, info) => {
   test.skip(process.env.ZWAI_E2E_MCP_PROGRESS !== "1", "requires the keyless loopback model and MCP endpoint")
   const serverID = "progress-fixture"
   const errors: string[] = []
   let token: string | number | undefined
   let calls = 0
   let finalSent = false
+  let validationResult = ""
   let modelResult = ""
   let originalDirectLoadPercent: number | undefined
   let reportProgress!: () => void
@@ -60,7 +62,7 @@ test("MCP progress is visible in folded work before the remote call returns", as
         const rpc = JSON.parse(raw) as {
           id?: number | string
           method: string
-          params?: { protocolVersion?: string; name?: string; _meta?: { progressToken?: string | number } }
+          params?: { protocolVersion?: string; name?: string; arguments?: { record_key?: string }; _meta?: { progressToken?: string | number } }
         }
         if (rpc.id === undefined) {
           response.writeHead(202).end()
@@ -80,12 +82,15 @@ test("MCP progress is visible in folded work before the remote call returns", as
             return
           case "tools/list":
             json(response, reply({
-              tools: [{ name: "inspect_record", inputSchema: { type: "object", properties: {} } }],
+              tools: [{ name: "inspect_record", inputSchema: {
+                type: "object", required: ["record_key"], properties: { record_key: { type: "string" } },
+              } }],
             }))
             return
           case "tools/call":
             if (rpc.params?.name !== "inspect_record") throw new Error("Unexpected remote tool")
             calls++
+            if (rpc.params.arguments?.record_key !== "fixture") throw new Error("Missing argument crossed the MCP boundary")
             token = rpc.params._meta?.progressToken
             response.writeHead(200, { "Content-Type": "text/event-stream" })
             response.flushHeaders()
@@ -120,11 +125,12 @@ test("MCP progress is visible in folded work before the remote call returns", as
         return
       }
       const listed = input.messages.some((message) => message.tool_call_id === "remote-catalog")
+      validationResult = input.messages.find((message) => message.tool_call_id === missingCallID)?.content ?? ""
       const name = input.tools?.find((item) => item.function.name.includes(listed ? "_call_tool_" : "_list_tools_"))?.function.name
       if (!name) throw new Error("MCP proxy absent at the model boundary")
-      const args = listed ? { name: "inspect_record", arguments: {} } : {}
+      const args = listed ? { name: "inspect_record", arguments: validationResult ? { record_key: "fixture" } : {} } : {}
       modelReply(response, input, { role: "assistant", tool_calls: [
-        { index: 0, id: listed ? callID : "remote-catalog", type: "function", function: { name, arguments: JSON.stringify(args) } },
+        { index: 0, id: listed ? (validationResult ? callID : missingCallID) : "remote-catalog", type: "function", function: { name, arguments: JSON.stringify(args) } },
       ] }, "tool_calls")
     } catch (error) {
       errors.push(String(error))
@@ -175,6 +181,8 @@ test("MCP progress is visible in folded work before the remote call returns", as
     await composer(page).press("Enter")
     const { turn } = await (await accepted).json()
     await expect.poll(() => ({ calls, errors })).toEqual({ calls: 1, errors: [] })
+    expect(validationResult).toContain("Missing required MCP arguments")
+    expect(validationResult).toContain("record_key")
     expect(typeof token).toBe("string")
     const transcript = page.getByTestId("transcript")
     const collapsed = transcript.getByTestId("work-fold")
@@ -191,7 +199,11 @@ test("MCP progress is visible in folded work before the remote call returns", as
     expect(modelResult).toBe("")
     await page.screenshot({ path: info.outputPath("mcp-folded-progress.png"), animations: "disabled" })
     await collapsed.click()
-    const tool = transcript.getByRole("button", { name: /mcp_.*call_tool/ }).last()
+    const callRows = transcript.getByRole("button", { name: /mcp_.*call_tool/ })
+    const rejected = callRows.first()
+    if (await rejected.getAttribute("aria-expanded") === "false") await rejected.click()
+    await expect(transcript.getByText(/Missing required MCP arguments.*record_key/)).toBeVisible()
+    const tool = callRows.last()
     if (await tool.getAttribute("aria-expanded") === "false") await tool.click()
     await expect(transcript.getByTestId("mcp-tool-progress")).toContainText(phase)
     finishCall()
@@ -203,6 +215,9 @@ test("MCP progress is visible in folded work before the remote call returns", as
     const trace = await (await request.get(`/api/trace/${turn.id}`)).json()
     expect(trace.events).toContainEqual(expect.objectContaining({
       kind: "tool_result", tool_call_id: callID, text: expect.stringContaining(resultText),
+    }))
+    expect(trace.events).toContainEqual(expect.objectContaining({
+      kind: "tool_result", tool_call_id: missingCallID, text: expect.stringContaining("Missing required MCP arguments"),
     }))
     expect((trace.events as ProgressEvent[]).some((event) => event.kind === "tool_delta" || event.text?.includes(phase))).toBe(false)
   } finally {

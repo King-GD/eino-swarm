@@ -1114,10 +1114,17 @@ that server's remote tools and can switch each one off without disabling the
 server. A tool switched off during a turn leaves the next request. Plan and
 Nuwa read-only toolsets do not mount MCP tools. Other Nuwa turns make the
 mounted names available to workers and keep the planner's toolset separate.
+When the tool schema declares a required top-level field without a default, the call
+is checked before sending it. The tool record names missing fields so the
+model can supply them in a new call in the same turn. Other calls in the
+same batch can finish.
+
 A confirmed expired session is renewed once with the current saved credentials
-for the same MCP connection. If it cannot be renewed, or the tool fails for
-another reason, the task stops. Repair the connection in Settings and retry
-the task. Check for an external effect before retrying a call that timed out.
+for the same MCP connection. The task stops if renewal fails or the server
+returns a tool execution error. Repair the connection in Settings and retry
+the task. A Streamable HTTP call deadline keeps the turn available for later
+independent calls. Check for an external effect before repeating the timed-out
+call.
 Keep secrets
 in the write-only environment and header fields. Blank preserves the saved
 map. `{}` clears it. Local commands run with the conversation workspace as

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
@@ -206,7 +207,7 @@ func (h *sessionHolder) runCall(ctx context.Context, name string, arguments map[
 	if h.renewExpired(ctx, e, code) {
 		_, result, code = h.callOnce(ctx, name, arguments, direct)
 	}
-	if code == "ok" {
+	if code == "ok" || code == missingRequiredArgumentsCode {
 		return jsonResult(result)
 	}
 	if code == "timeout" && h.server.Transport == "streamable_http" {
@@ -254,14 +255,10 @@ func (h *sessionHolder) callOnce(ctx context.Context, name string, arguments map
 		h.logCall(ctx, started, e.server.Timeout(), "", "connect", code, "")
 		return e, nil, code
 	}
-	found := false
-	for _, remote := range catalog.Tools {
-		if remote.OriginalName == name || direct && remote.Name == name {
-			found = true
-			break
-		}
-	}
-	if !found {
+	index := slices.IndexFunc(catalog.Tools, func(remote ToolDescriptor) bool {
+		return remote.OriginalName == name || direct && remote.Name == name
+	})
+	if index < 0 {
 		return e, nil, "unknown_tool"
 	}
 	if h.manager.remoteDisabled(h.server.ID, name) {
@@ -269,6 +266,10 @@ func (h *sessionHolder) callOnce(ctx context.Context, name string, arguments map
 	}
 	if ExecutionFailure(ctx) != nil {
 		return e, nil, "task_blocked"
+	}
+	if rejection := checkRequiredArguments(catalog.Tools[index].InputSchema, arguments); rejection != nil {
+		h.logCall(ctx, started, e.server.Timeout(), name, "validate", missingRequiredArgumentsCode, "")
+		return e, rejection, missingRequiredArgumentsCode
 	}
 	started = time.Now()
 	callCtx, cancel := context.WithTimeout(ctx, e.server.Timeout())
