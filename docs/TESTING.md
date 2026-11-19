@@ -40,6 +40,10 @@ unrelated phone model-catalog refresh, including the final queued sample.
 WebKit MP4/AAC recordings are normalized to 16 kHz mono PCM WAV even with the
 automatic recording setting; conversion retains the final recorder chunk and
 enforces the configured byte limit on the converted audio.
+`frontend/e2e/speech.spec.ts` reads the uploaded file directly from multipart
+boundaries and preserves its bytes. This accepts Go's filename-before-name
+header order, which Node 22's `Request.formData()` parser rejects. Both automatic
+and WAV recording cases still decode the received audio and check its duration.
 `frontend/src/lib/speech-capture-boundaries.test.ts` also checks late cancelled
 conversion, conversion failure without a raw-container fallback, and expanded
 WAV byte limits through the real recorder. `mobile/src/lib/phone-speech.test.ts`

@@ -15,6 +15,29 @@ function wave(): Buffer {
   return bytes
 }
 
+function recordingFromMultipart(bytes: Buffer, contentType: string) {
+  const boundary = contentType.match(/(?:^|;)\s*boundary=(?:"([^"]+)"|([^;\s]+))/i)
+  if (!boundary) throw new Error("Recording upload omitted its multipart boundary")
+  const delimiter = Buffer.from(`\r\n--${boundary[1] ?? boundary[2]}`)
+  let offset = 0
+  while (offset < bytes.length) {
+    const headerEnd = bytes.indexOf("\r\n\r\n", offset)
+    if (headerEnd < 0) break
+    const bodyEnd = bytes.indexOf(delimiter, headerEnd + 4)
+    if (bodyEnd < 0) break
+    const headers = bytes.subarray(offset, headerEnd).toString("latin1")
+    const disposition = headers.match(/(?:^|\r\n)Content-Disposition:\s*form-data;([^\r\n]*)/i)?.[1] ?? ""
+    if (/(?:^|;)\s*name=(?:"file"|file)(?:;|$)/.test(disposition)) {
+      const mime = headers.match(/(?:^|\r\n)Content-Type:\s*([^\r\n]+)/i)?.[1].trim()
+      if (!mime) throw new Error("Recording upload omitted its audio media type")
+      const audio = bytes.subarray(headerEnd + 4, bodyEnd)
+      return { data: audio.toString("base64"), mime, size: audio.length }
+    }
+    offset = bodyEnd + delimiter.length + 2
+  }
+  throw new Error("Recording upload omitted its file part")
+}
+
 for (const recordingFormat of ["auto", "wav"] as const) {
 test(`speech ${recordingFormat} settings gate real recording, preserve edits and read a completed answer`, async ({ page, request }) => {
   const previous = (await (await request.get("/api/settings")).json()).settings.speech
@@ -29,10 +52,8 @@ test(`speech ${recordingFormat} settings gate real recording, preserve edits and
       for await (const chunk of req) chunks.push(Buffer.from(chunk))
       const bytes = Buffer.concat(chunks)
       if (req.url === "/v1/audio/transcriptions") {
-        const form = await new Request("http://fixture.invalid/", { method: "POST", headers: { "Content-Type": req.headers["content-type"]! }, body: bytes }).formData()
-        const file = form.get("file") as File
-        const audio = Buffer.from(await file.arrayBuffer())
-        receive({ data: audio.toString("base64"), mime: file.type, size: audio.length })
+        // Node 22's formData parser refuses Go's filename-before-name header order.
+        receive(recordingFromMultipart(bytes, req.headers["content-type"] ?? ""))
         await recognitionGate
         res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify({ text: "recognized speech" }))
       } else if (req.url === "/v1/audio/speech") {
