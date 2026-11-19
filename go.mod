@@ -4,16 +4,18 @@ go 1.26.0
 
 require (
 	github.com/LubyRuffy/eino-tools v0.1.1-0.20261112082817-613350fdb992
-	github.com/LubyRuffy/pairlink v0.0.0-20260924021808-3e3676dc96d5
+	github.com/LubyRuffy/pairlink v0.0.0-20261119024829-70436b9460e4
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/cloudwego/eino v0.9.19
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.13
 	github.com/creack/pty v1.1.24
 	github.com/eino-contrib/jsonschema v1.0.3
+	github.com/evanphx/json-patch v0.5.2
 	github.com/gin-gonic/gin v1.12.0
 	github.com/glebarez/go-sqlite v1.21.2
 	github.com/glebarez/sqlite v1.11.0
+	github.com/google/jsonschema-go v0.4.3
 	github.com/gorilla/websocket v1.5.3
 	github.com/meguminnnnnnnnn/go-openai v0.1.2
 	github.com/modelcontextprotocol/go-sdk v1.8.0
@@ -50,7 +52,6 @@ require (
 	github.com/corpix/uarand v0.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
-	github.com/evanphx/json-patch v0.5.2 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
@@ -63,7 +64,6 @@ require (
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/gogs/chardet v0.0.0-20211120154057-b7413eaefb8f // indirect
-	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/goph/emperror v0.17.2 // indirect
 	github.com/itlightning/dateparse v0.2.1 // indirect

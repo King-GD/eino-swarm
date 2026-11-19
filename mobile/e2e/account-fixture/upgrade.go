@@ -8,26 +8,11 @@ import (
 	pstore "github.com/LubyRuffy/pairlink/store"
 )
 
-// The dependency's append-only Memory returns the first historical peer pair,
-// including a revoked row. Gateway storage resolves the live replacement. The
-// fixture keeps the real relay/Noise path while modelling that same lookup.
+// fixtureBindings uses pairlink Memory. BindingByPeers returns the newest live
+// row for a host and device. Revoked-only history is ErrRevoked.
 type fixtureBindings struct{ *pstore.Memory }
 
 func newFixtureBindings() *fixtureBindings { return &fixtureBindings{Memory: pstore.NewMemory()} }
-
-func (s *fixtureBindings) BindingByPeers(ctx context.Context, host, device []byte) (pstore.Binding, error) {
-	rows, err := s.ListAllBindings(ctx)
-	if err != nil {
-		return pstore.Binding{}, err
-	}
-	for index := len(rows) - 1; index >= 0; index-- {
-		row := rows[index]
-		if !row.Revoked && bytes.Equal(row.HostPub, host) && bytes.Equal(row.DevicePub, device) {
-			return row, nil
-		}
-	}
-	return pstore.Binding{}, pstore.ErrNotFound
-}
 
 func (f *fixture) retirePhoneBindings(ctx context.Context, encodedPub string) error {
 	if f.bindings == nil {
