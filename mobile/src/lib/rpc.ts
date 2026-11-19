@@ -8,6 +8,7 @@ export const OpOpen = "open"
 export const OpRead = "read"
 export const OpStart = "start"
 export const OpSend = "send"
+export const OpDeliver = "deliver"
 export const OpSteer = "steer"
 export const OpStop = "stop"
 export const OpAnswer = "answer"
@@ -62,6 +63,8 @@ export type RemoteRequest = {
   thread_id?: string
   project_id?: string
   text?: string
+  mode?: import("../../../frontend/src/lib/delivery-mode").DeliveryMode
+  expected_turn_id?: string
   call_id?: string
   answers?: unknown
   continue?: boolean
@@ -69,6 +72,9 @@ export type RemoteRequest = {
   since?: number
   include_detail?: boolean
   before?: number
+  compact_history?: boolean
+  work_from?: number
+  work_through?: number
   provider_id?: string
   model?: string
   reasoning?: string
@@ -117,6 +123,7 @@ export type FollowupView = {
   id: string
   seq: number
   text: string
+  attachments?: number
 }
 
 export type ThreadGroup = {
@@ -294,6 +301,9 @@ export type RemoteResponse = EngineStartup & {
   seq?: number
   event?: RemoteEvent
   events?: RemoteEvent[]
+  history_work?: HistoryWork[]
+  focus_seq?: number
+  history_before?: number
   status?: WatchStatus
   models?: ModelChoice[]
   reasoning_levels?: string[]
@@ -302,6 +312,7 @@ export type RemoteResponse = EngineStartup & {
   put?: { id: string; name?: string; ready: boolean; kind?: string }
   groups?: ThreadGroup[]
   followups?: FollowupView[]
+  delivery?: { turn_id?: string; steer_seq?: number; preempted?: boolean }
   clients?: ClientCatalog
   client_view?: ClientView
   timeout_settings?: TimeoutSettings
@@ -313,6 +324,8 @@ export type RemoteResponse = EngineStartup & {
   speech?: import("../../../frontend/src/lib/speech-types").SpeechSnapshot
   audio?: { audio_id: string; text?: string; mime?: string; size?: number; offset?: number; next?: number; data?: string; more?: boolean }
 }
+
+export type HistoryWork = { from: number; through: number; agent_ids?: string[] }
 
 /** A small discovery view; plugin definitions and data use a frozen transfer. */
 export type TaskPanelManifest = {

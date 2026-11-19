@@ -155,9 +155,10 @@ export function HostChrome({
       {versionCheck ? <VersionCheck onClose={() => setVersionCheck(false)} /> : null}
       <h1 className="sr-only">{t("home.app")}</h1>
       <div
+        ref={rail}
         role="tablist"
         aria-label={showChat ? t("home.nav") : t("home.hosts")}
-        className="flex min-w-0 flex-1 items-center gap-1"
+        className="rail flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
       >
         {showChat ? (
           <button
@@ -177,8 +178,7 @@ export function HostChrome({
             <span className="max-w-28 truncate">{t("chat.tab")}</span>
           </button>
         ) : null}
-        <div ref={rail} className="rail flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-          {phonePCChoices(hosts, account.pcs?.hosts, account.pcs?.origin).map((host) => {
+        {phonePCChoices(hosts, account.pcs?.hosts, account.pcs?.origin).map((host) => {
             const selected = !chatSelected && Boolean(host.fingerprint) && host.fingerprint === activeFingerprint
             const label = host.label || t("account.unnamedPC")
             return (
@@ -227,8 +227,7 @@ export function HostChrome({
                 ) : null}
               </button>
             )
-          })}
-        </div>
+        })}
       </div>
       {openAccount ? <AccountButton onClick={openAccount} /> : null}
     </header>

@@ -29,6 +29,8 @@ import { SpeechActions } from "./speech-actions"
 import { GeneratedImageResult } from "./generated-image-result"
 import { readGeneratedImage } from "@/lib/remote-files"
 import type { RemoteLink } from "@/lib/link"
+import type { HistoryWork } from "@/lib/rpc"
+import { LazyHistoryWork } from "@/components/lazy-history-work"
 import { gatewayImageCode } from "@/lib/paired-image-generation"
 
 export function renderBlock(b: CompactBlock) {
@@ -59,10 +61,11 @@ export function renderBlock(b: CompactBlock) {
   }
   if (b.kind === "steer") {
     const text = dropPackedJson(b.text)
-    if (!text) return null
+    if (!text && !b.hasImages) return null
     return (
       <div data-quote-text="" className="ml-auto w-fit min-w-0 max-w-[85%] wrap-break-word rounded-2xl bg-accent px-3 py-2 text-sm">
-        <QuotedPhoneText text={text} />
+        {text ? <QuotedPhoneText text={text} /> : t("thread.image")}
+        {b.pending !== undefined ? <p className="mt-1 text-xs text-muted-foreground">{t(b.pending ? "delivery.pending" : "delivery.consumed")}</p> : null}
       </div>
     )
   }
@@ -291,6 +294,8 @@ export function ThreadLog({
   continueDisabled,
   activeTurnId,
   imageOwner,
+  historyWork = [],
+  historyAgent = "manager",
 }: {
   blocks: CompactBlock[]
   running?: boolean
@@ -298,8 +303,15 @@ export function ThreadLog({
   continueDisabled?: boolean
   activeTurnId?: string
   imageOwner?: { link: RemoteLink; threadId: string }
+  historyWork?: HistoryWork[]
+  historyAgent?: string
 }) {
-  const items = foldPhoneItems(blocks)
+  const deferred = historyWork.filter((range) => !range.agent_ids || range.agent_ids.includes(historyAgent))
+  const items = foldPhoneItems(deferred.length ? blocks.filter((block) => {
+    if (block.kind !== "reasoning" && block.kind !== "tool") return true
+    const seq = block.sourceSeq ?? 0
+    return !deferred.some((range) => seq >= range.from && seq <= range.through)
+  }) : blocks)
   let lastWork = -1
   items.forEach((item, i) => {
     if (item.type === "block" && item.block.kind === "turn_end") {
@@ -312,17 +324,26 @@ export function ThreadLog({
     lastWork >= 0 &&
     items.slice(lastWork + 1).some((item) => item.type === "block" && item.block.kind === "answer")
   const planningTail = phonePlanningTail(items, running)
+  let workIndex = 0
+  const renderWorkBefore = (seq: number) => {
+    if (!imageOwner) return null
+    const rows = []
+    while (workIndex < deferred.length && deferred[workIndex].from < seq) {
+      const range = deferred[workIndex++]
+      rows.push(<LazyHistoryWork key={`work:${imageOwner.threadId}:${range.from}:${range.through}`}
+        owner={imageOwner} range={range} agentId={historyAgent} renderTool={renderBlock} />)
+    }
+    return rows
+  }
   return (
     <>
-      {items.map((item, i) => {
+      {items.flatMap((item, i) => {
+        const first = item.type === "work" ? item.blocks[0] : item.block
+        const lazy = renderWorkBefore(first?.sourceSeq || Infinity)
         if (item.type === "work") {
-          return (
-            <WorkFold
-              key={item.blocks[0]?.id ?? `work-${i}`}
-              blocks={item.blocks}
-              live={running && i === lastWork && !laterAnswer}
-            />
-          )
+          return [...(lazy ?? []),
+            <WorkFold key={first?.id ?? `work-${i}`} blocks={item.blocks} live={running && i === lastWork && !laterAnswer} />,
+          ]
         }
         const pause = item.block.confirm
         const actionable = running && pause?.pending && (!activeTurnId || !item.block.turnId || item.block.turnId === activeTurnId)
@@ -330,13 +351,13 @@ export function ThreadLog({
           ? <PairedImageResult data={item.block.imageGeneration} link={imageOwner?.link} threadId={imageOwner?.threadId} />
           : pause ? <IterationLimitCard pause={pause}
               onContinue={actionable ? onContinue : undefined} disabled={continueDisabled} /> : renderBlock(item.block)
-        if (!node) return null
-        return (
-          <div key={item.block.id} className="min-w-0 max-w-full">
-            {node}
-          </div>
-        )
+        return [...(lazy ?? []), ...(node ? [
+          <div key={item.block.id} className="min-w-0 max-w-full"
+            data-phone-turn={item.block.turnId} data-phone-prompt={item.block.kind === "user" ? "" : undefined}
+            data-phone-event-seq={item.block.sourceSeq}>{node}</div>,
+        ] : [])]
       })}
+      {renderWorkBefore(Infinity)}
       {planningTail ? <PlanningTail /> : null}
     </>
   )

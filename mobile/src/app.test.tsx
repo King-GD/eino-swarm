@@ -13,6 +13,7 @@ import {
   OpLog,
   OpMore,
   OpOpen,
+  OpDeliver,
   OpSend,
   OpStart,
   OpUnwatch,
@@ -314,7 +315,7 @@ describe("selecting a PC returns to its inbox", () => {
     await waitFor(() => expect(reopen).toHaveBeenCalledTimes(1))
     expect(screen.getByRole("heading", { name: "th-1" })).toBeInTheDocument()
     expect(send).toHaveBeenCalledTimes(1)
-    expect(send.mock.calls[0]).toEqual([expect.objectContaining({ op: OpSend, thread_id: "th-1", text: "Continue my work" })])
+    expect(send.mock.calls[0]).toEqual([expect.objectContaining({ op: OpDeliver, mode: "queue", thread_id: "th-1", text: "Continue my work" })])
   })
 
   it("retries when the installed link drops during its first inbox request", async () => {
@@ -921,7 +922,7 @@ function hostLink(opts?: {
     rpc: async (req: Partial<RemoteRequest>): Promise<RemoteResponse> => {
       if (req.op === OpHello) return { v: 1, id: "h", ok: true }
       if (req.op === OpStart && opts?.start) return opts.start(req)
-      if (req.op === OpSend && opts?.send) return opts.send(req)
+      if ((req.op === OpSend || req.op === OpDeliver) && opts?.send) return opts.send(req)
       if (req.op === OpList) {
         if (opts?.list) return opts.list()
         return { v: 1, id: "l", ok: true, threads, running, projects: opts?.projects ?? [] }

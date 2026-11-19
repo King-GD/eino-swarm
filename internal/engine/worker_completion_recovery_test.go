@@ -241,3 +241,106 @@ func TestColdHumanContinueCannotGrantAnExtraEarlyFinalAttempt(t *testing.T) {
 		t.Fatal("cold continuation lost or duplicated its atomic consumption receipt")
 	}
 }
+
+// The automatic receipt used to drop the runtime lock before the waiter was
+// withdrawn. A human decline accepted in that interval stored a second
+// terminal receipt, and the next read of the wait could not parse the log.
+func TestAutomaticResumeWithdrawsTheWaiterBeforeALateDecline(t *testing.T) {
+	e := newTestEngine(t)
+	th, _ := e.CreateThread("late collection decline", "", "")
+	turn := plantUnfinishedTurn(t, e, th.ID, "Collect the result.")
+	reg := swarm.NewRegistry()
+	t.Cleanup(reg.Close)
+	worker := swarm.PendingAgent{AgentID: "original-worker", Generation: 1, Running: true}
+	if err := reg.PlantFinished(swarm.FinishedWorker{ID: worker.AgentID, Generation: 1, Result: "Terminal result."}); err != nil {
+		t.Fatal(err)
+	}
+	rt := e.runtimeFor(th.ID)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	idle := make(chan struct{})
+	if !rt.occupy(reg, cancel, turn.ID, idle) {
+		t.Fatal("runtime was not claimed")
+	}
+	defer rt.release(cancel, idle, turn.ID)
+	p := workerCollectionPause{Reason: "workers_uncollected", WaitID: "late-decline", Limit: 1, Extend: 2, WorkerIDs: []string{worker.AgentID}, Workers: []swarm.PendingAgent{worker}, AutomaticResume: true}
+	var declineErr error
+	afterCollectionResumeUnlock = func() { declineErr = e.ContinueTurn(th.ID, false) }
+	t.Cleanup(func() { afterCollectionResumeUnlock = nil })
+	type waited struct {
+		proceed, automatic bool
+		err                error
+	}
+	done := make(chan waited, 1)
+	go func() {
+		proceed, automatic, err := rt.waitForWorkerCollection(ctx, turn, reg, &p)
+		done <- waited{proceed, automatic, err}
+	}()
+	select {
+	case got := <-done:
+		if got.err != nil || !got.proceed || !got.automatic {
+			t.Fatalf("automatic resume did not commit: %+v", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("automatic resume did not finish")
+	}
+	if !errors.Is(declineErr, ErrIdle) {
+		t.Fatalf("late decline was accepted after the resume receipt: %v", declineErr)
+	}
+	assertCollectionResumeIsExclusive(t, e, turn)
+}
+
+// ContinueTurn can still see a published waiter after the resume receipt is
+// stored. The decline write has to refuse that receipt itself.
+func TestStoredResumeRejectsACollectionDeclineWhileTheWaiterIsStillPublished(t *testing.T) {
+	e := newTestEngine(t)
+	th, _ := e.CreateThread("published collection decline", "", "")
+	turn := plantUnfinishedTurn(t, e, th.ID, "Collect the result.")
+	reg := swarm.NewRegistry()
+	t.Cleanup(reg.Close)
+	worker := swarm.PendingAgent{AgentID: "original-worker", Generation: 1, Running: true}
+	if err := reg.PlantFinished(swarm.FinishedWorker{ID: worker.AgentID, Generation: 1, Result: "Terminal result."}); err != nil {
+		t.Fatal(err)
+	}
+	rt := e.runtimeFor(th.ID)
+	_, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	idle := make(chan struct{})
+	if !rt.occupy(reg, cancel, turn.ID, idle) {
+		t.Fatal("runtime was not claimed")
+	}
+	defer rt.release(cancel, idle, turn.ID)
+	p := workerCollectionPause{Reason: "workers_uncollected", WaitID: "published-decline", Limit: 1, Extend: 2, WorkerIDs: []string{worker.AgentID}, Workers: []swarm.PendingAgent{worker}, AutomaticResume: true}
+	rt.mu.Lock()
+	rt.collectionPause, rt.continueCh = &p, make(chan bool, 1)
+	if err := rt.saveWorkerPauseEvent(turn, KindMaxIterations, &p); err != nil {
+		rt.mu.Unlock()
+		t.Fatal(err)
+	}
+	if err := rt.saveWorkerPauseEvent(turn, KindWorkersCollectionResumed, workerCollectionReceipt{p.WaitID, p.WorkerIDs, reg.PendingAgents()}); err != nil {
+		rt.mu.Unlock()
+		t.Fatal(err)
+	}
+	rt.mu.Unlock()
+	if err := e.ContinueTurn(th.ID, false); err == nil || errors.Is(err, ErrIdle) {
+		t.Fatalf("published waiter accepted a decline after the resume receipt: %v", err)
+	}
+	assertCollectionResumeIsExclusive(t, e, turn)
+}
+
+func assertCollectionResumeIsExclusive(t *testing.T, e *Engine, turn *store.Turn) {
+	t.Helper()
+	paused, used, err := e.workerCollectionWaitState(turn)
+	if err != nil || paused != nil || !used {
+		t.Fatalf("resume receipt was not the only terminal decision: paused=%v used=%v err=%v", paused, used, err)
+	}
+	events, err := e.store.ListTurnEvents(turn.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ev := range events {
+		if ev.Kind == KindWorkersCollectionDeclined {
+			t.Fatal("decline receipt was stored after the automatic resume")
+		}
+	}
+}

@@ -2583,6 +2583,25 @@ steer.
 
 Oldest first. Empty is `[]`, not `null`.
 
+### `POST /api/threads/:id/deliver` → `202`
+
+Takes an ordinary composer message with the existing `text`, `images`,
+`files` and `model` fields plus `mode`. Use `queue` for normal send
+(returns `followup` when a turn is running, or `turn` when starting one).
+Use `steer` or `interrupt` with `expected_turn_id` to attach input to
+the current turn. The result includes `turn_id` and `steer_seq`.
+`preempted: true` means an underway manager step was cancelled. A changed
+turn returns `409 delivery_turn_changed`. `steer_consumed` references
+the steer event's seq when the manager assembles the next model input.
+
+The paired phone uses the `deliver` RPC with the same mode/expected-turn
+fields, staged `puts` for attachments, or `followup_id` to select one
+queued row. Its acknowledgement includes `delivery` and the current
+`followups`. A request for a queue row supplies its ID only as input.
+Desktop queue rows send `mode` and `expected_turn_id` to the existing
+follow-up steer endpoint below. A bodyless POST retains the older
+send-now behavior when the thread is idle.
+
 ### `POST /api/threads/:id/followups` → `202`
 
 Body `{"text": "…"}`. Appends one waiting message. `409 idle` when nothing is
@@ -2878,7 +2897,7 @@ shortening only the bounded detail text.
 | `max_iterations` | manager pause, turn still running. `reason:"iterations"` identifies the ordinary cap; `reason:"workers_uncollected"` adds `wait_id`, `worker_ids`, exact `workers` generations and `automatic_resume`. The latter is collection waiting, not evidence that the displayed iteration allowance was exhausted; `automatic_resume_refusal` may explain changed identities. Old payloads without reason retain cap semantics |
 | `max_iterations_continued` | the human extended the turn; `text` names how many extra rounds |
 | `workers_collection_resumed` | one generation-bound automatic completion wake for this turn; JSON contains the original `wait_id`, `worker_ids` and terminal `workers`. It only resumes collection, is not a wait-result receipt, and does not renew correction or automatic-wake allowances |
-| `workers_collection_declined` | internal durable refusal of this exact worker-collection wait before acknowledging a human decline; contains `wait_id`, `worker_ids` and `workers`. Cold recovery cannot turn the old automatic wait back on. Not a completion or model-call receipt |
+| `workers_collection_declined` | internal durable refusal of this exact worker-collection wait before acknowledging a human decline; contains `wait_id`, `worker_ids` and `workers`. Refused and not stored once `workers_collection_resumed` for that wait exists. Cold recovery cannot turn the old automatic wait back on. Not a completion or model-call receipt |
 | `model_backoff` | a wait observation or private-candidate deferral, not a sent request or new retry allowance. Origin JSON is `{scope:"origin",cooldown_id,attempt,wait_ms}` on the actual caller/turn: cooldown_id is an opaque process-local service-generation identity shared across roles, with no endpoint; positive wait_ms is observed remaining cooldown (sub-millisecond waits use 1), and 0 means an active probe has not yet yielded valid content and its remaining wait is unknown. Only one recovery probe is admitted after cooldown; its first decoded nonempty body, reasoning or tool-call delta admits other requests while the stream stays open. Headers, role-only/empty/usage-only deltas and error frames do not admit them. Only the probe's final result resets or advances failures; concurrent results during that probe cannot change the streak or a later generation. A failed probe renews cooldown without cancelling already admitted requests; non-streaming Generate waits for its complete result. PC/phone chat and history show one timed row per conversation/generation and omit zero-delay probe rows; Trace keeps each caller observation. Candidate JSON instead uses `{scope:"schedule_answer",attempt,wait_ms,code,candidate_id}` as described below. Legacy rows may omit the added fields. |
 | `model_retry` | the manager hit a recoverable ChatModel failure and re-entered this turn. `text` is JSON `{attempt,cap,reason?}`. `reason` selects the transcript notice: `invalid_tool_json` (the model returned a tool call that was not valid JSON), `model_response_invalid` (the SDK cannot decode the model HTTP response or stream, including a wrong field type; the turn did not reach a tool), `rate_limited`, `model_unavailable` (HTTP 500/502/503/504/529), `model_transport` (dropped stream, connection reset, mid-stream read timeout), `model_idle` (silence after the first byte). Older rows omit `reason` and keep the generic retry line. `reason: "context_overflow"` is separate: the endpoint rejected the call because the prompt plus the requested output does not fit the window. That notice names the window, the turn compacts once, and a second rejection ends the turn with `the prompt plus the requested output exceeds this model's context window; automatic compact could not free enough space. Lower Max completion tokens in Settings → Swarm, or shorten the request, then retry`. A repeating schedule that ends that way is paused. When the in-turn retries are exhausted, the turn error is the same class: `the model returned a tool call that was not valid JSON`, `the model service is rate limiting requests`, `the model service is unavailable`, `the model service returned a response that could not be decoded`, or `the connection to the model service dropped`. An exhausted idle timeout keeps the sentence that names how long the model sent no data. A trailing tool call whose arguments are not valid JSON is refused before the next model request and then dropped, so that payload is not sent and a `400 Unterminated string` cannot repeat. `reason: "scheduled_no_activity"` is the scheduled-check continuation, not a model failure |
 | `title` | the conversation was named; `text` is the new title, `agent_id` is `title-namer`. Not rendered in the transcript |

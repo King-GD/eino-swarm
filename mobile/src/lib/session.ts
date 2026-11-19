@@ -5,6 +5,7 @@ import {
   OpReady,
   type RemoteEvent,
   type FollowupView,
+  type HistoryWork,
   type RemoteResponse,
   type ThreadDetail,
   type WatchStatus,
@@ -25,6 +26,7 @@ export type PhoneView = {
   queued: RemoteEvent[]
   events: RemoteEvent[]
   blocks: CompactBlock[]
+  historyWork: HistoryWork[]
   detail: ThreadDetail | null
   followups: FollowupView[]
 }
@@ -39,6 +41,7 @@ export function emptyView(): PhoneView {
     queued: [],
     events: [],
     blocks: [],
+    historyWork: [],
     detail: null,
     followups: [],
   }
@@ -103,6 +106,7 @@ export function prependOlder(
   events: RemoteEvent[],
   more: boolean,
   cursor = 0,
+  work: HistoryWork[] = [],
 ): PhoneView {
   const incoming = events
     .filter((ev) => {
@@ -111,19 +115,17 @@ export function prependOlder(
       return view.oldestSeq === 0 || ev.seq < view.oldestSeq
     })
     .sort((a, b) => a.seq - b.seq)
-  if (incoming.length === 0) {
-    if (!more) return { ...view, hasMore: false }
-    const next = cursor > 0 && (view.oldestSeq === 0 || cursor < view.oldestSeq) ? cursor : 0
-    if (!next) return { ...view, hasMore: false }
-    return { ...view, oldestSeq: next, hasMore: true }
-  }
+  const next = cursor > 0 && (!view.oldestSeq || cursor < view.oldestSeq) ? cursor : 0
+  if (incoming.length === 0 && work.length === 0)
+    return { ...view, oldestSeq: next || view.oldestSeq, hasMore: more && next > 0 }
   const merged = mergeEvents(view.events, incoming)
   const blocks = restoreStreaming(foldEvents(merged), view.blocks)
   return {
     ...view,
     events: merged,
-    oldestSeq: merged[0]?.seq ?? view.oldestSeq,
+    oldestSeq: next || merged[0]?.seq || view.oldestSeq,
     hasMore: more,
+    historyWork: mergeHistoryWork(view.historyWork, work, merged),
     blocks,
     detail: askDetail(view.detail, blocks),
   }
@@ -144,11 +146,12 @@ function applyReady(view: PhoneView, resp: RemoteResponse): PhoneView {
   if (resp.status && detail) {
     detail = askDetail(applyWatchStatus(detail, resp.status, true), blocks)
   }
+  const oldest = oldestOf(stored, lastSeq, Boolean(resp.more), view.oldestSeq)
   return {
     ...view,
     lastSeq,
-    oldestSeq: oldestOf(stored, lastSeq, Boolean(resp.more), view.oldestSeq),
-    hasMore:
+    oldestSeq: resp.history_before ? Math.min(resp.history_before, oldest || Infinity) : oldest,
+    hasMore: resp.history_before ? Boolean(resp.more) :
       Boolean(resp.more) ||
       (fromReady.length === 0 && view.hasMore) ||
       (stored[0]?.seq ?? 0) > 1,
@@ -156,9 +159,25 @@ function applyReady(view: PhoneView, resp: RemoteResponse): PhoneView {
     queued: [],
     events: stored,
     blocks,
+    historyWork: mergeHistoryWork(view.historyWork, resp.history_work ?? [], stored),
     detail,
     followups: resp.status?.followups ?? view.followups,
   }
+}
+
+function mergeHistoryWork(loaded: HistoryWork[], added: HistoryWork[], events: RemoteEvent[]): HistoryWork[] {
+  if (!added.length && !loaded.length) return loaded
+  const ranges = new Map([...loaded, ...added].map((range) => [range.from, range]))
+  for (const event of events) {
+    const cut = rewindCut(event)
+    if (!cut) continue
+    for (const [from, range] of ranges) {
+      if (range.through < cut || from >= event.seq) continue
+      if (from >= cut) ranges.delete(from)
+      else ranges.set(from, { ...range, through: cut - 1 })
+    }
+  }
+  return [...ranges.values()].sort((left, right) => left.from - right.from)
 }
 
 function oldestOf(
@@ -219,6 +238,7 @@ function applyRewind(view: PhoneView, ev: RemoteEvent, cut: number): PhoneView {
     hasMore: unloaded ? view.hasMore || cut > 1 : view.hasMore,
     events,
     blocks,
+    historyWork: view.historyWork.flatMap((range) => range.from >= cut ? [] : [{ ...range, through: Math.min(range.through, cut - 1) }]),
     detail: view.detail ? askDetail(view.detail, blocks) : view.detail,
   }
 }

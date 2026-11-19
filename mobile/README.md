@@ -180,6 +180,9 @@ select the PC again after fixing local storage. QR re-pairing and account
 rotation for the same PC cannot run together. Signing out removes a migrated
 PC's managed ticket; it does not restore its retired anonymous ticket.
 
+On the LOCAL welcome page, **Sign in** starts Gateway authorization in one tap.
+The welcome page displays progress, review and errors. **Other ways** is
+available before sign-in and after a cancelled or failed attempt.
 Android sign-in opens the validated verification page in the default external
 browser; return to zwai after authorizing. iOS retains its Browser sheet.
 Version-read and browser-launch acknowledgements each stop waiting after fifteen
@@ -332,8 +335,13 @@ advance. A completion divider already counts as visible; this does not promise
 an older answer body whenever the tail contains only a divider. The current
 turn, live sequence and streaming output remain current while pages arrive.
 A failed page keeps the ready conversation, reports the error once and does not
-retry automatically. **Earlier** sits above the log for additional history;
-pulling up also pages older events. User and
+retry automatically. **Earlier** jumps to the preceding assistant reply.
+Current PCs send compact history for completed conversations and older pages.
+Expand **Thinking and tools** to request those steps, with further pages
+available inside the fold when needed. A running conversation retains its live
+activity. At three turns, the navigation strip jumps to the selected prompt,
+loading an older turn first when needed. Direct chat also has turn navigation.
+On the inbox, **Chat** and all PC tabs scroll in the same strip. User and
 assistant rows render markdown; a path link does not navigate the
 webview. Recognised language fences use the existing source syntax colours in
 both themes, including C++ tags `cpp`, `c++`, and `cxx`. The same rendering
@@ -362,10 +370,10 @@ The header Back button and Android system Back return from a worker log to
 the Agents list, then to the conversation, before leaving for the inbox.
 Loading Earlier history after several streamed replies keeps the Agents list free
 of manager paragraphs and work folds; those remain in the manager conversation.
-On iOS, swipe right from the left screen edge to return through the same visible
+On iOS, swipe right from near the left edge to return through the same visible
 layers, including dismissing an open model picker first. One completed gesture
-returns one layer; root screens stay open. Short, cancelled, vertical or
-non-edge swipes do not navigate, and swiping left does not create forward
+returns one layer; root screens stay open. Cancelled, vertical, non-edge or
+below-threshold swipes leave the page open, and swiping left does not create forward
 navigation. The gesture does not use browser history.
 The `schedule` event is still **A wait is armed.** in the transcript; the live
 wait is the banner (next check, **Run now**, **Cancel wait**).
@@ -441,19 +449,20 @@ a short thread is bottom-aligned, and scrolling away from the tail raises
 **Jump to latest**. Answering inside a conversation is one rounded box
 (`components/composer.tsx`) that grows with the text up to a cap, Enter
 sends (Shift+Enter is a newline, and an IME candidate list is never a
-send). The leftmost control is **Add**. It attaches files and, in a PC
-conversation or new chat, lists `/goal` and `/plan` with a short description.
-Choosing one inserts `/name ` and leaves the cursor after it; the command is
-not sent until it has an argument. Typing `/` opens the same list and filters
-it. A fullwidth slash or the IME slash punctuation is treated as `/`. A path
-or URL does not open the list, and `/plan` is offered only at the start of
-the draft. `/compact` stays on the PC. Direct model chat uses Add for files
-only. Android Back closes Add first; while a slash list is open it removes
-only the unfinished slash token. The round button stays off until there is
-something to send.
-While a turn is live the box also offers steer, and a plain send is queued
-after this turn. The composer has no persistent queue hint below its controls;
-waiting messages remain visible in the queue tray.
+send). The leftmost control is **Add**. It attaches files and lists `/goal`,
+`/plan` and `/image` in a paired PC conversation or new chat. Direct chat
+offers `/image` when the selected Gateway source has an authorized image model.
+Typing `/` at the start or after draft text opens the same command list, including
+with a fullwidth slash or the IME slash punctuation. Paths and URLs stay literal.
+Choosing `/plan` or `/image` places it at the start and uses the existing draft
+as its argument. The command requires an argument and a separate send action.
+`/compact` stays on the PC. Android Back closes Add first. When the slash list
+is open, Back removes only the unfinished slash token.
+While a paired PC turn is live, the send arrow queues ordinary messages,
+including attachments. Open **Send options** beside the arrow to insert the draft
+into the next model call of this turn, or to interrupt the active manager step
+and insert immediately. Each queued row offers both actions for that row. Stop
+ends the turn and preserves the other queued messages.
 Message, quote and Ask Other editors use 16px text (`C-017`). On iOS, focusing and
 dismissing the keyboard must leave the header in its safe area and the wait
 actions and Send/Follow-up/Steer inside the screen, including long drafts;

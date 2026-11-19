@@ -58,6 +58,9 @@ func handleLog(eng *engine.Engine, cfg config.RemoteConfig, req Request, path, s
 	if _, err := eng.Store().GetThread(tid); err != nil {
 		return mapErr(req.ID, path, sessionID, err)
 	}
+	if req.WorkFrom != 0 || req.WorkThrough != 0 {
+		return readHistoryWork(eng.Store(), cfg, req, tid, path, sessionID)
+	}
 	before := req.Before
 	limit := watchEvents(cfg)
 	if before <= 0 {
@@ -73,6 +76,9 @@ func handleLog(eng *engine.Engine, cfg config.RemoteConfig, req Request, path, s
 			return packLogEvents(req.ID, path, sessionID, tid, page, more, cfg)
 		}
 		before = window[0].Seq
+	}
+	if req.CompactHistory {
+		return compactPhoneHistory(eng.Store(), cfg, req.ID, tid, path, sessionID, before)
 	}
 	var page []store.Event
 	hasMore := true

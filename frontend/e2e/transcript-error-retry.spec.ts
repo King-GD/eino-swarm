@@ -122,7 +122,7 @@ function observeWrites(page: Page, id: string) {
     if (["POST", "PATCH", "DELETE"].includes(incoming.method()) &&
       (path === `/api/threads/${id}` || path === `/api/threads/${id}/turns` ||
         path === `/api/threads/${id}/retry` ||
-        path === `/api/threads/${id}/steer` || path === `/api/threads/${id}/interrupt` ||
+        path === `/api/threads/${id}/steer` || path === `/api/threads/${id}/deliver` || path === `/api/threads/${id}/interrupt` ||
         path.startsWith(`/api/threads/${id}/followups`) || path.startsWith("/api/schedules"))) {
       writes.push(`${incoming.method()} ${path}`)
     }

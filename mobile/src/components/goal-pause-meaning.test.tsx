@@ -16,7 +16,7 @@ for (const locale of ["en", "zh"] as const) {
   it.each(["goal_capped", "goal_idle"] as const)(`${locale}: retains the pause cause without a resume action (%s)`, (pause) => {
     setLocale(locale)
     render(<ThreadScreen detail={{ id: "readonly", title: "Read only", goal: "Verify the artifact.", [pause]: true }}
-      blocks={[]} onBack={vi.fn()} onSend={vi.fn()} onSteer={vi.fn()} onStop={vi.fn()}
+      blocks={[]} onBack={vi.fn()} onSend={vi.fn()} onInsert={vi.fn()} onStop={vi.fn()}
       onAnswer={vi.fn()} onAnswerStructured={vi.fn()} />)
     const banner = screen.getByTestId("goal-banner")
     expect(banner).toHaveTextContent(locale === "zh" ? "自动执行已暂停" : "Auto-run paused")
@@ -57,7 +57,7 @@ for (const locale of ["en", "zh"] as const) {
         blocks = applyEvent(blocks, event)
       }
       const handlers = {
-        onBack: vi.fn(), onSend: vi.fn(), onSteer: vi.fn(), onStop: vi.fn(),
+        onBack: vi.fn(), onSend: vi.fn(), onInsert: vi.fn(), onStop: vi.fn(),
         onAnswer: vi.fn(), onAnswerStructured: vi.fn(), onResumeGoal: resume,
       }
       const view = render(<ThreadScreen detail={detail} blocks={blocks} {...handlers} />)

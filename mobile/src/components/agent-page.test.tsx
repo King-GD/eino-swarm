@@ -16,7 +16,7 @@ it("removes streamed manager paragraphs from the worker roster after older histo
   let state = applyPush(openView({ id: "t1", title: "talk" }), {
     ...response({ op: OpReady, seq: 10, events: [event(10, "user_message", "Check the current workspace")], more: true }),
   })
-  const handlers = { onBack: vi.fn(), onOlder: vi.fn(), onSend: vi.fn(), onSteer: vi.fn(),
+  const handlers = { onBack: vi.fn(), onOlder: vi.fn(), onSend: vi.fn(), onInsert: vi.fn(),
     onStop: vi.fn(), onAnswer: vi.fn(), onAnswerStructured: vi.fn() }
   const props = () => ({ detail: state.detail!, blocks: state.blocks, hasMore: state.hasMore, ...handlers })
   const view = render(<ThreadScreen {...props()} />)

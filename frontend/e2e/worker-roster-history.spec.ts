@@ -23,7 +23,7 @@ test("a follow-up queries a finished worker without inventing a new delegation",
     const { schedule } = await scheduled.json()
     const traces: Trace[] = []
     for (const text of ["Verify the assigned inputs.", "Inspect the existing worker state."]) {
-      const accepted = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/threads/${threadID}/steer`)
+      const accepted = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/threads/${threadID}/deliver`)
       await composer(page).fill(text)
       await composer(page).press("Enter")
       const response = await accepted

@@ -91,7 +91,7 @@ test("drops files and generic binary photos without changing their vision bytes"
     [image.naturalWidth, image.naturalHeight])).toEqual([16, 12])
   const threadID = await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id")
   const accepted = page.waitForResponse((response) => response.request().method() === "POST"
-    && new URL(response.url()).pathname === `/api/threads/${threadID}/steer`)
+    && new URL(response.url()).pathname === `/api/threads/${threadID}/deliver`)
   await send(page, "Use the attached material")
   const response = await accepted
   expect(response.status()).toBe(202)

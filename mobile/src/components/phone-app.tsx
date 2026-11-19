@@ -40,18 +40,18 @@ import type {
 import { useClientPages, useClientPoll } from "@/lib/client-poll"
 import { mergeClientTools } from "@/lib/local-clients"
 import { readClientTask } from "@/lib/read-client"
+import { parseSlashSubmit } from "../../../frontend/src/lib/slash-core"
 import {
   OpCancelWait,
-  OpLog,
   OpMore,
   OpOpen,
   OpResumeGoal,
   OpRunNow,
   OpFollowupDrop,
   OpFollowupSteer,
+  OpDeliver,
   OpSend,
   OpStart,
-  OpSteer,
   OpStop,
   OpTune,
   OpUnwatch,
@@ -65,7 +65,6 @@ import {
   applyPush,
   emptyView,
   openView,
-  prependOlder,
   type PhoneView,
 } from "@/lib/session"
 import {
@@ -84,7 +83,8 @@ import { mergeCompletion, readInbox, useCompletionRead } from "@/lib/completion-
 import { useInboxRefresh } from "@/lib/inbox-refresh"
 import { usePhoneVisibility } from "@/lib/phone-visibility"
 import { openPhoneThread } from "@/lib/open-thread"
-import { answerPhoneQuestion, continuePhoneTurn, interruptPhoneFollowup, sendPhoneQueue, sendPhoneTurn } from "@/lib/phone-turn"
+import { readOlderHistory } from "@/lib/read-older-history"
+import { answerPhoneQuestion, continuePhoneTurn, deliverPhoneFollowup, sendPhoneQueue, sendPhoneTurn } from "@/lib/phone-turn"
 import { sendComposed } from "@/lib/turn-send"
 import { phonePrediction } from "@/lib/composer-prediction"
 import { useModelCatalog } from "@/lib/use-model-catalog"
@@ -527,35 +527,21 @@ export function PhoneApp() {
     }
   }
 
-  const loadOlder = async () => {
+  const loadOlder = async (turnId?: string): Promise<number | undefined> => {
     const target = linkRef.current
     if (!target || olderBusy.current) return
     const cur = viewRef.current
-    const before = cur.oldestSeq > 0 ? cur.oldestSeq : cur.lastSeq
     if (!cur.hasMore || !cur.threadId) return
     const gen = loadGen.current
     const threadId = cur.threadId
     olderBusy.current = true
     setLoadingOlder(true)
+    const stillHere = () => linkRef.current === target && loadGen.current === gen && viewRef.current.threadId === threadId
     try {
-      const r = await target.rpc({
-        op: OpLog,
-        thread_id: threadId,
-        before,
-      })
-      if (loadGen.current !== gen || viewRef.current.threadId !== threadId) return
-      if (!r.ok) {
-        setError(remoteError(r.error || r.code || ""))
-        return
-      }
-      const latest = viewRef.current
-      if (!latest.hasMore) return
-      const cursor = latest.oldestSeq > 0 ? latest.oldestSeq : latest.lastSeq
-      // Automatic opening history can advance before this manual page returns.
-      if (before > 0 && cursor > 0 && cursor < before) return
-      commitView(prependOlder(latest, r.events ?? [], Boolean(r.more), r.seq ?? 0))
+      return await readOlderHistory({ link: target, threadId, turnId, stillHere,
+        current: () => viewRef.current, commit: commitView, setError })
     } catch (e) {
-      fail(e)
+      if (stillHere()) fail(e)
     } finally {
       if (loadGen.current === gen) {
         olderBusy.current = false
@@ -850,9 +836,10 @@ export function PhoneApp() {
             panelOwnerKey={activeFp ? `${activeFp}:${startup?.data_generation ?? 0}` : ""}
             blocks={view.blocks}
             followups={view.followups}
-            onSteerFollowup={(id) => void queueFollowup(OpFollowupSteer, detail.id, id)}
+            onSteerFollowup={(id, mode, turnId) => mode && turnId
+              ? void deliverPhoneFollowup(turnDeps, detail.id, id, mode, turnId)
+              : void queueFollowup(OpFollowupSteer, detail.id, id)}
             onDropFollowup={(id) => void queueFollowup(OpFollowupDrop, detail.id, id)}
-            onInterrupt={(id) => void interruptPhoneFollowup(turnDeps, detail.id, id)}
             hasMore={view.hasMore}
             loadingOlder={loadingOlder}
             caughtUp={view.caughtUp}
@@ -868,9 +855,10 @@ export function PhoneApp() {
             onTune={(next) => void tuneThread(detail.id, next)}
             onBack={() => void closeThread()}
             onOpenAccount={openPcAccount}
-            onOlder={() => void loadOlder()}
-            onSend={(text, extra) => postTurn(OpSend, detail.id, text, extra)}
-            onSteer={(text, extra) => postTurn(OpSteer, detail.id, text, extra)}
+            onOlder={loadOlder}
+            historyWork={view.historyWork}
+            onSend={(text, extra) => postTurn(parseSlashSubmit(text) ? OpSend : OpDeliver, detail.id, text, extra)}
+            onInsert={(mode, turnId, text, extra) => sendPhoneTurn(turnDeps, OpDeliver, detail.id, text, extra, { mode, turnId })}
             onStop={async () => {
               if (!link?.alive()) return
               try {

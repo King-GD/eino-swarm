@@ -14,9 +14,8 @@ public class BridgeViewController: CAPBridgeViewController, UIGestureRecognizerD
         bridge?.registerPluginInstance(StreamBodyPlugin())
         bridge?.registerPluginInstance(fileSavePlugin)
 
-        let back = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(edgeBack(_:)))
-        back.edges = .left
-        back.cancelsTouchesInView = false
+        let back = UIPanGestureRecognizer(target: self, action: #selector(edgeBack(_:)))
+        back.maximumNumberOfTouches = 1
         back.delegate = self
         webView?.addGestureRecognizer(back)
         webView?.scrollView.panGestureRecognizer.require(toFail: back)
@@ -69,16 +68,23 @@ public class BridgeViewController: CAPBridgeViewController, UIGestureRecognizerD
         fileSavePlugin.cancelForDestroy()
     }
 
-    public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        guard let back = gestureRecognizer as? UIScreenEdgePanGestureRecognizer else { return true }
-        let velocity = back.velocity(in: view)
-        return velocity.x > abs(velocity.y)
+    public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        touch.location(in: view).x <= 44
     }
 
-    @objc private func edgeBack(_ back: UIScreenEdgePanGestureRecognizer) {
+    public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard let back = gestureRecognizer as? UIPanGestureRecognizer else { return false }
+        let movement = back.translation(in: view)
+        let direction = movement == .zero ? back.velocity(in: view) : movement
+        return direction.x > abs(direction.y) * 1.25
+    }
+
+    @objc private func edgeBack(_ back: UIPanGestureRecognizer) {
         guard back.state == .ended else { return }
         let movement = back.translation(in: view)
-        guard movement.x >= max(60, view.bounds.width * 0.2), movement.x > abs(movement.y) else { return }
+        let velocity = back.velocity(in: view)
+        let flick = movement.x >= 36 && velocity.x >= 450
+        guard movement.x > abs(movement.y) * 1.25, movement.x >= 58 || flick else { return }
 
         // The visible overlay may temporarily own Back; resolve its current handler at completion.
         webView?.evaluateJavaScript("typeof window.__zwaiAndroidBack === 'function' && window.__zwaiAndroidBack()")

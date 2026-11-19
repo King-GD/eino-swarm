@@ -166,7 +166,7 @@ func (p *LinkPump) permit(req Request) bool {
 			p.reply(fail(req.ID, p.path, p.sessionID, "custom_models_disabled", "Model settings cannot be changed in this mode."))
 			return false
 		}
-	case OpTranslateSelection, OpStart, OpSend, OpSteer, OpContinue, OpRunNow, OpResumeGoal, OpPreempt, OpFollowupSteer:
+	case OpTranslateSelection, OpStart, OpSend, OpDeliver, OpSteer, OpContinue, OpRunNow, OpResumeGoal, OpPreempt, OpFollowupSteer:
 		if !work {
 			p.reply(fail(req.ID, p.path, p.sessionID, "login_required", "Sign in before using this install."))
 			return false
@@ -229,6 +229,9 @@ func (p *LinkPump) startWatch(req Request) Response {
 		if !resp.OK {
 			return resp
 		}
+	}
+	if req.CompactHistory && req.Since == 0 {
+		resp = p.compactReadyHistory(resp)
 	}
 	p.watchWG.Add(1)
 	go func() {

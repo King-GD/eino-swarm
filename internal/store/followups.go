@@ -14,6 +14,10 @@ import (
 // is already running does not see it; the next one does, unless someone
 // steers it in earlier.
 func (s *Store) EnqueueFollowup(threadID, text string) (*Followup, error) {
+	return s.EnqueueFollowupInput(threadID, text, nil, nil)
+}
+
+func (s *Store) EnqueueFollowupInput(threadID, text string, files []string, images []ImageRef) (*Followup, error) {
 	if _, err := s.GetThread(threadID); err != nil {
 		return nil, err
 	}
@@ -21,6 +25,8 @@ func (s *Store) EnqueueFollowup(threadID, text string) (*Followup, error) {
 		ID:        NewID("fu_"),
 		ThreadID:  threadID,
 		Text:      text,
+		Files:     files,
+		Images:    images,
 		CreatedAt: time.Now().UTC(),
 		Seq: s.nextSeq(s.followupSeq, threadID, func() int64 {
 			return s.maxSeq(&Followup{}, "seq", threadID)

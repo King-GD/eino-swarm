@@ -1,15 +1,17 @@
 import { capabilityAllows } from "../../../frontend/src/lib/capabilities"
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react"
-import { ArrowUp, Loader2, Plus, Square, X, Zap } from "lucide-react"
+import { ArrowUp, Loader2, Plus, Square, X } from "lucide-react"
+import type { InsertMode } from "../../../frontend/src/lib/delivery-mode"
 
 import { installAndroidBack } from "@/lib/android-back"
 import { cn } from "@/lib/cn"
-import { applySlashPick, phoneAddChoices, phoneSlashCatalog, phoneSlashChoices } from "@/lib/composer-commands"
+import { applySlashPick, type PhoneSlashCommand } from "@/lib/composer-commands"
 import { t } from "@/lib/i18n"
 import { formatQuotedMessage } from "@/lib/quote"
 import type { ComposerPrediction } from "../../../frontend/src/lib/composer-prediction"
 import {
   clearSlashCommand,
+  filterSlashCommands,
   nextSlashIndex,
   normalizeSlashPrefix,
   parseSlashSubmit,
@@ -21,6 +23,7 @@ import {
 import { isVisionFile } from "@/lib/put-chunks"
 import type { ModelChoice } from "@/lib/rpc"
 import { ComposerAddMenu, ComposerSlashMenu } from "./composer-menu"
+import { DeliveryMenu } from "./delivery-menu"
 import { ModelPicker } from "./model-picker"
 import { SpeechCapture, type SpeechCapturePhase } from "./speech-capture"
 import { insertSpeechText } from "../../../frontend/src/lib/speech-text"
@@ -51,8 +54,7 @@ export function Composer({
   above,
   quotes = [],
   onQuotesChange,
-  steerLabel,
-  onSteer,
+  onInsert,
   stopLabel,
   onStop,
   onSubmit,
@@ -67,7 +69,7 @@ export function Composer({
   refreshError,
   onTune,
   hideModel = false,
-  slashCommands = false,
+  slashCommands,
 }: {
   label: string
   prediction?: ComposerPrediction
@@ -79,8 +81,7 @@ export function Composer({
   above?: ReactNode
   quotes?: string[]
   onQuotesChange?: (quotes: string[]) => void
-  steerLabel?: string
-  onSteer?: Send
+  onInsert?: (mode: InsertMode, text: string, extra?: ComposerExtra) => void | Promise<void>
   stopLabel?: string
   onStop?: () => void | Promise<void>
   onSubmit: Send
@@ -95,8 +96,7 @@ export function Composer({
   refreshError?: string
   onTune?: (next: { providerId: string; model: string; reasoning: string }) => void
   hideModel?: boolean
-  /** PC conversations can run /goal and /plan. Direct model chat cannot. */
-  slashCommands?: boolean
+  slashCommands?: readonly PhoneSlashCommand[]
 }) {
   const [dismissedPrediction, setDismissedPrediction] = useState<string>()
   const [text, setText] = useState("")
@@ -137,14 +137,14 @@ export function Composer({
   const showTools = showModel || reasoningLevels.length > 0
   const lockedModel = models.length === 1 && Boolean(models[0]?.locked)
   const modelText = choiceLabel(models, pick) || t("composer.model")
-  const catalog = phoneSlashCatalog.map((command) => ({
+  const catalog = slashCommands?.map((command) => ({
     ...command,
-    description: t(command.id === "goal" ? "slash.goal" : "slash.plan"),
-  }))
-  const draft = slashCommands ? slashDraft(text) : null
-  const slashItems = draft ? phoneSlashChoices(catalog, draft.query, draft.afterText) : []
+    description: t(`slash.${command.id}`),
+  })) ?? []
+  const draft = catalog.length ? slashDraft(text) : null
+  const slashItems = draft ? filterSlashCommands(draft.query, catalog) : []
   const slashOpen = slashItems.length > 0 && !command?.arg
-  const awaitingCommand = slashCommands && catalog.some((item) => item.id === slashAwaitingArg(text))
+  const awaitingCommand = catalog.some((item) => item.id === slashAwaitingArg(text))
   const commandDraft = slashOpen || awaitingCommand
   const ready = hasDraft && !disabled && !pending && !speechBusy && !commandDraft
 
@@ -208,7 +208,7 @@ export function Composer({
   }
 
   const pickCommand = (command: SlashCommand) => {
-    const next = applySlashPick(text, command.name)
+    const next = applySlashPick(text, command)
     pinCaret.current = next.caret
     setAddOpen(false)
     setText(next.text)
@@ -356,7 +356,7 @@ export function Composer({
         {addOpen && !capturingSpeech ? (
           <ComposerAddMenu
             anchor={addRef.current}
-            commands={slashCommands ? phoneAddChoices(catalog, text) : []}
+            commands={catalog}
             onAttach={() => {
               fileRef.current?.click()
               setAddOpen(false)
@@ -373,21 +373,6 @@ export function Composer({
             onSelect={pickCommand}
           />
         ) : null}
-        {!capturingSpeech && onSteer && steerLabel ? (
-          <button
-            type="button"
-            aria-label={steerLabel}
-            title={steerLabel}
-            disabled={!ready}
-            className={cn(
-              "flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground",
-              "transition-colors active:bg-accent disabled:opacity-40",
-            )}
-            onClick={() => void fire(onSteer)}
-          >
-            <Zap className="size-4" aria-hidden />
-          </button>
-        ) : null}
         <textarea
           ref={box}
           aria-label={label}
@@ -398,10 +383,10 @@ export function Composer({
           disabled={disabled || pending}
           aria-expanded={slashOpen || undefined}
           aria-controls={slashOpen ? "slash-menu" : undefined}
-          aria-autocomplete={slashCommands ? "list" : undefined}
+          aria-autocomplete={catalog.length ? "list" : undefined}
           onChange={(e) => {
-            const next = slashCommands ? normalizeSlashPrefix(e.target.value) : e.target.value
-            if (slashDraft(next)) setAddOpen(false)
+            const next = catalog.length ? normalizeSlashPrefix(e.target.value) : e.target.value
+            if (catalog.length && slashDraft(next)) setAddOpen(false)
             setText(next)
           }}
           onPaste={(e) => {
@@ -458,6 +443,9 @@ export function Composer({
             setText(next.text)
             requestAnimationFrame(() => { box.current?.focus(); box.current?.setSelectionRange(next.caret, next.caret) })
           }} />
+        {!capturingSpeech && onInsert && !showStop && !command ? (
+          <DeliveryMenu disabled={!ready} onSelect={(mode) => void fire((content, extra) => onInsert(mode, content, extra))} />
+        ) : null}
         {!capturingSpeech ? <button
           type={showStop ? "button" : "submit"}
           aria-label={showStop ? stopLabel : sendLabel}

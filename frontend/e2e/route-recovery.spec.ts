@@ -79,7 +79,7 @@ async function startRouteTurn(page: Page) {
   const threadID = await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id")
   expect(threadID).toBeTruthy()
   const accepted = page.waitForResponse((response) => response.request().method() === "POST"
-    && new URL(response.url()).pathname === `/api/threads/${threadID}/steer`)
+    && new URL(response.url()).pathname === `/api/threads/${threadID}/deliver`)
   await composer(page).fill("Inspect the current input.")
   await composer(page).press("Enter")
   const response = await accepted

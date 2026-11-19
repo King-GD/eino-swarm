@@ -429,9 +429,12 @@ func (e *Engine) startTurnInput(threadID string, in UserInput) (*store.Turn, err
 	if th.PlanMode {
 		toolset = tools.ExploreOnly(toolset)
 	}
-	refs, err := e.saveInputImages(threadID, in.Images)
-	if err != nil {
-		return nil, err
+	refs := in.storedImages
+	if len(refs) == 0 {
+		refs, err = e.saveInputImages(threadID, in.Images)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if len(refs) == 0 {
 		refs = keep
@@ -606,9 +609,12 @@ func (e *Engine) steerInput(threadID string, in UserInput, interpretSlash bool) 
 	if err := e.bindAttachmentTurns(files, turnID); err != nil {
 		return err
 	}
-	refs, err := e.saveInputImages(threadID, in.Images)
-	if err != nil {
-		return err
+	refs := in.storedImages
+	if len(refs) == 0 {
+		refs, err = e.saveInputImages(threadID, in.Images)
+		if err != nil {
+			return err
+		}
 	}
 	msg := BuildUserMessage("[steer] "+text, in.Images)
 	// Admission and steering share rt.mu -> recordMu. The persisted human

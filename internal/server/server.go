@@ -186,6 +186,7 @@ func New(opts Options) (*Server, error) {
 		api.GET("/threads/:id/agents/:agent/log", s.listAgentLog)
 		api.POST("/threads/:id/turns", s.startTurn)
 		api.POST("/threads/:id/steer", s.steer)
+		api.POST("/threads/:id/deliver", s.deliverComposer)
 		api.POST("/threads/:id/side-chat", s.askSideChat)
 		api.POST("/threads/:id/translation", s.translateSelection)
 		api.POST("/threads/:id/decision", s.decideThread)
@@ -363,6 +364,10 @@ func (s *Server) fail(c *gin.Context, err error) {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "skipped_busy"})
 	case errors.Is(err, engine.ErrIdle):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "idle"})
+	case errors.Is(err, engine.ErrDeliveryTurnChanged):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "delivery_turn_changed"})
+	case errors.Is(err, engine.ErrInvalidDelivery):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "invalid_delivery"})
 	case errors.Is(err, engine.ErrNoFailedTurn):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "no_failed_turn"})
 	case errors.Is(err, engine.ErrNoPendingSteer):

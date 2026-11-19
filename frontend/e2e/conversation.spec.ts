@@ -499,6 +499,26 @@ test("Steer on a queued row injects and empties the tray", async ({ page }) => {
   await expect(page.getByTestId("steer")).toContainText(later)
 })
 
+test("PC sends by default to the queue and interrupts for the selected row", async ({ page }) => {
+  await freshConversation(page)
+  await send(page, "Look at this from two angles and merge the findings")
+  const first = "leave this for the next turn"
+  const second = "interrupt for this specific message"
+  const tray = page.getByTestId("followup-queue")
+  for (const message of [first, second]) {
+    await composer(page).fill(message)
+    await expect(page.getByRole("button", { name: "Send options", exact: true })).toBeEnabled()
+    await composer(page).press("Enter")
+    await expect(tray).toContainText(message)
+  }
+  const delivered = page.waitForRequest((request) => request.method() === "POST" && /\/followups\/[^/]+\/steer$/.test(request.url()))
+  await tray.getByRole("button", { name: `Send options for ${second}` }).click()
+  await page.getByRole("menuitem", { name: "Interrupt and insert", exact: true }).click()
+  expect((await delivered).postDataJSON()).toMatchObject({ mode: "interrupt", expected_turn_id: expect.any(String) })
+  await expect(tray).not.toContainText(second)
+  await expect(page.getByTestId("transcript")).toContainText(second)
+})
+
 test("editing a queued follow-up pulls it into the composer and queues it at the back", async ({ page }) => {
   await freshConversation(page)
   await send(page, "Look at this from two angles and merge the findings")

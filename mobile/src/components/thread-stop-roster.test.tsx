@@ -23,7 +23,7 @@ describe("phone stopped worker roster", () => {
     ].map((row, index) => ({ thread_id: "thread", seq: index + 1, text: "", created_at: "", ...row }) as RemoteEvent)
     const blocks = events.reduce<CompactBlock[]>(applyEvent, [])
     render(<ThreadScreen detail={{ id: "thread", title: "Work" }} blocks={blocks}
-      onBack={vi.fn()} onSend={vi.fn()} onSteer={vi.fn()} onStop={vi.fn()}
+      onBack={vi.fn()} onSend={vi.fn()} onInsert={vi.fn()} onStop={vi.fn()}
       onAnswer={vi.fn()} onAnswerStructured={vi.fn()} />)
     fireEvent.click(screen.getByRole("button", { name: language.open }))
     const stopped = screen.getByRole("heading", { name: language.stopped }).closest("section")!

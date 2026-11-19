@@ -29,6 +29,7 @@ export type EventKind =
   | "steer_retracted"
   | "steer_revised"
   | "steer_preempted"
+  | "steer_consumed"
   | "cleanup"
   | "workers_retained"
   | "progress"
@@ -379,6 +380,8 @@ export interface Followup {
   thread_id: string
   seq: number
   text: string
+  files?: string[]
+  images?: unknown[]
   created_at: string
 }
 

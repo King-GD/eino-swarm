@@ -22,7 +22,7 @@ test("Trace preserves a saved destination note when source cleanup fails", async
     await page.getByRole("button", { name: `New conversation in ${name}` }).click()
     const threadID = await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id")
     const accepted = page.waitForResponse((response) => response.request().method() === "POST"
-      && new URL(response.url()).pathname === `/api/threads/${threadID}/steer`)
+      && new URL(response.url()).pathname === `/api/threads/${threadID}/deliver`)
     await page.getByTestId("composer-input").fill("Inspect the available inputs and summarize the result.")
     await page.getByTestId("composer-input").press("Enter")
     const { turn } = await (await accepted).json()

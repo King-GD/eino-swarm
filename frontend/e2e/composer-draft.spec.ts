@@ -176,7 +176,7 @@ for (const command of ["goal", "plan"] as const) {
     await freshConversation(page)
     const id = (await selectedThread(page).getAttribute("data-id"))!
     const accepted = page.waitForResponse((response) => response.request().method() === "POST"
-      && new URL(response.url()).pathname === `/api/threads/${id}/steer`)
+      && new URL(response.url()).pathname === `/api/threads/${id}/deliver`)
     await composer(page).fill("context for the pending command")
     await composer(page).press("Enter")
     expect((await accepted).status()).toBe(202)
@@ -197,7 +197,7 @@ for (const command of ["goal", "plan"] as const) {
     page.on("request", (req) => {
       const url = new URL(req.url()).pathname
       if ((url === `/api/threads/${id}` && req.method() === "PATCH")
-        || (url === `/api/threads/${id}/steer` && req.method() === "POST")
+        || (url === `/api/threads/${id}/deliver` && req.method() === "POST")
         || (url === `/api/threads/${id}/files` && req.method() === "POST")
         || (url.startsWith("/api/composer/drafts/") && req.method() === "DELETE")) mutations++
     })
@@ -219,7 +219,7 @@ for (const command of ["goal", "plan"] as const) {
     await composer(page).fill("Inspect the attached context.")
     await expect(page.getByRole("alert")).toHaveCount(0)
     const sent = page.waitForResponse((response) => response.request().method() === "POST"
-      && new URL(response.url()).pathname === `/api/threads/${id}/steer`)
+      && new URL(response.url()).pathname === `/api/threads/${id}/deliver`)
     await composer(page).press("Enter")
     expect((await sent).status()).toBe(202)
     await expect(composer(page)).toHaveValue("")
@@ -233,7 +233,7 @@ for (const failure of ["refused", "ack-lost"] as const) {
   test(`keeps the draft after a ${failure} send and never resends it on reload`, async ({ page, request }, info) => {
     await freshConversation(page)
     const id = (await selectedThread(page).getAttribute("data-id"))!
-    const url = `**/api/threads/${id}/steer`
+    const url = `**/api/threads/${id}/deliver`
     let sends = 0
     await page.route(url, async (route) => {
       sends++

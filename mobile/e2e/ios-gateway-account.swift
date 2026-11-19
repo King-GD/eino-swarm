@@ -6,6 +6,24 @@ import XCTest
 final class BindFlowTests: XCTestCase {
   private let fixtureOrigin = "__ZWAI_GATEWAY_FIXTURE_ORIGIN__"
 
+  func testNativeLocalWelcomeStartsAuthorizationWithOneTap() throws {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    defer { app.terminate() }
+    try control("review=pending&pc=hide&api=on&start=normal&catalog=normal&model=normal")
+    app.launch()
+    let welcome = app.staticTexts["Sign in to zwai"]
+    XCTAssertTrue(welcome.waitForExistence(timeout: 15))
+    app.buttons["Sign in"].tap()
+    try browserLogin(app, authorize: false)
+    XCTAssertTrue(app.staticTexts["Waiting for administrator approval"].waitForExistence(timeout: 15))
+    XCTAssertTrue(welcome.exists)
+    XCTAssertFalse(app.staticTexts["User center"].exists)
+    XCTAssertEqual(try count("browser_start"), 1)
+    try assertReviewOnly(app)
+    record(app, "local-welcome-retains-authorization-status")
+  }
+
   // This case starts in Account mode. The other direct-model transport cases
   // explicitly select LOCAL through the existing private wrapper input.
   func testNativeSignedInAccountWaitsForPCThenLocalKeepsLogin() throws {
@@ -83,15 +101,14 @@ final class BindFlowTests: XCTestCase {
     XCTAssertFalse(app.textFields["API key"].exists)
     record(app, "account-default-no-configuration")
 
-    login.tap()
-    XCTAssertTrue(app.staticTexts["User center"].waitForExistence(timeout: 5))
-
     // These requests go through the shipping WKWebView fetch bridge. Neither
     // an error message alone nor a source mock proves redirect/abort behavior.
     try control("start=redirect")
-    app.buttons["Sign in"].tap()
+    login.tap()
     try waitForCount("redirect_sent", atLeast: 1, timeout: 8)
     XCTAssertTrue(app.staticTexts["The endpoint rejected the request."].waitForExistence(timeout: 8))
+    XCTAssertTrue(app.staticTexts["Sign in to zwai"].exists, "The welcome page keeps the retry")
+    XCTAssertFalse(app.staticTexts["User center"].exists)
     XCTAssertEqual(try count("redirect_target"), 0)
     XCTAssertEqual(try count("browser_start"), 0)
     record(app, "account-native-control-redirect-refused")
@@ -118,6 +135,8 @@ final class BindFlowTests: XCTestCase {
     app.buttons["Sign in"].tap()
     try browserLogin(app, authorize: false)
     XCTAssertTrue(app.staticTexts["Waiting for administrator approval"].waitForExistence(timeout: 15))
+    XCTAssertTrue(app.staticTexts["Sign in to zwai"].exists)
+    XCTAssertFalse(app.staticTexts["User center"].exists)
     try assertReviewOnly(app)
     let pending = try counts()
     for key in ["bootstrap", "models", "model_calls", "connect"] {
@@ -137,9 +156,6 @@ final class BindFlowTests: XCTestCase {
     try control("review=approved&pc=hide&catalog=redirect")
     XCTAssertTrue(login.waitForExistence(timeout: 8))
     login.tap()
-    let userCenter = app.staticTexts["User center"]
-    XCTAssertTrue(userCenter.waitForExistence(timeout: 5))
-    if app.buttons["Sign in"].exists { app.buttons["Sign in"].tap() }
     try browserLogin(app, authorize: true)
 
     XCTAssertTrue(app.staticTexts["Could not load server models. Refresh to try again."].waitForExistence(timeout: 20))
@@ -149,8 +165,6 @@ final class BindFlowTests: XCTestCase {
     record(app, "account-native-catalog-redirect-refused")
     try control("catalog=normal")
     app.buttons["Refresh account"].tap()
-    XCTAssertTrue(app.staticTexts["native-fixture-model"].waitForExistence(timeout: 15))
-    app.buttons["Close"].tap()
 
     let message = app.textViews["Message"]
     XCTAssertTrue(message.waitForExistence(timeout: 20), "LOCAL may use the approved account model without a PC")
@@ -185,12 +199,7 @@ final class BindFlowTests: XCTestCase {
     record(app, "account-direct-model-without-pc")
 
     app.buttons["Back"].tap()
-    app.buttons["Menu"].tap()
-    // WKWebView exposes the account menu action as a native Button.
-    let center = app.buttons["User center"]
-    XCTAssertTrue(center.waitForExistence(timeout: 5))
-    XCTAssertTrue(center.isHittable)
-    center.tap()
+    try openUserCenter(app)
     try control("pc=show&api=off")
     app.buttons["Refresh account"].tap()
     let connect = app.buttons["Connect Native PC"]
@@ -221,11 +230,7 @@ final class BindFlowTests: XCTestCase {
     let login = app.buttons["Sign in"].firstMatch
     XCTAssertTrue(login.waitForExistence(timeout: 15), "This case requires a fresh private app container")
     login.tap()
-    XCTAssertTrue(app.staticTexts["User center"].waitForExistence(timeout: 5))
-    app.buttons["Sign in"].tap()
     try browserLogin(app, authorize: true)
-    XCTAssertTrue(app.staticTexts["native-fixture-model"].waitForExistence(timeout: 15))
-    app.buttons["Close"].tap()
     XCTAssertTrue(app.textViews["Message"].waitForExistence(timeout: 15))
 
     let answer = "Native streamed 中文🙂 complete"
@@ -259,9 +264,8 @@ final class BindFlowTests: XCTestCase {
     let login = app.buttons["Sign in"].firstMatch
     XCTAssertTrue(login.waitForExistence(timeout: 15), "This case requires a fresh private app container")
     login.tap()
-    XCTAssertTrue(app.staticTexts["User center"].waitForExistence(timeout: 5))
-    app.buttons["Sign in"].tap()
     try browserLogin(app, authorize: true)
+    try openUserCenter(app)
     XCTAssertTrue(app.staticTexts["native-fixture-model"].waitForExistence(timeout: 15))
 
     try choosePreference(app, label: "Phone chat Web tools", option: "Cloud server")
@@ -385,9 +389,8 @@ final class BindFlowTests: XCTestCase {
     let login = app.buttons["Sign in"].firstMatch
     XCTAssertTrue(login.waitForExistence(timeout: 15), "This case requires a fresh private app container")
     login.tap()
-    XCTAssertTrue(app.staticTexts["User center"].waitForExistence(timeout: 5))
-    app.buttons["Sign in"].tap()
     try browserLogin(app, authorize: true)
+    try openUserCenter(app)
     XCTAssertTrue(app.staticTexts["native-fixture-model"].waitForExistence(timeout: 15))
     let connect = app.buttons["Connect Native PC"]
     try reveal(app, connect)
@@ -614,6 +617,14 @@ final class BindFlowTests: XCTestCase {
       app.swipeUp()
     }
     XCTAssertTrue(element.isHittable)
+  }
+
+  private func openUserCenter(_ app: XCUIApplication) throws {
+    let center = app.buttons["User center"].firstMatch
+    XCTAssertTrue(center.waitForExistence(timeout: 15))
+    XCTAssertTrue(center.isHittable)
+    center.tap()
+    XCTAssertTrue(app.buttons["Close"].waitForExistence(timeout: 5))
   }
 
   private func browserLogin(_ app: XCUIApplication, authorize: Bool) throws {

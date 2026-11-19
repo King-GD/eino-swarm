@@ -117,6 +117,7 @@ export function applyEvent(blocks: CompactBlock[], ev: RemoteEvent): CompactBloc
   for (let i = 0; i < reduced.length; i++) {
     const added = positions[i] === undefined
     let block = worker ? { ...reduced[i], agentId: worker, id: own.some((b) => b.id === reduced[i].id) ? reduced[i].id : `${worker}:${reduced[i].id}` } : reduced[i]
+    if (added) block = { ...block, sourceSeq: ev.seq, turnId: block.turnId ?? ev.turn_id }
     if (added) {
       // Unstored deltas all have sequence zero. Their rendered identities
       // must outlive the stream without colliding with a later model call.
@@ -196,8 +197,14 @@ function applyEventForAgent(blocks: CompactBlock[], ev: RemoteEvent): CompactBlo
       })
       return next
     case "steer":
-      next.push({ id: blockId(ev), kind: "steer", text: ev.text })
+      next.push({ id: blockId(ev), kind: "steer", text: ev.text, pending: ev.role === "human" ? true : undefined, hasImages: ev.has_images })
       return next
+    case "steer_consumed": {
+      const seq = Number(ev.text)
+      const i = lastIndex(next, (b) => b.kind === "steer" && b.sourceSeq === seq && b.turnId === ev.turn_id)
+      if (i >= 0 && next[i].pending === true) next[i] = { ...next[i], pending: false }
+      return next
+    }
     case "steer_revised": {
       const rev = parseSteerRevision(ev.text)
       if (!rev) return next
@@ -271,7 +278,7 @@ function applyEventForAgent(blocks: CompactBlock[], ev: RemoteEvent): CompactBlo
         return next
       }
       const tail = tailAnswer(next)
-      if (tail >= 0 && ev.text && next[tail].text === ev.text) return next
+      if (tail >= 0 && ev.text && next[tail].text === ev.text && next[tail].turnId === ev.turn_id) return next
       if (ev.text) {
         next.push({ id: blockId(ev), kind: "answer", text: ev.text })
       }

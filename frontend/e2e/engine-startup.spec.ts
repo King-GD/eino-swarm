@@ -11,14 +11,14 @@ test("restoration progress keeps history readable and a saved draft intact until
   await freshConversation(page)
   const selectedId = await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id")
   await composer(page).fill("Inspect the assigned operation.")
-  const first = page.waitForResponse((response) => response.request().method() === "POST" && /\/steer$/.test(new URL(response.url()).pathname))
+  const first = page.waitForResponse((response) => response.request().method() === "POST" && /\/deliver$/.test(new URL(response.url()).pathname))
   await composer(page).press("Enter")
   expect((await first).status()).toBe(202)
   await waitForIdle(page)
   await composer(page).fill("Retained draft during restoration")
   await waitForDraftSaved(page)
   let sends = 0
-  page.on("request", (request) => { if (/\/(steer|turns)$/.test(new URL(request.url()).pathname) && request.method() === "POST") sends++ })
+  page.on("request", (request) => { if (/\/(deliver|steer|turns)$/.test(new URL(request.url()).pathname) && request.method() === "POST") sends++ })
   startup = "restoring"; completed = 1
   await expect(page.getByTestId("engine-startup")).toHaveText("Restoring unfinished tasks 1/3")
   await expect(composer(page)).toHaveValue("Retained draft during restoration")
@@ -45,7 +45,7 @@ test("restoration progress keeps history readable and a saved draft intact until
 test("a restoring refusal retains an uncertain draft and never automatically resubmits it", async ({ page }, info) => {
   await freshConversation(page)
   let refused = 0
-  await page.route("**/api/threads/*/steer", async (route) => {
+  await page.route("**/api/threads/*/deliver", async (route) => {
     refused++
     await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ code: "restoring", error: "Restoring unfinished tasks" }) })
   })

@@ -37,7 +37,7 @@ for (const locale of ["en", "zh"] as const) {
     let posts = 0
     let resends = 0
     page.on("request", (req) => {
-      if (req.method() === "POST" && new URL(req.url()).pathname === `/api/threads/${row.id}/steer`) resends++
+      if (req.method() === "POST" && new URL(req.url()).pathname === `/api/threads/${row.id}/deliver`) resends++
     })
     await page.route(`**${path}`, async (route) => {
       posts++

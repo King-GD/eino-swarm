@@ -14,7 +14,7 @@ for (const locale of ["en", "zh"] as const) {
     setLocale(locale)
     const detail: ThreadDetail = { id: "goal-thread", title: "Work", goal: "Verify the assigned work.", goal_on: true }
     const blocks = applyEvent([], { thread_id: detail.id, seq: 1, kind: "spawned", agent_id: "worker-1", role: "reader", text: "", created_at: "" })
-    const handlers = { onBack: vi.fn(), onSend: vi.fn(), onSteer: vi.fn(), onStop: vi.fn(), onAnswer: vi.fn(), onAnswerStructured: vi.fn() }
+    const handlers = { onBack: vi.fn(), onSend: vi.fn(), onInsert: vi.fn(), onStop: vi.fn(), onAnswer: vi.fn(), onAnswerStructured: vi.fn() }
     const fileLink = new MockLink(new MockHost(0))
     const view = render(<ThreadScreen detail={detail} fileLink={fileLink} blocks={blocks} {...handlers} />)
     const check = () => {

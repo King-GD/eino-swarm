@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -175,6 +176,60 @@ func TestFollowupRelayCleanupJoinsItsActiveWatch(t *testing.T) {
 	handler.pump.mu.Unlock()
 	if watching != "" || cancel != nil {
 		t.Fatal("relay cleanup left its watch active")
+	}
+}
+
+func TestPhoneRelayDeliveryPreservesTheSelectedMessageAndTarget(t *testing.T) {
+	t.Setenv("ZWAI_MOCK_WORKER_DELAY_MS", "2500")
+	e := testEngine(t)
+	th, err := e.CreateThread("Relay delivery", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := newFollowupRelay(t, e)
+	if watch := r.rpc(t, Request{ID: "watch-delivery", Op: OpWatch, ThreadID: th.ID}); !watch.OK || watch.Op != OpReady {
+		t.Fatalf("watch did not reach LinkPump: %+v", watch)
+	}
+	start := r.rpc(t, Request{ID: "start", Op: OpDeliver, DeliveryMode: "queue", ThreadID: th.ID, Text: "Start the fixture turn"})
+	if !start.OK || start.Delivery == nil || start.Delivery.TurnID == "" {
+		t.Fatalf("idle send did not start: %+v", start)
+	}
+	for _, text := range []string{"wait for next turn", "move this earlier"} {
+		if response := r.rpc(t, Request{ID: text, Op: OpDeliver, DeliveryMode: "queue", ThreadID: th.ID, Text: text}); !response.OK {
+			t.Fatalf("queue was refused: %+v", response)
+		}
+	}
+	queued, err := e.ListFollowups(th.ID)
+	if err != nil || len(queued) != 2 {
+		t.Fatalf("expected both messages in the durable queue: %+v %v", queued, err)
+	}
+	request := Request{ID: "stale", Op: OpDeliver, ThreadID: th.ID, FollowupID: queued[1].ID, ExpectedTurn: "stale", DeliveryMode: "interrupt"}
+	if response := r.rpc(t, request); response.OK || response.Code != "delivery_turn_changed" {
+		t.Fatalf("stale turn accepted: %+v", response)
+	}
+	request.ID, request.ExpectedTurn = "current", start.Delivery.TurnID
+	response := r.rpc(t, request)
+	if !response.OK || response.Delivery == nil || response.Delivery.TurnID != request.ExpectedTurn || response.Delivery.SteerSeq == 0 ||
+		response.Followups == nil || len(*response.Followups) != 1 || (*response.Followups)[0].ID != queued[0].ID {
+		t.Fatalf("wrong delivery identity or queue: %+v", response)
+	}
+	request.ID = "retry"
+	if response := r.rpc(t, request); response.OK || response.Code != "not_found" {
+		t.Fatalf("selected message was delivered twice: %+v", response)
+	}
+	// A paired phone must see the consumption receipt on its live watch,
+	// correlated to the exact accepted steer, without fetching history again.
+	seq := strconv.FormatInt(response.Delivery.SteerSeq, 10)
+	deadline := time.After(8 * time.Second)
+	for i := 0; ; i++ {
+		if i == len(r.seen) {
+			r.receive(t, deadline)
+		}
+		got := r.seen[i]
+		if got.Op == OpEvent && got.Event != nil && got.Event.Kind == "steer_consumed" &&
+			got.Event.TurnID == request.ExpectedTurn && got.Event.Text == seq {
+			break
+		}
 	}
 }
 

@@ -8,11 +8,13 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Added
 
-- The phone composer starts with Add. It attaches files and, in a PC conversation or new chat, lists `/goal` and `/plan`. Typing `/` filters that list. Compact stays on the PC. (`F-150`, `F-220`, `C-009`)
+- The phone composer's Add menu and slash suggestions list `/goal`, `/plan` and `/image` in PC chats, including after draft text. Direct chat offers `/image` when the selected Gateway source has authorized image generation. Choosing a leading command keeps the draft as its argument. (`F-150`, `F-182`, `F-220`, `C-009`, `C-051`)
 
 - PC and Web voice settings can choose the microphone. System default follows the operating-system input; a named device is used exactly, and an unplugged device asks for another choice instead of switching microphones silently. Phones keep the phone microphone. (`F-148`, `C-048`)
 
 ### Changed
+
+- PC and paired phones queue ordinary follow-ups by default. Send options and each queue row offer insertion on the next model call or immediate insertion by interrupting the current manager step. (`C-002`)
 
 - Signed-in phones can open Chat directly with their authorized Gateway catalog while the PC page waits for a connection. Chat and PC keep their separate model sources. (`F-210`, `C-013`)
 - 网关模式下，普通网关和第三方接入会根据可用的识别、朗读模型分别默认开启语音。语音设置仅显示网关允许编辑的参数，录音格式和超时等设置默认折叠。(`F-148`, `C-048`)
@@ -25,6 +27,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - MCP attempts one session renewal for a verified expiry. A failed renewal
   or other tool failure stops the task and prompts the user to repair the
   connection before retrying. (`F-176`, `C-041`, #176)
+
+- An automatic worker-collection resume withdraws its waiter before releasing the runtime lock. A human decline that arrives after that receipt is refused, so the wait log cannot contain both terminal receipts. (`F-150`, `C-019`)
 
 - The phone composer's voice button matches the one-line field, so the rounded row no longer leaves empty space above the text. (`F-148`)
 
@@ -286,6 +290,13 @@ and UI font updates, and desktop distribution builds. Each platform is published
 only after its own acceptance; older mobile deliveries retain their frozen batches.
 
 ## [Unreleased]
+
+### Changed
+
+- Phone conversations show turn navigation from three turns. Earlier jumps to
+  the previous reply and loads folded work on demand with a compatible PC.
+  Chat and PC tabs scroll together, and iOS Back accepts shorter swipes from
+  further inside the left edge. (`F-220`, `C-006`, `C-015`)
 
 ### Fixed
 

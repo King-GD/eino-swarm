@@ -8,12 +8,14 @@ import { GeneratedImageResult } from "@/components/generated-image-result"
 import { HostChrome } from "@/components/host-chrome"
 import { PhoneMarkdown } from "@/components/markdown"
 import { ThreadLog } from "@/components/thread-blocks"
+import { scrollToTranscriptRow, TurnNavigation } from "@/components/turn-navigation"
 import { Button } from "@/components/ui/button"
 import {
   AttachmentTooBig,
   readComposerFiles,
   turnsFromMessages,
 } from "@/lib/attachments"
+import { directImageSlashCommands } from "@/lib/composer-commands"
 import { defaultTimeoutSeconds, findProvider, mintID, providerChoices, type DirectProvider } from "@/lib/direct-provider"
 import {
   loadThreads,
@@ -77,6 +79,7 @@ export function DirectChatScreen({
 }) {
   const sourceID = gatewaySourceID ?? providers.find((row) => row.sourceKind === "gateway")?.id ?? ""
   const account = usePhoneAccount()
+  const transcript = useRef<HTMLDivElement>(null)
   const sourceIDs = new Set(gatewaySourceIDs ?? [sourceID, ...providers.filter(row => row.sourceKind === "gateway").map(row => row.id)])
   const visible = (row: DirectThread) => (account.mode !== "account" && !row.providerId.startsWith("gateway:")) || sourceIDs.has(row.providerId)
   const [threads, setThreads] = useState(loadThreads)
@@ -92,7 +95,9 @@ export function DirectChatScreen({
   const open = visibleThreads.find((row) => row.id === openID) ?? null
   const models = providerChoices(providers)
   const selectedID = open?.providerId || pick.providerId
-  const selectedUnavailable = Boolean(selectedID) && !findProvider(providers, selectedID)
+  const selectedProvider = findProvider(providers, selectedID)
+  const selectedUnavailable = Boolean(selectedID) && !selectedProvider
+  const imageAvailable = selectedProvider && gatewayImageTarget(selectedProvider)
   useEffect(() => {
     const source = activeSource.current
     if (source && !providers.some((row) => row.id === source.id && row.apiKey === source.key)) stopRef.current?.abort("stop")
@@ -327,13 +332,24 @@ export function DirectChatScreen({
         />
       )}
       {open ? (
-        <div data-testid="transcript" className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+        <>
+        <TurnNavigation
+          turns={open.messages.filter((message) => message.role === "user").map((message) => ({ id: message.id, label: message.text.trim().slice(0, 66) }))}
+          onJump={(id) => {
+            const row = transcript.current?.querySelector<HTMLElement>(`[data-phone-turn="${CSS.escape(id)}"]`)
+            scrollToTranscriptRow(transcript.current, row)
+          }}
+        />
+        <div ref={transcript} data-testid="transcript" className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
           <div className="flex flex-col gap-1.5">
             {open.messages.map((message) => (
-              <MessageRow key={message.id} message={message} live={pending && message.id === open.messages.at(-1)?.id} />
+              <div key={message.id} data-phone-turn={message.role === "user" ? message.id : undefined} className="min-w-0">
+                <MessageRow message={message} live={pending && message.id === open.messages.at(-1)?.id} />
+              </div>
             ))}
           </div>
         </div>
+        </>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
           {visibleThreads.length === 0 ? (
@@ -397,6 +413,7 @@ export function DirectChatScreen({
         providerId={open?.providerId || pick.providerId}
         model={open?.model || pick.model}
         reasoning={open?.reasoning ?? pick.reasoning}
+        slashCommands={imageAvailable ? directImageSlashCommands : undefined}
         onTune={(next) => {
           setPick(next)
           if (!open) return

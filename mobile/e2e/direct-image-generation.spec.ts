@@ -127,7 +127,16 @@ async function sendText(page: Page, message: string) {
 test("direct /image waits, downloads exact pixels, and reopens IndexedDB history", async ({ page }, info) => {
   const held = defer()
   const calls = await signedImageFixture(page, { held })
-  await sendText(page, "/image 两色图案")
+  const input = page.getByLabel("消息")
+  await page.getByRole("button", { name: "添加", exact: true }).click()
+  await expect(page.getByTestId("composer-command-image")).toBeVisible()
+  await expect(page.getByTestId("composer-command-goal")).toHaveCount(0)
+  await expect(page.getByTestId("composer-command-plan")).toHaveCount(0)
+  await input.fill("两色图案 /ima")
+  await page.getByTestId("slash-command-image").click()
+  await expect(input).toHaveValue("/image 两色图案")
+  expect(calls.images).toHaveLength(0)
+  await page.getByRole("button", { name: "发送", exact: true }).click()
   const result = page.getByTestId("generated-image-result")
   try {
     await expect(result).toHaveAttribute("data-status", "running")
@@ -194,6 +203,8 @@ test("invalid image bytes settle as a failed call without retry", async ({ page 
 
 test("an unauthorized /image preserves the draft and never requests a model", async ({ page }) => {
   const calls = await signedImageFixture(page, { imageAllowed: false })
+  await page.getByLabel("消息").fill("/")
+  await expect(page.getByTestId("slash-command-image")).toHaveCount(0)
   await sendText(page, "/image 保留草稿")
   await expect(page.getByText("当前模型来源无法生成图片。")).toBeVisible()
   await expect(page.getByLabel("消息")).toHaveValue("/image 保留草稿")
@@ -220,6 +231,10 @@ test("reloading a pending call shows unknown without a second paid request", asy
 test("Account Chat uses its fixed image role when no PC is connected", async ({ page }) => {
   const calls = await signedImageFixture(page, { fixedAccount: true })
   await expect(page.getByRole("button", { name: "模型", exact: true })).toHaveCount(0)
+  await page.getByRole("button", { name: "添加", exact: true }).click()
+  await page.getByTestId("composer-command-image").click()
+  await expect(page.getByLabel("消息")).toHaveValue("/image ")
+  await expect(page.getByRole("button", { name: "发送", exact: true })).toBeDisabled()
   await sendText(page, "/image 两色图案")
   await expect(page.getByTestId("generated-image-result").getByRole("img")).toBeVisible()
   expect(calls.images).toEqual([{ model: "image", prompt: "两色图案", n: 1 }])

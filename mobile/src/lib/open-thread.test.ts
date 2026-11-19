@@ -72,7 +72,7 @@ describe("opening a phone conversation", () => {
     const h = harness(async () => ({ ...ready, detail }))
     expect(await openPhoneThread(h.opts)).toBe(true)
     expect(h.rpc).toHaveBeenCalledTimes(1)
-    expect(h.rpc).toHaveBeenCalledWith({ op: OpWatch, thread_id: detail.id, include_detail: true })
+    expect(h.rpc).toHaveBeenCalledWith({ op: OpWatch, thread_id: detail.id, include_detail: true, compact_history: true })
     expect(h.view().caughtUp).toBe(true)
     expect(h.view().blocks.some((block) => block.text === "The request")).toBe(true)
   })
@@ -229,7 +229,7 @@ describe("opening a phone conversation", () => {
     const page = pendingReply()
     const h = harness(async (op) => op === OpWatch ? { ...hiddenReady, detail } : page.promise)
     const opening = openPhoneThread(h.opts)
-    await vi.waitFor(() => expect(h.rpc).toHaveBeenCalledWith({ op: OpLog, thread_id: detail.id, before: 28 }), { timeout: 250 })
+    await vi.waitFor(() => expect(h.rpc).toHaveBeenCalledWith({ op: OpLog, thread_id: detail.id, before: 28, compact_history: true }), { timeout: 250 })
     h.opts.commitView(prependOlder(h.view(), [historyEvent(18)], true, 18))
     const manuallyAdvanced = h.view()
     page.resolve({ v: 1, id: "late", ok: true, thread_id: detail.id, events: [], seq: 20, more: true })
@@ -266,7 +266,7 @@ describe("opening a phone conversation", () => {
       throw new Error("Opening must stop at the retained manager history")
     })
     const opening = openPhoneThread(h.opts)
-    await vi.waitFor(() => expect(h.rpc).toHaveBeenCalledWith({ op: OpLog, thread_id: detail.id, before: 28 }), { timeout: 250 })
+    await vi.waitFor(() => expect(h.rpc).toHaveBeenCalledWith({ op: OpLog, thread_id: detail.id, before: 28, compact_history: true }), { timeout: 250 })
     h.opts.commitView(applyPush(h.view(), { v: 1, id: "", ok: true, op: "event",
       event: historyEvent(0, { kind: "delta", message_id: "removed-answer", text: "Removed partial" }) }))
     h.opts.commitView(applyPush(h.view(), { v: 1, id: "", ok: true, op: "event",
@@ -306,7 +306,7 @@ describe("opening a phone conversation", () => {
     const page = pendingReply()
     const h = harness(async (op) => op === OpWatch ? { ...hiddenReady, detail } : page.promise)
     const opening = openPhoneThread(h.opts)
-    await vi.waitFor(() => expect(h.rpc).toHaveBeenCalledWith({ op: OpLog, thread_id: detail.id, before: 28 }), { timeout: 250 })
+    await vi.waitFor(() => expect(h.rpc).toHaveBeenCalledWith({ op: OpLog, thread_id: detail.id, before: 28, compact_history: true }), { timeout: 250 })
     h.opts.commitView(applyPush(h.view(), { v: 1, id: "", ok: true, op: "event",
       event: historyEvent(31, { turn_id: "new-live-turn", kind: "user_message", text: "New live request" }),
       status: { running: true, turn_id: "new-live-turn" } }))
@@ -337,7 +337,7 @@ describe("opening a phone conversation", () => {
         : { ...ready, seq: 40, detail, events: [historyEvent(40, { kind: "user_message", text: "Current opening" })] }
     })
     const opening = openPhoneThread(h.opts)
-    await vi.waitFor(() => expect(h.rpc).toHaveBeenCalledWith({ op: OpLog, thread_id: detail.id, before: 28 }), { timeout: 250 })
+    await vi.waitFor(() => expect(h.rpc).toHaveBeenCalledWith({ op: OpLog, thread_id: detail.id, before: 28, compact_history: true }), { timeout: 250 })
     if (navigation === "Back") h.opts.setView(emptyView())
     else if (navigation === "another thread") h.opts.setView(openView({ id: "other", title: "Other conversation" }))
     else {

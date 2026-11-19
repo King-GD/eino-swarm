@@ -35,7 +35,8 @@ export function QueuedSteers({
       aria-label={t("transcript.queuedSteering")}
       className="mt-1 flex flex-col gap-1"
     >
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-muted-foreground">{t("delivery.pending")}</span>
         <Button
           type="button"
           variant="ghost"

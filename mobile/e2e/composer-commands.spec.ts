@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test"
 
-test("a PC conversation can discover goal and plan without remembering the slash", async ({ page }, info) => {
+test("a PC conversation can discover goal, plan and image from either composer menu", async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto("/?mock=1&tick=0")
   const box = page.getByLabel("消息", { exact: true })
@@ -10,6 +10,7 @@ test("a PC conversation can discover goal and plan without remembering the slash
   await expect(page.getByRole("menuitem", { name: "添加文件" })).toBeVisible()
   await expect(page.getByTestId("composer-command-goal")).toBeVisible()
   await expect(page.getByTestId("composer-command-plan")).toBeVisible()
+  await expect(page.getByTestId("composer-command-image")).toBeVisible()
   await page.getByTestId("composer-command-goal").click()
   await expect(box).toHaveValue("/goal ")
   await expect(form.getByRole("button", { name: /^(跟进|发送)$/ })).toBeDisabled()
@@ -17,6 +18,7 @@ test("a PC conversation can discover goal and plan without remembering the slash
   await box.fill("/")
   await expect(page.getByTestId("slash-command-goal")).toBeVisible()
   await expect(page.getByTestId("slash-command-plan")).toBeVisible()
+  await expect(page.getByTestId("slash-command-image")).toBeVisible()
   await box.fill("/pl")
   await expect(page.getByTestId("slash-command-plan")).toBeVisible()
   await expect(page.getByTestId("slash-command-goal")).toHaveCount(0)
@@ -24,7 +26,11 @@ test("a PC conversation can discover goal and plan without remembering the slash
   await expect(box).toHaveValue("/plan ")
   await box.fill("检查当前结果 /")
   await expect(page.getByTestId("slash-command-goal")).toBeVisible()
-  await expect(page.getByTestId("slash-command-plan")).toHaveCount(0)
+  await expect(page.getByTestId("slash-command-plan")).toBeVisible()
+  await expect(page.getByTestId("slash-command-image")).toBeVisible()
+  await page.getByTestId("slash-command-plan").click()
+  await expect(box).toHaveValue("/plan 检查当前结果")
+  await box.fill("检查当前结果 /")
   await page.getByTestId("slash-command-goal").click()
   await expect(box).toHaveValue("检查当前结果 /goal ")
   await box.fill("检查当前结果")

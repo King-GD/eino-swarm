@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { pairedSlashCommands } from "@/lib/composer-commands"
 import { setLocale } from "@/lib/i18n"
 import { Composer } from "./composer"
 
@@ -26,12 +27,13 @@ describe("phone slash commands", () => {
     expect(onSubmit).toHaveBeenCalledWith("/")
   })
 
-  it("lists goal and plan from Add and from a typed slash", () => {
+  it("lists goal, plan and image from Add and from a typed slash", () => {
     setLocale("en")
-    render(<Composer label="Message" sendLabel="Send" slashCommands onSubmit={vi.fn()} />)
+    render(<Composer label="Message" sendLabel="Send" slashCommands={pairedSlashCommands} onSubmit={vi.fn()} />)
     fireEvent.click(screen.getByRole("button", { name: "Add" }))
     expect(screen.getByTestId("composer-command-goal")).toHaveTextContent("Set a standing objective")
     expect(screen.getByTestId("composer-command-plan")).toBeInTheDocument()
+    expect(screen.getByTestId("composer-command-image")).toBeInTheDocument()
     fireEvent.pointerDown(screen.getByTestId("composer-add-scrim"))
     expect(screen.queryByTestId("composer-add-menu")).not.toBeInTheDocument()
 
@@ -39,6 +41,7 @@ describe("phone slash commands", () => {
     expect(box()).toHaveValue("/")
     expect(screen.getByTestId("slash-command-goal")).toBeInTheDocument()
     expect(screen.getByTestId("slash-command-plan")).toBeInTheDocument()
+    expect(screen.getByTestId("slash-command-image")).toBeInTheDocument()
     fireEvent.change(box(), { target: { value: "/pl" } })
     expect(screen.getByTestId("slash-command-plan")).toBeInTheDocument()
     expect(screen.queryByTestId("slash-command-goal")).not.toBeInTheDocument()
@@ -51,7 +54,7 @@ describe("phone slash commands", () => {
   it("inserts the picked command and does not send it until it has an argument", () => {
     setLocale("en")
     const onSubmit = vi.fn()
-    render(<Composer label="Message" sendLabel="Send" slashCommands onSubmit={onSubmit} />)
+    render(<Composer label="Message" sendLabel="Send" slashCommands={pairedSlashCommands} onSubmit={onSubmit} />)
     fireEvent.change(box(), { target: { value: "／" } })
     expect(box()).toHaveValue("/")
     fireEvent.click(screen.getByTestId("slash-command-goal"))
@@ -69,7 +72,7 @@ describe("phone slash commands", () => {
   it("completes the highlighted command with Enter and keeps an existing sentence", () => {
     setLocale("en")
     const onSubmit = vi.fn()
-    render(<Composer label="Message" sendLabel="Send" slashCommands onSubmit={onSubmit} />)
+    render(<Composer label="Message" sendLabel="Send" slashCommands={pairedSlashCommands} onSubmit={onSubmit} />)
     fireEvent.change(box(), { target: { value: "/" } })
     fireEvent.keyDown(box(), { key: "ArrowDown" })
     fireEvent.keyDown(box(), { key: "Enter" })
@@ -78,14 +81,15 @@ describe("phone slash commands", () => {
 
     fireEvent.change(box(), { target: { value: "keep going" } })
     fireEvent.click(screen.getByRole("button", { name: "Add" }))
-    expect(screen.queryByTestId("composer-command-plan")).not.toBeInTheDocument()
+    expect(screen.getByTestId("composer-command-plan")).toBeInTheDocument()
+    expect(screen.getByTestId("composer-command-image")).toBeInTheDocument()
     fireEvent.click(screen.getByTestId("composer-command-goal"))
     expect(box()).toHaveValue("keep going /goal ")
   })
 
   it("closes Add on Android Back and removes only the unfinished slash token", () => {
     setLocale("en")
-    render(<Composer label="Message" sendLabel="Send" slashCommands onSubmit={vi.fn()} />)
+    render(<Composer label="Message" sendLabel="Send" slashCommands={pairedSlashCommands} onSubmit={vi.fn()} />)
     fireEvent.change(box(), { target: { value: "keep going" } })
     fireEvent.click(screen.getByRole("button", { name: "Add" }))
     act(() => {
@@ -106,7 +110,7 @@ describe("phone slash commands", () => {
   it("still refuses a quoted goal after the command was picked", () => {
     setLocale("en")
     const onSubmit = vi.fn()
-    render(<Composer label="Message" sendLabel="Send" slashCommands quotes={["selected context"]} onSubmit={onSubmit} />)
+    render(<Composer label="Message" sendLabel="Send" slashCommands={pairedSlashCommands} quotes={["selected context"]} onSubmit={onSubmit} />)
     fireEvent.change(box(), { target: { value: "/goal inspect" } })
     fireEvent.click(screen.getByRole("button", { name: "Send" }))
     expect(onSubmit).not.toHaveBeenCalled()

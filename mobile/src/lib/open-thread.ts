@@ -28,7 +28,7 @@ export async function openPhoneThread(opts: {
   openings.set(target, request)
   const still = () => openings.get(target) === request && view().threadId === id
   try {
-    const w = await target.rpc({ op: OpWatch, thread_id: id, include_detail: true })
+    const w = await target.rpc({ op: OpWatch, thread_id: id, include_detail: true, compact_history: true })
     if (!still()) return false
     if (!w.ok) {
       setError(w.error || w.code ? remoteError(w.error || w.code || "") : t("err.watch"))
@@ -63,7 +63,7 @@ export async function openPhoneThread(opts: {
       const current = view()
       const before = current.oldestSeq > 0 ? current.oldestSeq : current.lastSeq
       try {
-        const older = await target.rpc({ op: OpLog, thread_id: id, before })
+        const older = await target.rpc({ op: OpLog, thread_id: id, before, compact_history: true })
         if (!still()) return false
         if (!older.ok) {
           setError(remoteError(older.error || older.code || ""))
@@ -75,7 +75,7 @@ export async function openPhoneThread(opts: {
         // A manual page may already have advanced while this read was pending.
         // Its late cursor cannot exhaust or move that newer history window.
         if (before > 0 && cursor > 0 && cursor < before) continue
-        commitView(prependOlder(latest, older.events ?? [], Boolean(older.more), older.seq ?? 0))
+        commitView(prependOlder(latest, older.events ?? [], Boolean(older.more), older.seq, older.history_work))
       } catch (error) {
         if (!still()) return false
         setError(linkError(error))

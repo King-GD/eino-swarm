@@ -87,7 +87,7 @@ for (const field of ["reasoning_content", "reasoning"] as const) {
       await freshConversation(page)
       const threadID = await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id")
       expect(threadID).toBeTruthy()
-      const accepted = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/threads/${threadID}/steer`)
+      const accepted = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/threads/${threadID}/deliver`)
       await composer(page).fill("Perform the requested check")
       await composer(page).press("Enter")
       const started = await accepted
@@ -262,7 +262,7 @@ test("manager commentary splits the work folds live and in paged replay", async 
     const threadID = await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id")
     expect(threadID).toBeTruthy()
     const started = page.waitForResponse((response) => response.request().method() === "POST" &&
-      new URL(response.url()).pathname === `/api/threads/${threadID}/steer`)
+      new URL(response.url()).pathname === `/api/threads/${threadID}/deliver`)
     await composer(page).fill("Compare the two local inputs")
     await composer(page).press("Enter")
     const accepted = await started

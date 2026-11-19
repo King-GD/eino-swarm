@@ -28,7 +28,7 @@ test("rejected reviews retain diagnostics; committed changes expose their full d
     await page.getByTestId("dest-projects").click()
     await page.getByRole("button", { name: `New conversation in ${name}` }).click()
     const thread = await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id")
-    const accepted = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/threads/${thread}/steer`)
+    const accepted = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/threads/${thread}/deliver`)
     await composer(page).fill("Keep replies concise.")
     await composer(page).press("Enter")
     const { turn } = await (await accepted).json()
@@ -38,7 +38,7 @@ test("rejected reviews retain diagnostics; committed changes expose their full d
     await page.getByRole("button", { name: "Review this conversation now" }).click()
     await expect.poll(() => fixture.calls.some((call) => call.review)).toBe(true)
     // A later turn is already complete when this review's old-turn result lands.
-    const nextAccepted = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/threads/${thread}/steer`)
+    const nextAccepted = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/threads/${thread}/deliver`)
     await composer(page).fill("Verify the current result.")
     await composer(page).press("Enter")
     const nextTurn = (await (await nextAccepted).json()).turn
@@ -170,7 +170,7 @@ test("one complete refusal automatically compacts related notes without dropping
     await page.getByRole("button", { name: `New conversation in ${name}` }).click()
     const thread = await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id")
     expect(thread).toBeTruthy()
-    const accepted = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/threads/${thread}/steer`)
+    const accepted = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/threads/${thread}/deliver`)
     await composer(page).fill(requirement)
     await composer(page).press("Enter")
     const { turn } = await (await accepted).json()

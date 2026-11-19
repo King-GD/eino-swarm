@@ -98,18 +98,20 @@ describe("ScanScreen", () => {
 describe("ScanScreen on a phone that can sign in", () => {
   beforeEach(() => setLocale("en"))
 
-  const withAccount = (openAccount: () => void, onURI = vi.fn(), error?: string) => render(
-    <PhoneAccountContext.Provider value={{ providers: [], openAccount }}>
+  const signIn = (login = vi.fn()) => ({ status: "signed_out" as const, login, busy: false, hasSession: false, error: undefined,
+    logout: vi.fn(), refresh: vi.fn() })
+  const withAccount = (login = vi.fn(), onURI = vi.fn(), error?: string) => render(
+    <PhoneAccountContext.Provider value={{ providers: [], welcomeSignIn: signIn(login) }}>
       <ScanScreen onURI={onURI} error={error} onAddModel={vi.fn()} />
     </PhoneAccountContext.Provider>,
   )
 
   it("leads with the account and folds pairing and own-model entry behind Other ways", () => {
-    const openAccount = vi.fn()
-    withAccount(openAccount)
+    const login = vi.fn()
+    withAccount(login)
     expect(screen.getByRole("heading", { name: t("welcome.title") })).toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: t("account.login") }))
-    expect(openAccount).toHaveBeenCalledOnce()
+    expect(login).toHaveBeenCalledOnce()
     // The hidden controls are absent, not merely invisible, so a screen reader
     // and the keyboard order see the account first.
     for (const name of [t("scan.camera"), t("scan.paste"), t("chat.connect")]) {
@@ -145,7 +147,7 @@ describe("ScanScreen on a phone that can sign in", () => {
 
   it("keeps the embedded Add a PC form unfolded", () => {
     render(
-      <PhoneAccountContext.Provider value={{ providers: [], openAccount: vi.fn() }}>
+      <PhoneAccountContext.Provider value={{ providers: [], welcomeSignIn: signIn() }}>
         <ScanScreen embedded onURI={vi.fn()} />
       </PhoneAccountContext.Provider>,
     )

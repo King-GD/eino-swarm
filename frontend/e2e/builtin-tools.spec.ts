@@ -43,7 +43,7 @@ test("Responses cloud search keeps citations and its own Trace after reload", as
     expect(configured.ok()).toBe(true)
     await freshConversation(page)
     const threadID = await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id")
-    const accepted = page.waitForResponse((reply) => reply.request().method() === "POST" && new URL(reply.url()).pathname === `/api/threads/${threadID}/steer`)
+    const accepted = page.waitForResponse((reply) => reply.request().method() === "POST" && new URL(reply.url()).pathname === `/api/threads/${threadID}/deliver`)
     await composer(page).fill("Perform the requested check")
     await composer(page).press("Enter")
     const { turn } = await (await accepted).json()

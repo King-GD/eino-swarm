@@ -185,6 +185,36 @@ func composeSteer(eng *engine.Engine, stage *Staging, req Request, path, session
 	return opErr(req.ID, path, sessionID, err)
 }
 
+func composeDelivery(eng *engine.Engine, stage *Staging, req Request, path, sessionID string) Response {
+	mode := engine.DeliveryMode(req.DeliveryMode)
+	if req.ThreadID == "" || (req.FollowupID != "" && (req.Text != "" || len(req.Puts) != 0)) {
+		return mapErr(req.ID, path, sessionID, engine.ErrInvalidDelivery)
+	}
+	if err := requireStage(stage, req); err != nil {
+		return mapErr(req.ID, path, sessionID, err)
+	}
+	if mode == engine.DeliveryQueue {
+		if err := prepareTurn(eng, req); err != nil {
+			return mapErr(req.ID, path, sessionID, err)
+		}
+	}
+	in, err := inputFromPuts(eng, stage, req.ThreadID, req)
+	if err != nil {
+		return mapErr(req.ID, path, sessionID, err)
+	}
+	in.Text = req.Text
+	receipt, err := eng.DeliverComposerInput(req.ThreadID, mode, req.ExpectedTurn, req.FollowupID, in)
+	if err != nil {
+		return mapErr(req.ID, path, sessionID, err)
+	}
+	resp := okBase(req.ID, path, sessionID)
+	resp.Delivery = &DeliveryView{TurnID: receipt.TurnID, SteerSeq: receipt.SteerSeq, Preempted: receipt.Preempted}
+	if receipt.Turn != nil {
+		resp.Delivery.TurnID = receipt.Turn.ID
+	}
+	return attachFollowups(eng, resp, req.ThreadID)
+}
+
 func requireStage(stage *Staging, req Request) error {
 	if len(req.Puts) == 0 || stage != nil {
 		return nil

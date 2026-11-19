@@ -7,6 +7,7 @@ import { AccountButton } from "@/components/account-button"
 import { ChoiceRail } from "@/components/choice-rail"
 import { Composer, type ComposerExtra } from "@/components/composer"
 import { Button } from "@/components/ui/button"
+import { pairedSlashCommands } from "@/lib/composer-commands"
 import { t } from "@/lib/i18n"
 import type { ModelChoice, ProjectView } from "@/lib/rpc"
 import { linkLabel, type SavedLink } from "@/lib/store"
@@ -132,7 +133,7 @@ export function NewChatScreen({
         refreshBusy={refreshBusy}
         refreshError={refreshError}
         hideModel={hideModel}
-        slashCommands
+        slashCommands={pairedSlashCommands}
         onSubmit={(text, extra) => (extra ? onStart(text, project, extra) : onStart(text, project))}
       />
     </main>

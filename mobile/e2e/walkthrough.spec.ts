@@ -202,17 +202,29 @@ test("worker activity opens in its own phone view without becoming a manager ans
   await expect(page.getByRole("button", { name: /^打开 Sweep the unused exports$/ })).toBeVisible()
 })
 
-test("interrupting a waiting phone message first inserts it into the live turn", async ({ page }) => {
+test("phone send defaults to queue and the selected row can interrupt this turn", async ({ page }) => {
   await page.goto("/?mock=1&tick=0&queue=1")
   const queue = page.getByTestId("followup-queue")
   await expect(queue).toContainText("first waiting message")
   await expect(queue).toContainText("second waiting message")
 
-  await queue.getByRole("button", { name: "中断插入" }).click()
+  const input = page.getByLabel("消息", { exact: true })
+  await input.fill("a new message for the next turn")
+  await page.getByRole("button", { name: "跟进", exact: true }).click()
+  await expect(queue).toContainText("a new message for the next turn")
+  await input.fill("a correction at the next model call")
+  await page.getByRole("button", { name: "发送方式", exact: true }).click()
+  await page.getByRole("menuitem", { name: "插入本轮", exact: true }).click()
+  const transcript = page.getByTestId("transcript")
+  await expect(transcript).toContainText("a correction at the next model call")
+  await expect(transcript).toContainText("等待插入")
+  await queue.getByRole("button", { name: "second waiting message 的发送选项" }).click()
+  await page.getByRole("menuitem", { name: "中断并插入", exact: true }).click()
 
-  await expect(queue).not.toContainText("first waiting message")
-  await expect(queue).toContainText("second waiting message")
-  await expect(page.getByTestId("transcript")).toContainText("first waiting message")
+  await expect(queue).toContainText("first waiting message")
+  await expect(queue).not.toContainText("second waiting message")
+  await expect(transcript).toContainText("second waiting message")
+  await expect(transcript).toContainText("已送入模型")
   await expect(page.getByText("服务端拒绝了这次请求", { exact: false })).toHaveCount(0)
 })
 
@@ -235,7 +247,7 @@ test("selected answer text becomes a removable quote in the next phone message",
   await page.getByTestId("quote-draft").fill("")
   await page.getByTestId("quote-draft").pressSequentially("Here is the corrected source:")
   await page.getByLabel("消息").fill("解释这一句")
-  await page.getByRole("button", { name: /跟进|发送/ }).click()
+  await page.getByRole("button", { name: /^(跟进|发送)$/ }).click()
   await expect(page.getByTestId("quoted-message").last()).toContainText("Here is the corrected source:")
   await expect(page.getByTestId("quoted-message").last()).toContainText("解释这一句")
   await expect(page.getByTestId("quote-drafts")).toHaveCount(0)
@@ -493,7 +505,7 @@ test("the composer grows with the text and an empty live draft offers Stop", asy
 }) => {
   await page.goto(WALKTHROUGH)
   const box = page.getByLabel("消息")
-  const send = page.getByRole("button", { name: /跟进|发送/ })
+  const send = page.getByRole("button", { name: /^(跟进|发送)$/ })
   await expect(page.locator("form").getByRole("button", { name: "停止" })).toBeEnabled()
 
   const oneLine = await box.evaluate((el) => el.clientHeight)

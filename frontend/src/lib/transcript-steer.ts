@@ -105,11 +105,10 @@ function isModelRound(b: Block): boolean {
 export function splitQueuedSteers(
   blocks: Block[],
   running: boolean,
+  receipts?: TranscriptState["steerReceipts"],
+  activeTurnId?: string,
 ): { body: Block[]; queued: Block[] } {
-  if (!running || blocks.length === 0) {
-    return { body: blocks, queued: [] }
-  }
-  const turnId = blocks[blocks.length - 1].turnId
+  const turnId = running ? activeTurnId ?? blocks.at(-1)?.turnId : undefined
   let lastRound = -1
   for (let i = 0; i < blocks.length; i++) {
     const b = blocks[i]
@@ -119,7 +118,11 @@ export function splitQueuedSteers(
   const queued: Block[] = []
   for (let i = 0; i < blocks.length; i++) {
     const b = blocks[i]
-    if (b.kind === "steer" && b.turnId === turnId && i > lastRound) {
+    const explicit = b.kind === "steer" && b.role === "human"
+    const consumed = explicit && receipts?.[b.seq]?.turnId === b.turnId
+    if (consumed) {
+      body.push({ ...b, steerConsumed: true })
+    } else if (running && b.kind === "steer" && b.turnId === turnId && (explicit || i > lastRound)) {
       queued.push(b)
     } else {
       body.push(b)

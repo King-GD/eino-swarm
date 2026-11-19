@@ -93,6 +93,8 @@ func dispatch(eng *engine.Engine, cfg config.RemoteConfig, stage *Staging, req R
 		return composeStart(eng, cfg, stage, req, path, sessionID)
 	case OpSend:
 		return composeSend(eng, stage, req, path, sessionID)
+	case OpDeliver:
+		return composeDelivery(eng, stage, req, path, sessionID)
 	case OpSteer:
 		return composeSteer(eng, stage, req, path, sessionID)
 	case OpGetTimeouts, OpSetTimeouts:
@@ -277,6 +279,10 @@ func mapErr(id, path, sessionID string, err error) Response {
 		return fail(id, path, sessionID, "busy", err.Error())
 	case errors.Is(err, engine.ErrIdle):
 		return fail(id, path, sessionID, "idle", err.Error())
+	case errors.Is(err, engine.ErrDeliveryTurnChanged):
+		return fail(id, path, sessionID, "delivery_turn_changed", err.Error())
+	case errors.Is(err, engine.ErrInvalidDelivery):
+		return fail(id, path, sessionID, "invalid_delivery", err.Error())
 	case errors.Is(err, engine.ErrSkippedBusy):
 		return fail(id, path, sessionID, "skipped_busy", err.Error())
 	case errors.Is(err, store.ErrNotFound):

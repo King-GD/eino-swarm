@@ -2,8 +2,10 @@ import { Trash2, X } from "lucide-react"
 import { useState } from "react"
 
 import { ConfirmDeleteDialog } from "@/components/app/confirm-delete-dialog"
+import { DeliveryMenu } from "@/components/app/delivery-menu"
 import { Button } from "@/components/ui/button"
 import type { Followup } from "@/lib/types"
+import type { InsertMode } from "@/lib/delivery-mode"
 import { useT } from "@/lib/use-t"
 
 /** Codex-style tray: messages waiting for the current turn to finish.
@@ -17,12 +19,16 @@ export function QueueTray({
   onDelete,
   onClear,
   onEdit,
+  turnId,
+  disabled,
 }: {
   items: Followup[]
-  onSteer: (id: string) => void
+  onSteer: (id: string, mode?: InsertMode) => void
   onDelete: (id: string) => void
   onClear: () => void
   onEdit: (item: Followup) => void
+  turnId?: string
+  disabled?: boolean
 }) {
   const t = useT()
   const [doomed, setDoomed] = useState<Followup>()
@@ -49,9 +55,12 @@ export function QueueTray({
         </Button>
       </div>
       <ul className="mt-1 space-y-2">
-        {items.map((item) => (
+        {items.map((item) => {
+          const attached = (item.files?.length ?? 0) + (item.images?.length ?? 0)
+          const text = item.text || t("delivery.attachments", { n: attached })
+          return (
           <li key={item.id} className="flex items-start gap-2">
-            <button
+            {attached ? <span className="min-w-0 flex-1 truncate text-left text-sm" title={text}>{text}</span> : <button
               type="button"
               className="min-w-0 flex-1 truncate text-left text-sm hover:underline"
               title={item.text}
@@ -59,17 +68,19 @@ export function QueueTray({
               onClick={() => onEdit(item)}
             >
               {item.text}
-            </button>
+            </button>}
             <Button
               type="button"
               variant="ghost"
               size="sm"
               className="h-7 px-2"
-              aria-label={t("queue.steerNamed", { text: item.text })}
-              onClick={() => onSteer(item.id)}
+              aria-label={t("queue.steerNamed", { text })}
+              disabled={disabled}
+              onClick={() => turnId ? onSteer(item.id, "steer") : onSteer(item.id)}
             >
-              {t("queue.steer")}
+              {turnId ? t("delivery.steer") : t("delivery.sendNow")}
             </Button>
+            {turnId ? <DeliveryMenu disabled={disabled} queuedText={text} onSelect={(mode) => onSteer(item.id, mode)} /> : null}
             <Button
               type="button"
               variant="ghost"
@@ -80,7 +91,8 @@ export function QueueTray({
               <Trash2 />
             </Button>
           </li>
-        ))}
+          )
+        })}
       </ul>
       <ConfirmDeleteDialog
         open={Boolean(doomed)}

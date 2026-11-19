@@ -4,7 +4,7 @@ test("quoted goal stays in the phone composer until the quotation is removed", a
   await page.goto("/?mock=1&tick=0")
   const input = page.getByLabel("消息", { exact: true })
   await input.fill("show result")
-  await page.getByRole("button", { name: /跟进|发送/ }).click()
+  await page.getByRole("button", { name: /^(跟进|发送)$/ }).click()
   const source = page.getByTestId("transcript").getByText("Here is what changed:")
   await expect(source).toBeVisible()
   await source.evaluate((element) => {
@@ -19,7 +19,7 @@ test("quoted goal stays in the phone composer until the quotation is removed", a
   const command = "/goal Inspect the assigned operation"
   await input.fill(command)
   const before = await page.getByTestId("quoted-message").count()
-  await page.getByRole("button", { name: /跟进|发送/ }).click()
+  await page.getByRole("button", { name: /^(跟进|发送)$/ }).click()
   await expect(page.getByRole("alert")).toContainText("命令只接受纯文本")
   await expect(input).toHaveValue(command)
   await expect(page.getByTestId("quote-draft")).toHaveValue("Here is what changed:")

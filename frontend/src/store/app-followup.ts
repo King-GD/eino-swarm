@@ -1,6 +1,7 @@
 import { ApiError, api } from "@/lib/api"
 import { resolveLocale, t, type LocalePref } from "@/lib/i18n"
 import type { Followup } from "@/lib/types"
+import type { InsertMode } from "@/lib/delivery-mode"
 import { bumpFollowups, isFollowupGeneration } from "./followup-sync"
 
 type FollowupHost = {
@@ -50,7 +51,7 @@ export function followupActions(
       }
     },
 
-    steerFollowup: async (fid: string) => {
+    steerFollowup: async (fid: string, mode?: InsertMode, expectedTurnId?: string) => {
       const id = get().activeId
       if (!id) return
       const key = JSON.stringify([id, fid])
@@ -58,7 +59,8 @@ export function followupActions(
       injecting.add(key)
       const previousError = get().error
       try {
-        await api.steerFollowup(id, fid)
+        if (mode) await api.steerFollowup(id, fid, mode, expectedTurnId)
+        else await api.steerFollowup(id, fid)
         if (get().activeId !== id) return
         bumpFollowups()
         set((s) => ({

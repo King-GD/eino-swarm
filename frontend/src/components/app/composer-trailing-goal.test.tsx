@@ -68,7 +68,7 @@ for (const text of ["Inspect `/goal`", "Inspect /tmp/中文/goal", "Inspect ./�
     expect(screen.getByRole("button", { name: "Send" })).toBeEnabled()
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Send" })) })
     expect(send).toHaveBeenCalledTimes(1)
-    expect(send).toHaveBeenCalledWith(text, undefined, { steer: false })
+    expect(send).toHaveBeenCalledWith(text, undefined, { deliveryMode: "queue" })
     expect(goal).not.toHaveBeenCalled()
   })
 }

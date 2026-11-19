@@ -116,7 +116,7 @@ describe("Composer Enter vs IME", () => {
     fireEvent.change(input, { target: { value: "draft" } })
     fireEvent.keyDown(input, { key: "Enter", keyCode: 13 })
     expect(onSend).toHaveBeenCalledTimes(1)
-    expect(onSend).toHaveBeenCalledWith("draft", undefined, { steer: false })
+    expect(onSend).toHaveBeenCalledWith("draft", undefined, { deliveryMode: "queue" })
   })
 
   it("does not send Shift+Enter", () => {
@@ -165,16 +165,16 @@ describe("Composer Enter vs IME", () => {
     await frame()
     fireEvent.keyDown(input, { key: "Enter", keyCode: 13 })
     expect(onSend).toHaveBeenCalledTimes(1)
-    expect(onSend).toHaveBeenCalledWith("draft", undefined, { steer: false })
+    expect(onSend).toHaveBeenCalledWith("draft", undefined, { deliveryMode: "queue" })
   })
 
-  it("steers immediately on ⌘Enter", () => {
+  it("queues steering for the current turn on ⌘Enter", () => {
     const onSend = vi.fn()
-    renderComposer({ onSend, running: true })
+    renderComposer({ onSend, running: true, activeTurnId: "current-turn" })
     const input = screen.getByTestId("composer-input")
     fireEvent.change(input, { target: { value: "draft" } })
     fireEvent.keyDown(input, { key: "Enter", metaKey: true, keyCode: 13 })
-    expect(onSend).toHaveBeenCalledWith("draft", undefined, { steer: true })
+    expect(onSend).toHaveBeenCalledWith("draft", undefined, { deliveryMode: "steer", expectedTurnId: "current-turn" })
   })
 
   // CJK IMEs write the committed string back into a controlled textarea
@@ -182,7 +182,7 @@ describe("Composer Enter vs IME", () => {
   // that just started the turn.
   it("does not queue when the IME restores a draft that was just sent", () => {
     const onSend = vi.fn()
-    renderComposer({ onSend, running: true })
+    renderComposer({ onSend, running: true, activeTurnId: "current-turn" })
     const input = screen.getByTestId("composer-input")
     fireEvent.change(input, { target: { value: "draft" } })
     fireEvent.keyDown(input, { key: "Enter", metaKey: true, keyCode: 13 })
@@ -198,7 +198,7 @@ describe("Composer Enter vs IME", () => {
   // cleared the guard.
   it("keeps a paste of the draft that was just sent", () => {
     const onSend = vi.fn()
-    renderComposer({ onSend, running: true })
+    renderComposer({ onSend, running: true, activeTurnId: "current-turn" })
     const input = screen.getByTestId("composer-input")
     fireEvent.change(input, { target: { value: "draft" } })
     fireEvent.keyDown(input, { key: "Enter", metaKey: true, keyCode: 13 })
@@ -208,7 +208,7 @@ describe("Composer Enter vs IME", () => {
     expect(input).toHaveValue("draft")
     fireEvent.keyDown(input, { key: "Enter", keyCode: 13 })
     expect(onSend).toHaveBeenCalledTimes(2)
-    expect(onSend).toHaveBeenLastCalledWith("draft", undefined, { steer: false })
+    expect(onSend).toHaveBeenLastCalledWith("draft", undefined, { deliveryMode: "queue" })
   })
 
   // A microtask runs before the browser inserts, so recovering there wrote
@@ -236,14 +236,14 @@ describe("Composer Enter vs IME", () => {
 
   it("sends a different draft after the previous one", () => {
     const onSend = vi.fn()
-    renderComposer({ onSend, running: true })
+    renderComposer({ onSend, running: true, activeTurnId: "current-turn" })
     const input = screen.getByTestId("composer-input")
     fireEvent.change(input, { target: { value: "draft" } })
     fireEvent.keyDown(input, { key: "Enter", metaKey: true, keyCode: 13 })
     fireEvent.change(input, { target: { value: "next" } })
     fireEvent.keyDown(input, { key: "Enter", keyCode: 13 })
-    expect(onSend).toHaveBeenNthCalledWith(1, "draft", undefined, { steer: true })
-    expect(onSend).toHaveBeenNthCalledWith(2, "next", undefined, { steer: false })
+    expect(onSend).toHaveBeenNthCalledWith(1, "draft", undefined, { deliveryMode: "steer", expectedTurnId: "current-turn" })
+    expect(onSend).toHaveBeenNthCalledWith(2, "next", undefined, { deliveryMode: "queue" })
   })
 })
 
@@ -291,7 +291,7 @@ describe("Composer corner button while a turn is running", () => {
     fireEvent.change(input, { target: { value: "draft" } })
     expect(screen.queryByRole("button", { name: "Stop" })).toBeNull()
     fireEvent.click(screen.getByRole("button", { name: "Send" }))
-    expect(onSend).toHaveBeenCalledWith("draft", undefined, { steer: false })
+    expect(onSend).toHaveBeenCalledWith("draft", undefined, { deliveryMode: "queue" })
     expect(onStop).not.toHaveBeenCalled()
 
     fireEvent.change(input, { target: { value: "" } })
@@ -338,7 +338,7 @@ describe("Composer quotes", () => {
       formatQuotedMessage(["alpha"], "do this"),
       undefined,
       {
-        steer: false,
+        deliveryMode: "queue",
       },
     )
     expect(onQuotesChange).toHaveBeenCalledWith([])
@@ -352,7 +352,7 @@ describe("Composer quotes", () => {
     })
     fireEvent.click(screen.getByRole("button", { name: "Send" }))
     expect(onSend).toHaveBeenCalledWith(formatQuotedMessage(["alpha"], ""), undefined, {
-      steer: false,
+      deliveryMode: "queue",
     })
   })
 })

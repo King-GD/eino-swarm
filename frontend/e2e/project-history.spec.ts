@@ -95,7 +95,7 @@ test(`a project ${menu ? "uses its history menu and an unfiltered query for" : r
     } else {
       await page.getByRole("button", { name: projectName, exact: true }).click()
       await page.locator(`[data-testid="thread-row"][data-id="${targetID}"]`).getByTestId("row-label").click()
-      const accepted = page.waitForResponse((reply) => reply.request().method() === "POST" && new URL(reply.url()).pathname === `/api/threads/${targetID}/steer`)
+      const accepted = page.waitForResponse((reply) => reply.request().method() === "POST" && new URL(reply.url()).pathname === `/api/threads/${targetID}/deliver`)
       await composer(page).fill("结合这个项目近期的讨论，提炼已经确定的要求和仍待实现的建议，并注明来源。")
       await composer(page).press("Enter")
       started = await accepted

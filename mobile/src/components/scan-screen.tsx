@@ -1,4 +1,5 @@
 import { usePhoneAccount } from "@/components/gateway-account-shell"
+import { GatewaySignIn, gatewaySignInWaiting } from "@/components/gateway-sign-in"
 import { useEffect, useState } from "react"
 import { Camera } from "lucide-react"
 
@@ -24,13 +25,15 @@ export function ScanScreen({
   embedded?: boolean
   onAddModel?: () => void
 }) {
-  const account = usePhoneAccount()
+  const { welcomeSignIn } = usePhoneAccount()
   const [paste, setPaste] = useState("")
   const [localError, setLocalError] = useState<string>()
   const [live, setLive] = useState(false)
   // A signed-out phone opens on the account: pairing by QR, a pasted URI and a
   // model service of one's own are still here, one tap away.
-  const accountFirst = !embedded && Boolean(account.openAccount)
+  const signIn = embedded ? undefined : welcomeSignIn
+  const accountFirst = Boolean(signIn)
+  const waiting = signIn && gatewaySignInWaiting(signIn)
   const [other, setOther] = useState(false)
 
   const submitPaste = () => {
@@ -52,7 +55,7 @@ export function ScanScreen({
 
   const shown = error || localError
   useEffect(() => { if (shown) setOther(true) }, [shown])
-  const showOther = !accountFirst || other
+  const showOther = !accountFirst || (!waiting && other)
 
   return (
     <main
@@ -72,11 +75,11 @@ export function ScanScreen({
           ) : null}
         </header>
       )}
-      {accountFirst ? (
+      {signIn ? (
         <>
           <p className="text-sm leading-relaxed text-muted-foreground">{t("welcome.hint")}</p>
-          <Button onClick={() => account.openAccount?.()}>{t("account.login")}</Button>
-          <Button
+          <GatewaySignIn account={signIn} welcome />
+          {waiting ? null : <Button
             type="button"
             variant="ghost"
             aria-expanded={showOther}
@@ -84,7 +87,7 @@ export function ScanScreen({
             onClick={() => setOther((value) => !value)}
           >
             {t("welcome.other")}
-          </Button>
+          </Button>}
         </>
       ) : null}
       {showOther ? (

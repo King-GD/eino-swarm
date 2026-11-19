@@ -1,5 +1,5 @@
 import { ChevronRight, Loader2, SquarePen } from "lucide-react"
-import { Children, useEffect, useState, type ReactNode } from "react"
+import { Children, useEffect, useLayoutEffect, useState, type ReactNode } from "react"
 
 import { ProjectManager } from "@/components/project-manager"
 import { ClientGroups } from "@/components/client-groups"
@@ -42,6 +42,35 @@ function writeFolded(ids: Set<string>) {
   } catch {
     // A preference is not worth failing the inbox.
   }
+}
+
+function useSearchViewport(focused: boolean) {
+  const [frame, setFrame] = useState({ inset: 0, top: 0 })
+  useLayoutEffect(() => {
+    const viewport = window.visualViewport
+    if (!focused || !viewport) return
+    // WebKit can both shrink and pan the visible viewport on focus. Keep the
+    // inbox in that viewport without changing the user's zoom.
+    const measure = () => {
+      const inset = viewport.scale === 1 ? Math.max(0, document.documentElement.clientHeight - viewport.height) : 0
+      const top = viewport.scale === 1 ? Math.max(0, viewport.pageTop) : 0
+      setFrame((previous) => previous.inset === inset && previous.top === top ? previous : { inset, top })
+    }
+    measure()
+    viewport.addEventListener("resize", measure)
+    viewport.addEventListener("scroll", measure)
+    window.addEventListener("resize", measure)
+    window.addEventListener("scroll", measure)
+    return () => {
+      viewport.removeEventListener("resize", measure)
+      viewport.removeEventListener("scroll", measure)
+      window.removeEventListener("resize", measure)
+      window.removeEventListener("scroll", measure)
+    }
+  }, [focused])
+  return focused && (frame.inset || frame.top)
+    ? { position: "relative" as const, height: `calc(100% - ${frame.inset}px)`, top: frame.top }
+    : undefined
 }
 
 export function HomeScreen({
@@ -118,6 +147,8 @@ export function HomeScreen({
   const [managing, setManaging] = useState(false)
   useEffect(() => setManaging(false), [pcLink, activeFingerprint])
   const [query, setQuery] = useState("")
+  const [searchFocused, setSearchFocused] = useState(false)
+  const searchViewport = useSearchViewport(searchFocused)
   const [folded, setFolded] = useState(readFolded)
   const [runningShown, setRunningShown] = useState(INBOX_PREVIEW)
   const sectioned = groups.some((g) => g.id !== GROUP_ATTENTION)
@@ -181,7 +212,7 @@ export function HomeScreen({
   const attentionMore = Boolean(sectionMore(groups, GROUP_ATTENTION)?.more) && !query
   const empty = live.length === 0 && unread.length === 0 && !attentionMore && grouped.length === 0
   return (
-    <main className="mx-auto flex h-full max-w-lg flex-col overflow-hidden">
+    <main className="mx-auto flex h-full max-w-lg flex-col overflow-hidden" style={searchViewport}>
       <HostChrome
         onOpenAccount={onOpenAccount}
         hosts={hosts}
@@ -284,8 +315,7 @@ export function HomeScreen({
           </div>
         </PullToRefresh>
       )}
-
-      <HomeBar query={query} onQuery={setQuery} onNewChat={() => onNewChat("")} />
+      <HomeBar query={query} onQuery={setQuery} onSearchFocus={setSearchFocused} onNewChat={() => onNewChat("")} />
     </main>
   )
 }

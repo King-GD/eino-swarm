@@ -114,16 +114,16 @@ export function Transcript({
     () => resolveTurnNavItems(blocks, apiTurns),
     [blocks, apiTurns],
   )
+  const liveTurn = state.running ? state.turns.slice().reverse().find((row) => row.status === "running")?.id : undefined
   const { body, queued } = useMemo(
-    () => splitQueuedSteers(blocks, state.running),
-    [blocks, state.running],
+    () => splitQueuedSteers(blocks, state.running, state.steerReceipts, liveTurn),
+    [blocks, state.running, state.steerReceipts, liveTurn],
   )
   const groups = useMemo(() => turnSlices(body, state.turns), [body, state.turns])
   const turnById = useMemo(
     () => new Map(state.turns.map((row) => [row.id, row])),
     [state.turns],
   )
-  const liveTurn = state.running ? state.turns.slice().reverse().find((row) => row.status === "running")?.id : undefined
   const liveAt = liveTurn ? groups.map((group) => group.turnId).lastIndexOf(liveTurn) : -1
   const beginEdit = useCallback((seq: number) => setEditingSeq(seq), [])
   const cancelEdit = useCallback(() => setEditingSeq(null), [])
@@ -359,7 +359,7 @@ const BlockView = memo(function BlockView({
         <div className="mb-2 flex justify-end" data-testid="steer">
           <div className="flex max-w-[85%] items-start gap-2 rounded-2xl rounded-br-md border border-dashed border-border px-3 py-2 text-(length:--chrome-font-size) text-muted-foreground">
             <Badge variant="outline" className="mt-0.5 shrink-0">
-              {t("transcript.steer")}
+              {t(block.steerConsumed ? "delivery.consumed" : "transcript.steer")}
             </Badge>
             <div className="min-w-0">
               <InputThumbs

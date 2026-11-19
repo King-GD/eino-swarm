@@ -13,20 +13,38 @@ import (
 // It is not steering: the manager will not see this text until a later turn.
 // Nothing running is idle, not a silent queue that never flushes.
 func (e *Engine) EnqueueFollowup(threadID, text string) (*store.Followup, error) {
+	return e.enqueueFollowupInput(threadID, UserInput{Text: text})
+}
+
+func (e *Engine) enqueueFollowupInput(threadID string, in UserInput) (*store.Followup, error) {
+	text := strings.TrimSpace(in.Text)
 	if IsImageCommand(text) {
 		return nil, ErrBusy
-	}
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return nil, fmt.Errorf("engine: an empty follow-up has nothing to wait for")
 	}
 	if _, err := e.store.GetThread(threadID); err != nil {
 		return nil, err
 	}
-	if !e.Status(threadID).Running {
+	if _, _, err := e.hydrateUserInput(threadID, in, "engine: an empty follow-up has nothing to wait for"); err != nil {
+		return nil, err
+	}
+	rt := e.deliveryRuntime(threadID)
+	if rt == nil {
 		return nil, ErrIdle
 	}
-	return e.store.EnqueueFollowup(threadID, text)
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	if !rt.running || rt.userStopped || rt.abandoned {
+		return nil, ErrIdle
+	}
+	refs, err := e.saveInputImages(threadID, in.Images)
+	if err != nil {
+		return nil, err
+	}
+	item, err := e.store.EnqueueFollowupInput(threadID, text, in.Files, refs)
+	if err != nil {
+		e.removeFollowupImages(threadID, refs)
+	}
+	return item, err
 }
 
 // ListFollowups returns waiting messages in the order they were typed.
@@ -42,7 +60,11 @@ func (e *Engine) DeleteFollowup(threadID, id string) error {
 	if _, err := e.store.GetThread(threadID); err != nil {
 		return err
 	}
-	return e.store.DeleteFollowup(threadID, id)
+	item, err := e.store.TakeFollowup(threadID, id)
+	if err == nil {
+		e.removeFollowupImages(threadID, item.Images)
+	}
+	return err
 }
 
 // RequeueFollowup saves an edited waiting message at the back of the FIFO.
@@ -72,19 +94,22 @@ func (e *Engine) SteerFollowup(threadID, id string) (*store.Turn, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := e.Steer(threadID, f.Text); err != nil {
-		if !errors.Is(err, ErrIdle) {
-			e.restoreFollowup(f)
-			return nil, err
+	in, err := e.followupInput(f)
+	if err == nil {
+		err = e.SteerInput(threadID, in)
+		if err == nil {
+			return nil, nil
 		}
-		turn, startErr := e.StartTurn(threadID, f.Text)
-		if startErr != nil {
-			e.restoreFollowup(f)
-			return nil, startErr
+		if errors.Is(err, ErrIdle) {
+			var turn *store.Turn
+			turn, err = e.StartTurnInput(threadID, in)
+			if err == nil {
+				return turn, nil
+			}
 		}
-		return turn, nil
 	}
-	return nil, nil
+	e.restoreFollowup(f)
+	return nil, err
 }
 
 func (e *Engine) restoreFollowup(f *store.Followup) {
@@ -111,9 +136,15 @@ func (rt *runtime) flushFollowup(status string) bool {
 	if item == nil {
 		return false
 	}
+	in, err := rt.engine.followupInput(item)
+	if err != nil {
+		rt.engine.restoreFollowup(item)
+		rt.engine.log.Warn("could not load a queued follow-up", "thread", rt.threadID, "followup", item.ID, "err", err)
+		return false
+	}
 	var startErr error
 	for attempt := 0; attempt < 8; attempt++ {
-		_, startErr = rt.engine.StartTurnInput(rt.threadID, UserInput{Text: item.Text, queuedFollowup: true})
+		_, startErr = rt.engine.StartTurnInput(rt.threadID, in)
 		if startErr == nil {
 			return true
 		}

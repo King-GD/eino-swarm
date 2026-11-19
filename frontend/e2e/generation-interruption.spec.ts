@@ -17,7 +17,7 @@ test("interrupted reasoning retains its cause while the same worker recovers and
       memory: { ...settings.memory, auto_review: false },
     } })).ok()).toBe(true)
     await freshConversation(page)
-    const accepted = page.waitForResponse((response) => response.request().method() === "POST" && /\/api\/threads\/[^/]+\/steer$/.test(new URL(response.url()).pathname))
+    const accepted = page.waitForResponse((response) => response.request().method() === "POST" && /\/api\/threads\/[^/]+\/deliver$/.test(new URL(response.url()).pathname))
     await composer(page).fill("Inspect the assigned inputs.")
     await composer(page).press("Enter")
     turnID = (await (await accepted).json()).turn.id
@@ -135,7 +135,7 @@ test("a middle-turn manager cap preserves one real tool effect across recovery a
     }
     await page.goto("/")
     await openProjectThread(page)
-    const accepted = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/threads/${threadID}/steer`)
+    const accepted = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/threads/${threadID}/deliver`)
     await composer(page).fill("Make one workspace change and preserve its verification evidence.")
     await composer(page).press("Enter")
     turnID = (await (await accepted).json()).turn.id

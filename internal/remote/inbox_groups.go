@@ -45,7 +45,7 @@ func threadsInGroup(idle []store.Thread, group string) []store.Thread {
 func followupViews(rows []store.Followup) *[]FollowupView {
 	out := make([]FollowupView, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, FollowupView{ID: row.ID, Seq: row.Seq, Text: row.Text})
+		out = append(out, FollowupView{ID: row.ID, Seq: row.Seq, Text: row.Text, Attachments: len(row.Images) + len(row.Files)})
 	}
 	return &out
 }

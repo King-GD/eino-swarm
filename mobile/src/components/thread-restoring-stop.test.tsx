@@ -7,7 +7,7 @@ it("can stop a selected not-yet-restored stored running turn without fabricating
   setLocale("en")
   const onStop = vi.fn()
   const detail = { id: "t1", title: "Pending recovery", turns: [{ id: "persisted-turn", status: "running" }] }
-  const props = { detail, blocks: [], onBack: vi.fn(), onSend: vi.fn(), onSteer: vi.fn(), onStop, onAnswer: vi.fn(), onAnswerStructured: vi.fn() }
+  const props = { detail, blocks: [], onBack: vi.fn(), onSend: vi.fn(), onInsert: vi.fn(), onStop, onAnswer: vi.fn(), onAnswerStructured: vi.fn() }
   const frame = render(<ThreadScreen {...props} restoring />)
   const stop = screen.getByRole("button", { name: /^Stop$/ })
   expect(stop).toBeEnabled()

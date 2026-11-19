@@ -42,6 +42,7 @@ export const KINDS = [
   "steer_retracted",
   "steer_revised",
   "steer_preempted",
+  "steer_consumed",
   "cleanup",
   "workers_retained",
   "progress",

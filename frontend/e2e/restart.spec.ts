@@ -87,7 +87,7 @@ test("cleanup and interruption replay shows stopped workers separately from comp
 test("Stop keeps unfinished workers stopped after a reload", async ({ page }) => {
   await freshConversation(page)
   const accepted = page.waitForResponse((response) =>
-    response.request().method() === "POST" && /\/api\/threads\/[^/]+\/steer$/.test(new URL(response.url()).pathname),
+    response.request().method() === "POST" && /\/api\/threads\/[^/]+\/deliver$/.test(new URL(response.url()).pathname),
   )
   await send(page, "Look at this from two angles and merge the findings")
   const started = await accepted

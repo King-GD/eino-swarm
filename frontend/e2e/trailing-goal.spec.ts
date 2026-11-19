@@ -16,7 +16,7 @@ function observeSubmissions(page: Page, id: string) {
       const body = request.postDataJSON()
       if (Object.hasOwn(body, "goal")) goals.push(body)
     }
-    if (request.method() === "POST" && [`/api/threads/${id}/steer`, `/api/threads/${id}/turns`, `/api/threads/${id}/followups`].includes(path)) {
+    if (request.method() === "POST" && [`/api/threads/${id}/steer`, `/api/threads/${id}/deliver`, `/api/threads/${id}/turns`, `/api/threads/${id}/followups`].includes(path)) {
       messages.push(request.postDataJSON())
     }
   })
@@ -133,7 +133,7 @@ test("bare goals still need an objective while unknown commands, quotations and 
       await expect(page.getByTestId("composer-command-hint")).toHaveCount(0)
       await expect(page.getByTestId("slash-menu")).toHaveCount(0)
       const sent = page.waitForResponse((response) => response.request().method() === "POST"
-        && new URL(response.url()).pathname === `/api/threads/${id}/steer`)
+        && new URL(response.url()).pathname === `/api/threads/${id}/deliver`)
       await composer(page).press("Enter")
       expect((await sent).status()).toBe(202)
       await waitForIdle(page)
@@ -142,7 +142,7 @@ test("bare goals still need an objective while unknown commands, quotations and 
     })
   }
   expect(observed.goals).toEqual([])
-  expect(observed.messages).toEqual(ordinary.map((text) => ({ text, model: "mock" })))
+  expect(observed.messages).toEqual(ordinary.map((text) => ({ text, model: "mock", mode: "queue" })))
   const { thread } = await (await request.get(`/api/threads/${id}`)).json()
   expect(thread.goal).toBeFalsy()
   await page.screenshot({ path: info.outputPath("literal-goal-messages.png"), animations: "disabled" })

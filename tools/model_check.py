@@ -51,6 +51,9 @@ Both speech models check eventual settlement under explicitly fair progress.
 models/lifecycle/WorkerCollectionView.tla checks that a live collection pause
 stays actionable when the transcript flag is idle, and that a decline is
 closing rather than the idle stopped sentence while the turn is still running.
+models/lifecycle/WorkerCollectionAdmission.tla checks that an automatic resume
+withdraws its waiter before releasing the runtime lock, a later decline is not
+stored, and a durable Stop still blocks that resume.
 models/swarm/ConcurrencyCap.tla checks that one task's running sub-agents stay
 within the live cap when lowered, and invalid Settings saves are refused (C-009).
 Every case sets its model's switch constants and states
@@ -248,6 +251,16 @@ MODELS = {
             ("GateOnTranscriptRunning", "DeclineShownAsIdle"),
             ("TypeOK", "RunningPauseStaysActionable", "StoppedViewIsIdle",
              "DeclineWhileRunningIsClosing"),
+            (),
+        ),
+        Model(
+            "followup-delivery", ROOT / "models" / "lifecycle" / "FollowupDelivery.tla",
+            ("SplitInterrupt",), ("TypeOK", "InterruptMatchesDelivery"), (),
+        ),
+        Model(
+            "collection-admission", ROOT / "models" / "lifecycle" / "WorkerCollectionAdmission.tla",
+            ("ReleaseAdmissionLater", "DeclineSkipsLog", "StopIgnored"),
+            ("TypeOK", "AdmissionClosedAfterResume", "NoDeclineAfterResume", "StopPrecedesResume"),
             (),
         ),
         Model(
@@ -612,6 +625,32 @@ CASES: tuple[Case, ...] = (
         ("collection-view-reach-divergent", "NeverDivergentPause"),
         ("collection-view-reach-closing", "NeverClosing"),
         ("collection-view-reach-idle", "NeverIdleStop"),
+    )),
+    _case("followup-delivery-current", "One turn-scoped operation inserts and interrupts", model="followup-delivery"),
+    _case("followup-delivery-split", "A delayed phone RPC targets the successor",
+          ("SplitInterrupt",), "InterruptMatchesDelivery", model="followup-delivery"),
+    *(_case(name, "witness", witness=witness, model="followup-delivery") for name, witness in (
+        ("followup-delivery-reach-now", "NeverInsertNow"),
+        ("followup-delivery-reach-next-call", "NeverInsertWithoutInterrupt"),
+        ("followup-delivery-reach-other-row", "NeverKeepOtherRow"),
+    )),
+    _case("collection-admission-current",
+          "resume withdraws its waiter before the lock drops, and a later decline is refused",
+          model="collection-admission"),
+    _case("collection-admission-release-later",
+          "observed: the resume receipt drops the runtime lock before the waiter is withdrawn",
+          ("ReleaseAdmissionLater",), "AdmissionClosedAfterResume", model="collection-admission"),
+    _case("collection-admission-decline-skips-log",
+          "observed: a human decline appends its receipt without reading an already stored resume",
+          ("ReleaseAdmissionLater", "DeclineSkipsLog"), "NoDeclineAfterResume", model="collection-admission"),
+    _case("collection-admission-stop-ignored",
+          "seeded: a durable Stop does not block the automatic resume receipt",
+          ("StopIgnored",), "StopPrecedesResume", model="collection-admission"),
+    *(_case(name, "witness", witness=witness, model="collection-admission") for name, witness in (
+        ("collection-admission-reach-resume", "NeverResumeCommitted"),
+        ("collection-admission-reach-decline", "NeverDeclineWins"),
+        ("collection-admission-reach-late-decline", "NeverLateDeclineRefused"),
+        ("collection-admission-reach-stop", "NeverStopBlocksResume"),
     )),
     _case("route-current", "three confirmed route refusals fail the call without a model retry",
           model="route"),

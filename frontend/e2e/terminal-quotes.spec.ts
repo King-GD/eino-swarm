@@ -75,7 +75,7 @@ test("selected terminal output keeps its source through draft reload and send", 
   await reloadOpenConversation(page)
   await expect(composer(page)).toHaveValue(question)
   await expect(page.getByLabel("1 annotation")).toBeVisible()
-  const sent = page.waitForRequest((req) => req.method() === "POST" && new URL(req.url()).pathname === `/api/threads/${threadId}/steer`)
+  const sent = page.waitForRequest((req) => req.method() === "POST" && new URL(req.url()).pathname === `/api/threads/${threadId}/deliver`)
   await composer(page).press("Enter")
   const payload = (await sent).postDataJSON() as { text: string }
   expect(payload.text).toBe(`<selected_text>\n${quote}\n</selected_text>\n\n<user_request>\n${question}\n</user_request>`)

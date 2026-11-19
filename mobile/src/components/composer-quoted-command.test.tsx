@@ -5,14 +5,16 @@ import { expect, it, vi } from "vitest"
 import { Composer } from "./composer"
 
 for (const command of ["/goal Inspect the assigned operation", "检查 assigned operation /goal", "／goal继续检查", "/plan Inspect the operation"]) {
-  for (const action of ["Send", "Steer"]) {
+  {
+    const action = "Send"
     it(`keeps the quoted ${command} draft before ${action} can become ordinary chat`, async () => {
       const submit = vi.fn()
       const steer = vi.fn()
       const quotes = vi.fn()
-      render(<Composer label="Message" sendLabel="Send" steerLabel="Steer" onSubmit={submit} onSteer={steer}
+      render(<Composer label="Message" sendLabel="Send" onSubmit={submit} onInsert={steer}
         quotes={["original selected context"]} onQuotesChange={quotes} />)
       fireEvent.change(screen.getByLabelText("Message"), { target: { value: command } })
+      expect(screen.queryByRole("button", { name: /Send options|发送方式/ })).not.toBeInTheDocument()
       fireEvent.click(screen.getByRole("button", { name: action }))
       expect(submit).not.toHaveBeenCalled()
       expect(steer).not.toHaveBeenCalled()

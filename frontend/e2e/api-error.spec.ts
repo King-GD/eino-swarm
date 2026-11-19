@@ -51,7 +51,7 @@ test(`${responseCase.name} stays visible in Chat and the same turn Trace after r
     const threadID = await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id")
     expect(threadID).toBeTruthy()
     const accepted = page.waitForResponse((response) => response.request().method() === "POST"
-      && new URL(response.url()).pathname === `/api/threads/${threadID}/steer`)
+      && new URL(response.url()).pathname === `/api/threads/${threadID}/deliver`)
     await composer(page).fill("Perform the requested check")
     await composer(page).press("Enter")
     const started = await accepted
@@ -219,7 +219,7 @@ test("a first-byte timeout guides configuration and a longer wait reaches the mo
     const threadID = await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id")
     const submit = async () => {
       const response = page.waitForResponse((r) => r.request().method() === "POST"
-        && new URL(r.url()).pathname === `/api/threads/${threadID}/steer`)
+        && new URL(r.url()).pathname === `/api/threads/${threadID}/deliver`)
       await composer(page).fill("Perform the requested check")
       await composer(page).press("Enter")
       const accepted = await response

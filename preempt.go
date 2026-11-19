@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/cloudwego/eino/components/model"
@@ -29,6 +30,11 @@ func (r *Registry) Preempt() bool {
 	if r.closed {
 		return false
 	}
+	r.preemptLocked()
+	return true
+}
+
+func (r *Registry) preemptLocked() {
 	r.preempted = true
 	if len(r.epochs) == 0 {
 		r.preemptPending = true
@@ -36,7 +42,6 @@ func (r *Registry) Preempt() bool {
 	for _, cancel := range r.epochs {
 		cancel()
 	}
-	return true
 }
 
 // TakePreempt reports and clears whether Preempt was called since the last
@@ -65,6 +70,31 @@ func (r *Registry) HasPendingSteers() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.mgrInbox) > 0
+}
+
+// A restarted manager pass may already carry the steer in its initial
+// messages. Observe the assembled model input, including that path.
+func (r *Registry) noteSteerInput(messages []*schema.Message) {
+	r.mu.Lock()
+	var read []int64
+	for _, msg := range messages {
+		seq := SteerSeq(msg)
+		if seq <= 0 {
+			continue
+		}
+		if _, seen := r.readSteerSeqs[seq]; seen {
+			continue
+		}
+		if r.readSteerSeqs == nil {
+			r.readSteerSeqs = make(map[int64]struct{})
+		}
+		r.readSteerSeqs[seq] = struct{}{}
+		read = append(read, seq)
+	}
+	r.mu.Unlock()
+	for _, seq := range read {
+		r.emit(Notification{Kind: NotifySteerConsumed, AgentID: DefaultManagerID, Text: strconv.FormatInt(seq, 10)})
+	}
 }
 
 // RetractManagerSteer drops one unread steering message by the event seq

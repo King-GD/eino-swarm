@@ -54,7 +54,7 @@ test("a live recovery SSE reaches Full log without a history or Trace fetch", as
   await freshConversation(page)
   const threadId = (await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id"))!
   const accepted = page.waitForResponse((response) => response.request().method() === "POST"
-    && new URL(response.url()).pathname === `/api/threads/${threadId}/steer`)
+    && new URL(response.url()).pathname === `/api/threads/${threadId}/deliver`)
   await composer(page).fill("Perform the assigned offline verification.")
   await composer(page).press("Enter")
   const response = await accepted

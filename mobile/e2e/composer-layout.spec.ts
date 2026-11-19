@@ -1,6 +1,50 @@
 import { writeFileSync } from "node:fs"
 import { expect, test, type Page } from "@playwright/test"
 
+test("inbox search keeps its header, results and controls in the keyboard viewport", async ({ page }) => {
+  await page.goto("/?mock=1&tick=0&history=compact")
+  await page.getByRole("button", { name: "返回", exact: true }).click()
+  const search = page.getByRole("searchbox", { name: "搜索对话" })
+  const menu = page.getByRole("button", { name: "菜单", exact: true })
+  const newChat = page.getByTestId("new-chat")
+  const initialTop = (await menu.boundingBox())!.y
+  const initialBottom = await search.evaluate((node) => node.getBoundingClientRect().bottom)
+  expect.soft(await search.evaluate((node) => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(16)
+  await search.tap()
+  await expect(search).toBeFocused()
+  // Mobile WebKit's keyboard reduces the visual viewport without changing the
+  // layout viewport. Real keyboard geometry is verified in the packaged app.
+  const { keyboardTop, pageTop } = await page.evaluate(() => {
+    const viewport = window.visualViewport!
+    const height = viewport.height - 280
+    const pageTop = 120
+    Object.defineProperty(viewport, "height", { configurable: true, value: height })
+    Object.defineProperty(viewport, "pageTop", { configurable: true, value: pageTop })
+    viewport.dispatchEvent(new Event("resize"))
+    viewport.dispatchEvent(new Event("scroll"))
+    return { keyboardTop: pageTop + height, pageTop }
+  })
+  await search.pressSequentially("Trim")
+  const match = page.getByRole("button", { name: "打开 Trim the layout pass", exact: true })
+  await expect(match).toBeVisible()
+  expect((await search.boundingBox())!.y).toBeGreaterThan((await match.boundingBox())!.y)
+  for (const control of [search, newChat, match, page.getByTestId("inbox-scroller")]) {
+    await expect.soft.poll(() => control.evaluate((node) => node.getBoundingClientRect().bottom)).toBeLessThanOrEqual(keyboardTop)
+  }
+  expect((await menu.boundingBox())!.y - pageTop).toBe(initialTop)
+
+  await page.evaluate(() => {
+    const viewport = window.visualViewport!
+    Reflect.deleteProperty(viewport, "height")
+    Reflect.deleteProperty(viewport, "pageTop")
+    viewport.dispatchEvent(new Event("resize"))
+  })
+  await search.blur()
+  await expect.poll(() => search.evaluate((node) => node.getBoundingClientRect().bottom)).toBe(initialBottom)
+  await expect(search).toHaveValue("Trim")
+  await expect(match).toBeVisible()
+})
+
 // Bounds must include the submission itself: a visible editor or a page with
 // overflow hidden can still hide the button on its right.
 async function controlsFit(page: Page, label: string) {
@@ -31,7 +75,7 @@ async function controlsFit(page: Page, label: string) {
 test("PC follow-up and new chat keep submission inside the phone", async ({ page }) => {
   await page.goto("/?mock=1&tick=0")
   await expect(page.locator("form").getByRole("button", { name: "停止", exact: true })).toBeEnabled()
-  await expect(page.getByRole("button", { name: "插入", exact: true })).toHaveCount(1)
+  await expect(page.getByRole("button", { name: "插入", exact: true })).toHaveCount(0)
   await controlsFit(page, "消息")
   await page.getByRole("button", { name: "返回" }).click()
   await page.getByTestId("new-chat").click()
@@ -39,24 +83,25 @@ test("PC follow-up and new chat keep submission inside the phone", async ({ page
   await controlsFit(page, "新消息")
 })
 
-test("the live composer keeps Follow-up and Steer without a persistent queue hint", async ({ page }, info) => {
+test("the live composer offers send options beside Follow-up without a persistent hint", async ({ page }, info) => {
   await page.goto("/?mock=1&tick=0")
   const form = page.locator("form")
   const editor = page.getByLabel("消息", { exact: true })
-  const steer = form.getByRole("button", { name: "插入", exact: true })
+  const options = form.getByRole("button", { name: "发送方式", exact: true })
   const followUp = form.getByRole("button", { name: "跟进", exact: true })
   const hint = page.getByText(/^(排在本轮之后|Queued after this turn)$/)
   await expect(form.getByRole("button", { name: "停止", exact: true })).toBeEnabled()
   await expect(hint).toHaveCount(0)
   await editor.fill("Check the current result")
   await expect(followUp).toBeEnabled()
-  await expect(steer).toBeEnabled()
+  await expect(options).toBeEnabled()
   await expect(hint).toHaveCount(0)
   writeFileSync(info.outputPath("composer-live-without-queue-hint.png"), await page.screenshot(), { mode: 0o600 })
 
   // Exercise both real composer callbacks: hiding a hint must not turn Steer
   // into a queued send or remove Follow-up from an active conversation.
-  await steer.click()
+  await options.click()
+  await page.getByRole("menuitem", { name: "插入本轮", exact: true }).click()
   await expect(page.getByTestId("transcript").getByText("Check the current result", { exact: true })).toBeVisible()
   await expect(editor).toHaveValue("")
   await expect(form.getByRole("button", { name: "停止", exact: true })).toBeEnabled()
@@ -66,7 +111,7 @@ test("the live composer keeps Follow-up and Steer without a persistent queue hin
   await expect(page.getByTestId("transcript").getByText("Continue with the next item", { exact: true })).toBeVisible()
   await expect(editor).toHaveValue("")
   await expect(form.getByRole("button", { name: "发送", exact: true })).toBeDisabled()
-  await expect(steer).toHaveCount(0)
+  await expect(options).toHaveCount(0)
   await expect(hint).toHaveCount(0)
   writeFileSync(info.outputPath("composer-idle-without-steer.png"), await page.screenshot(), { mode: 0o600 })
 })
@@ -88,7 +133,7 @@ test("the empty live composer stops the turn while a typed draft still sends a f
   await page.screenshot({ path: "test-results/composer-stopped.png" })
 })
 
-test("Steer on a waiting row starts it after Stop while leaving the other row queued", async ({ page }, testInfo) => {
+test("Send now on a waiting row starts it after Stop while leaving the other row queued", async ({ page }, testInfo) => {
   await page.goto("/?mock=1&tick=400&queue=1")
   const form = page.locator("form")
   const queue = page.getByTestId("followup-queue")
@@ -101,7 +146,7 @@ test("Steer on a waiting row starts it after Stop while leaving the other row qu
   await page.screenshot({ path: testInfo.outputPath("queued-steer-after-stop-idle.png") })
 
   await queue.locator("li").filter({ hasText: "first waiting message" })
-    .getByRole("button", { name: "插入", exact: true }).click()
+    .getByRole("button", { name: "立即发送", exact: true }).click()
   await expect(queue.locator("li")).toHaveCount(1)
   await expect(queue).not.toContainText("first waiting message")
   await expect(queue).toContainText("second waiting message")

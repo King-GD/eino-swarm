@@ -333,7 +333,7 @@ func (e *Engine) unreadSteerMessages(turn *store.Turn, snapshots ...*restoreSnap
 		if _, ok := retracted[ev.Seq]; ok {
 			continue
 		}
-		if steerConsumedAfter(events, ev.Seq) {
+		if steerConsumedAfter(events, ev.Seq, ev.Role == "human") {
 			continue
 		}
 		var msg *schema.Message
@@ -354,14 +354,18 @@ func (e *Engine) unreadSteerMessages(turn *store.Turn, snapshots ...*restoreSnap
 	return out
 }
 
-func steerConsumedAfter(events []store.Event, seq int64) bool {
+func steerConsumedAfter(events []store.Event, seq int64, exact bool) bool {
 	for _, ev := range events {
 		if ev.Seq <= seq {
 			continue
 		}
 		switch ev.Kind {
+		case swarm.NotifySteerConsumed.String():
+			if ev.Text == strconv.FormatInt(seq, 10) {
+				return true
+			}
 		case swarm.NotifyAgentMessage.String(), swarm.NotifyToolCall.String(), KindSteerPreempted:
-			if isManagerAgent(ev.AgentID) {
+			if !exact && isManagerAgent(ev.AgentID) {
 				return true
 			}
 		}

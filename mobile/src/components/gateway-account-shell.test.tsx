@@ -461,20 +461,16 @@ describe("gateway account shell", () => {
     expect(screen.queryByRole("radio",{name:"All models"})).not.toBeInTheDocument()
   })
 
-  it("opens default-server sign-in without server or web-tool controls, and Android Back closes its overlay", async () => {
+  it("starts default-server sign-in from the LOCAL welcome page with one tap", () => {
     localStorage.setItem("zwai.phone.mode", "local")
     render(<App />)
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }))
-    expect(screen.getByTestId("gateway-account")).toBeVisible()
+    expect(mocks.account.login).toHaveBeenCalledOnce()
+    expect(screen.queryByRole("dialog", { name: "User center" })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Other server" })).not.toBeInTheDocument()
     expect(screen.queryByLabelText("Server address")).not.toBeInTheDocument()
     expect(screen.queryByLabelText("Phone chat Web tools")).not.toBeInTheDocument()
     expect(screen.queryByLabelText("PC conversation Web tools")).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole("button", { name: "Sign in" }))
-    expect(mocks.account.login).toHaveBeenCalledOnce()
-    await act(async () => { expect(window.__zwaiAndroidBack?.()).toBe(true) })
-    expect(screen.queryByTestId("gateway-account")).not.toBeInTheDocument()
-    expect(window.__zwaiAndroidBack?.()).toBe(false)
   })
 
   it("keeps an account PC going offline during selection on the account refresh path", async () => {

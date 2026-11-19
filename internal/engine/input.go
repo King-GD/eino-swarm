@@ -80,6 +80,7 @@ type UserInput struct {
 	ImplementPlan  bool
 	retryWorkers   bool // only the explicit human goal-resume path may reset watchdog recovery
 	queuedFollowup bool // previously queued text never becomes an image command automatically
+	storedImages   []store.ImageRef
 }
 
 // DecodeImages turns the wire payload into pixels. It refuses anything that

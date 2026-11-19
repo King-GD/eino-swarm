@@ -60,3 +60,29 @@ func TestSteerFollowupHTTPReportsStorageFailureAndKeepsTheQueue(t *testing.T) {
 		t.Fatalf("failed HTTP steering started work: %+v err=%v", turns, err)
 	}
 }
+
+func TestComposerDeliveryHTTPBindsTheSelectedRowToTheActiveTurn(t *testing.T) {
+	t.Setenv("ZWAI_MOCK_WORKER_DELAY_MS", "2200")
+	h := newHarness(t)
+	id := h.newThread()
+	path := "/api/threads/" + id
+	started := h.json(http.MethodPost, path+"/deliver", map[string]any{"mode": "queue", "text": "Start the first turn"}, http.StatusAccepted)
+	turn := started["turn"].(map[string]any)["id"].(string)
+	first := h.json(http.MethodPost, path+"/deliver", map[string]any{"mode": "queue", "text": "Keep this in line"}, http.StatusAccepted)
+	second := h.json(http.MethodPost, path+"/deliver", map[string]any{"mode": "queue", "text": "Deliver this row"}, http.StatusAccepted)
+	firstID := first["followup"].(map[string]any)["id"].(string)
+	secondID := second["followup"].(map[string]any)["id"].(string)
+	rowPath := path + "/followups/" + secondID + "/steer"
+	refused := h.json(http.MethodPost, rowPath, map[string]any{"mode": "interrupt", "expected_turn_id": "another-turn"}, http.StatusConflict)
+	if refused["code"] != "delivery_turn_changed" {
+		t.Fatalf("stale turn response: %+v", refused)
+	}
+	accepted := h.json(http.MethodPost, rowPath, map[string]any{"mode": "interrupt", "expected_turn_id": turn}, http.StatusAccepted)
+	if accepted["steered"] != true {
+		t.Fatalf("wrong selection receipt: %+v", accepted)
+	}
+	queue, err := h.app.Store.ListFollowups(id)
+	if err != nil || len(queue) != 1 || queue[0].ID != firstID {
+		t.Fatalf("wrong queue after inserting second row: %+v %v", queue, err)
+	}
+}

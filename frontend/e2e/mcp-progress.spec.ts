@@ -170,7 +170,7 @@ test("MCP progress is visible in folded work before the remote call returns", as
     await freshConversation(page)
     const threadID = await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id")
     const accepted = page.waitForResponse((reply) => reply.request().method() === "POST"
-      && new URL(reply.url()).pathname === `/api/threads/${threadID}/steer`)
+      && new URL(reply.url()).pathname === `/api/threads/${threadID}/deliver`)
     await composer(page).fill("Inspect the records")
     await composer(page).press("Enter")
     const { turn } = await (await accepted).json()

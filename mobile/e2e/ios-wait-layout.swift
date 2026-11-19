@@ -230,7 +230,7 @@ final class BindFlowTests: XCTestCase {
     XCTAssertTrue(app.staticTexts["Worker evidence"].waitForExistence(timeout: 8))
     recordAgentPage(app, name: "edge-back-worker-before")
 
-    leftEdgeBack(app)
+    nearEdgeBack(app)
     let workerReturned = group.waitForExistence(timeout: 5)
     recordAgentPage(app, name: "edge-back-worker-to-roster")
     XCTAssertTrue(workerReturned, "one native left-edge swipe must return from worker to the Agents list")
@@ -305,6 +305,13 @@ final class BindFlowTests: XCTestCase {
     let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: y))
     let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: y))
     start.press(forDuration: 0.05, thenDragTo: end)
+  }
+
+  private func nearEdgeBack(_ app: XCUIApplication) {
+    let topLeft = app.coordinate(withNormalizedOffset: .zero)
+    let start = topLeft.withOffset(CGVector(dx: 30, dy: app.frame.height * 0.45))
+    let end = start.withOffset(CGVector(dx: 66, dy: 0))
+    start.press(forDuration: 0.01, thenDragTo: end, withVelocity: .fast, thenHoldForDuration: 0)
   }
 
   func testModelResponseErrorIsLocalizedWithoutToolBlame() throws {

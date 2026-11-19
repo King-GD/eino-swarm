@@ -311,11 +311,13 @@ type Attachment struct {
 // Followup is a message typed while a turn was already running. It waits for
 // that turn to finish; Steer pulls it into the current turn instead.
 type Followup struct {
-	ID        string    `gorm:"primaryKey;size:64" json:"id"`
-	ThreadID  string    `gorm:"index;size:64" json:"thread_id"`
-	Seq       int64     `json:"seq"`
-	Text      string    `json:"text"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string     `gorm:"primaryKey;size:64" json:"id"`
+	ThreadID  string     `gorm:"index;size:64" json:"thread_id"`
+	Seq       int64      `json:"seq"`
+	Text      string     `json:"text"`
+	Files     []string   `gorm:"serializer:json" json:"files,omitempty"`
+	Images    []ImageRef `gorm:"serializer:json" json:"images,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 // NewID returns a short, filesystem- and URL-safe identifier. Thread ids name

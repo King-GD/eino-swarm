@@ -48,7 +48,7 @@ it("offers a snapshot-only pause even before its historical cap is loaded", asyn
   const onContinue = vi.fn().mockResolvedValue(undefined)
   render(<ThreadScreen detail={{ id: "thread", title: "Task", running: {
     thread_id: "thread", title: "Task", turn_id: "turn", awaiting_continue: true,
-  } }} blocks={[]} onBack={vi.fn()} onSend={vi.fn()} onSteer={vi.fn()} onStop={vi.fn()}
+  } }} blocks={[]} onBack={vi.fn()} onSend={vi.fn()} onInsert={vi.fn()} onStop={vi.fn()}
     onAnswer={vi.fn()} onAnswerStructured={vi.fn()} onContinue={onContinue} />)
   expect(screen.getByTestId("iteration-limit")).toHaveTextContent("The manager is paused")
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Continue this turn" })))

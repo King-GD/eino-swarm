@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { X } from "lucide-react"
 import { AccountPcList } from "@/components/account-pc-list"
 import type { GatewayAccountController } from "@/components/gateway-account-shell"
+import { GatewaySignIn, gatewaySignInState, gatewaySignInWaiting } from "@/components/gateway-sign-in"
 import { Button } from "@/components/ui/button"
 import type { DirectProvider } from "@/lib/direct-provider"
 import { AccountPortrait } from "@/components/account-portrait"
@@ -45,13 +46,8 @@ export function GatewayAccountScreen({ account, providers, modelBusy, modelError
   const [otherWays, setOtherWays] = useState(false)
   const authorized = account.status === "authorized"
   const accountName = account.session ? gatewayUserDisplayName(account.session.user) : ""
-  const waiting = ["checking", "authorization_pending", "account_pending", "account_rejected"].includes(account.status) || Boolean(account.session && account.status === "access_denied")
-  const statusText = account.status === "account_pending" ? t("account.pending")
-    : account.status === "account_rejected" ? t("account.rejected")
-    : account.status === "authorization_pending" ? t("account.browser")
-    : account.status === "checking" ? t("account.checking")
-    : account.status === "access_denied" ? t(account.session ? "account.accessDenied" : "account.denied")
-    : account.status === "expired" ? t("account.expired") : ""
+  const signIn = gatewaySignInState(account)
+  const waiting = gatewaySignInWaiting(signIn)
   return (
     <div className="mx-auto flex h-full max-w-lg flex-col">
       <UpdateNotice />
@@ -74,14 +70,9 @@ export function GatewayAccountScreen({ account, providers, modelBusy, modelError
           </button>
           <p className="break-all text-sm font-medium">{accountName}</p>
         </div>
-        {statusText ? <p role="status" className="text-sm text-muted-foreground">{statusText}</p> : null}
         {modeBusy ? <p role="status" className="text-sm text-muted-foreground">{t("account.mode.switching")}</p> : null}
         {modeError ? <p role="alert" className="text-sm text-destructive">{modeError}</p> : null}
-        {account.error ? <p role="alert" className="text-sm text-destructive">{t(account.error === "browser_unavailable" ? "account.browserFailed" : account.error === "gateway_timeout" ? "account.timeout" : account.error === "pc_upgrade_failed" ? "account.upgradeFailed" : "chat.failed")}</p> : null}
-        {!authorized && (!waiting || account.status === "access_denied") ? <>
-          <p className="text-sm leading-relaxed text-muted-foreground">{t("account.hint")}</p>
-          <Button disabled={account.busy} onClick={() => void account.login()}>{t("account.login")}</Button>
-        </> : null}
+        <GatewaySignIn account={signIn} />
         {authorized && !pcRequired ? <WebExecutionSettings pcWeb={pcWeb} /> : null}
         {!waiting && !pcRequired ? <SpeechStatus /> : null}
         {authorized && account.bootstrap?.capability_status !== "ready" ? <p role="status" className="text-sm text-muted-foreground">{t("account.capabilitiesUnknown")}</p> : null}

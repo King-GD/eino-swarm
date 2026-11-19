@@ -9,7 +9,7 @@ import { ThreadScreen } from "./thread-screen"
 function harness(detail: ThreadDetail, blocks: CompactBlock[] = []) {
   setLocale("en")
   const handlers = {
-    onBack: vi.fn(), onSend: vi.fn(), onSteer: vi.fn(), onStop: vi.fn(),
+    onBack: vi.fn(), onSend: vi.fn(), onInsert: vi.fn(), onStop: vi.fn(),
     onAnswer: vi.fn(), onAnswerStructured: vi.fn(),
   }
   const view = render(<ThreadScreen detail={detail} blocks={blocks} {...handlers} />)
@@ -20,7 +20,7 @@ function harness(detail: ThreadDetail, blocks: CompactBlock[] = []) {
 
 describe("phone live-turn primary action", () => {
   it("stops from an empty composer, keeps clickable follow-up and steer for a draft, then returns to Send", () => {
-    const live: ThreadDetail = { id: "t1", title: "live", running: { thread_id: "t1", title: "live" } }
+    const live: ThreadDetail = { id: "t1", title: "live", running: { thread_id: "t1", turn_id: "tn1", title: "live" } }
     const view = harness(live)
     const stop = view.form.getByRole("button", { name: "Stop" })
     expect(stop).toBeEnabled()
@@ -34,10 +34,11 @@ describe("phone live-turn primary action", () => {
     fireEvent.click(view.form.getByRole("button", { name: "Follow-up" }))
     expect(view.onSend).toHaveBeenCalledWith("next")
     fireEvent.change(view.input, { target: { value: "nudge" } })
-    fireEvent.click(view.form.getByRole("button", { name: "Steer" }))
-    expect(view.onSteer).toHaveBeenCalledWith("nudge")
+    fireEvent.click(view.form.getByRole("button", { name: "Send options" }))
+    fireEvent.click(screen.getByRole("menuitem", { name: "Insert into this turn" }))
+    expect(view.onInsert).toHaveBeenCalledWith("steer", "tn1", "nudge", undefined)
     view.rerender(<ThreadScreen detail={{ id: "t1", title: "live" }} blocks={[]}
-      onBack={view.onBack} onSend={view.onSend} onSteer={view.onSteer} onStop={view.onStop}
+      onBack={view.onBack} onSend={view.onSend} onInsert={view.onInsert} onStop={view.onStop}
       onAnswer={view.onAnswer} onAnswerStructured={view.onAnswerStructured} />)
     expect(view.form.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument()
     expect(view.form.getByRole("button", { name: "Send" })).toBeDisabled()
@@ -52,7 +53,7 @@ describe("phone live-turn primary action", () => {
     expect(view.onAnswer).toHaveBeenCalledWith("answer")
     expect(view.onStop).not.toHaveBeenCalled()
     view.rerender(<ThreadScreen detail={{ id: "t1", title: "wait", waiting: true }} blocks={[]}
-      onBack={view.onBack} onSend={view.onSend} onSteer={view.onSteer} onStop={view.onStop}
+      onBack={view.onBack} onSend={view.onSend} onInsert={view.onInsert} onStop={view.onStop}
       onAnswer={view.onAnswer} onAnswerStructured={view.onAnswerStructured} />)
     expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument()
   })

@@ -7,7 +7,7 @@ for (const theme of ["light", "dark"] as const) {
     await page.goto("/?mock=1&tick=0&speech=local&speech_delay=800")
     const input = page.getByLabel("消息", { exact: true })
     await input.fill("show result")
-    await page.getByRole("button", { name: /跟进|发送/ }).click()
+    await page.getByRole("button", { name: /^(跟进|发送)$/ }).click()
     const source = page.getByTestId("transcript").getByText("Here is what changed:")
     await expect(source).toBeVisible()
     await source.evaluate((element) => {

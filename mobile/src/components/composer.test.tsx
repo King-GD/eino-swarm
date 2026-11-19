@@ -59,20 +59,20 @@ describe("Composer", () => {
 
   it("offers steer beside send while a turn is live", () => {
     setLocale("en")
-    const onSteer = vi.fn()
+    const onInsert = vi.fn()
     const onSubmit = vi.fn()
     render(
       <Composer
         label="Message"
         sendLabel="Follow-up"
-        steerLabel="Steer"
-        onSteer={onSteer}
+        onInsert={onInsert}
         onSubmit={onSubmit}
       />,
     )
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "nudge" } })
-    fireEvent.click(screen.getByRole("button", { name: "Steer" }))
-    expect(onSteer).toHaveBeenCalledWith("nudge")
+    fireEvent.click(screen.getByRole("button", { name: "Send options" }))
+    fireEvent.click(screen.getByRole("menuitem", { name: "Insert into this turn" }))
+    expect(onInsert).toHaveBeenCalledWith("steer", "nudge", undefined)
     expect(onSubmit).not.toHaveBeenCalled()
     expect(screen.getByLabelText("Message")).toHaveValue("")
   })

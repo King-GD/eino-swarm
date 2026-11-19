@@ -751,7 +751,11 @@ func (s *Store) DeleteAttachmentByPath(threadID, relPath string) error {
 // BindAttachmentTurn records that a previously uploaded file belongs to this
 // turn, so a later send can tell this request's files from leftovers.
 func (s *Store) BindAttachmentTurn(threadID, relPath, turnID string) error {
-	res := s.db.Model(&Attachment{}).
+	return bindAttachmentTurn(s.db, threadID, relPath, turnID)
+}
+
+func bindAttachmentTurn(db *gorm.DB, threadID, relPath, turnID string) error {
+	res := db.Model(&Attachment{}).
 		Where("thread_id = ? AND rel_path = ?", threadID, relPath).
 		Update("turn_id", turnID)
 	if res.Error != nil {

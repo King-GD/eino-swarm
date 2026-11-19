@@ -74,6 +74,7 @@ const (
 	NotifyGenerationCompleted                     // the model output ended normally
 	NotifyGenerationInterrupted                   // one model output ended before completion
 	NotifyGenerationRecovered                     // a subsequent generation actually began
+	NotifySteerConsumed                           // a steer was included in the manager's model input
 )
 
 var notifyNames = map[NotifyKind]string{
@@ -93,6 +94,7 @@ var notifyNames = map[NotifyKind]string{
 	NotifyGenerationCompleted:   "generation_completed",
 	NotifyGenerationInterrupted: "generation_interrupted",
 	NotifyGenerationRecovered:   "generation_recovered",
+	NotifySteerConsumed:         "steer_consumed",
 }
 
 func (k NotifyKind) String() string {

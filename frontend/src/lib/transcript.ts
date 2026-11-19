@@ -87,6 +87,7 @@ export interface Block {
   kind: BlockKind
   agentId: string
   role?: string
+  steerConsumed?: boolean
   text: string
   /** Source goal event for chat projection; the original receipt stays in Trace. */
   goalNoticeKind?: "goal_resumed" | "goal_continued"
@@ -234,6 +235,7 @@ export interface TranscriptState {
   retractedSteers?: number[]
   /** Latest caption for an unread steer, keyed by that steer's event seq. */
   steerRevisions?: Record<number, string>
+  steerReceipts?: Record<number, { turnId: string; seq: number }>
   quietTurns?: string[]
   scheduledFiredTurns?: string[]
   /** Stored seqs in `[from, through]` belong to a resent message. Live
@@ -274,6 +276,7 @@ export function reduceEvent(
     pulse: state.pulse,
     retractedSteers: state.retractedSteers,
     steerRevisions: state.steerRevisions,
+    steerReceipts: state.steerReceipts,
     quietTurns: state.quietTurns?.slice(),
     scheduledFiredTurns: state.scheduledFiredTurns?.slice(),
     rewindCut: state.rewindCut,
@@ -303,6 +306,13 @@ export function reduceEvent(
     return next
   }
   if (ev.kind === "steer_preempted") {
+    return next
+  }
+  if (ev.kind === "steer_consumed") {
+    const inputSeq = parseSteerRetractSeq(ev.text)
+    if (inputSeq > 0 && ev.seq > inputSeq) {
+      next.steerReceipts = { ...next.steerReceipts, [inputSeq]: { turnId: ev.turn_id, seq: ev.seq } }
+    }
     return next
   }
   if (ev.kind === "steer_retracted") {
@@ -892,6 +902,7 @@ export function rewindTranscript(
     pulse: undefined,
     retractedSteers: (state.retractedSteers ?? []).filter((s) => s < fromSeq),
     steerRevisions: steerRevisionsBefore(state.steerRevisions, fromSeq),
+    steerReceipts: Object.fromEntries(Object.entries(state.steerReceipts ?? {}).filter(([, receipt]) => receipt.seq < fromSeq)),
     quietTurns: (state.quietTurns ?? []).filter((id) => keptTurns.has(id)),
     scheduledFiredTurns: (state.scheduledFiredTurns ?? []).filter((id) => keptTurns.has(id)),
     rewindCut: { from: fromSeq, through, live: true },
@@ -925,6 +936,7 @@ export function placePendingEdit(
     pulse: undefined,
     retractedSteers: state.retractedSteers,
     steerRevisions: state.steerRevisions,
+    steerReceipts: state.steerReceipts,
     quietTurns: state.quietTurns?.slice(),
     scheduledFiredTurns: state.scheduledFiredTurns?.slice(),
     rewindCut: state.rewindCut,

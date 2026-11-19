@@ -13,6 +13,11 @@ import (
 const KindWorkersCollectionResumed = "workers_collection_resumed"
 const KindWorkersCollectionDeclined = "workers_collection_declined"
 
+// afterCollectionResumeUnlock runs after a stored automatic resume has
+// withdrawn its waiter and released the runtime lock. Tests use it to
+// attempt the human decline that must now be refused. Nil otherwise.
+var afterCollectionResumeUnlock func()
+
 // The generation-bound wait is independent of the one correction allowance.
 // Only its one durable completion receipt may admit an automatic attempt.
 type workerCollectionPause struct {
@@ -156,15 +161,17 @@ func (rt *runtime) saveWorkerPauseEvent(turn *store.Turn, kind string, value any
 	if _, deleted := e.droppedTurns[turn.ID]; deleted {
 		return fmt.Errorf("worker completion wait owner was deleted")
 	}
-	if kind == KindWorkersCollectionResumed {
+	if kind == KindWorkersCollectionResumed || kind == KindWorkersCollectionDeclined {
 		events, err := e.store.ListTurnEvents(turn.ID)
 		if err != nil {
 			return fmt.Errorf("verify worker completion authorization: %w", err)
 		}
-		for _, ev := range events {
-			if ev.Kind == KindUserStopRequested {
-				rt.userStopped = true
-				return context.Canceled
+		if kind == KindWorkersCollectionResumed {
+			for _, ev := range events {
+				if ev.Kind == KindUserStopRequested {
+					rt.userStopped = true
+					return context.Canceled
+				}
 			}
 		}
 		paused, used, err := workerCollectionWaitEvents(events)
@@ -172,7 +179,10 @@ func (rt *runtime) saveWorkerPauseEvent(turn *store.Turn, kind string, value any
 		if err != nil {
 			return err
 		}
-		if used || !ok || !matchingWorkerCollectionReceipt(paused, receipt) || !paused.AutomaticResume || paused.Decision != nil {
+		// A resume receipt ends this wait. A later decline must not append a
+		// second terminal receipt, or the next fold cannot parse the log.
+		if !ok || !matchingWorkerCollectionReceipt(paused, receipt) || paused.Decision != nil ||
+			(kind == KindWorkersCollectionResumed && (used || !paused.AutomaticResume)) {
 			return fmt.Errorf("worker completion authorization changed")
 		}
 	}
@@ -317,7 +327,15 @@ func (rt *runtime) waitForWorkerCollection(ctx context.Context, turn *store.Turn
 			value := workerCollectionReceipt{p.WaitID, p.WorkerIDs, reg.PendingAgents()}
 			err = rt.saveWorkerPauseEvent(turn, KindWorkersCollectionResumed, value)
 			p.AutomaticResume = false
+			if err == nil {
+				// Withdraw before unlock. ContinueTurn still sees this waiter
+				// until then and would otherwise store a decline after the receipt.
+				rt.continueCh, rt.collectionPause = nil, nil
+			}
 			rt.mu.Unlock()
+			if err == nil && afterCollectionResumeUnlock != nil {
+				afterCollectionResumeUnlock()
+			}
 			if err != nil {
 				return false, false, err
 			}

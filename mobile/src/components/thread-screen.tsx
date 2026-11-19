@@ -3,25 +3,29 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { ArrowDown, ChevronLeft, ChevronRight, FileText, Loader2 } from "lucide-react"
 
 import type { ComposerPrediction } from "../../../frontend/src/lib/composer-prediction"
+import type { InsertMode } from "../../../frontend/src/lib/delivery-mode"
 import { AccountButton } from "@/components/account-button"
 import { AskCard } from "@/components/ask-card"
 import { IterationLimitCard } from "@/components/iteration-limit-card"
 import { Composer, type ComposerExtra } from "@/components/composer"
+import { DeliveryMenu } from "@/components/delivery-menu"
 import { FileBrowser } from "@/components/file-browser"
 import { GoalBanner, ScheduleBanner } from "@/components/status-banners"
 import { SelectionActions } from "@/components/selection-actions"
 import { ThreadLog } from "@/components/thread-blocks"
+import { pairedTurnDestinations, scrollToTranscriptRow, TurnNavigation } from "@/components/turn-navigation"
 import { PhoneTaskPanelButton, PhoneTaskPanelSheet, usePhoneTaskPanelView } from "@/components/task-panels"
 import { Button } from "@/components/ui/button"
 import { agentRosterText } from "@/lib/agent-label"
 import { installAndroidBack } from "@/lib/android-back"
+import { pairedSlashCommands } from "@/lib/composer-commands"
 import { t } from "@/lib/i18n"
 import { pendingIterationLimit } from "@/lib/iteration-limit"
 import { normalizeSelectedText } from "@/lib/quote"
 import type { CompactBlock } from "@/lib/transcript"
 import { managerBlocks, pendingAsk, phoneAgents } from "@/lib/transcript"
 import { hasPhoneHistoryContent } from "@/lib/phone-history"
-import type { FollowupView, ModelChoice, ThreadDetail } from "@/lib/rpc"
+import type { FollowupView, HistoryWork, ModelChoice, ThreadDetail } from "@/lib/rpc"
 import { cn } from "@/lib/cn"
 import type { RemoteLink } from "@/lib/link"
 
@@ -32,6 +36,7 @@ export function ThreadScreen({
   fileLink,
   panelOwnerKey = "",
   blocks,
+  historyWork,
   hasMore,
   loadingOlder,
   caughtUp = true,
@@ -40,10 +45,9 @@ export function ThreadScreen({
   onOlder,
   followups = [],
   onSend,
-  onSteer,
+  onInsert,
   onSteerFollowup,
   onDropFollowup,
-  onInterrupt,
   composerPending,
   restoring,
   models,
@@ -68,18 +72,18 @@ export function ThreadScreen({
   fileLink?: RemoteLink
   panelOwnerKey?: string
   blocks: CompactBlock[]
+  historyWork?: HistoryWork[]
   hasMore?: boolean
   loadingOlder?: boolean
   caughtUp?: boolean
   onBack: () => void
   onOpenAccount?: () => void
-  onOlder?: () => void
+  onOlder?: (turnId?: string) => Promise<number | undefined> | void
   followups?: FollowupView[]
   onSend: (text: string, extra?: ComposerExtra) => void
-  onSteer: (text: string, extra?: ComposerExtra) => void
-  onSteerFollowup?: (id: string) => void
+  onInsert?: (mode: InsertMode, turnId: string, text: string, extra?: ComposerExtra) => void | Promise<void>
+  onSteerFollowup?: (id: string, mode?: InsertMode, turnId?: string) => void
   onDropFollowup?: (id: string) => void
-  onInterrupt?: (id: string) => void
   composerPending?: boolean
   restoring?: boolean
   models?: ModelChoice[]
@@ -119,6 +123,7 @@ export function ThreadScreen({
   const opening = !caughtUp && blocks.length === 0
   const asking = Boolean(detail.running?.ask_user || ask?.pending)
   const running = Boolean(detail.running)
+  const turnId = detail.running?.turn_id
   const iterationLimit = pendingIterationLimit(manager, detail.running?.turn_id)
   const waiting = Boolean(detail.waiting && !running)
   const scroller = useRef<HTMLDivElement>(null)
@@ -129,6 +134,7 @@ export function ThreadScreen({
   const [quotes, setQuotes] = useState<string[]>([])
   const stick = useRef(true)
   const pinHeight = useRef<number | null>(null)
+  const [historyJump, setHistoryJump] = useState<{ thread: string; turnId?: string; seq?: number }>()
   const [atTail, setAtTail] = useState(false)
   const [behind, setBehind] = useState(false)
 
@@ -236,7 +242,10 @@ export function ThreadScreen({
     // The reader is already at the top, asking for what is above. Pinning
     // the old offset hides that page and leaves the last turn on screen.
     pinHeight.current = 0
-    onOlder()
+    stick.current = false
+    void Promise.resolve(onOlder()).then((seq) => {
+      if (seq) setHistoryJump({ thread: detail.id, seq })
+    })
   }
 
   const pullY = useRef<number | null>(null)
@@ -259,6 +268,25 @@ export function ThreadScreen({
     }
     if (!atTail) setAtTail(true)
   }, [caughtUp, blocks, loadingOlder, hasMore, atTail, behind, agentPage])
+
+  useLayoutEffect(() => {
+    if (!historyJump || loadingOlder) return
+    setHistoryJump(undefined)
+    const el = scroller.current
+    if (historyJump.thread !== detail.id || agentPage !== "chat" || !el) return
+    const row = historyJump.turnId ? turnRow(el, historyJump.turnId)
+      : el.querySelector<HTMLElement>(`[data-phone-event-seq="${historyJump.seq}"]`)
+    scrollToTranscriptRow(el, row)
+  }, [agentPage, detail.id, historyJump, loadingOlder])
+
+  const jumpToTurn = (id: string) => {
+    const el = scroller.current
+    stick.current = false
+    if (el && scrollToTranscriptRow(el, turnRow(el, id))) return
+    if (onOlder && hasMore && !loadingOlder) {
+      void Promise.resolve(onOlder(id)).then(() => setHistoryJump({ thread: detail.id, turnId: id }))
+    }
+  }
 
   const toLatest = () => {
     const el = scroller.current
@@ -358,6 +386,11 @@ export function ThreadScreen({
         <p className="px-4 text-[11px] text-[hsl(var(--running))]">{t("thread.plan")}</p>
       ) : null}
 
+      {agentPage === "chat" && caughtUp ? (
+        <TurnNavigation turns={pairedTurnDestinations(detail.turns ?? [], manager)}
+          pending={loadingOlder} onJump={jumpToTurn} />
+      ) : null}
+
       {hasMore ? (
         <div className="flex shrink-0 justify-center border-b border-border">
           <Button
@@ -447,6 +480,8 @@ export function ThreadScreen({
                 </div>
               ) : (
                 <ThreadLog blocks={selectedAgent ? selectedAgent.blocks : manager}
+                  historyWork={historyWork}
+                  historyAgent={selectedAgent?.id}
                   imageOwner={fileLink ? { link: fileLink, threadId: detail.id } : undefined}
                   running={selectedAgent ? selectedAgent.status === "running" : running}
                   onContinue={agentPage === "chat" && detail.running?.awaiting_continue !== false ? onContinue : undefined}
@@ -513,9 +548,10 @@ export function ThreadScreen({
       {agentPage === "chat" && followups.length > 0 ? (
         <QueueTray
           items={followups}
-          onSteer={restoring ? undefined : onSteerFollowup}
+          onSteer={onSteerFollowup}
           onDrop={onDropFollowup}
-          onInterrupt={running && !restoring ? onInterrupt : undefined}
+          turnId={turnId}
+          disabled={restoring || asking || (running && !turnId)}
         />
       ) : null}
       {agentPage === "chat" ? <Composer
@@ -526,8 +562,7 @@ export function ThreadScreen({
         // announces two "Answer" controls and a test cannot pick either.
         label={asking ? t("thread.answerBox") : t("thread.message")}
         sendLabel={asking ? t("thread.answer") : running ? t("thread.followUp") : t("thread.send")}
-        steerLabel={running && !asking ? t("thread.steer") : undefined}
-        onSteer={running && !asking ? onSteer : undefined}
+        onInsert={turnId && !asking && onInsert ? (mode, text, extra) => onInsert(mode, turnId, text, extra) : undefined}
         stopLabel={t("thread.stop")}
         onStop={running && !asking ? onStop : undefined}
         disabled={restoring}
@@ -542,7 +577,7 @@ export function ThreadScreen({
         refreshBusy={refreshBusy}
         refreshError={refreshError}
         hideModel={hideModel}
-        slashCommands={!asking}
+        slashCommands={asking ? undefined : pairedSlashCommands}
         onTune={onTune}
         onSubmit={asking ? (text, extra) => {
           if (parseSlashSubmit(text)?.id !== "image") return onAnswer(text)
@@ -553,39 +588,46 @@ export function ThreadScreen({
   )
 }
 
+function turnRow(scroller: HTMLElement, turnId: string): HTMLElement | null {
+  const rows = Array.from(scroller.querySelectorAll<HTMLElement>("[data-phone-turn]"))
+  return rows.find((row) => row.dataset.phoneTurn === turnId && "phonePrompt" in row.dataset)
+    ?? rows.find((row) => row.dataset.phoneTurn === turnId)
+    ?? null
+}
+
 function QueueTray({
   items,
   onSteer,
   onDrop,
-  onInterrupt,
+  turnId,
+  disabled,
 }: {
   items: FollowupView[]
-  onSteer?: (id: string) => void
+  onSteer?: (id: string, mode?: InsertMode, turnId?: string) => void
   onDrop?: (id: string) => void
-  onInterrupt?: (id: string) => void
+  turnId?: string
+  disabled?: boolean
 }) {
   return (
     <div data-testid="followup-queue" className="border-t border-border px-3 py-2">
       <div className="mb-1 flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">{t("queue.waiting")}</p>
-        {onInterrupt ? (
-          <Button variant="ghost" className="h-8 px-2" onClick={() => onInterrupt(items[0].id)}>
-            {t("queue.interrupt")}
-          </Button>
-        ) : null}
       </div>
       <ul className="flex flex-col gap-1">
-        {items.map((item) => (
+        {items.map((item) => {
+          const text = item.text || t("delivery.attachments", { n: item.attachments ?? 0 })
+          return (
           <li key={item.id} className="flex items-center gap-2">
-            <p className="min-w-0 flex-1 truncate text-sm">{item.text}</p>
+            <p className="min-w-0 flex-1 truncate text-sm">{text}</p>
             <Button
               variant="ghost"
               className="h-8 shrink-0 px-2"
-              aria-label={t("queue.steer")}
-              onClick={() => onSteer?.(item.id)}
+              disabled={disabled}
+              onClick={() => turnId ? onSteer?.(item.id, "steer", turnId) : onSteer?.(item.id)}
             >
-              {t("queue.steer")}
+              {turnId ? t("delivery.steer") : t("delivery.sendNow")}
             </Button>
+            {turnId ? <DeliveryMenu disabled={disabled} queuedText={text} onSelect={(mode) => onSteer?.(item.id, mode, turnId)} /> : null}
             <Button
               variant="ghost"
               className="h-8 shrink-0 px-2 text-muted-foreground"
@@ -595,7 +637,8 @@ function QueueTray({
               {t("queue.remove")}
             </Button>
           </li>
-        ))}
+          )
+        })}
       </ul>
     </div>
   )

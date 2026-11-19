@@ -41,8 +41,9 @@ for (const op of [OpSend, OpSteer]) {
     })
     const commit = vi.fn()
     const setError = vi.fn()
-    const deps = { link: () => ({ alive: () => true, rpc }) as unknown as RemoteLink,
-      view: emptyView, commit, setError, setPending: vi.fn(), fail: vi.fn() }
+    const link = { alive: () => true, rpc } as unknown as RemoteLink
+    const deps = { link: () => link,
+      view: () => ({ ...emptyView(), threadId: "completed-goal-thread" }), commit, setError, setPending: vi.fn(), fail: vi.fn() }
     render(<Composer label="Message" sendLabel="Send" onSubmit={(text, extra) => sendPhoneTurn(deps, op, "completed-goal-thread", text, extra)} />)
     const input = screen.getByLabelText("Message")
     const command = "Inspect the assigned operation /goal"

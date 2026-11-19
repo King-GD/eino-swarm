@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react"
 import { GatewayAccountScreen } from "@/components/gateway-account-screen"
+import { gatewaySignInState, type GatewaySignInState } from "@/components/gateway-sign-in"
 import type { PcWebSnapshot } from "@/components/pc-web-execution-status"
 import { loadPhoneMode, savePhoneMode, type PhoneMode } from "@/lib/phone-mode"
 import { installAndroidBack } from "@/lib/android-back"
@@ -22,6 +23,7 @@ type PhoneAccount = {
   user?: { name: string; avatar?: string }
   providers: DirectProvider[]
   openAccount?: (pcWeb?: PcWebSnapshot) => void
+  welcomeSignIn?: GatewaySignInState
   gatewaySourceID?: string
   gatewaySourceIDs?: string[]
   refreshModels?: () => void | Promise<void>
@@ -114,6 +116,7 @@ export function GatewayAccountShell({ children }: { children: ReactNode }) {
       gatewaySourceIDs: account.status === "authorized" ? [account.bootstrap?.models.source_id, account.bootstrap?.gateway_models?.source_id].filter((id): id is string => Boolean(id)) : [],
       refreshModels: refresh, modelsBusy: modelBusy, modelsError: modelError,
       openAccount: (pcWeb) => setDialog({ pcWeb }),
+      welcomeSignIn: gatewaySignInState(account),
       empty: account.status === "authorized" ? <GatewayAccountScreen account={account} onToggleMode={toggleMode}
         modeBusy={modeBusy} modeError={modeError}
         providers={providers} modelBusy={modelBusy} modelError={modelError} pcRequired={mode === "account"} onConnect={connect}

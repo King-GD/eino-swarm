@@ -18,6 +18,7 @@ import {
   type Appearance,
 } from "@/lib/appearance"
 import { ApiError, api } from "@/lib/api"
+import type { DeliveryOptions, InsertMode } from "@/lib/delivery-mode"
 import { parseSlashSubmit } from "@/lib/slash-core"
 import { imageGenerationErrorKey } from "@/lib/messages-image-generation"
 import {
@@ -152,7 +153,7 @@ export interface AppState extends ScheduleSlice {
   renameThread: (id: string, title: string) => Promise<void>
   deleteThread: (id: string) => Promise<void>
   reorderThreads: (ids: string[]) => Promise<void>
-  send: (text: string, images?: SendImage[], opts?: { steer?: boolean; command?: "goal" | "plan"; files?: string[]; fromEventSeq?: number; threadId?: string; historyReport?: boolean }) => Promise<boolean>
+  send: (text: string, images?: SendImage[], opts?: DeliveryOptions & { steer?: boolean; command?: "goal" | "plan"; files?: string[]; fromEventSeq?: number; threadId?: string; historyReport?: boolean }) => Promise<boolean>
   continueFailed: (turnId: string) => Promise<boolean>
   setGoal: (text: string, threadId?: string) => Promise<boolean>
   setPlan: (text: string, threadId?: string) => Promise<boolean>
@@ -170,7 +171,7 @@ export interface AppState extends ScheduleSlice {
   preempt: () => Promise<void>
   retractSteer: (seq: number) => Promise<boolean>
   reviseSteer: (seq: number, text: string) => Promise<void>
-  steerFollowup: (id: string) => Promise<void>
+  steerFollowup: (id: string, mode?: InsertMode, expectedTurnId?: string) => Promise<void>
   deleteFollowup: (id: string) => Promise<boolean>
   requeueFollowup: (id: string, text: string) => Promise<void>
   clearFollowups: () => Promise<void>
@@ -616,9 +617,11 @@ export const useApp = create<AppState>((set, get) => ({
       }
       // Pasted images have nowhere to wait: the follow-up row is text. They
       // inject now rather than being dropped on the floor.
+      const deliveryMode = !command && !opts?.historyReport ? opts?.deliveryMode : undefined
       const queue =
         !command &&
         !opts?.historyReport &&
+        !deliveryMode &&
         !opts?.steer &&
         status.running &&
         !(images && images.length > 0) &&
@@ -651,7 +654,16 @@ export const useApp = create<AppState>((set, get) => ({
       const sentSeq = get().activeId === id ? get().transcript.lastSeq : 0
       // Plan entry must reject a newly busy target, while goals may update its live turn.
       const shown = shownComposerModel(get(), id)
-      const accepted = opts?.historyReport
+      const delivery = deliveryMode && await api.deliver(id, deliveryMode, text, images, opts?.files, shown, opts?.expectedTurnId)
+      if (delivery && delivery.followup) {
+        const item = delivery.followup
+        bumpFollowups()
+        if (get().activeId === id) set((s) => ({ followups: [...s.followups.filter((row) => row.id !== item.id), item] }))
+        return true
+      }
+      const accepted = delivery
+        ? { steered: Boolean(delivery.steer_seq), turn: delivery.turn }
+        : opts?.historyReport
         ? { steered: false, turn: await api.startTurn(id, text, images, opts?.files, undefined, true, shown) }
         : (command === "plan" || command === "image")
           ? { steered: false, turn: await api.startTurn(id, text, images, opts?.files, undefined, undefined, shown) }

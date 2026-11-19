@@ -807,6 +807,8 @@ function AppComposer({
   const interrupt = useApp((s) => s.interrupt)
   const followups = useApp((s) => s.followups)
   const steerFollowup = useApp((s) => s.steerFollowup)
+  const activeTurnId = useApp((s) => s.status.running ? s.status.turn_id : undefined)
+  const waitingForAnswer = useApp((s) => s.status.awaiting_answer)
   const deleteFollowup = useApp((s) => s.deleteFollowup)
   const clearFollowups = useApp((s) => s.clearFollowups)
   const upload = useApp((s) => s.upload)
@@ -884,7 +886,9 @@ function AppComposer({
       prefillToken={prefillToken}
       focusSignal={focusSignal}
       followups={followups}
-      onSteerFollowup={(id) => void steerFollowup(id)}
+      activeTurnId={activeTurnId}
+      waitingForAnswer={waitingForAnswer}
+      onSteerFollowup={(id, mode) => void steerFollowup(id, mode, activeTurnId)}
       onDeleteFollowup={(id) => void deleteFollowup(id)}
       onEditFollowup={(item) => onEditFollowup(item.id, item.text)}
       onClearFollowups={() => void clearFollowups()}

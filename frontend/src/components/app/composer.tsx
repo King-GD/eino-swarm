@@ -14,6 +14,7 @@ import { ComposerDropOverlay } from "@/components/app/composer-drop-overlay"
 import { ComposerImages } from "@/components/app/composer-images"
 import { ComposerQuotes } from "@/components/app/composer-quotes"
 import { ComposerTools } from "@/components/app/composer-tools"
+import { DeliveryMenu } from "@/components/app/delivery-menu"
 import { ModelPicker } from "@/components/app/model-picker"
 import { GoalBanner } from "@/components/app/goal-banner"
 import { PlanBanner } from "@/components/app/plan-banner"
@@ -79,11 +80,14 @@ import { cn } from "@/lib/utils"
 import { activeWake } from "@/lib/schedule-view"
 import { predictionToInsert, predictionsEnabled } from "@/lib/composer-prediction"
 import { useApp } from "@/store/app"
+import type { DeliveryMode, DeliveryOptions, InsertMode } from "@/lib/delivery-mode"
 
 /** The composer. Enter while a turn is running queues a follow-up for after
  *  it finishes. ⌘Enter (or Steer on a queued row) injects into this turn. */
 export function Composer({
   running,
+  activeTurnId,
+  waitingForAnswer,
   compressing,
   models,
   provider,
@@ -149,7 +153,9 @@ export function Composer({
   /** Explicit levels the server offers (low/medium/high), in order. */
   reasoningLevels: string[]
   onReasoningChange: (level: string) => void
-  onSend: (text: string, images?: SendImage[], opts?: { steer?: boolean; files?: string[]; threadId?: string }) => void | boolean | Promise<boolean>
+  activeTurnId?: string
+  waitingForAnswer?: boolean
+  onSend: (text: string, images?: SendImage[], opts?: DeliveryOptions & { files?: string[]; threadId?: string }) => void | boolean | Promise<boolean>
   onResolveThread?: () => Promise<string | undefined>
   draftKey?: string
   onStop: () => void
@@ -169,7 +175,7 @@ export function Composer({
   quotes?: Quote[]
   onQuotesChange?: (quotes: Quote[]) => void
   followups?: Followup[]
-  onSteerFollowup?: (id: string) => void
+  onSteerFollowup?: (id: string, mode?: InsertMode) => void
   onDeleteFollowup?: (id: string) => void
   /** Pull this waiting row into the box. The caller removes it from the tray. */
   onEditFollowup?: (item: Followup) => void
@@ -398,7 +404,7 @@ export function Composer({
     setText(next)
   }
 
-  const submit = async (opts?: { steer?: boolean }) => {
+  const submit = async (mode: DeliveryMode = "queue") => {
     if (submittingRef.current || disabled || speechInput.busy) return
     if (slash?.id === "side") {
       openSideQuestion(slash.arg)
@@ -468,7 +474,8 @@ export function Composer({
         const images = imageList.length > 0 ? await toSendImages(imageList) : undefined
         const files = uploaded.map((a) => a.rel_path).filter(Boolean)
         const result = onSend(payload, images, {
-          steer: Boolean(opts?.steer), files: files.length > 0 ? files : undefined,
+          deliveryMode: mode, expectedTurnId: mode === "queue" ? undefined : activeTurnId,
+          files: files.length > 0 ? files : undefined,
           ...(threadId ? { threadId } : {}),
         })
         accepted = result instanceof Promise ? await result : result
@@ -612,7 +619,9 @@ export function Composer({
 
           <QueueTray
             items={followups ?? []}
-            onSteer={(id) => onSteerFollowup?.(id)}
+            turnId={activeTurnId}
+            disabled={disabled || waitingForAnswer || (running && !activeTurnId)}
+            onSteer={(id, mode) => onSteerFollowup?.(id, mode)}
             onDelete={(id) => onDeleteFollowup?.(id)}
             onEdit={(item) => onEditFollowup?.(item)}
             onClear={() => onClearFollowups?.()}
@@ -803,7 +812,7 @@ export function Composer({
               // not be preventDefault'd or the IME cannot commit.
               if (!enterSendsMessage(e.nativeEvent, composingRef.current)) return
               e.preventDefault()
-              void submit({ steer: e.metaKey || e.ctrlKey })
+              void submit((e.metaKey || e.ctrlKey) && activeTurnId && !waitingForAnswer ? "steer" : "queue")
             }}
           />
 
@@ -911,6 +920,9 @@ export function Composer({
                 </Button>
               ) : null}
               <VoiceInputControl control={speechInput} />
+              {running && activeTurnId && !waitingForAnswer && corner.send && !slash ? (
+                <DeliveryMenu disabled={sendDisabled} onSelect={(mode) => void submit(mode)} />
+              ) : null}
               {corner.send ? (
                 <Button
                   size="icon"

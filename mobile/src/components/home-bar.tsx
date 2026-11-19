@@ -11,11 +11,13 @@ export function HomeBar({
   query,
   onQuery,
   onNewChat,
+  onSearchFocus,
   disabled,
 }: {
   query: string
   onQuery: (q: string) => void
   onNewChat: () => void
+  onSearchFocus?: (focused: boolean) => void
   disabled?: boolean
 }) {
   return (
@@ -31,8 +33,10 @@ export function HomeBar({
             aria-label={t("home.search")}
             placeholder={t("home.search")}
             value={query}
-            className="h-9 rounded-full bg-muted pl-9 pr-10"
+            className="h-9 rounded-full bg-muted pl-9 pr-10 text-base"
             onChange={(e) => onQuery(e.target.value)}
+            onFocus={() => onSearchFocus?.(true)}
+            onBlur={() => onSearchFocus?.(false)}
           />
           {query ? (
             <button

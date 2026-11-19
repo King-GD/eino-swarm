@@ -100,7 +100,7 @@ test("account overlays keep the title and close control inside the safe area", a
   const cdp = await page.context().newCDPSession(page)
   await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets })
   await fixture(page)
-  await page.goto("/")
+  await page.goto("/?mock=1&tick=0")
   expect(await page.locator("body").evaluate((body) => Number.parseFloat(getComputedStyle(body).paddingTop))).toBe(insets.top)
 
   const checkOverlay = async (name: string) => {
@@ -126,9 +126,10 @@ test("account overlays keep the title and close control inside the safe area", a
     await expect(dialog).toHaveCount(0)
   }
 
-  await page.getByRole("button", { name: "登录" }).click()
+  await page.getByRole("button", { name: "返回", exact: true }).click()
+  await page.getByRole("button", { name: "菜单" }).click()
+  await page.getByRole("menuitem", { name: "用户中心" }).click()
   await checkOverlay("signed-out-safe-area")
-  await expect(page.getByRole("button", { name: "其他方式", exact: true })).toBeVisible()
 
   await approved(page)
   await page.goto("/?mock=1&tick=0")
@@ -140,21 +141,26 @@ test("account overlays keep the title and close control inside the safe area", a
   await expect(page.getByRole("tab", { name: "Walkthrough PC", exact: true })).toHaveAttribute("aria-selected", "true")
 })
 
-test("default account sign-in requires no server configuration and review hides all other resources", async ({ page }, testInfo) => {
+test("LOCAL welcome signs in with one tap and keeps review on the same page", async ({ page }, testInfo) => {
   const calls = await fixture(page)
   await page.goto("/")
+  const welcome = page.getByRole("heading", { name: "登录 zwai 账号", exact: true })
+  await expect(welcome).toBeVisible()
   await page.getByRole("button", { name: "登录", exact: true }).click()
   await expect(page.getByRole("button", { name: "其他服务器", exact: true })).toHaveCount(0)
   await expect(page.getByLabel("服务器地址")).toHaveCount(0)
   await expect(page.getByLabel("手机直聊联网工具", { exact: true })).toHaveCount(0)
   await expect(page.getByLabel("电脑会话联网工具", { exact: true })).toHaveCount(0)
-  await page.getByRole("dialog", { name: "用户中心", exact: true }).getByRole("button", { name: "登录", exact: true }).click()
   await expect(page.getByText("等待管理员审核")).toBeVisible({ timeout: 12_000 })
+  await expect(welcome).toBeVisible()
+  await expect(page.getByRole("dialog", { name: "用户中心", exact: true })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "其他方式", exact: true })).toHaveCount(0)
   await expect(page.getByRole("button", { name: "扫描二维码" })).toHaveCount(0)
   await expect(page.getByLabel("消息")).toHaveCount(0)
   await expect(page.getByRole("heading", { name: "我的电脑" })).toHaveCount(0)
   expect(calls.filter((c) => !["/client/api/v1/auth/mobile/start", "/client/api/v1/auth/mobile/poll", "/client/api/v1/auth/sso/corporate/start"].includes(c.path))).toEqual([])
   const start = calls.find((c) => c.path.endsWith("/start") && c.path.includes("/mobile/"))!
+  expect(calls.filter((c) => c.path === "/client/api/v1/auth/mobile/start")).toHaveLength(1)
   expect(start.body).toMatchObject({ candidate_token: expect.stringMatching(/^agm_[a-f0-9]{64}$/), code_challenge: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/) })
   await noOverflow(page)
   await page.screenshot({ path: testInfo.outputPath("account-review.png") })
@@ -237,7 +243,6 @@ test("a fresh sign-in opens the account's only online PC without scanning", asyn
   const calls = await fixture(page, { apiEnabled: false, review: "authorized", hosts: [workPC] })
   await page.goto("/")
   await page.getByRole("button", { name: "登录", exact: true }).click()
-  await page.getByRole("dialog", { name: "用户中心", exact: true }).getByRole("button", { name: "登录", exact: true }).click()
   await expect(page.getByRole("tab", { name: "办公电脑" })).toHaveAttribute("aria-selected", "true", { timeout: 20_000 })
   expect(connectCalls(calls)).toHaveLength(1)
   expect(calls.filter((call) => call.path.includes("pairings"))).toEqual([])

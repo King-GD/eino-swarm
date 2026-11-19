@@ -102,7 +102,7 @@ test("a project carries what one conversation learned into the next", async ({
   const threadID = await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id")
   expect(threadID).toBeTruthy()
   const accepted = page.waitForResponse((response) => response.request().method() === "POST"
-    && new URL(response.url()).pathname === `/api/threads/${threadID}/steer`)
+    && new URL(response.url()).pathname === `/api/threads/${threadID}/deliver`)
   await send(page, first)
   const started = await accepted
   expect(started.status()).toBe(202)

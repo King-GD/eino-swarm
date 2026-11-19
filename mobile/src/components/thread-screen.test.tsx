@@ -30,7 +30,7 @@ describe("ThreadScreen", () => {
     })
     render(<ThreadScreen detail={{ id: "t1", title: "talk", running: { thread_id: "t1", title: "talk" } }}
       blocks={blocks} hasMore caughtUp onOlder={onOlder}
-      onBack={vi.fn()} onSend={vi.fn()} onSteer={vi.fn()} onStop={vi.fn()}
+      onBack={vi.fn()} onSend={vi.fn()} onInsert={vi.fn()} onStop={vi.fn()}
       onAnswer={vi.fn()} onAnswerStructured={vi.fn()} />)
     expect(screen.getByText("No visible messages in this turn yet. Open earlier history.")).toBeVisible()
     fireEvent.click(screen.getByRole("button", { name: "Earlier" }))
@@ -51,7 +51,7 @@ describe("ThreadScreen", () => {
       thread_id: "t1", created_at: "2026-09-29T00:00:00Z", text: "", ...event,
     } as RemoteEvent)
     const handlers = {
-      onBack: vi.fn(), onSend: vi.fn(), onSteer: vi.fn(), onStop: vi.fn(),
+      onBack: vi.fn(), onSend: vi.fn(), onInsert: vi.fn(), onStop: vi.fn(),
       onAnswer: vi.fn(), onAnswerStructured: vi.fn(),
     }
     const view = render(<ThreadScreen detail={{ id: "t1", title: "talk" }} blocks={blocks} {...handlers} />)
@@ -93,7 +93,7 @@ describe("ThreadScreen", () => {
       thread_id: "t1", created_at: "2026-09-25T00:00:00Z", text: "", ...event,
     } as RemoteEvent)
     render(<ThreadScreen detail={{ id: "t1", title: "talk" }} blocks={blocks}
-      onBack={vi.fn()} onSend={vi.fn()} onSteer={vi.fn()} onStop={vi.fn()}
+      onBack={vi.fn()} onSend={vi.fn()} onInsert={vi.fn()} onStop={vi.fn()}
       onAnswer={vi.fn()} onAnswerStructured={vi.fn()} />)
     expect(screen.getByText("manager answer")).toBeInTheDocument()
     expect(screen.queryByText("worker answer")).not.toBeInTheDocument()
@@ -113,7 +113,7 @@ describe("ThreadScreen", () => {
       created_at: "2026-09-25T00:00:00Z",
     })
     const handlers = {
-      onBack, onSend: vi.fn(), onSteer: vi.fn(), onStop: vi.fn(),
+      onBack, onSend: vi.fn(), onInsert: vi.fn(), onStop: vi.fn(),
       onAnswer: vi.fn(), onAnswerStructured: vi.fn(),
     }
     const view = render(<ThreadScreen detail={{ id: "t1", title: "talk" }} blocks={blocks} {...handlers} />)
@@ -146,7 +146,7 @@ describe("ThreadScreen", () => {
     let blocks = applyEvent([], { thread_id: "t1", seq: 1, kind: "spawned", agent_id: "w1", role: "reader", text: "", created_at: "2026-09-25T00:00:00Z" })
     blocks = applyEvent(blocks, { thread_id: "t1", seq: 2, kind: "finished", agent_id: "w1", text: "", err: "worker timed out", created_at: "2026-09-25T00:00:01Z" })
     render(<ThreadScreen detail={{ id: "t1", title: "talk" }} blocks={blocks}
-      onBack={vi.fn()} onSend={vi.fn()} onSteer={vi.fn()} onStop={vi.fn()}
+      onBack={vi.fn()} onSend={vi.fn()} onInsert={vi.fn()} onStop={vi.fn()}
       onAnswer={vi.fn()} onAnswerStructured={vi.fn()} />)
     fireEvent.click(screen.getByRole("button", { name: /agents/i }))
     fireEvent.click(screen.getByRole("button", { name: /reader.*w1.*failed/i }))
@@ -161,7 +161,7 @@ describe("ThreadScreen", () => {
         blocks={[{ id: "a1", kind: "answer", text: "alpha beta" }]}
         onBack={vi.fn()}
         onSend={onSend}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -197,7 +197,7 @@ describe("ThreadScreen", () => {
     render(<ThreadScreen detail={{ id: "t1", title: "talk" }}
       fileLink={link}
       blocks={[{ id: "a1", kind: "answer", text: "Keep two hosts." }]}
-      onBack={vi.fn()} onSend={onSend} onSteer={vi.fn()} onStop={vi.fn()}
+      onBack={vi.fn()} onSend={onSend} onInsert={vi.fn()} onStop={vi.fn()}
       onAnswer={vi.fn()} onAnswerStructured={vi.fn()} />)
     const range = document.createRange()
     range.selectNodeContents(screen.getByText("Keep two hosts."))
@@ -227,7 +227,7 @@ describe("ThreadScreen", () => {
         blocks={[{ id: "a1", kind: "answer", text: "alpha beta" }]}
         onBack={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -251,7 +251,7 @@ describe("ThreadScreen", () => {
         blocks={[{ id: "tool1", kind: "tool", text: "opened", toolName: "read_file" }]}
         onBack={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -273,7 +273,7 @@ describe("ThreadScreen", () => {
       detail: { id: "t1", title: "talk" },
       onBack: vi.fn(),
       onSend: vi.fn(),
-      onSteer: vi.fn(),
+      onInsert: vi.fn(),
       onStop: vi.fn(),
       onAnswer: vi.fn(),
       onAnswerStructured: vi.fn(),
@@ -303,7 +303,7 @@ describe("ThreadScreen", () => {
         blocks={[{ id: "r1", kind: "reasoning", text: "checked the path" }]}
         onBack={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -315,19 +315,19 @@ describe("ThreadScreen", () => {
 
   it("maps send, steer and stop onto the live thread", () => {
     const onSend = vi.fn()
-    const onSteer = vi.fn()
+    const onInsert = vi.fn()
     const onStop = vi.fn()
     render(
       <ThreadScreen
         detail={{
           id: "t1",
           title: "live",
-          running: { thread_id: "t1", title: "live", action: "write" },
+          running: { thread_id: "t1", turn_id: "tn1", title: "live", action: "write" },
         }}
         blocks={[{ id: "1", kind: "answer", text: "done bit" }]}
         onBack={vi.fn()}
         onSend={onSend}
-        onSteer={onSteer}
+        onInsert={onInsert}
         onStop={onStop}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -343,8 +343,9 @@ describe("ThreadScreen", () => {
     fireEvent.change(screen.getByLabelText("Message"), {
       target: { value: "nudge" },
     })
-    fireEvent.click(screen.getByRole("button", { name: "Steer" }))
-    expect(onSteer).toHaveBeenCalledWith("nudge")
+    fireEvent.click(screen.getByRole("button", { name: "Send options" }))
+    fireEvent.click(screen.getByRole("menuitem", { name: "Insert into this turn" }))
+    expect(onInsert).toHaveBeenCalledWith("steer", "tn1", "nudge", undefined)
     expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument()
     const transcript = screen.getByTestId("transcript")
     expect(transcript).toHaveClass("min-h-0")
@@ -388,7 +389,7 @@ describe("ThreadScreen", () => {
         ]}
         onBack={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={onAnswerStructured}
@@ -426,7 +427,7 @@ describe("ThreadScreen", () => {
         blocks={[{ id: "1", kind: "notice", text: "A wait is armed." }]}
         onBack={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -466,7 +467,7 @@ describe("ThreadScreen", () => {
         blocks={[]}
         onBack={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -496,7 +497,7 @@ describe("ThreadScreen", () => {
         blocks={[]}
         onBack={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -521,7 +522,7 @@ describe("ThreadScreen", () => {
         blocks={[]}
         onBack={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -543,7 +544,7 @@ describe("ThreadScreen", () => {
         blocks={[]}
         onBack={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -564,7 +565,7 @@ describe("ThreadScreen", () => {
         blocks={[]}
         onBack={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -591,7 +592,7 @@ describe("ThreadScreen", () => {
         blocks={[]}
         onBack={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -621,7 +622,7 @@ describe("ThreadScreen", () => {
         ]}
         onBack={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -646,7 +647,7 @@ describe("ThreadScreen", () => {
         onBack={vi.fn()}
         onOlder={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -668,7 +669,7 @@ describe("ThreadScreen", () => {
         onBack={vi.fn()}
         onOlder={onOlder}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -695,7 +696,7 @@ describe("ThreadScreen", () => {
       onBack: vi.fn(),
       onOlder,
       onSend: vi.fn(),
-      onSteer: vi.fn(),
+      onInsert: vi.fn(),
       onStop: vi.fn(),
       onAnswer: vi.fn(),
       onAnswerStructured: vi.fn(),
@@ -712,39 +713,15 @@ describe("ThreadScreen", () => {
     expect(onOlder).toHaveBeenCalledTimes(2)
   })
 
-  it("hides interrupt until a follow-up is actually waiting", () => {
-    const onInterrupt = vi.fn()
-    const detail = {
-      id: "t1",
-      title: "live",
-      running: { thread_id: "t1", title: "live" },
-    }
-    const handlers = {
-      onBack: vi.fn(),
-      onSend: vi.fn(),
-      onSteer: vi.fn(),
-      onStop: vi.fn(),
-      onAnswer: vi.fn(),
-      onAnswerStructured: vi.fn(),
-      onInterrupt,
-    }
-    const view = render(<ThreadScreen detail={detail} blocks={[]} {...handlers} />)
-    expect(screen.queryByRole("button", { name: "Interrupt" })).not.toBeInTheDocument()
-    expect(within(screen.getByRole("banner")).getByRole("button", { name: "Stop" })).toBeInTheDocument()
-    view.rerender(
-      <ThreadScreen
-        detail={detail}
-        blocks={[]}
-        followups={[{ id: "f1", seq: 1, text: "later" }]}
-        {...handlers}
-      />,
-    )
-    fireEvent.click(screen.getByRole("button", { name: "Interrupt" }))
-    expect(onInterrupt).toHaveBeenCalledTimes(1)
-    expect(onInterrupt).toHaveBeenCalledWith("f1")
-    expect(screen.getByTestId("followup-queue")).toContainElement(
-      screen.getByRole("button", { name: "Interrupt" }),
-    )
+  it("runs the selected queue row without substituting the head", () => {
+    const onSteerFollowup = vi.fn()
+    render(<ThreadScreen detail={{ id: "t1", title: "live", running: { thread_id: "t1", title: "live", turn_id: "turn-a" } }}
+      blocks={[]} onBack={vi.fn()} onSend={vi.fn()} onStop={vi.fn()} onAnswer={vi.fn()} onAnswerStructured={vi.fn()}
+      followups={[{ id: "f1", seq: 1, text: "later" }, { id: "f2", seq: 2, text: "correction" }]} onSteerFollowup={onSteerFollowup} />)
+    fireEvent.click(screen.getByRole("button", { name: "Send options for correction" }))
+    fireEvent.click(screen.getByRole("menuitem", { name: "Interrupt and insert" }))
+    expect(onSteerFollowup).toHaveBeenCalledTimes(1)
+    expect(onSteerFollowup).toHaveBeenCalledWith("f2", "interrupt", "turn-a")
   })
 
   it("loads earlier rows when the finger pulls down at the top", () => {
@@ -757,7 +734,7 @@ describe("ThreadScreen", () => {
         onBack={vi.fn()}
         onOlder={onOlder}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -779,7 +756,7 @@ describe("ThreadScreen", () => {
         blocks={[{ id: "1", kind: "answer", text: "now" }]}
         onBack={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -797,7 +774,7 @@ describe("ThreadScreen", () => {
         blocks={[{ id: "1", kind: "answer", text: "now" }]}
         onBack={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -829,7 +806,7 @@ describe("ThreadScreen", () => {
         blocks={[{ id: "1", kind: "answer", text: "now" }]}
         onBack={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -847,29 +824,29 @@ describe("ThreadScreen", () => {
     setLocale("en")
     const { rerender } = render(
       <ThreadScreen
-        detail={{ id: "t1", title: "live", running: { thread_id: "t1", title: "live" } }}
+        detail={{ id: "t1", title: "live", running: { thread_id: "t1", title: "live", turn_id: "tn1" } }}
         blocks={[]}
         onBack={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
       />,
     )
     expect(screen.queryByText("Queued after this turn")).not.toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Steer" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Send options" })).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "follow-up" } })
     expect(screen.queryByText("Queued after this turn")).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Follow-up" })).toBeEnabled()
-    expect(screen.getByRole("button", { name: "Steer" })).toBeEnabled()
+    expect(screen.getByRole("button", { name: "Send options" })).toBeEnabled()
     rerender(
       <ThreadScreen
         detail={{ id: "t1", title: "live" }}
         blocks={[]}
         onBack={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -894,7 +871,7 @@ describe("ThreadScreen", () => {
         blocks={[]}
         onBack={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={onAnswer}
         onAnswerStructured={vi.fn()}
@@ -917,7 +894,7 @@ describe("ThreadScreen", () => {
         onBack={vi.fn()}
         onOlder={onOlder}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}
@@ -944,7 +921,7 @@ describe("ThreadScreen", () => {
         caughtUp={false}
         onBack={vi.fn()}
         onSend={vi.fn()}
-        onSteer={vi.fn()}
+        onInsert={vi.fn()}
         onStop={vi.fn()}
         onAnswer={vi.fn()}
         onAnswerStructured={vi.fn()}

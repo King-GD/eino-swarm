@@ -23,6 +23,7 @@ const (
 	OpRead                = "read"
 	OpStart               = "start"
 	OpSend                = "send"
+	OpDeliver             = "deliver"
 	OpSteer               = "steer"
 	OpStop                = "stop"
 	OpContinue            = "continue"
@@ -89,24 +90,29 @@ func plaintextBudget() int {
 // Request is the slim RPC the phone sends over a sealed pairlink frame.
 type Request struct {
 	// ProductMode is explicit install-wide debug intent, never phone credentials.
-	ProductMode string          `json:"product_mode,omitempty"`
-	V           int             `json:"v"`
-	ID          string          `json:"id"`
-	Op          string          `json:"op"`
-	Cursor      string          `json:"cursor,omitempty"`
-	ThreadID    string          `json:"thread_id,omitempty"`
-	ProjectID   string          `json:"project_id,omitempty"`
-	Text        string          `json:"text,omitempty"`
-	CallID      string          `json:"call_id,omitempty"`
-	Answers     json.RawMessage `json:"answers,omitempty"`
+	ProductMode  string          `json:"product_mode,omitempty"`
+	V            int             `json:"v"`
+	ID           string          `json:"id"`
+	Op           string          `json:"op"`
+	Cursor       string          `json:"cursor,omitempty"`
+	ThreadID     string          `json:"thread_id,omitempty"`
+	ProjectID    string          `json:"project_id,omitempty"`
+	Text         string          `json:"text,omitempty"`
+	DeliveryMode string          `json:"mode,omitempty"`
+	ExpectedTurn string          `json:"expected_turn_id,omitempty"`
+	CallID       string          `json:"call_id,omitempty"`
+	Answers      json.RawMessage `json:"answers,omitempty"`
 	// Continue is explicit so a missing decision cannot decline a paused turn.
 	Continue *bool `json:"continue,omitempty"`
 	Since    int64 `json:"since,omitempty"`
 	// IncludeDetail opens a conversation in the watch ready reply. Older hosts
 	// ignore it; the phone can still request open separately.
-	IncludeDetail bool  `json:"include_detail,omitempty"`
-	CompletedSeq  int64 `json:"completed_seq,omitempty"`
-	Before        int64 `json:"before,omitempty"`
+	IncludeDetail  bool  `json:"include_detail,omitempty"`
+	CompletedSeq   int64 `json:"completed_seq,omitempty"`
+	Before         int64 `json:"before,omitempty"`
+	CompactHistory bool  `json:"compact_history,omitempty"`
+	WorkFrom       int64 `json:"work_from,omitempty"`
+	WorkThrough    int64 `json:"work_through,omitempty"`
 	// ProviderID and Model switch the conversation's endpoint. Empty leaves it.
 	ProviderID string `json:"provider_id,omitempty"`
 	Model      string `json:"model,omitempty"`
@@ -187,6 +193,9 @@ type Response struct {
 	Seq                   int64                      `json:"seq,omitempty"`
 	Event                 *EventView                 `json:"event,omitempty"`
 	Events                []EventView                `json:"events,omitempty"`
+	HistoryWork           []HistoryWork              `json:"history_work,omitempty"`
+	FocusSeq              int64                      `json:"focus_seq,omitempty"`
+	HistoryBefore         int64                      `json:"history_before,omitempty"`
 	Status                *WatchStatus               `json:"status,omitempty"`
 	Models                []ModelView                `json:"models,omitempty"`
 	ReasoningLevels       []string                   `json:"reasoning_levels,omitempty"`
@@ -194,6 +203,7 @@ type Response struct {
 	Put                   *PutView                   `json:"put,omitempty"`
 	Groups                []ThreadGroup              `json:"groups,omitempty"`
 	Followups             *[]FollowupView            `json:"followups,omitempty"`
+	Delivery              *DeliveryView              `json:"delivery,omitempty"`
 	Clients               *ClientCatalog             `json:"clients,omitempty"`
 	ClientView            *ClientView                `json:"client_view,omitempty"`
 	Files                 []FileView                 `json:"files,omitempty"`
@@ -206,6 +216,14 @@ type Response struct {
 	MemoryAvailable     *bool                     `json:"memory_available,omitempty"`
 	TimeoutSettings     *config.TimeoutSettings   `json:"timeout_settings,omitempty"`
 	WebExecutionStatus  *tools.WebExecutionStatus `json:"web_execution_status,omitempty"`
+}
+
+// HistoryWork marks an inclusive interval of deferred transcript details.
+// Its sequence bounds are cursors, separate from the durable event payloads.
+type HistoryWork struct {
+	From     int64    `json:"from"`
+	Through  int64    `json:"through"`
+	AgentIDs []string `json:"agent_ids,omitempty"`
 }
 
 // FileView is one PC workspace entry, including upload provenance.
@@ -288,9 +306,16 @@ type ThreadGroup struct {
 // FollowupView is a message waiting until this turn finishes. The phone
 // paints it immediately; the transcript will not mention it until then.
 type FollowupView struct {
-	ID   string `json:"id"`
-	Seq  int64  `json:"seq"`
-	Text string `json:"text"`
+	ID          string `json:"id"`
+	Seq         int64  `json:"seq"`
+	Text        string `json:"text"`
+	Attachments int    `json:"attachments,omitempty"`
+}
+
+type DeliveryView struct {
+	TurnID    string `json:"turn_id,omitempty"`
+	SteerSeq  int64  `json:"steer_seq,omitempty"`
+	Preempted bool   `json:"preempted,omitempty"`
 }
 
 // ModelView is one composer row. No endpoint, key, or token window: the phone

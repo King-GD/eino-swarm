@@ -1,6 +1,7 @@
 import { notifyEngineRestoring } from "./engine-startup"
 import { desktopProcessID, desktopShell } from "./shell"
 import { readLocalePref, resolveLocale, t } from "./i18n"
+import type { DeliveryMode, InsertMode } from "./delivery-mode"
 
 import type {
   Attachment,
@@ -744,6 +745,11 @@ export const api = {
     request<{ followups: Followup[] }>(`/api/threads/${id}/followups`).then(
       (r) => r.followups ?? [],
     ),
+  deliver: (id: string, mode: DeliveryMode, text: string, images?: SendImage[], files?: string[], model?: string, expectedTurnId?: string) =>
+    request<{ turn?: Turn; followup?: Followup; turn_id?: string; steer_seq?: number; preempted?: boolean }>(`/api/threads/${id}/deliver`, {
+      method: "POST",
+      body: JSON.stringify({ ...turnBody(text, images, files, undefined, undefined, model), mode, expected_turn_id: expectedTurnId }),
+    }),
   enqueueFollowup: (id: string, text: string) =>
     request<{ followup: Followup }>(`/api/threads/${id}/followups`, {
       method: "POST",
@@ -758,9 +764,10 @@ export const api = {
     }).then((r) => r.followup),
   /** Injects a queued row into the running turn. A stopped turn starts it
    *  as the next one (`steered: false` plus `turn`), same as `steer`. */
-  steerFollowup: (id: string, fid: string) =>
+  steerFollowup: (id: string, fid: string, mode?: InsertMode, expectedTurnId?: string) =>
     request<{ steered: boolean; turn?: Turn }>(`/api/threads/${id}/followups/${fid}/steer`, {
       method: "POST",
+      ...(mode ? { body: JSON.stringify({ mode, expected_turn_id: expectedTurnId }) } : {}),
     }),
   /** Aborts the current manager tool/generate so unread steering lands now.
    *  Workers stay up. Stop is still POST …/interrupt. */

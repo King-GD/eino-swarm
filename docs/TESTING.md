@@ -1,5 +1,20 @@
 # Testing
 
+Phone history and navigation are covered by `mobile/e2e/conversation-open.spec.ts`
+in Chromium and iPhone WebKit. The compact fixture exercises three turns,
+one-tap Earlier, deferred work expansion and shared Chat/PC scrolling.
+`internal/remote/log_compact_test.go` checks the encrypted watch and expansion,
+hundreds of work events between answers, ask receipts, and the frame budget.
+For native back, `testLeftEdgeSwipeReturnsThroughAgentPages` in
+`mobile/e2e/ios-wait-layout.swift` also starts a fast swipe 30 points from the
+left edge, within the content viewport.
+
+The inbox search regression in `mobile/e2e/composer-layout.spec.ts` checks the
+search font and visual viewport layout on both phone browser profiles.
+The packaged XCTest `mobile/e2e/ios-inbox-search.swift` checks header, matching
+row, search and New chat bounds against the iOS keyboard, then confirms query
+and layout recovery after dismissal. Use `history=compact` with the offline iOS fixture.
+
 Current phone regression fixtures declare negotiated source capabilities and paired
 LOCAL policy explicitly. Cached PC audio alone does not authorize Gateway audio;
 an unavailable cache may still leave a disabled Gateway snapshot. Connection tests
@@ -4998,7 +5013,7 @@ lands in that folder even when `threads` omitted it, and why a live row
 with no project stays out of Recents.
 `mobile/src/lib/inbox-preview.test.ts` pulls findings and drops the tool name.
 `mobile/src/components/host-chrome.test.tsx` is why the menu prints the package version.
-`mobile/src/components/thread-screen.test.tsx` is why an empty earlier page does not immediately ask again, why Interrupt is only on a queued follow-up and names the queue head, and why a standing `/goal` is
+`mobile/src/components/thread-screen.test.tsx` is why an empty earlier page does not immediately ask again, why a queued action targets the selected message, and why a standing `/goal` is
 Pursuing / Blocked / Paused with Start only while unfinished, a completed goal
 hides its strip without clearing stored state. `mobile/src/lib/transcript-goal.test.ts`
 retains a localized completion notice from the JSON `goal_complete` payload.
@@ -5008,12 +5023,17 @@ objective stays one truncated line so that chrome cannot cover the composer,
 and Earlier sits outside the scroller so a live-edge tail can still page.
 A scroll that is already at the top does not itself ask for another page.
 After the bounded opening backfill, further requests use Earlier or a pull.
-Interrupt is on a queued follow-up,
-not on every running turn. `mobile/src/lib/phone-turn.test.ts` verifies that
-this action promotes the selected waiting message before preempting the current
-manager step, leaves later messages queued, and tolerates a steer already read
-before the second RPC; `mobile/e2e/walkthrough.spec.ts` exercises the button
-through the phone screen against a scripted PC.
+The send menu and each live queue row offer insertion into the next manager
+request and immediate interruption. `mobile/src/lib/phone-turn.test.ts`
+checks the single RPC with selected row and expected turn IDs.
+`mobile/e2e/walkthrough.spec.ts` drives all three choices in the paired phone
+composer. `mobile/e2e/ios-followup-delivery.swift` drives the same packaged
+web assets in iOS with its native keyboard and scripted PC. The real HTTP
+model boundary, selected-row rollback, HTTP and encrypted Pairlink admission
+are covered by `internal/engine/followup_delivery_test.go`,
+`internal/server/followup_failure_test.go` and
+`internal/remote/followup_relay_test.go`. The old split RPC is the fault
+switch in `models/lifecycle/FollowupDelivery.tla`.
 The same walkthrough selects answer text and checks that Add to chat stays near
 the highlight: below the native menu's reserved space when there is room, or
 in its own row below a selection at the transcript bottom. The docked-row
@@ -7652,10 +7672,13 @@ Several things are tested here, some as pure logic and some in jsdom:
   Filtering is
   prefix-or-contains, compact's hint is a percentage (hidden when used is 0),
   and unknown names are not commands. The menu is a listbox; the textarea
-  owns the keys. A phone PC conversation uses the same token rules for goal
-  and plan only: `mobile/src/lib/composer-commands.test.ts`,
-  `mobile/src/components/composer-slash.test.tsx`, and
-  `mobile/e2e/composer-commands.spec.ts`. Compact stays on the PC.
+  owns the keys. A paired phone composer lists goal, plan and image from Add
+  and from a typed slash, including after draft text. A leading command pick
+  preserves the draft as its argument. Direct chat lists image for an authorized
+  source and tests its request and result through a real menu pick. See
+  `mobile/src/lib/composer-commands.test.ts`, `mobile/src/components/composer-slash.test.tsx`,
+  `mobile/e2e/composer-commands.spec.ts`, `mobile/e2e/direct-image-generation.spec.ts`
+  and `mobile/e2e/ios-composer-commands.swift`.
 - **`src/lib/stream.ts`**, against a fake `EventSource`: every kind the server
   sends is subscribed to (including `goal_session`), a review that lands after
   `done` is delivered, the event name wins over a disagreeing payload, and a
@@ -7941,6 +7964,11 @@ fixture with the final IPA public bytes. It must display and operate the real
 Browser sheet, including sign-in, review isolation, authorization and return;
 launching the app or receiving a successful browser-open acknowledgement alone
 does not verify presentation.
+
+In a fresh LOCAL app container,
+`testNativeLocalWelcomeStartsAuthorizationWithOneTap` checks that one welcome
+tap opens the actual Browser sheet, then verifies the review status is visible
+on the welcome page after closing the sheet.
 
 Use `mobile/scripts/ios-layout-fixture.py` with
 `IOS_LAYOUT_SCENARIO=ios-scene-lifecycle.swift`,
@@ -8798,6 +8826,17 @@ the idle sentence on a stored decline and must break `StoppedViewIsIdle` and
 pause, a closing decline with a later peer notice, and the idle stopped
 sentence reachable. The model does not check worker cancellation time or that
 the React card reads the same store field.
+`models/lifecycle/WorkerCollectionAdmission.tla` checks the same wait's
+admission. The resume receipt withdraws the in-memory waiter before the
+runtime lock is released, a later decline is not stored, and a durable Stop
+still blocks the resume. `collection-admission-release-later` restores the
+post-unlock window and must break `AdmissionClosedAfterResume`.
+`collection-admission-decline-skips-log` restores appending the decline
+without reading the stored resume and must break `NoDeclineAfterResume`.
+`collection-admission-stop-ignored` must break `StopPrecedesResume`. The
+reach witnesses keep a committed resume, a decline that wins first, a refused
+late decline, and a Stop that blocks the resume. The model does not check
+worker execution time.
 
 `models/provider/RouteRecovery.tla` (`make model-check`) checks one logical
 call: three confirmed refusals end it, a success or Stop or a different error

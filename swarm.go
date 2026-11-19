@@ -204,7 +204,8 @@ type Registry struct {
 
 	// mgrInbox holds steering messages for the manager agent, drained by
 	// ManagerMiddleware at the manager's next turn boundary.
-	mgrInbox []*schema.Message
+	mgrInbox      []*schema.Message
+	readSteerSeqs map[int64]struct{}
 
 	// epochs are in-flight manager tool/generate cancels. Interrupt
 	// injection cancels these without cancelling the turn or the workers.
@@ -393,16 +394,31 @@ func (r *Registry) SteerManager(text string) bool {
 // pasted image rides along with the steering text. False when nothing is
 // running to steer.
 func (r *Registry) SteerManagerMessage(msg *schema.Message) bool {
+	accepted, _ := r.deliverManagerSteer(msg, false)
+	return accepted
+}
+
+// SteerManagerMessageNow arms cancellation while the new input is still in
+// the inbox. A concurrent model boundary cannot drain it between the two.
+func (r *Registry) SteerManagerMessageNow(msg *schema.Message) (accepted, interrupted bool) {
+	return r.deliverManagerSteer(msg, true)
+}
+
+func (r *Registry) deliverManagerSteer(msg *schema.Message, interrupt bool) (bool, bool) {
 	if msg == nil {
-		return false
+		return false, false
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
-		return false
+		return false, false
 	}
 	r.mgrInbox = append(r.mgrInbox, msg)
-	return true
+	if interrupt && len(r.epochs) > 0 {
+		r.preemptLocked()
+		return true, true
+	}
+	return true, false
 }
 
 // TakePendingSteers removes and returns steering messages that were queued but
@@ -465,9 +481,8 @@ type historyRecorder struct {
 func (m *historyRecorder) BeforeModelRewriteState(ctx context.Context,
 	state *adk.ChatModelAgentState, mc *adk.TypedModelContext[*schema.Message],
 ) (context.Context, *adk.ChatModelAgentState, error) {
-	for _, msg := range m.reg.drainManagerInbox() {
-		state.Messages = append(state.Messages, msg)
-	}
+	state.Messages = append(state.Messages, m.reg.drainManagerInbox()...)
+	m.reg.noteSteerInput(state.Messages)
 	m.reg.SetHistory(state.Messages)
 	return ctx, state, nil
 }

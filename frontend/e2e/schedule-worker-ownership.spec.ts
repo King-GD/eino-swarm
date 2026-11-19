@@ -26,7 +26,7 @@ test("a failed scheduled check retains its owned worker and the next check colle
     const created = await request.post("/api/schedules", { data: { kind: "thread", thread_id: threadID, prompt: "Inspect the assigned task state.", every_s: 3600 } })
     expect(created.ok()).toBe(true)
     scheduleID = (await created.json()).schedule.id
-    const accepted = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/threads/${threadID}/steer`)
+    const accepted = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/threads/${threadID}/deliver`)
     await composer(page).fill("Inspect the assigned inputs.")
     await composer(page).press("Enter")
     const first = await (await accepted).json()

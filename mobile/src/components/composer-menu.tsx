@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { Flag, ListTodo, Paperclip } from "lucide-react"
+import { Flag, Image, ListTodo, Paperclip } from "lucide-react"
 
 import { installAndroidBack } from "@/lib/android-back"
 import { cn } from "@/lib/cn"
@@ -8,7 +8,7 @@ import { t } from "@/lib/i18n"
 import type { SlashCommand } from "../../../frontend/src/lib/slash-core"
 
 function CommandIcon({ id }: { id: string }) {
-  const Icon = id === "plan" ? ListTodo : Flag
+  const Icon = id === "image" ? Image : id === "plan" ? ListTodo : Flag
   return <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
 }
 
@@ -20,7 +20,7 @@ function placeAbove(anchor: HTMLElement, matchWidth: boolean) {
   return { left, width, bottom: window.innerHeight - rect.top + 8 }
 }
 
-function useAbove(anchor: HTMLElement | null, matchWidth: boolean) {
+export function useAbove(anchor: HTMLElement | null, matchWidth: boolean) {
   const [box, setBox] = useState<ReturnType<typeof placeAbove>>()
   useLayoutEffect(() => {
     if (!anchor) return

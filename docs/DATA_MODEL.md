@@ -384,7 +384,7 @@ state below; they do not consume that correction (`C-009`, `C-012`).
 不证明结果已收取、不重置纠正额度。身份变化或不可验证时保留人工等待。
 重启 checkpoint 的 `pause:worker_collection` 保留原等待；恢复查询保留暂停与
 自动唤醒回执，不能因进程更换重复授予。 人工拒绝在 ACK 前写入
-`workers_collection_declined` 的精确等待身份；Stop 的持久意图优先于自动许可，
+`workers_collection_declined` 的精确等待身份；自动唤醒回执写入后先撤回内存等待入口，再释放 runtime 锁，此后的拒绝不再追加第二条回执。Stop 的持久意图优先于自动许可，
 checkpoint 之后的新继续／唤醒／拒绝回执优先于旧暂停快照。 typed Continue 的
 plain `max_iterations_continued` 与已消费的 `model_retry` 在同一非终态事件事务
 提交后才 ACK、广播；第二条写失败不得留下只有续额的半个决定。live 与 cold
@@ -712,16 +712,17 @@ exists is saved alongside the old one rather than overwriting it.
 
 ## `followups` — messages waiting for the current turn
 
-Typed while a turn is already running. They are **not** steering: the manager
-does not see them until this turn completes or fails and the engine starts the
-oldest one as the next turn. The live turn's user text is not stored as a
-follow-up. Submitting an edit of a waiting row assigns a
-new `seq` at the back of that FIFO. **Steer** on a row (or ⌘Enter on a new draft)
-pulls that text into the current turn at the next model boundary instead and
-drops a queued copy of the same words.
-**Interrupt** on the unread-steer pin aborts the current manager tool so those
-steers drain on this turn; **Delete** retracts one unread `steer` (event stays,
-the `[steer]` message is dropped).
+An ordinary message sent while a turn runs is stored here, with any uploaded
+files and image references. The oldest row starts the next turn after the
+current turn completes or fails. Submitting an edit of a text-only row
+assigns a new `seq` at the back of that FIFO.
+
+Insertion of a selected row admits the displayed turn and commits deletion
+of the selected ID and revision, the attachment bindings, the `steer` event,
+and the linked `messages` row in one transaction. Immediate insertion also
+cancels the active manager step. A `steer_consumed` event records the original
+steer seq when the manager includes it in model input.
+
 Cancelled turns leave the queue alone; an error starts the next queued human
 message without changing the failed turn or schedule run. A crash, a kill, or quitting
 the app also leaves the rows: they are not in-memory, so the next start still
@@ -738,7 +739,9 @@ was sent or removed by a person.
 | `id` | `fu_` + hex |
 | `thread_id` | indexed |
 | `seq` | per-conversation FIFO; an unshift after a lost `StartTurn` race uses a value in front of whatever is still waiting; submitting an edit assigns a new seq at the back |
-| `text` | what will be sent |
+| `text` | message caption |
+| `files` | JSON array of workspace upload paths |
+| `images` | JSON array of conversation-local input image references |
 | `created_at` | |
 
 ## `thread_wake_decisions` — human conversation-wait policy

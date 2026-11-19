@@ -1,4 +1,5 @@
 import { mockGeneratedImageChunk, mockGeneratedImageTurn } from "./mock-generated-image"
+import { compactHistoryFixture, compactHistorySteps, compactTurns, mockCompactPage } from "./mock-compact-history"
 import { MockProjects } from "./mock-projects"
 import { MockProductMode } from "./mock-product-mode"
 import { MockSpeech } from "./mock-speech"
@@ -39,6 +40,7 @@ import {
   OpResumeGoal,
   OpRunNow,
   OpSend,
+  OpDeliver,
   OpStart,
   OpSteer,
   OpStop,
@@ -87,8 +89,19 @@ type MockThread = MockGoalFields & {
   completedSeq?: number
   readSeq?: number
   followups?: FollowupView[]
+  pendingInputs?: RemoteEvent[]
+  script?: number
+  finishingSeed?: boolean
 }
 
+
+function mockTurnID(thread: MockThread): string {
+  for (let i = thread.events.length - 1; i >= 0; i--) {
+    const id = thread.events[i].turn_id
+    if (id) return id
+  }
+  return thread.id + "-live"
+}
 
 function threadSeed(): MockThread[] {
   return [
@@ -211,7 +224,10 @@ export class MockHost {
     const live = this.find("t-live")
     if (live) {
       const goalFixture = mockGoalFixture(new URLSearchParams(location.search).get("history"))
-      if (new URLSearchParams(location.search).get("history") === "reasoning-only") {
+      if (compactHistoryFixture(live.id)) {
+        this.seed(live, compactHistorySteps(), false)
+        live.readSeq = live.completedSeq
+      } else if (new URLSearchParams(location.search).get("history") === "reasoning-only") {
         this.seed(live, reasoningOnlyTurn(true), true)
       } else if (new URLSearchParams(location.search).get("history") === "restart-ask") {
         live.askUser = true
@@ -541,6 +557,7 @@ export class MockHost {
 
   detail(th: MockThread): ThreadDetail {
     return {
+      ...(compactHistoryFixture(th.id) ? { turns: compactTurns } : {}),
       ...(new URLSearchParams(location.search).get("history") === "restore-pending" && !th.running ? { turns: [{ id: "stored-before-restart", status: "running" }] } : {}),
       id: th.id,
       title: th.title,
@@ -551,7 +568,7 @@ export class MockHost {
         ? { id: "w-" + th.id, next_run_at: new Date(Date.now() + 9 * 60_000).toISOString() }
         : undefined,
       running: th.running
-        ? { thread_id: th.id, title: th.title, action: th.action, awaiting_continue: mockAwaitingContinue(th), turn_id: th.events.at(-1)?.turn_id }
+        ? { thread_id: th.id, title: th.title, action: th.action, awaiting_continue: mockAwaitingContinue(th), turn_id: mockTurnID(th) }
         : undefined,
       provider_id: th.providerID,
       model: th.model,
@@ -562,10 +579,13 @@ export class MockHost {
   snapshot(th: MockThread) {
     const hiddenHistory = (new URLSearchParams(location.search).get("history") === "hidden" || workerCollectionPaged()) && th.id === "t-live"
     const streamedAgents = new URLSearchParams(location.search).get("history") === "streamed-agents" && th.id === "t-live"
+    const compact = compactHistoryFixture(th.id) ? mockCompactPage(th.events) : undefined
     return {
-      events: iterationSnapshotOnly(th) ? [] : hiddenHistory ? th.events.slice(-2) : streamedAgents ? th.events.slice(1).filter((event) => event.seq > 0) : th.events,
+      ...compact,
+      events: compact?.events ?? (iterationSnapshotOnly(th) ? [] : hiddenHistory ? th.events.slice(-2) : streamedAgents ? th.events.slice(1).filter((event) => event.seq > 0) : th.events),
       seq: th.events[th.events.length - 1]?.seq ?? 0,
-      status: { running: th.running, waiting: th.waiting, followups: th.followups, awaiting_continue: mockAwaitingContinue(th), turn_id: th.events.at(-1)?.turn_id },
+      history_before: compact?.seq,
+      status: { running: th.running, waiting: th.waiting, followups: th.followups, awaiting_continue: mockAwaitingContinue(th), turn_id: mockTurnID(th) },
     }
   }
 
@@ -594,17 +614,61 @@ export class MockHost {
     th.waiting = false
     th.minutesAgo = 0
     const steps = mockGeneratedImageTurn(prompt) ?? scriptedTurn(prompt)
+    const turnId = `${th.id}-${this.seq + 1}`
+    const script = th.script = (th.script ?? 0) + 1
     if (th.goal && new URLSearchParams(location.search).get("history") === "goal-complete") {
       steps.splice(-1, 0, { kind: "goal_complete", text: JSON.stringify({ summary: "Current evidence verified." }) })
     }
     steps.forEach((step, i) => {
       this.later(() => {
+        if (th.script !== script) return
         // The turn is already over when `done` goes out, and the frame
         // carries that status. Settling after it would re-arm the header.
+        if (step.kind === "tool_result" || step.kind === "agent_message") this.consumeMockSteers(th)
         if (i === steps.length - 1) this.settle(th)
-        this.push(th, step)
+        this.push(th, { ...step, turnID: step.turnID ?? turnId })
+        if (i === steps.length - 1) this.flushMockQueue(th)
       }, i * this.tickMs)
     })
+  }
+
+  insertMockSteer(th: MockThread, text: string, turnId: string, interrupt: boolean) {
+    this.push(th, { kind: "steer", text, turnID: turnId, role: "human" })
+    const event = th.events.at(-1)!
+    th.pendingInputs = [...th.pendingInputs ?? [], event]
+    if (interrupt) {
+      this.push(th, { kind: "steer_preempted", turnID: turnId })
+      this.consumeMockSteers(th)
+    }
+    return event.seq
+  }
+
+  private consumeMockSteers(th: MockThread) {
+    const inputs = th.pendingInputs ?? []
+    th.pendingInputs = []
+    for (const input of inputs) this.push(th, { kind: "steer_consumed", text: String(input.seq), turnID: input.turn_id })
+  }
+
+  private flushMockQueue(th: MockThread) {
+    const next = th.followups?.[0]
+    if (!next) return
+    th.followups = th.followups?.slice(1)
+    this.run(th, next.text)
+  }
+
+  queueMockInput(th: MockThread, text: string, attachments: number) {
+    const seq = ++this.seq
+    th.followups = [...th.followups ?? [], { id: `mock-fu-${seq}`, seq, text, attachments }]
+    if (th.script !== undefined || th.finishingSeed || new URLSearchParams(location.search).get("queue") === "1") return
+    th.finishingSeed = true
+    this.later(() => {
+      th.finishingSeed = false
+      if (!th.running || th.script !== undefined) return
+      this.consumeMockSteers(th)
+      this.settle(th)
+      this.push(th, { kind: "done", turnID: mockTurnID(th) })
+      this.flushMockQueue(th)
+    }, Math.max(this.tickMs, 100))
   }
 
   settle(th: MockThread) {
@@ -615,6 +679,7 @@ export class MockHost {
   }
 
   stopTurn(th: MockThread) {
+    if (th.script !== undefined) th.script++
     this.settle(th)
     const params = new URLSearchParams(location.search)
     if (params.get("history") === "stopped-workers" && th.id === "t-live") {
@@ -659,7 +724,7 @@ export class MockHost {
         op: OpEvent,
         thread_id: th.id,
         event: ev,
-        status: { running: th.running, waiting: th.waiting, followups: th.followups, awaiting_continue: mockAwaitingContinue(th), turn_id: th.events.at(-1)?.turn_id },
+        status: { running: th.running, waiting: th.waiting, followups: th.followups, awaiting_continue: mockAwaitingContinue(th), turn_id: mockTurnID(th) },
       })
     }
   }
@@ -907,11 +972,31 @@ export class MockLink {
       }
       case OpLog: {
         const th = thread()
+        if (th && compactHistoryFixture(th.id)) return this.ok({ id, thread_id: th.id, ...mockCompactPage(th.events, req) })
         const hiddenHistory = ["hidden", "streamed-agents"].includes(new URLSearchParams(location.search).get("history") ?? "") && th?.id === "t-live"
         return this.ok({ id, thread_id: th?.id, events: workerCollectionPaged() && th?.id === "t-live" ? th.events.slice(0, -2).filter((event) => !req.before || event.seq < req.before) : hiddenHistory ? th.events.slice(0, 1) : [], more: false })
       }
       case OpStart:
         return this.ok({ id, threads: [this.host.view(this.host.begin(req.text ?? ""))] })
+      case OpDeliver: {
+        const th = thread()
+        if (!th) return this.missing(id)
+        if (req.mode === "queue") {
+          if (th.running) this.host.queueMockInput(th, req.text ?? "", req.puts?.length ?? 0)
+          else this.host.run(th, req.text ?? "")
+          return this.ok({ id, followups: th.followups ?? [] })
+        }
+        const turnId = mockTurnID(th)
+        if (!th.running || req.expected_turn_id !== turnId) {
+          return { ...this.ok({ id }), ok: false, code: "delivery_turn_changed" }
+        }
+        const item = th.followups?.find((row) => row.id === req.followup_id)
+        if (req.followup_id && !item) return this.missing(id)
+        if (item) th.followups = th.followups?.filter((row) => row.id !== item.id)
+        const preempted = req.mode === "interrupt"
+        const steerSeq = this.host.insertMockSteer(th, item?.text ?? req.text ?? "", turnId, preempted)
+        return this.ok({ id, delivery: { turn_id: turnId, steer_seq: steerSeq, preempted }, followups: th.followups ?? [] })
+      }
       case OpSend:
       case OpAnswer:
       case OpRunNow:
