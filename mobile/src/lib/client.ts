@@ -140,6 +140,7 @@ export type RPCOptions = {
 }
 
 export type DeviceLinkOpts = {
+  bindingScoped?: boolean
   keepAliveMs?: number
   rpcTimeoutMs?: number
   version?: string
@@ -196,6 +197,7 @@ export class DeviceLink {
   private readonly keepAliveMs: number
   private readonly rpcTimeoutMs: number
   private readonly version: string
+  private readonly bindingScoped: boolean
   path = "relay"
   sessionIDHex = ""
   onPush?: (resp: RemoteResponse) => void
@@ -211,6 +213,7 @@ export class DeviceLink {
     this.keepAliveMs = opts.keepAliveMs ?? KEEP_ALIVE_MS
     this.rpcTimeoutMs = opts.rpcTimeoutMs ?? RPC_TIMEOUT_MS
     this.version = opts.version ?? ""
+    this.bindingScoped = opts.bindingScoped ?? false
   }
 
   alive(): boolean {
@@ -226,7 +229,7 @@ export class DeviceLink {
     this.dropped = false
     const url = httpToWS(hubURL)
     const proto = TICKET_PROTO + ticket
-    const ws = openHubSocket(url, proto, this.identity.pub, this.hostPub, this.sessionID, open)
+    const ws = openHubSocket(url, proto, this.identity.pub, this.hostPub, this.sessionID, open, this.bindingScoped)
     this.ws = ws
     try {
       await new Promise<void>((resolve, reject) => {
@@ -542,7 +545,7 @@ export async function openSaved(
     identity,
     b64urlToBytes(saved.hostPub),
     hexToBytes(saved.sessionID),
-    { version: await softwareVersion() },
+    { version: await softwareVersion(), bindingScoped: Boolean(saved.gatewayOwnerID) },
   )
   await link.connect(saved.hubURL, saved.ticket, open)
   return link

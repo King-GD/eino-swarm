@@ -1,12 +1,13 @@
 import { afterEach, expect, it, vi } from "vitest"
-import { DeviceLink } from "./client"
-import { bytesToHex, utf8 } from "./bytes"
+import { DeviceLink, HANDSHAKE_TIMEOUT_MS, openSaved, TICKET_PROTO } from "./client"
+import { bytesToB64url, bytesToHex, utf8 } from "./bytes"
 import { generateIdentity, respond, type Session } from "./crypto"
 import { marshalFrame, TYPE_DATA, TYPE_HANDSHAKE, unmarshalFrame } from "./frame"
 import { OpMeta, PROTOCOL_V } from "./rpc"
+import type { SavedLink } from "./store"
 
-/** Matches the dependency Hub's pubkey → socket registration, including its
- * replacement behavior. Requests cross the actual client crypto/RPC boundary. */
+/** Requests cross the actual client crypto/RPC boundary. Each fixture socket
+ * accepts frames for the hosts to which its ticket grants access. */
 class RelaySocket {
   readyState = 0
   binaryType = "arraybuffer"
@@ -37,7 +38,7 @@ class RelaySocket {
 }
 
 afterEach(() => vi.useRealTimers())
-it("keeps all PCs connected on one Hub socket across repeated 15-second heartbeats", async () => {
+it("keeps legacy QR pairings connected on one Hub socket across repeated 15-second heartbeats", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] })
   const phone = generateIdentity(), first = generateIdentity(), second = generateIdentity()
   const hosts = new Map([first, second].map(host => [bytesToHex(host.pub), host]))
@@ -67,6 +68,35 @@ it("keeps all PCs connected on one Hub socket across repeated 15-second heartbea
     a.close()
     expect(sockets[0].readyState).toBe(3)
   } finally { a.close(); b.close() }
+})
+
+it("uses each account PC's own ticket on a binding-scoped relay", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] })
+  const phone = generateIdentity(), first = generateIdentity(), second = generateIdentity()
+  const hosts = new Map([["ticket-a", first], ["ticket-b", second]])
+  const open = vi.fn((_url: string, protocol: string) => {
+    const host = hosts.get(protocol.slice(TICKET_PROTO.length))!
+    return new RelaySocket(new Map([[bytesToHex(host.pub), host]])) as unknown as WebSocket
+  })
+  const saved = (host: typeof first, ticket: string, session: number): SavedLink => ({
+    hubURL: "https://hub.example.test", ticket, hostPub: bytesToB64url(host.pub),
+    sessionID: bytesToHex(new Uint8Array(16).fill(session)), fingerprint: bytesToHex(host.pub),
+    gatewayOrigin: "https://hub.example.test", gatewayOwnerID: "owner",
+    gatewayMobileID: "phone", gatewayHostID: ticket,
+  })
+  const a = await openSaved(saved(first, "ticket-a", 1), phone, open)
+  let b: DeviceLink | undefined
+  try {
+    const pending = openSaved(saved(second, "ticket-b", 2), phone, open).catch(error => error as Error)
+    await vi.advanceTimersByTimeAsync(HANDSHAKE_TIMEOUT_MS)
+    const result = await pending
+    if (result instanceof Error) throw result
+    b = result
+    expect(open.mock.calls.map(([, protocol]) => protocol)).toEqual([TICKET_PROTO + "ticket-a", TICKET_PROTO + "ticket-b"])
+    expect((await b.rpc({ op: OpMeta })).host).toBe(bytesToHex(second.pub))
+    b.close()
+    expect((await a.rpc({ op: OpMeta })).host).toBe(bytesToHex(first.pub))
+  } finally { a.close(); b?.close() }
 })
 
 it("isolates logical RPC timeouts and replaces the transport only after a real socket loss", async () => {

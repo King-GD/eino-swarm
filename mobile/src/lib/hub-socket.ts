@@ -1,8 +1,7 @@
 import { bytesToHex, equalBytes } from "./bytes"
 import { unmarshalFrame } from "./frame"
 
-/** Pairlink registers one relay socket per device public key. PCs own separate
- * encrypted sessions over it, as the desktop SDK's peer map does. */
+/** Each logical channel owns a distinct encrypted session. */
 export type HubSocket = {
   readonly readyState: number
   onopen: ((event: Event) => void) | null
@@ -19,11 +18,13 @@ type Relay = { socket: WebSocket; channels: Map<string, HubSocket>; finish: (eve
 // Factories isolate injected transports; production uses one stable factory.
 const pools = new WeakMap<SocketOpener, Map<string, Relay>>()
 
-export function openHubSocket(url: string, protocol: string, device: Uint8Array, host: Uint8Array, session: Uint8Array, open: SocketOpener = openBrowserSocket): HubSocket {
+export function openHubSocket(url: string, protocol: string, device: Uint8Array, host: Uint8Array, session: Uint8Array, open: SocketOpener = openBrowserSocket, bindingScoped = false): HubSocket {
   let pool = pools.get(open)
   if (!pool) { pool = new Map(); pools.set(open, pool) }
-  const key = `${url}\t${bytesToHex(device)}`
   const peer = `${bytesToHex(host)}\t${bytesToHex(session)}`
+  // Account relay sockets authenticate a single pairing ticket. Legacy QR
+  // hubs may still replace a socket when the same device key connects twice.
+  const key = JSON.stringify([url, bytesToHex(device), bindingScoped ? peer : null, bindingScoped ? protocol : null])
   let relay = pool.get(key)
   if (!relay || relay.socket.readyState > 1) {
     const socket = open(url, protocol)

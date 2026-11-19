@@ -55,12 +55,13 @@ keep its voice controls unavailable with **User center → Retry**; saved person
 choices remain intact. Ordinary PC metadata polling and PC disconnection do not
 interrupt unchanged phone-owned Gateway speech.
 
-Multiple PCs share one physical WebSocket per phone public key and complete Hub
-endpoint. Every PC retains its own encrypted session, RPC waiters and lifetime.
-Closing or timing out one PC leaves the others connected; the final PC releases
-the socket. Background connection warming and 15-second heartbeats reuse that
-transport instead of replacing it. Only a real shared-socket failure starts
-recovery for its peers.
+Each account-managed PC connects with its own Pairlink ticket and WebSocket.
+The Gateway's online badge reflects PC presence. The mobile connection becomes
+ready after the phone and PC complete their encrypted handshake and the PC
+engine reports readiness. Legacy QR connections can share a socket per phone
+public key and full Hub endpoint. Every PC retains its encrypted session and
+RPC waiters. Closing one PC releases only its channel. Heartbeats and
+background warming reuse live connections.
 
 The phone account’s automatic Gateway output uses **PCM (streaming playback)**
 with SSE and 200-character segments, allowing audio to play before a segment
