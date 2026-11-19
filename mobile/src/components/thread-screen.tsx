@@ -388,7 +388,7 @@ export function ThreadScreen({
 
       {agentPage === "chat" && caughtUp ? (
         <TurnNavigation turns={pairedTurnDestinations(detail.turns ?? [], manager)}
-          pending={loadingOlder} onJump={jumpToTurn} />
+          scroller={scroller} pending={loadingOlder} onJump={jumpToTurn} />
       ) : null}
 
       {hasMore ? (

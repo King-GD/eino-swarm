@@ -340,8 +340,11 @@ retry automatically. **Earlier** jumps to the preceding assistant reply.
 Current PCs send compact history for completed conversations and older pages.
 Expand **Thinking and tools** to request those steps, with further pages
 available inside the fold when needed. A running conversation retains its live
-activity. At three turns, the navigation strip jumps to the selected prompt,
-loading an older turn first when needed. Direct chat also has turn navigation.
+activity. From three turns onward, the navigation strip highlights the current
+prompt as you scroll and keeps its button in view. Tap a button to jump to that
+user input, loading older history first when needed. Older paired PCs without
+prompt previews show only the turn number until that input loads, never the
+assistant reply. Direct chat uses the same scroll tracking.
 On the inbox, **Chat** and all PC tabs scroll in the same strip. User and
 assistant rows render markdown; a path link does not navigate the
 webview. Recognised language fences use the existing source syntax colours in

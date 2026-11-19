@@ -1407,6 +1407,9 @@ thread wait is parked. Goal, schedule, `turn`, `done` and `error` event
 frames carry that `status` too so a parked `/goal` does not look idle after
 `done`.
 With `include_detail: true`, `ready` also carries the existing `open` `detail`.
+Each entry in `detail.turns` may include `user_text`, a single-line user-input
+preview clipped to `summary_chars`. It is independent of the existing `text`
+preview, which prefers the assistant reply and otherwise uses the user input.
 Worker-collection decline receipts retain their original kind and sequence
 in push and paged history; their wait ID and worker-generation payload follows
 the existing event-text and frame limits. They are

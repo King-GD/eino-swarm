@@ -315,6 +315,8 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 
 ## C-006 Phone remote protocol
 
+- 轮次导航：PC 打开详情的 `turns[].user_text` 是可选的单行用户输入预览，受 `summary_chars` 限制；既有 `turns[].text` 的回复预览语义不变。手机优先使用已加载的用户消息，旧 PC 缺少输入预览时仅显示轮次号，绝不拿回复代替输入。证据：`internal/remote/snapshot_reads_test.go`、`mobile/e2e/conversation-open.spec.ts`。
+
 - Model discovery is refreshed on the same live link after a PC mode/scope change and after phone account model-policy changes. Refreshes to one PC are serialized; late old-scope responses cannot replace the current list. Voice-only catalog metadata does not refresh model choices. A legacy PC omitting Gateway capability metadata shows an explicit PC-update notice; phone authority never substitutes for that PC's grant. Evidence: `mobile/src/lib/model-source-refresh.test.ts`.
 
 - 项目管理（`F-225`，兼容扩展）：`project_get` 显式读取单个 PC 项目及全局 `memory_available`；`project_create`／`project_update` 通过 `project_patch` 保存同一 PC 数据，更新省略字段保留。名称／指令／目录／记忆／女娲模式与规划执行模型使用既有引擎校验；模型组合必须四字段齐全，就绪校验在字段写入前完成。写入在 `restoring` 阶段拒绝；读取超帧返回 `too_large`，写入只回 ID／名称以保留确认空间，不把完整指令加入收件箱轮询。手机关闭／切换 PC 后不得应用旧响应；失败保留草稿，旧主机能力缺失明确提示升级。目录属于 PC，按 `C-026` 保留空白路径身份。证据：`internal/remote/project_settings.go`、`internal/remote/project_settings_test.go`、`mobile/src/components/project-manager.test.tsx`、`mobile/e2e/project-management.spec.ts`。

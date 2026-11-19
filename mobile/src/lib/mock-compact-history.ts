@@ -6,12 +6,12 @@ export function compactHistoryFixture(threadID: string): boolean {
 }
 
 export const compactTurns: TurnView[] = ["First", "Second", "Third"].map((ordinal, index) => ({
-  id: `compact-${index + 1}`, status: "done", text: `${ordinal} prompt`,
+  id: `compact-${index + 1}`, status: "done", text: `Response ${index + 1}`, user_text: `${ordinal} prompt`,
 }))
 
 export function compactHistorySteps(): Step[] {
   return compactTurns.flatMap((turn, index) => [
-    { kind: "user_message", turnID: turn.id, text: turn.text },
+    { kind: "user_message", turnID: turn.id, text: turn.user_text },
     ...Array.from({ length: 90 }, (_, i) => ({
       kind: "reasoning", turnID: turn.id, text: `Deferred thought ${index + 1}.${i + 1}`,
     })),

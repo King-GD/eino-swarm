@@ -422,7 +422,7 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-220 Read and control PC conversations
 
-- 三轮起显示可点击的轮次导航，缺少目标历史时先补页。手机直连对话也支持轮次导航。配对对话的「更早」定位到上一条主管正文，新版 PC 按需传输折叠的思考与工具。iOS 从左侧 44 点内水平右滑可逐层返回，顶部「对话」与各 PC 标签共用横向滚动条。证据：`mobile/src/components/turn-navigation.tsx`、`mobile/src/components/host-chrome.tsx`、`mobile/e2e/conversation-open.spec.ts`、`internal/remote/log_compact_test.go`。关联 `C-006`、`C-015`。
+- 配对及手机直连对话从三轮起显示可点击的轮次导航：只预览用户输入，随阅读位置高亮并保持当前项可见；缺少目标历史时先补页。配对对话的「更早」定位到上一条主管正文，新版 PC 按需传输折叠的思考与工具。iOS 从左侧 44 点内水平右滑可逐层返回，顶部「对话」与各 PC 标签共用横向滚动条。证据：`mobile/src/components/turn-navigation.tsx`、`mobile/src/components/host-chrome.tsx`、`mobile/e2e/conversation-open.spec.ts`、`internal/remote/log_compact_test.go`。关联 `C-006`、`C-015`。
 
 - 进入应用后自动连接账号下全部启用的在线 PC，返回用户同样适用；保留当前在线选择，否则自动打开可用 PC。后台连接不轮流跳页，在线设备排在离线设备前，离线未配对设备仍可见。证据：`mobile/src/lib/use-auto-gateway-pcs.ts`、`mobile/src/lib/phone-pcs.ts`。
 - 切换 PC 保留已建立的各设备连接，返回时复用存活连接；连接／引擎就绪阶段显示所选 PC，不闪回用户中心。仅当前 PC 更新可见会话，移除、撤权、凭据变化或页面退出释放对应连接。实现与待执行回归：`mobile/src/lib/use-phone-link-lifecycle.ts`、`mobile/src/components/pc-connection-gate.tsx`、`mobile/src/lib/use-phone-link-lifecycle.test.tsx`。

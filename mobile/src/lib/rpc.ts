@@ -198,6 +198,7 @@ export type TurnView = {
   id: string
   status: string
   text?: string
+  user_text?: string
   web_execution?: "auto" | "local" | "cloud"
 }
 

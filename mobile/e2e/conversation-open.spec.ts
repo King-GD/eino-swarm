@@ -8,6 +8,8 @@ test("jumps between three turns and reads deferred work only when expanded", asy
   const transcript = page.getByTestId("transcript")
   const turns = page.getByRole("navigation", { name: "Conversation turns" })
   await expect(turns.getByRole("button")).toHaveCount(3)
+  await expect(turns.getByRole("button", { name: "Jump to turn 1: First prompt" })).toBeVisible()
+  await expect(turns.getByRole("button", { name: "Jump to turn 3: Third prompt" })).toHaveAttribute("aria-current", "location")
   await expect(transcript.getByText("Response 2", { exact: true })).toHaveCount(0)
   await expect(transcript.getByText("Deferred thought 2.1", { exact: true })).toHaveCount(0)
 
@@ -23,6 +25,7 @@ test("jumps between three turns and reads deferred work only when expanded", asy
 
   await turns.getByRole("button", { name: /^Jump to turn 1:/ }).click()
   await expect(transcript.getByText("First prompt", { exact: true })).toBeInViewport()
+  await expect(turns.getByRole("button", { name: "Jump to turn 1: First prompt" })).toHaveAttribute("aria-current", "location")
   await turns.getByRole("button", { name: /^Jump to turn 3:/ }).click()
   await expect(transcript.getByText("Third prompt", { exact: true })).toBeInViewport()
 })
@@ -76,6 +79,14 @@ test("direct Chat shows jump controls starting at the third prompt", async ({ pa
   const transcript = page.getByTestId("transcript")
   await expect(transcript.getByText("Direct prompt 3", { exact: true })).toBeInViewport()
   await expect(transcript.getByText("Direct prompt 1", { exact: true })).not.toBeInViewport()
+  await expect(turns.getByRole("button", { name: "Jump to turn 3: Direct prompt 3" })).toHaveAttribute("aria-current", "location")
+  await transcript.evaluate((el) => {
+    const prompt = el.querySelector('[data-phone-turn="prompt-1"]')!
+    el.scrollTop += prompt.getBoundingClientRect().top - el.getBoundingClientRect().top + 120
+  })
+  await expect(turns.getByRole("button", { name: "Jump to turn 2: Direct prompt 2" })).toHaveAttribute("aria-current", "location")
+  await transcript.evaluate((el) => { el.scrollTop = 0 })
+  await expect(turns.getByRole("button", { name: "Jump to turn 1: Direct prompt 1" })).toHaveAttribute("aria-current", "location")
 })
 
 for (const language of [

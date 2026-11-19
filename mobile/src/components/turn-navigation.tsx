@@ -1,9 +1,12 @@
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react"
 import { t } from "@/lib/i18n"
 import type { TurnView } from "@/lib/rpc"
 import { dropPackedJson } from "@/lib/tool-preview"
 import type { CompactBlock } from "@/lib/transcript"
 
 export type TurnDestination = { id: string; label: string }
+
+const promptInset = 8
 
 export function pairedTurnDestinations(turns: TurnView[], blocks: CompactBlock[]): TurnDestination[] {
   const prompts = new Map<string, string>()
@@ -23,27 +26,73 @@ export function pairedTurnDestinations(turns: TurnView[], blocks: CompactBlock[]
   return [
     ...extra.filter(([id]) => (loaded.get(id) ?? Infinity) < firstListed && Number.isFinite(firstListed))
       .map(([id, label]) => make(id, label)),
-    ...turns.map((turn) => make(turn.id, prompts.get(turn.id) ?? turn.text ?? "")),
+    ...turns.map((turn) => make(turn.id, prompts.get(turn.id) ?? dropPackedJson(turn.user_text ?? "").trim())),
     ...extra.filter(([id]) => (loaded.get(id) ?? Infinity) >= firstListed || !Number.isFinite(firstListed))
       .map(([id, label]) => make(id, label)),
   ]
 }
 
-export function TurnNavigation({ turns, pending, onJump }: {
+export function TurnNavigation({ turns, scroller, pending, onJump }: {
   turns: TurnDestination[]
+  scroller: RefObject<HTMLElement | null>
   pending?: boolean
   onJump: (id: string) => void
 }) {
+  const rail = useRef<HTMLElement>(null)
+  const [current, setCurrent] = useState<string>()
+
+  useEffect(() => {
+    const viewport = scroller.current
+    if (!viewport || turns.length < 3) return
+    const ids = new Set(turns.map((turn) => turn.id))
+    const update = () => {
+      const prompts = Array.from(viewport.querySelectorAll<HTMLElement>("[data-phone-turn][data-phone-prompt]"))
+        .filter((row) => ids.has(row.dataset.phoneTurn ?? ""))
+      const maxScroll = viewport.scrollHeight - viewport.clientHeight
+      if (maxScroll > 1 && viewport.scrollTop >= maxScroll - 1) {
+        setCurrent(prompts.at(-1)?.dataset.phoneTurn)
+        return
+      }
+      const readingLine = viewport.getBoundingClientRect().top + promptInset + 1
+      let active = prompts[0]
+      for (const prompt of prompts) {
+        if (prompt.getBoundingClientRect().top > readingLine) break
+        active = prompt
+      }
+      setCurrent(active?.dataset.phoneTurn)
+    }
+    update()
+    viewport.addEventListener("scroll", update, { passive: true })
+    const observer = new ResizeObserver(update)
+    observer.observe(viewport)
+    if (viewport.firstElementChild) observer.observe(viewport.firstElementChild)
+    return () => {
+      viewport.removeEventListener("scroll", update)
+      observer.disconnect()
+    }
+  }, [scroller, turns])
+
+  useLayoutEffect(() => {
+    const strip = rail.current
+    const active = strip?.querySelector('[aria-current="location"]')
+    if (!strip || !active) return
+    const bounds = strip.getBoundingClientRect()
+    const button = active.getBoundingClientRect()
+    if (button.left < bounds.left) strip.scrollLeft += button.left - bounds.left
+    else if (button.right > bounds.right) strip.scrollLeft += button.right - bounds.right
+  }, [current, turns])
+
   if (turns.length < 3) return null
   return (
-    <nav aria-label={t("thread.turnNav")} className="rail flex min-h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-border px-2">
+    <nav ref={rail} aria-label={t("thread.turnNav")} className="rail flex min-h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-border px-2">
       {turns.map((turn, index) => (
         <button
           key={turn.id}
           type="button"
           aria-label={t("thread.jumpTurn", { n: index + 1, text: turn.label })}
+          aria-current={turn.id === current ? "location" : undefined}
           disabled={pending}
-          className="inline-flex h-9 min-w-9 shrink-0 items-center justify-center rounded-lg px-2 text-xs font-medium text-muted-foreground hover:bg-accent focus-visible:bg-accent active:bg-accent disabled:opacity-50"
+          className="inline-flex h-9 min-w-9 shrink-0 items-center justify-center rounded-lg px-2 text-xs font-medium text-muted-foreground hover:bg-accent focus-visible:bg-accent active:bg-accent aria-[current=location]:bg-accent aria-[current=location]:text-accent-foreground disabled:opacity-50"
           onClick={() => onJump(turn.id)}
         >
           <span className="mr-1 tabular-nums">{index + 1}</span>
@@ -56,6 +105,6 @@ export function TurnNavigation({ turns, pending, onJump }: {
 
 export function scrollToTranscriptRow(scroller: HTMLElement | null, row: HTMLElement | null | undefined): boolean {
   if (!scroller || !row) return false
-  scroller.scrollTop += row.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 8
+  scroller.scrollTop += row.getBoundingClientRect().top - scroller.getBoundingClientRect().top - promptInset
   return true
 }

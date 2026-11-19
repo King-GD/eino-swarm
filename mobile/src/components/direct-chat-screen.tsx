@@ -334,6 +334,7 @@ export function DirectChatScreen({
       {open ? (
         <>
         <TurnNavigation
+          scroller={transcript}
           turns={open.messages.filter((message) => message.role === "user").map((message) => ({ id: message.id, label: message.text.trim().slice(0, 66) }))}
           onJump={(id) => {
             const row = transcript.current?.querySelector<HTMLElement>(`[data-phone-turn="${CSS.escape(id)}"]`)
@@ -343,7 +344,8 @@ export function DirectChatScreen({
         <div ref={transcript} data-testid="transcript" className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
           <div className="flex flex-col gap-1.5">
             {open.messages.map((message) => (
-              <div key={message.id} data-phone-turn={message.role === "user" ? message.id : undefined} className="min-w-0">
+              <div key={message.id} data-phone-turn={message.role === "user" ? message.id : undefined}
+                data-phone-prompt={message.role === "user" ? "" : undefined} className="min-w-0">
                 <MessageRow message={message} live={pending && message.id === open.messages.at(-1)?.id} />
               </div>
             ))}

@@ -68,6 +68,9 @@ func TestPhoneSnapshotsBoundTurnReads(t *testing.T) {
 				if err != nil || len(d.Turns) != 2 || d.Turns[0].Text != "answer 88" || d.Turns[1].Text != "answer 89" {
 					t.Fatalf("detail=%+v err=%v", d, err)
 				}
+				if d.Turns[0].UserText != "88" || d.Turns[1].UserText != "89" {
+					t.Fatalf("detail lacks user previews: %+v", d.Turns)
+				}
 			case "first watch":
 				if _, _, err := lastTurnWindow(e.Store(), th.ID, 24); err != nil {
 					t.Fatal(err)

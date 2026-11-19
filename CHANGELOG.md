@@ -25,6 +25,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- 移动端轮次导航随聊天滚动高亮当前项，且只显示用户输入预览，不再用助手回复作标题。(`F-220`, `C-006`)
+
 - PC 切到本地模式后，额外目录不再漏掉独立且仍获准对话的已登录网关来源；手机任务页也不再把唯一候选的标签套到其他已选模型上。会话选路不变。(`C-013`)
 
 - Speech settings no longer add a second “follow gateway default” row after choosing a voice, format, speed, or instruction. That control already returns to the gateway default. A saved value with no control keeps one reset action. (`F-148`, `C-048`)
