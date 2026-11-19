@@ -2,11 +2,12 @@ package server_test
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
 
-func TestSteerFollowupHTTPRejectsMissingOrForeignQueuedMessages(t *testing.T) {
+func TestSteerFollowupHTTPRejectsInvalidRequestsWithoutConsumingQueue(t *testing.T) {
 	h := newHarness(t)
 	first, other := h.newThread(), h.newThread()
 	f, err := h.app.Store.EnqueueFollowup(first, "only this conversation may consume me")
@@ -24,9 +25,19 @@ func TestSteerFollowupHTTPRejectsMissingOrForeignQueuedMessages(t *testing.T) {
 			t.Fatalf("missing row looked accepted: %+v", body)
 		}
 	}
+	// A malformed payload must not fall through to the bodyless send-now path.
+	path := "/api/threads/" + first + "/followups/" + f.ID + "/steer"
+	const privateBody = "private-body"
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(privateBody))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	h.app.Server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusBadRequest || strings.Contains(res.Body.String(), privateBody) {
+		t.Fatalf("malformed steer payload was not rejected safely (status %d)", res.Code)
+	}
 	rows, err := h.app.Store.ListFollowups(first)
 	if err != nil || len(rows) != 1 || rows[0].ID != f.ID || rows[0].Text != f.Text {
-		t.Fatalf("foreign steering consumed a row: %+v err=%v", rows, err)
+		t.Fatalf("a rejected request consumed a row: %+v err=%v", rows, err)
 	}
 	for _, id := range []string{first, other} {
 		turns, err := h.app.Store.ListTurns(id)

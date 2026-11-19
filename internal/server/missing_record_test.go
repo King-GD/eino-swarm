@@ -34,7 +34,8 @@ func TestMissingQueuedMessageIdentifiesTheRequestAndRecord(t *testing.T) {
 		t.Run(tc.code, func(t *testing.T) {
 			logs.Reset()
 			path := "/api/threads/" + tc.thread + "/followups/" + tc.followup + "/steer"
-			req := httptest.NewRequest(http.MethodPost, path+"?secret=do-not-log", strings.NewReader("private-body"))
+			// A bodyless steer reaches the queue lookup without a turn binding.
+			req := httptest.NewRequest(http.MethodPost, path+"?secret=do-not-log", nil)
 			req.Header.Set("Authorization", "Bearer do-not-log")
 			res := httptest.NewRecorder()
 			s.Handler().ServeHTTP(res, req)
@@ -65,7 +66,7 @@ func TestMissingQueuedMessageIdentifiesTheRequestAndRecord(t *testing.T) {
 			if logged["request_id"] != requestID || logged["code"] != tc.code || logged["thread_id"] != tc.thread {
 				t.Fatalf("log cannot locate this failure: %v", logged)
 			}
-			for _, secret := range []string{"do-not-log", "private-body", "secret="} {
+			for _, secret := range []string{"do-not-log", "secret="} {
 				if strings.Contains(logs.String()+res.Body.String(), secret) {
 					t.Fatalf("request diagnostics disclosed %q", secret)
 				}

@@ -32,6 +32,9 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
   without replaying the call. The same turn can make a later independent call
   on the session. (`F-176`, `C-041`, #177)
 
+- The queue HTTP regression now exercises bodyless steering for missing rows
+  and checks that malformed JSON returns `400` with the queue intact.
+
 - An automatic worker-collection resume withdraws its waiter before releasing the runtime lock. A human decline that arrives after that receipt is refused, so the wait log cannot contain both terminal receipts. (`F-150`, `C-019`)
 
 - The phone composer's voice button matches the one-line field, so the rounded row no longer leaves empty space above the text. (`F-148`)
