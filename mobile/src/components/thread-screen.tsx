@@ -542,6 +542,7 @@ export function ThreadScreen({
         refreshBusy={refreshBusy}
         refreshError={refreshError}
         hideModel={hideModel}
+        slashCommands={!asking}
         onTune={onTune}
         onSubmit={asking ? (text, extra) => {
           if (parseSlashSubmit(text)?.id !== "image") return onAnswer(text)

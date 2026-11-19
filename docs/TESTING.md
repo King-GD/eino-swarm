@@ -7625,7 +7625,10 @@ Several things are tested here, some as pure logic and some in jsdom:
   Filtering is
   prefix-or-contains, compact's hint is a percentage (hidden when used is 0),
   and unknown names are not commands. The menu is a listbox; the textarea
-  owns the keys.
+  owns the keys. A phone PC conversation uses the same token rules for goal
+  and plan only: `mobile/src/lib/composer-commands.test.ts`,
+  `mobile/src/components/composer-slash.test.tsx`, and
+  `mobile/e2e/composer-commands.spec.ts`. Compact stays on the PC.
 - **`src/lib/stream.ts`**, against a fake `EventSource`: every kind the server
   sends is subscribed to (including `goal_session`), a review that lands after
   `done` is delivered, the event name wins over a disagreeing payload, and a

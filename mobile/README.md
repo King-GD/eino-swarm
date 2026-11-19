@@ -441,7 +441,16 @@ a short thread is bottom-aligned, and scrolling away from the tail raises
 **Jump to latest**. Answering inside a conversation is one rounded box
 (`components/composer.tsx`) that grows with the text up to a cap, Enter
 sends (Shift+Enter is a newline, and an IME candidate list is never a
-send), and the round button stays off until there is something to send.
+send). The leftmost control is **Add**. It attaches files and, in a PC
+conversation or new chat, lists `/goal` and `/plan` with a short description.
+Choosing one inserts `/name ` and leaves the cursor after it; the command is
+not sent until it has an argument. Typing `/` opens the same list and filters
+it. A fullwidth slash or the IME slash punctuation is treated as `/`. A path
+or URL does not open the list, and `/plan` is offered only at the start of
+the draft. `/compact` stays on the PC. Direct model chat uses Add for files
+only. Android Back closes Add first; while a slash list is open it removes
+only the unfinished slash token. The round button stays off until there is
+something to send.
 While a turn is live the box also offers steer, and a plain send is queued
 after this turn. The composer has no persistent queue hint below its controls;
 waiting messages remain visible in the queue tray.

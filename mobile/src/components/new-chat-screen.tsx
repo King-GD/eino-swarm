@@ -132,6 +132,7 @@ export function NewChatScreen({
         refreshBusy={refreshBusy}
         refreshError={refreshError}
         hideModel={hideModel}
+        slashCommands
         onSubmit={(text, extra) => (extra ? onStart(text, project, extra) : onStart(text, project))}
       />
     </main>

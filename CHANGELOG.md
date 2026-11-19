@@ -8,6 +8,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Added
 
+- The phone composer starts with Add. It attaches files and, in a PC conversation or new chat, lists `/goal` and `/plan`. Typing `/` filters that list. Compact stays on the PC. (`F-150`, `F-220`, `C-009`)
+
 - PC and Web voice settings can choose the microphone. System default follows the operating-system input; a named device is used exactly, and an unplugged device asks for another choice instead of switching microphones silently. Phones keep the phone microphone. (`F-148`, `C-048`)
 
 ### Changed

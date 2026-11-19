@@ -1,14 +1,26 @@
 import { capabilityAllows } from "../../../frontend/src/lib/capabilities"
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react"
-import { ArrowUp, Loader2, Paperclip, Square, X, Zap } from "lucide-react"
+import { ArrowUp, Loader2, Plus, Square, X, Zap } from "lucide-react"
 
+import { installAndroidBack } from "@/lib/android-back"
 import { cn } from "@/lib/cn"
+import { applySlashPick, phoneAddChoices, phoneSlashCatalog, phoneSlashChoices } from "@/lib/composer-commands"
 import { t } from "@/lib/i18n"
 import { formatQuotedMessage } from "@/lib/quote"
 import type { ComposerPrediction } from "../../../frontend/src/lib/composer-prediction"
-import { parseSlashSubmit } from "../../../frontend/src/lib/slash-core"
+import {
+  clearSlashCommand,
+  nextSlashIndex,
+  normalizeSlashPrefix,
+  parseSlashSubmit,
+  slashAwaitingArg,
+  slashDraft,
+  stripSlashToken,
+  type SlashCommand,
+} from "../../../frontend/src/lib/slash-core"
 import { isVisionFile } from "@/lib/put-chunks"
 import type { ModelChoice } from "@/lib/rpc"
+import { ComposerAddMenu, ComposerSlashMenu } from "./composer-menu"
 import { ModelPicker } from "./model-picker"
 import { SpeechCapture, type SpeechCapturePhase } from "./speech-capture"
 import { insertSpeechText } from "../../../frontend/src/lib/speech-text"
@@ -55,6 +67,7 @@ export function Composer({
   refreshError,
   onTune,
   hideModel = false,
+  slashCommands = false,
 }: {
   label: string
   prediction?: ComposerPrediction
@@ -82,6 +95,8 @@ export function Composer({
   refreshError?: string
   onTune?: (next: { providerId: string; model: string; reasoning: string }) => void
   hideModel?: boolean
+  /** PC conversations can run /goal and /plan. Direct model chat cannot. */
+  slashCommands?: boolean
 }) {
   const [dismissedPrediction, setDismissedPrediction] = useState<string>()
   const [text, setText] = useState("")
@@ -92,6 +107,8 @@ export function Composer({
   const capturingSpeech = speechPhase === "preparing" || speechPhase === "recording"
   const speechBusy = capturingSpeech || speechPhase === "transcribing"
   const [commandRejected, setCommandRejected] = useState<"text" | "prompt">()
+  const [addOpen, setAddOpen] = useState(false)
+  const [slashIndex, setSlashIndex] = useState(0)
   const [attached, setAttached] = useState<File[]>([])
   const [pick, setPick] = useState(() => chosen(models, providerId, model))
   const explicitPick = useRef(false)
@@ -99,7 +116,10 @@ export function Composer({
   const [modelPickerOpen, setModelPickerOpen] = useState(false)
   const modelTextId = useId()
   const box = useRef<HTMLTextAreaElement>(null)
+  const formRef = useRef<HTMLFormElement>(null)
+  const addRef = useRef<HTMLButtonElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const pinCaret = useRef<number | null>(null)
   const imageAllowed = !pick.providerId.startsWith("gateway:") || capabilityAllows(models.find(row => row.provider_id === pick.providerId)?.capabilities, "ocr")
   const images = attached.filter((file) => isVisionFile(file))
   const files = attached.filter((file) => !isVisionFile(file))
@@ -112,12 +132,21 @@ export function Composer({
   const textOnlyRefusal = imageCommand
     ? hasQuotes || attached.length > 0
     : hasQuotes && (command?.id === "goal" || command?.id === "plan")
-  const ready = hasDraft && !disabled && !pending && !speechBusy
   const showStop = Boolean(onStop && stopLabel && (pending || !hasDraft))
   const showModel = !hideModel && (models.length > 0 || catalogBusy || Boolean(onRefreshModels))
   const showTools = showModel || reasoningLevels.length > 0
   const lockedModel = models.length === 1 && Boolean(models[0]?.locked)
   const modelText = choiceLabel(models, pick) || t("composer.model")
+  const catalog = phoneSlashCatalog.map((command) => ({
+    ...command,
+    description: t(command.id === "goal" ? "slash.goal" : "slash.plan"),
+  }))
+  const draft = slashCommands ? slashDraft(text) : null
+  const slashItems = draft ? phoneSlashChoices(catalog, draft.query, draft.afterText) : []
+  const slashOpen = slashItems.length > 0 && !command?.arg
+  const awaitingCommand = slashCommands && catalog.some((item) => item.id === slashAwaitingArg(text))
+  const commandDraft = slashOpen || awaitingCommand
+  const ready = hasDraft && !disabled && !pending && !speechBusy && !commandDraft
 
   // The conversation's selection arrives after catalog. A local edit is not
   // overwritten until those props themselves change.
@@ -141,6 +170,32 @@ export function Composer({
     el.style.height = Math.min(el.scrollHeight, 132) + "px"
   }, [text, capturingSpeech])
 
+  // A menu click blurs the field. Put the caret back after `/name ` lands.
+  useLayoutEffect(() => {
+    const pos = pinCaret.current
+    if (pos == null) return
+    pinCaret.current = null
+    const el = box.current
+    if (!el) return
+    el.focus()
+    el.setSelectionRange(pos, pos)
+  }, [text])
+
+  useEffect(() => {
+    setSlashIndex(0)
+  }, [draft?.query])
+
+  useEffect(() => {
+    if (!slashOpen) return
+    return installAndroidBack(() => {
+      setText((current) => {
+        const open = slashDraft(current)
+        return open ? stripSlashToken(current, open) : current
+      })
+      return true
+    })
+  }, [slashOpen])
+
   const extra = (): ComposerExtra | undefined => {
     if (attached.length === 0 && models.length === 0 && reasoningLevels.length === 0) return undefined
     return {
@@ -152,8 +207,21 @@ export function Composer({
     }
   }
 
+  const pickCommand = (command: SlashCommand) => {
+    const next = applySlashPick(text, command.name)
+    pinCaret.current = next.caret
+    setAddOpen(false)
+    setText(next.text)
+  }
+
   const fire = async (send: Send) => {
     if (images.length > 0 && !imageAllowed) return
+    if (slashOpen) {
+      const command = slashItems[Math.min(slashIndex, slashItems.length - 1)]
+      if (command) pickCommand(command)
+      return
+    }
+    if (awaitingCommand) return
     // The quote envelope hides the command from the PC. Refuse before clearing
     // or uploading any part of this draft, as the desktop composer does.
     if (textOnlyRefusal || (imageCommand && !command.arg)) {
@@ -248,6 +316,7 @@ export function Composer({
         <p role="alert" className="mb-2 text-sm text-destructive">{t("composer.imagePrompt")}</p>
       ) : null}
       <form
+        ref={formRef}
         className={cn(
           "flex min-w-0 flex-wrap items-end gap-1.5 rounded-3xl bg-muted p-1.5 transition-colors",
           !capturingSpeech && "focus-within:ring-1 focus-within:ring-ring",
@@ -258,6 +327,52 @@ export function Composer({
           void fire(onSubmit)
         }}
       >
+        <input
+          ref={fileRef}
+          type="file"
+          multiple
+          className="hidden"
+          data-testid="file-input"
+          onChange={(e) => {
+            addFiles(Array.from(e.target.files ?? []))
+            e.target.value = ""
+          }}
+        />
+        {!capturingSpeech ? (
+          <button
+            ref={addRef}
+            type="button"
+            aria-label={t("composer.add")}
+            aria-expanded={addOpen}
+            aria-controls={addOpen ? "composer-add-menu" : undefined}
+            aria-haspopup="menu"
+            disabled={disabled || pending}
+            className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-accent disabled:opacity-40"
+            onClick={() => setAddOpen((open) => !open)}
+          >
+            <Plus className="size-4" aria-hidden />
+          </button>
+        ) : null}
+        {addOpen && !capturingSpeech ? (
+          <ComposerAddMenu
+            anchor={addRef.current}
+            commands={slashCommands ? phoneAddChoices(catalog, text) : []}
+            onAttach={() => {
+              fileRef.current?.click()
+              setAddOpen(false)
+            }}
+            onPick={pickCommand}
+            onClose={() => setAddOpen(false)}
+          />
+        ) : null}
+        {slashOpen && !addOpen ? (
+          <ComposerSlashMenu
+            anchor={formRef.current}
+            commands={slashItems}
+            activeIndex={slashIndex}
+            onSelect={pickCommand}
+          />
+        ) : null}
         {!capturingSpeech && onSteer && steerLabel ? (
           <button
             type="button"
@@ -281,7 +396,14 @@ export function Composer({
           rows={1}
           hidden={capturingSpeech}
           disabled={disabled || pending}
-          onChange={(e) => setText(e.target.value)}
+          aria-expanded={slashOpen || undefined}
+          aria-controls={slashOpen ? "slash-menu" : undefined}
+          aria-autocomplete={slashCommands ? "list" : undefined}
+          onChange={(e) => {
+            const next = slashCommands ? normalizeSlashPrefix(e.target.value) : e.target.value
+            if (slashDraft(next)) setAddOpen(false)
+            setText(next)
+          }}
           onPaste={(e) => {
             const pasted = Array.from(e.clipboardData?.files ?? []).filter((file) => isVisionFile(file))
             if (pasted.length === 0) return
@@ -289,9 +411,32 @@ export function Composer({
             addFiles(pasted)
           }}
           onKeyDown={(e) => {
-            if (e.key === "Tab" && !e.shiftKey && !e.nativeEvent.isComposing && suggestion) { e.preventDefault(); insertSuggestion(); return }
+            if (e.nativeEvent.isComposing) return
+            if (slashOpen && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+              e.preventDefault()
+              setSlashIndex((index) => nextSlashIndex(index, slashItems.length, e.key === "ArrowDown" ? 1 : -1))
+              return
+            }
+            if (slashOpen && e.key === "Escape") {
+              e.preventDefault()
+              setText(draft ? stripSlashToken(text, draft) : text)
+              return
+            }
+            if (slashOpen && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey && (e.key === "Enter" || e.key === "Tab")) {
+              e.preventDefault()
+              const command = slashItems[Math.min(slashIndex, slashItems.length - 1)]
+              if (command) pickCommand(command)
+              return
+            }
+            if (e.key === "Tab" && !e.shiftKey && suggestion) { e.preventDefault(); insertSuggestion(); return }
             if (e.key === "Escape" && suggestion) { e.preventDefault(); setDismissedPrediction(suggestion.turnId); return }
-            if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return
+            if (e.key === "Escape" && awaitingCommand) {
+              e.preventDefault()
+              setText(clearSlashCommand(text))
+              return
+            }
+            if (e.key !== "Enter" || e.shiftKey) return
+            if (awaitingCommand) { e.preventDefault(); return }
             e.preventDefault()
             void fire(onSubmit)
           }}
@@ -303,6 +448,7 @@ export function Composer({
         <SpeechCapture disabled={disabled || pending}
           onPhaseChange={setSpeechPhase}
           onStart={() => {
+            setAddOpen(false)
             speechAnchor.current = { text: textRef.current, caret: box.current?.selectionStart ?? textRef.current.length }
             box.current?.blur()
           }}
@@ -333,27 +479,7 @@ export function Composer({
           )}
         </button> : null}
       </form>
-      <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
-        <input
-          ref={fileRef}
-          type="file"
-          multiple
-          className="hidden"
-          data-testid="file-input"
-          onChange={(e) => {
-            addFiles(Array.from(e.target.files ?? []))
-            e.target.value = ""
-          }}
-        />
-        <button
-          type="button"
-          aria-label={t("composer.attach")}
-          disabled={disabled || pending}
-          className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-accent disabled:opacity-40"
-          onClick={() => fileRef.current?.click()}
-        >
-          <Paperclip className="size-4" aria-hidden />
-        </button>
+      {showTools ? <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
         {showModel && catalogBusy && models.length === 0 ? (
           <div aria-busy="true" className="h-8 min-w-24 flex-1 animate-pulse rounded-full bg-muted motion-reduce:animate-none">
             <span className="sr-only">{t("composer.loading")}</span>
@@ -389,8 +515,7 @@ export function Composer({
             ))}
           </select>
         ) : null}
-        {showTools ? null : <span className="flex-1" />}
-      </div>
+      </div> : null}
       {showModel && modelPickerOpen && !lockedModel ? (
         <ModelPicker
           models={models}

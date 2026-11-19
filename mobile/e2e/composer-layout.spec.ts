@@ -11,7 +11,9 @@ async function controlsFit(page: Page, label: string) {
   for (const width of [320, 375, 402]) {
     await page.setViewportSize({ width, height: 812 })
     await editor.focus()
-    for (const item of [editor, submit, ...await page.getByRole("button", { name: "插入", exact: true }).all()]) {
+    const add = page.getByRole("button", { name: "添加", exact: true })
+    await expect(add).toHaveCount(1)
+    for (const item of [editor, submit, add, ...await page.getByRole("button", { name: "插入", exact: true }).all()]) {
       const box = await item.boundingBox()
       expect(box).not.toBeNull()
       expect(box!.x).toBeGreaterThanOrEqual(0)

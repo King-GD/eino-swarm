@@ -72,7 +72,9 @@ describe("App boot chrome", () => {
     expect(screen.queryByRole("button", { name: t("scan.camera") })).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: t("composer.model") })).toHaveTextContent("one")
     expect(screen.getByLabelText(t("composer.thinking"))).toBeInTheDocument()
-    expect(screen.getByLabelText(t("composer.attach"))).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: t("composer.add") }))
+    expect(screen.getByRole("menuitem", { name: t("composer.attach") })).toBeInTheDocument()
+    expect(screen.queryByTestId("composer-command-goal")).not.toBeInTheDocument()
   })
 
   it("opens on sign-in when this phone has never bound, with QR pairing one tap away", () => {
