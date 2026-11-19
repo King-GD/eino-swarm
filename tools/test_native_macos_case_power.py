@@ -55,6 +55,8 @@ class PowerCaseTests(unittest.TestCase):
         process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"],
                                    start_new_session=True)
         self.processes.append(process)
+        executable = power.process_identity(os.getpid())["executable"]
+        power.await_identity(process, executable, time.monotonic() + 2)
         return process
 
     def scenario_with_hold(self):

@@ -4,7 +4,9 @@ EXTENDS Naturals
 (* A delayed client targets turn 1 and the second queued message. Finishing
    can race with delivery. SplitInterrupt models the old second RPC, which
    accepts only a conversation ID and can preempt its successor. *)
-CONSTANT SplitInterrupt
+CONSTANTS
+    SplitInterrupt
+
 VARIABLES active, queue, delivered, interrupt, pending
 vars == <<active, queue, delivered, interrupt, pending>>
 

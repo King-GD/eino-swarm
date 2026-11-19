@@ -28,7 +28,7 @@ OneReplacement == attempts <= 2
 NoWorkAfterBlock == phase /= "blocked" \/ ~nextWork
 ManagerCancellationRequested == phase /= "blocked" \/ cancelManager
 DeadlineKeepsAdmission == result /= "deadline" \/ phase # "blocked"
-NoWorkAfterDeadline == ~(result = "deadline" /\ nextWork)
+NeverNextWorkAfterDeadline == ~(result = "deadline" /\ nextWork)
 NeverRecovered == ~(phase = "done" /\ attempts = 2 /\ result = "ok")
 NeverBlocked == phase /= "blocked"
 

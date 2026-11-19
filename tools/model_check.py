@@ -564,7 +564,7 @@ CASES: tuple[Case, ...] = (
           ("LeaveManagerRunning",), "ManagerCancellationRequested", model="mcp-call-recovery"),
     _case("mcp-call-recovery-blocks-deadline", "historical 9b799b2: a per-call deadline blocks the task",
           ("BlockDeadline",), "DeadlineKeepsAdmission", model="mcp-call-recovery"),
-    _case("mcp-call-recovery-continues-after-deadline", "witness", witness="NoWorkAfterDeadline",
+    _case("mcp-call-recovery-continues-after-deadline", "witness", witness="NeverNextWorkAfterDeadline",
           model="mcp-call-recovery"),
     _case("mcp-call-recovery-reach-success", "witness", witness="NeverRecovered", model="mcp-call-recovery"),
     _case("mcp-call-recovery-reach-block", "witness", witness="NeverBlocked", model="mcp-call-recovery"),
