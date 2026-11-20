@@ -239,6 +239,7 @@ export const en = {
   "thread.waiting": "Waiting",
   "thread.earlier": "Earlier",
   "thread.turnNav": "Conversation turns",
+  "thread.turnNoPreview": "No prompt preview",
   "thread.jumpTurn": "Jump to turn {n}: {text}",
   "thread.loadWork": "Thinking and tools",
   "thread.moreWork": "Load more steps",

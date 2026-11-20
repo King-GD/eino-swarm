@@ -346,10 +346,17 @@ Current PCs send compact history for completed conversations and older pages.
 Expand **Thinking and tools** to request those steps, with further pages
 available inside the fold when needed. A running conversation retains its live
 activity. From three turns onward, the navigation strip highlights the current
-prompt as you scroll and keeps its button in view. Tap a button to jump to that
-user input, loading older history first when needed. Older paired PCs without
-prompt previews show only the turn number until that input loads, never the
-assistant reply. Direct chat uses the same scroll tracking.
+prompt as you read. Each button shows up to two lines of the user input.
+While following the transcript, the strip keeps the current and previous
+buttons fully in view when both fit.
+Swipe the strip sideways to browse other prompts. It keeps that position
+through live updates until you scroll the transcript again or tap a turn.
+If a paired PC omits older prompt previews, the phone reads a bounded number
+of history pages without moving the transcript. Entries with missing input
+show **No prompt preview**. Tap a turn to jump to its prompt. When the reply
+and prompt are on separate history pages, the phone keeps loading until it
+reaches the prompt or the start of the turn. Direct chat uses the same
+navigation.
 On the inbox, **Chat** and all PC tabs scroll in the same strip. User and
 assistant rows render markdown; a path link does not navigate the
 webview. Recognised language fences use the existing source syntax colours in

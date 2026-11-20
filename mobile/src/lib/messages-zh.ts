@@ -257,6 +257,7 @@ export const zh: Record<MessageKey, string> = {
   "thread.waiting": "等待中",
   "thread.earlier": "更早",
   "thread.turnNav": "对话轮次导航",
+  "thread.turnNoPreview": "暂无输入预览",
   "thread.jumpTurn": "跳到第 {n} 轮：{text}",
   "thread.loadWork": "思考与工具",
   "thread.moreWork": "加载更多步骤",

@@ -9079,6 +9079,23 @@ write publication receipts.
 
 ### Phone conversation loading (F-220 / C-006)
 
+The legacy turn-navigation case strips the prompt previews from the PC
+snapshot. Its phone must populate earlier labels through compact history
+without loading those messages into the transcript. At 320 CSS px with
+seven turns, the preceding button must fit and accept a coordinate tap
+after jumping from turn seven to turn six. The corresponding packaged iOS
+case uses `history=compact&many-turns=1&split-history=1` with
+`testPreviousTurnRemainsFullyTappable`. The fifth turn's reply arrives on the
+first page and its prompt on the next. Browser coverage checks both tapping
+the turn directly and tapping after **Earlier** has already shown the reply.
+Another case moves
+the strip horizontally, changes composer settings while reading the same
+turn, and verifies that a subsequent transcript scroll resumes following.
+Use `IOS_LAYOUT_QUERY='/?mock=1&tick=0&history=compact&legacy-turn-previews=1'`
+with `ios-conversation-open.swift` for
+`testLegacyTurnPreviewsStayBrowsableBeforeJumping`. It swipes the actual
+navigation strip and taps an older preview in the packaged iOS app.
+
 Packaged native conversation-loading entry points are
 `mobile/e2e/ios-conversation-open.swift` and
 `mobile/android/app/src/androidTest/java/com/lubyruffy/zwai/ConversationOpenTest.java`.

@@ -24,7 +24,8 @@ import { pendingIterationLimit } from "@/lib/iteration-limit"
 import { normalizeSelectedText } from "@/lib/quote"
 import type { CompactBlock } from "@/lib/transcript"
 import { managerBlocks, pendingAsk, phoneAgents } from "@/lib/transcript"
-import { hasPhoneHistoryContent } from "@/lib/phone-history"
+import { hasPhoneHistoryContent, hasPhoneTurnStart } from "@/lib/phone-history"
+import { useOlderTurnPreviews } from "@/lib/turn-previews"
 import type { FollowupView, HistoryWork, ModelChoice, ThreadDetail } from "@/lib/rpc"
 import { cn } from "@/lib/cn"
 import type { RemoteLink } from "@/lib/link"
@@ -37,6 +38,7 @@ export function ThreadScreen({
   panelOwnerKey = "",
   blocks,
   historyWork,
+  historyBefore,
   hasMore,
   loadingOlder,
   caughtUp = true,
@@ -73,6 +75,7 @@ export function ThreadScreen({
   panelOwnerKey?: string
   blocks: CompactBlock[]
   historyWork?: HistoryWork[]
+  historyBefore?: number
   hasMore?: boolean
   loadingOlder?: boolean
   caughtUp?: boolean
@@ -117,6 +120,12 @@ export function ThreadScreen({
   ]
   const [agentPage, setAgentPage] = useState("chat")
   const taskPanels = usePhoneTaskPanelView(fileLink, detail.id, panelOwnerKey)
+  const destinations = pairedTurnDestinations(detail.turns ?? [], manager)
+  const suppliedPreviews = new Set(detail.turns?.filter((turn) => turn.user_text).map((turn) => turn.id))
+  const olderPreviews = useOlderTurnPreviews(
+    caughtUp && hasMore && destinations.length >= 3 ? fileLink : undefined,
+    detail.id, historyBefore, destinations.filter((turn) => !suppliedPreviews.has(turn.id)),
+  )
   useLayoutEffect(() => { onReadVisibility?.(agentPage === "chat" && !taskPanels.open) }, [agentPage, onReadVisibility, taskPanels.open])
   const selectedAgent = agents.find((agent) => agent.id === agentPage)
   const ask = pendingAsk(manager)
@@ -282,7 +291,7 @@ export function ThreadScreen({
   const jumpToTurn = (id: string) => {
     const el = scroller.current
     stick.current = false
-    if (el && scrollToTranscriptRow(el, turnRow(el, id))) return
+    if ((!hasMore || hasPhoneTurnStart(manager, id, true)) && el && scrollToTranscriptRow(el, turnRow(el, id))) return
     if (onOlder && hasMore && !loadingOlder) {
       void Promise.resolve(onOlder(id)).then(() => setHistoryJump({ thread: detail.id, turnId: id }))
     }
@@ -368,7 +377,9 @@ export function ThreadScreen({
       ) : null}
 
       {agentPage === "chat" && caughtUp ? (
-        <TurnNavigation turns={pairedTurnDestinations(detail.turns ?? [], manager)}
+        <TurnNavigation turns={destinations.map((turn) => ({
+          ...turn, label: turn.label || olderPreviews?.get(turn.id) || "",
+        }))}
           scroller={scroller} pending={loadingOlder} onJump={jumpToTurn} />
       ) : null}
 

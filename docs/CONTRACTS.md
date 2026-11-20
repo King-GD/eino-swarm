@@ -320,7 +320,7 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 
 - 本地 Claude、Codex 和 Cursor 任务已禁用。PC 不扫描任务文件，所有手机收件箱响应省略 `clients`。仅旧手机显式调用 `clients` 时收到 `enabled:false`，无任务数据。旧 `client_read` 请求返回 `not_found`，负分页偏移仍返回 `bad_request`。新手机忽略旧 PC 返回的本地任务。证据：`internal/remote/clients_test.go`、`internal/server/clients_test.go`、`mobile/src/app.test.tsx`。
 
-- 轮次导航：PC 打开详情的 `turns[].user_text` 是可选的单行用户输入预览，受 `summary_chars` 限制；既有 `turns[].text` 的回复预览语义不变。手机优先使用已加载的用户消息，旧 PC 缺少输入预览时仅显示轮次号，绝不拿回复代替输入。证据：`internal/remote/snapshot_reads_test.go`、`mobile/e2e/conversation-open.spec.ts`。
+- 轮次导航：PC 打开详情的 `turns[].user_text` 是可选的单行用户输入预览，受 `summary_chars` 限制；既有 `turns[].text` 的回复预览语义不变。手机优先使用已加载的用户消息。旧 PC 缺少输入预览时，手机对当前会话最多额外读取八页历史，按轮次 ID 提取用户输入，且不改变正文、分页游标或阅读位置。没有已验证输入时显示「暂无输入预览」。点选配对会话的轮次时，已加载的回复仍可继续向前读取，直到找到该轮提问或确认到达轮次起点。没有提问时使用该轮第一条可见内容跟踪位置。跟随正文时，宽度足够便保持当前轮和上一轮完整可点。横滑导航条后保留浏览位置，重新滚动正文或选中轮次后恢复跟随。证据：`internal/remote/snapshot_reads_test.go`、`mobile/e2e/conversation-open.spec.ts`。
 
 - Model discovery is refreshed on the same live link after a PC mode/scope change and after phone account model-policy changes. Refreshes to one PC are serialized; late old-scope responses cannot replace the current list. Voice-only catalog metadata does not refresh model choices. A legacy PC omitting Gateway capability metadata shows an explicit PC-update notice; phone authority never substitutes for that PC's grant. Evidence: `mobile/src/lib/model-source-refresh.test.ts`.
 

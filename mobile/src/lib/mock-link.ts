@@ -1,5 +1,5 @@
 import { mockGeneratedImageChunk, mockGeneratedImageTurn } from "./mock-generated-image"
-import { compactHistoryFixture, compactHistorySteps, compactTurns, mockCompactPage } from "./mock-compact-history"
+import { compactHistoryFixture, compactHistorySteps, compactTurnSummaries, mockCompactPage } from "./mock-compact-history"
 import { MockProjects } from "./mock-projects"
 import { MockProductMode } from "./mock-product-mode"
 import { MockSpeech } from "./mock-speech"
@@ -557,7 +557,7 @@ export class MockHost {
 
   detail(th: MockThread): ThreadDetail {
     return {
-      ...(compactHistoryFixture(th.id) ? { turns: compactTurns } : {}),
+      ...(compactHistoryFixture(th.id) ? { turns: compactTurnSummaries() } : {}),
       ...(new URLSearchParams(location.search).get("history") === "restore-pending" && !th.running ? { turns: [{ id: "stored-before-restart", status: "running" }] } : {}),
       id: th.id,
       title: th.title,

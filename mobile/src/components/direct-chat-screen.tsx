@@ -330,7 +330,11 @@ export function DirectChatScreen({
         <>
         <TurnNavigation
           scroller={transcript}
-          turns={open.messages.filter((message) => message.role === "user").map((message) => ({ id: message.id, label: message.text.trim().slice(0, 66) }))}
+          turns={open.messages.filter((message) => message.role === "user").map((message) => ({
+            id: message.id,
+            label: message.text.trim().replace(/\s+/g, " ").slice(0, 66)
+              || (message.attachments?.length ? t("delivery.attachments", { n: message.attachments.length }) : ""),
+          }))}
           onJump={(id) => {
             const row = transcript.current?.querySelector<HTMLElement>(`[data-phone-turn="${CSS.escape(id)}"]`)
             scrollToTranscriptRow(transcript.current, row)

@@ -37,6 +37,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- 手机轮次导航显示两行输入预览，兼容从旧版 PC 历史补齐文字。跟随时保持当前轮和上一轮可点，横滑浏览时保留位置。点选只加载了回复的轮次时，继续读取该轮的提问并定位到那里。 (`F-220`, `C-006`)
+
 - Conversation waits can finish classifying long human histories across tool calls in the same turn. Pending classification reports the remaining inputs separately from an explicit prohibition. (`F-160`, `C-009`, `C-012`)
 
 - PC and Web voice input shows and uses System default when the saved microphone is missing. The preferred microphone can be used again when it reconnects. (`F-148`, `C-048`)

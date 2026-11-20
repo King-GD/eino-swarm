@@ -839,6 +839,7 @@ export function PhoneApp() {
             onOpenAccount={openPcAccount}
             onOlder={loadOlder}
             historyWork={view.historyWork}
+            historyBefore={view.oldestSeq || view.lastSeq}
             onSend={(text, extra) => postTurn(parseSlashSubmit(text) ? OpSend : OpDeliver, detail.id, text, extra)}
             onInsert={(mode, turnId, text, extra) => sendPhoneTurn(turnDeps, OpDeliver, detail.id, text, extra, { mode, turnId })}
             onStop={async () => {

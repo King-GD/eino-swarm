@@ -5,12 +5,22 @@ export function compactHistoryFixture(threadID: string): boolean {
   return threadID === "t-live" && new URLSearchParams(location.search).get("history") === "compact"
 }
 
-export const compactTurns: TurnView[] = ["First", "Second", "Third"].map((ordinal, index) => ({
-  id: `compact-${index + 1}`, status: "done", text: `Response ${index + 1}`, user_text: `${ordinal} prompt`,
-}))
+function compactTurns(): TurnView[] {
+  const ordinals = ["First", "Second", "Third"]
+  if (new URLSearchParams(location.search).has("many-turns")) ordinals.push("Fourth", "Fifth", "Sixth", "Seventh")
+  return ordinals.map((ordinal, index) => ({
+    id: `compact-${index + 1}`, status: "done", text: `Response ${index + 1}`, user_text: `${ordinal} prompt`,
+  }))
+}
+
+export function compactTurnSummaries(): TurnView[] {
+  const turns = compactTurns()
+  if (!new URLSearchParams(location.search).has("legacy-turn-previews")) return turns
+  return turns.map(({ id, status, text }) => ({ id, status, text }))
+}
 
 export function compactHistorySteps(): Step[] {
-  return compactTurns.flatMap((turn, index) => [
+  return compactTurns().flatMap((turn, index) => [
     { kind: "user_message", turnID: turn.id, text: turn.user_text },
     ...Array.from({ length: 90 }, (_, i) => ({
       kind: "reasoning", turnID: turn.id, text: `Deferred thought ${index + 1}.${i + 1}`,
@@ -31,6 +41,10 @@ export function mockCompactPage(events: RemoteEvent[], req: Partial<RemoteReques
   const remaining = events.filter((event) => !req.before || event.seq < req.before)
   const turnId = remaining.at(-1)?.turn_id
   const turn = remaining.filter((event) => event.turn_id === turnId)
+  const answer = turn.find((event) => event.kind === "agent_message")
+  if (turnId === "compact-5" && answer && new URLSearchParams(location.search).has("split-history")) {
+    return { events: turn.filter((event) => event.seq >= answer.seq), seq: answer.seq, focus_seq: answer.seq, more: true }
+  }
   const work = turn.filter((event) => event.kind === "reasoning" || event.kind.startsWith("tool_"))
   const historyWork: HistoryWork[] = work.length ? [{ from: work[0].seq, through: work.at(-1)!.seq }] : []
   return {

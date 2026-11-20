@@ -1,5 +1,6 @@
 import { remoteError } from "./client"
 import type { RemoteLink } from "./link"
+import { hasPhoneTurnStart } from "./phone-history"
 import { OpLog } from "./rpc"
 import { prependOlder, type PhoneView } from "./session"
 import { dropPackedJson } from "./tool-preview"
@@ -38,8 +39,7 @@ export async function readOlderHistory({ link, threadId, turnId, stillHere, curr
       )
       const focus = answers.find((event) => event.seq === reply.focus_seq)?.seq ?? answers.at(-1)?.seq
       if (focus) return focus
-    } else if (next.blocks.some((block) => !block.agentId && block.turnId === turnId &&
-      (block.kind === "user" || block.kind === "answer" || block.kind === "error" || block.kind === "turn_end"))) {
+    } else if (hasPhoneTurnStart(next.blocks, turnId, next.hasMore)) {
       return
     }
     if (!next.oldestSeq || (before > 0 && next.oldestSeq >= before)) return

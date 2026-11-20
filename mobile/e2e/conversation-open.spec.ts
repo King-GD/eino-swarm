@@ -30,6 +30,129 @@ test("jumps between three turns and reads deferred work only when expanded", asy
   await expect(transcript.getByText("Third prompt", { exact: true })).toBeInViewport()
 })
 
+test("shows older prompt previews supplied by legacy history before jumping", async ({ page }, info) => {
+  await page.addInitScript(() => localStorage.setItem("zwai.phone.locale", "en"))
+  await page.goto("/?mock=1&tick=0&history=compact&legacy-turn-previews=1")
+  await page.getByRole("button", { name: "Back", exact: true }).tap()
+  await page.getByTestId("project-stack").getByRole("button", { name: "Open Trim the layout pass", exact: true }).tap()
+  const rail = page.getByRole("navigation", { name: "Conversation turns" })
+  const transcript = page.getByTestId("transcript")
+  const first = rail.getByRole("button", { name: "Jump to turn 1: First prompt" })
+  const second = rail.getByRole("button", { name: "Jump to turn 2: Second prompt" })
+  await expect(first).toContainText("First prompt")
+  await expect(second).toContainText("Second prompt")
+  await expect(rail).not.toContainText("Response 1")
+  await expect(transcript.getByText("First prompt", { exact: true })).toHaveCount(0)
+  await expect(rail.getByRole("button", { name: "Jump to turn 3: Third prompt" })).toHaveAttribute("aria-current", "location")
+
+  await rail.evaluate((strip) => { strip.scrollLeft = 0 })
+  await expect(first).toBeInViewport()
+  await page.screenshot({ path: info.outputPath("legacy-turn-previews-before-jump.png") })
+  await first.tap()
+  await expect(transcript.getByText("First prompt", { exact: true })).toBeInViewport()
+  await expect(first).toHaveAttribute("aria-current", "location")
+})
+
+test("turn six leaves turn five fully tappable without moving the strip", async ({ page }, info) => {
+  await page.setViewportSize({ width: 320, height: 812 })
+  await page.addInitScript(() => localStorage.setItem("zwai.phone.locale", "en"))
+  await page.goto("/?mock=1&tick=0&history=compact&many-turns=1")
+  await page.getByRole("button", { name: "Back", exact: true }).tap()
+  await page.getByTestId("project-stack").getByRole("button", { name: "Open Trim the layout pass", exact: true }).tap()
+  const rail = page.getByRole("navigation", { name: "Conversation turns" })
+  const transcript = page.getByTestId("transcript")
+  const seventh = rail.getByRole("button", { name: "Jump to turn 7: Seventh prompt" })
+  const sixth = rail.getByRole("button", { name: "Jump to turn 6: Sixth prompt" })
+  const fifth = rail.getByRole("button", { name: "Jump to turn 5: Fifth prompt" })
+  await expect(seventh).toHaveAttribute("aria-current", "location")
+  await expect(sixth).toBeInViewport({ ratio: 0.99 })
+  const sixthBox = (await sixth.boundingBox())!
+  await page.touchscreen.tap(sixthBox.x + sixthBox.width / 2, sixthBox.y + sixthBox.height / 2)
+  await expect(sixth).toHaveAttribute("aria-current", "location")
+  await expect(fifth).toBeInViewport({ ratio: 0.99 })
+  await expect(transcript.getByText("Fifth prompt", { exact: true })).toHaveCount(0)
+  await page.screenshot({ path: info.outputPath("turn-six-with-tappable-turn-five.png") })
+  const fifthBox = (await fifth.boundingBox())!
+  await page.touchscreen.tap(fifthBox.x + fifthBox.width / 2, fifthBox.y + fifthBox.height / 2)
+  await expect(transcript.getByText("Fifth prompt", { exact: true })).toBeInViewport()
+  await expect(fifth).toHaveAttribute("aria-current", "location")
+})
+
+for (const earlierFirst of [false, true]) {
+  test(`a turn jump finds its prompt across a split history page${earlierFirst ? " after Earlier loaded the reply" : ""}`, async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("zwai.phone.locale", "en"))
+    await page.goto("/?mock=1&tick=0&history=compact&many-turns=1&split-history=1")
+    await page.getByRole("button", { name: "Back", exact: true }).tap()
+    await page.getByTestId("project-stack").getByRole("button", { name: "Open Trim the layout pass", exact: true }).tap()
+    const rail = page.getByRole("navigation", { name: "Conversation turns" })
+    const transcript = page.getByTestId("transcript")
+    const sixth = rail.getByRole("button", { name: "Jump to turn 6: Sixth prompt" })
+    const fifth = rail.getByRole("button", { name: "Jump to turn 5: Fifth prompt" })
+    await expect(rail.getByRole("button", { name: /^Jump to turn 7:/ })).toHaveAttribute("aria-current", "location")
+    await sixth.tap()
+    await expect(sixth).toHaveAttribute("aria-current", "location")
+
+    if (earlierFirst) {
+      await page.getByRole("button", { name: "Earlier", exact: true }).tap()
+      await expect(transcript.getByText("Response 5", { exact: true })).toBeInViewport()
+    }
+    const prompt = transcript.getByText("Fifth prompt", { exact: true })
+    await expect(prompt).toHaveCount(0)
+    await fifth.tap()
+    await expect(prompt).toBeInViewport()
+    await expect(fifth).toHaveAttribute("aria-current", "location")
+  })
+}
+
+test("browsing the turn strip survives rerenders at the same reading position", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("zwai.phone.locale", "en")
+    localStorage.setItem("zwai.phone.providers", JSON.stringify([{
+      id: "offline", label: "Offline", baseURL: "http://127.0.0.1:1", api: "chat", model: "fixture",
+    }]))
+    localStorage.setItem("zwai.phone.directThreads", JSON.stringify([{
+      id: "rail", title: "Turn strip", providerId: "offline", model: "fixture", updatedAt: 1,
+      messages: Array.from({ length: 6 }, (_, i) => [
+        {
+          id: `prompt-${i}`, role: "user",
+          text: i === 1 ? "" : `Message ${i + 1} about the navigation layout`,
+          ...(i === 1 ? { attachments: [{ name: "notes.txt", kind: "file" }] } : {}),
+        },
+        { id: `reply-${i}`, role: "assistant", text: "Offline answer.\n\n".repeat(50) },
+      ]).flat(),
+    }]))
+  })
+  await page.goto("/")
+  await page.getByRole("button", { name: "Open Turn strip", exact: true }).tap()
+  const rail = page.getByRole("navigation", { name: "Conversation turns" })
+  const first = rail.getByRole("button", { name: /^Jump to turn 1:/ })
+  const last = rail.getByRole("button", { name: /^Jump to turn 6:/ })
+  await last.tap()
+  await expect(last).toHaveAttribute("aria-current", "location")
+  await rail.evaluate((strip) => {
+    strip.dispatchEvent(new WheelEvent("wheel", { deltaX: -300, bubbles: true }))
+    strip.scrollLeft = 0
+  })
+  await expect(first).toBeInViewport()
+  await expect(rail.getByRole("button", { name: "Jump to turn 2: Attachments (1)" })).toBeInViewport()
+
+  await page.getByRole("textbox", { name: "Message", exact: true }).tap()
+  await page.getByRole("button", { name: "Thinking level", exact: true }).tap()
+  await page.getByRole("radio", { name: "High thinking", exact: true }).tap()
+  await expect(last).toHaveAttribute("aria-current", "location")
+  await expect.poll(() => rail.evaluate((strip) => strip.scrollLeft)).toBe(0)
+
+  const transcript = page.getByTestId("transcript")
+  await transcript.evaluate((el) => {
+    el.dispatchEvent(new WheelEvent("wheel", { deltaY: -600, bubbles: true }))
+    const row = el.querySelector('[data-phone-turn="prompt-4"]')!
+    el.scrollTop += row.getBoundingClientRect().top - el.getBoundingClientRect().top + 64
+  })
+  const fifth = rail.getByRole("button", { name: /^Jump to turn 5:/ })
+  await expect(fifth).toHaveAttribute("aria-current", "location")
+  await expect(fifth).toBeInViewport()
+})
+
 test("scrolls Chat and PC tabs in one strip", async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem("zwai.phone.locale", "en")
