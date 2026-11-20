@@ -13,6 +13,8 @@ type ProgressEvent = { turn_id: string; tool_call_id: string; kind: string; seq:
 
 const callID = "remote-inspection"
 const missingCallID = "missing-record-key"
+const limitedCallID = "limited-inspection"
+const rateLimit = "Upstream HTTP 429 Too Many Requests"
 const phase = "Checking the source records"
 const resultText = "Source records verified"
 
@@ -33,7 +35,7 @@ function modelReply(response: ServerResponse, input: ModelRequest, message: obje
   response.end(`data: ${JSON.stringify(chunk(message, null))}\n\ndata: ${JSON.stringify(chunk({}, finish))}\n\ndata: [DONE]\n\n`)
 }
 
-test("MCP missing arguments remain visible while the corrected call reports progress", async ({ page, request }, info) => {
+test("MCP tool errors remain visible while the same turn continues to an independent call", async ({ page, request }, info) => {
   test.skip(process.env.ZWAI_E2E_MCP_PROGRESS !== "1", "requires the keyless loopback model and MCP endpoint")
   const serverID = "progress-fixture"
   const errors: string[] = []
@@ -41,6 +43,7 @@ test("MCP missing arguments remain visible while the corrected call reports prog
   let calls = 0
   let finalSent = false
   let validationResult = ""
+  let rateLimitResult = ""
   let modelResult = ""
   let originalDirectLoadPercent: number | undefined
   let reportProgress!: () => void
@@ -82,15 +85,19 @@ test("MCP missing arguments remain visible while the corrected call reports prog
             return
           case "tools/list":
             json(response, reply({
-              tools: [{ name: "inspect_record", inputSchema: {
+              tools: ["search_record", "inspect_record"].map((name) => ({ name, inputSchema: {
                 type: "object", required: ["record_key"], properties: { record_key: { type: "string" } },
-              } }],
+              } })),
             }))
             return
           case "tools/call":
-            if (rpc.params?.name !== "inspect_record") throw new Error("Unexpected remote tool")
             calls++
-            if (rpc.params.arguments?.record_key !== "fixture") throw new Error("Missing argument crossed the MCP boundary")
+            if (rpc.params?.arguments?.record_key !== "fixture") throw new Error("Missing argument crossed the MCP boundary")
+            if (rpc.params.name === "search_record") {
+              json(response, reply({ isError: true, content: [{ type: "text", text: rateLimit }] }))
+              return
+            }
+            if (rpc.params.name !== "inspect_record") throw new Error("Unexpected remote tool")
             token = rpc.params._meta?.progressToken
             response.writeHead(200, { "Content-Type": "text/event-stream" })
             response.flushHeaders()
@@ -128,9 +135,13 @@ test("MCP missing arguments remain visible while the corrected call reports prog
       validationResult = input.messages.find((message) => message.tool_call_id === missingCallID)?.content ?? ""
       const name = input.tools?.find((item) => item.function.name.includes(listed ? "_call_tool_" : "_list_tools_"))?.function.name
       if (!name) throw new Error("MCP proxy absent at the model boundary")
-      const args = listed ? { name: "inspect_record", arguments: validationResult ? { record_key: "fixture" } : {} } : {}
+      rateLimitResult = input.messages.find((message) => message.tool_call_id === limitedCallID)?.content ?? ""
+      const [id, args] = !listed ? ["remote-catalog", {}]
+        : !validationResult ? [missingCallID, { name: "search_record", arguments: {} }]
+        : !rateLimitResult ? [limitedCallID, { name: "search_record", arguments: { record_key: "fixture" } }]
+        : [callID, { name: "inspect_record", arguments: { record_key: "fixture" } }]
       modelReply(response, input, { role: "assistant", tool_calls: [
-        { index: 0, id: listed ? (validationResult ? callID : missingCallID) : "remote-catalog", type: "function", function: { name, arguments: JSON.stringify(args) } },
+        { index: 0, id, type: "function", function: { name, arguments: JSON.stringify(args) } },
       ] }, "tool_calls")
     } catch (error) {
       errors.push(String(error))
@@ -180,9 +191,10 @@ test("MCP missing arguments remain visible while the corrected call reports prog
     await composer(page).fill("Inspect the records")
     await composer(page).press("Enter")
     const { turn } = await (await accepted).json()
-    await expect.poll(() => ({ calls, errors })).toEqual({ calls: 1, errors: [] })
+    await expect.poll(() => ({ calls, errors })).toEqual({ calls: 2, errors: [] })
     expect(validationResult).toContain("Missing required MCP arguments")
     expect(validationResult).toContain("record_key")
+    expect(rateLimitResult).toContain(rateLimit)
     expect(typeof token).toBe("string")
     const transcript = page.getByTestId("transcript")
     const collapsed = transcript.getByTestId("work-fold")
@@ -203,6 +215,10 @@ test("MCP missing arguments remain visible while the corrected call reports prog
     const rejected = callRows.first()
     if (await rejected.getAttribute("aria-expanded") === "false") await rejected.click()
     await expect(transcript.getByText(/Missing required MCP arguments.*record_key/)).toBeVisible()
+    const limited = callRows.filter({ hasText: "429 Too Many Requests" })
+    await expect(limited).toContainText("search_record")
+    if (await limited.getAttribute("aria-expanded") === "false") await limited.click()
+    await expect(transcript.getByText(rateLimit, { exact: false }).last()).toBeVisible()
     const tool = callRows.last()
     if (await tool.getAttribute("aria-expanded") === "false") await tool.click()
     await expect(transcript.getByTestId("mcp-tool-progress")).toContainText(phase)
@@ -218,6 +234,9 @@ test("MCP missing arguments remain visible while the corrected call reports prog
     }))
     expect(trace.events).toContainEqual(expect.objectContaining({
       kind: "tool_result", tool_call_id: missingCallID, text: expect.stringContaining("Missing required MCP arguments"),
+    }))
+    expect(trace.events).toContainEqual(expect.objectContaining({
+      kind: "tool_result", tool_call_id: limitedCallID, text: expect.stringContaining(rateLimit),
     }))
     expect((trace.events as ProgressEvent[]).some((event) => event.kind === "tool_delta" || event.text?.includes(phase))).toBe(false)
   } finally {

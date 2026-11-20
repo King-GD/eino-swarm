@@ -28,6 +28,7 @@ func TestMCPToolReauthenticatesOnlyForAnExpiredSession(t *testing.T) {
 		wantExec  int32
 		timeout   bool
 		toolError bool
+		rateLimit bool
 		ok        bool
 	}{
 		{name: "proxy renews one expired binding", first: http.StatusNotFound, wantCalls: 2, wantExec: 1, ok: true},
@@ -39,6 +40,8 @@ func TestMCPToolReauthenticatesOnlyForAnExpiredSession(t *testing.T) {
 		{name: "expiry after a deadline renews only the later call", timeout: true, next: http.StatusNotFound, wantCalls: 3, wantExec: 2, ok: true},
 		{name: "authentication failure after a deadline stops the task", timeout: true, next: http.StatusUnauthorized, wantCalls: 2, wantExec: 1},
 		{name: "remote tool error pauses without retry", toolError: true, wantCalls: 1, wantExec: 1},
+		{name: "proxy continues after a rate limit", rateLimit: true, wantCalls: 2, wantExec: 2, ok: true},
+		{name: "direct continues after a rate limit", rateLimit: true, direct: true, wantCalls: 2, wantExec: 2, ok: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			server := mcp.NewServer(&mcp.Implementation{Name: "transport fixture", Version: "test"}, nil)
@@ -54,6 +57,11 @@ func TestMCPToolReauthenticatesOnlyForAnExpiredSession(t *testing.T) {
 						case <-stopFixture:
 							return nil, context.Canceled
 						}
+					}
+					if tc.rateLimit {
+						return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{
+							&mcp.TextContent{Text: "Upstream HTTP 429 Too Many Requests"},
+						}}, nil
 					}
 					if tc.toolError {
 						// The remote operation ran. Validation-like prose cannot prove
@@ -140,6 +148,15 @@ func TestMCPToolReauthenticatesOnlyForAnExpiredSession(t *testing.T) {
 						nuwaValidationTool(w, request, "independent-call", nextTool, nextArgs)
 						return
 					}
+					if tc.rateLimit {
+						receipt := nuwaValidationReceipt(request, "lookup-call")
+						if !strings.Contains(receipt, "Upstream HTTP 429 Too Many Requests") ||
+							!strings.Contains(receipt, "Verify it before repeating") || !strings.Contains(receipt, `"isError":true`) {
+							t.Errorf("the original model receipt lost the rate limit: %q", receipt)
+						}
+						nuwaValidationTool(w, request, "independent-call", nextTool, nextArgs)
+						return
+					}
 					if tc.first == http.StatusUnauthorized {
 						nuwaValidationTool(w, request, "repaired-lookup", toolName, args)
 						return
@@ -149,7 +166,7 @@ func TestMCPToolReauthenticatesOnlyForAnExpiredSession(t *testing.T) {
 					}
 					nuwaValidationTool(w, request, "next-tool", "exec", `{"command":"printf should-run-only-after-a-success"}`)
 				default:
-					if tc.timeout && !strings.Contains(nuwaValidationReceipt(request, "independent-call"), "independent lookup verified") {
+					if (tc.timeout || tc.rateLimit) && !strings.Contains(nuwaValidationReceipt(request, "independent-call"), "independent lookup verified") {
 						t.Error("the model did not receive the later independent result")
 					}
 					if tc.first == http.StatusUnauthorized && !strings.Contains(nuwaValidationReceipt(request, "repaired-lookup"), "lookup verified") {
@@ -211,6 +228,24 @@ func TestMCPToolReauthenticatesOnlyForAnExpiredSession(t *testing.T) {
 				if timeoutReceipts != 1 {
 					t.Errorf("durable timeout receipts = %d, want 1", timeoutReceipts)
 				}
+			} else if tc.rateLimit {
+				if toolNames[0] != "lookup" || toolNames[1] != "verify" || ids[1] != ids[0] {
+					t.Error("rate limit replayed the call or replaced the session")
+				}
+				events, err := e.store.ListTurnEvents(turn.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				receipts := 0
+				for _, event := range events {
+					if event.Kind == "tool_result" && event.ToolCallID == "lookup-call" &&
+						strings.Contains(event.Text, "Upstream HTTP 429 Too Many Requests") {
+						receipts++
+					}
+				}
+				if receipts != 1 {
+					t.Fatalf("durable rate limit receipts = %d, want 1", receipts)
+				}
 			} else if len(ids) == 2 && (ids[1] == "" || ids[0] == ids[1]) {
 				t.Error("confirmed expiry did not renew the session")
 			}
@@ -231,9 +266,9 @@ func TestMCPToolReauthenticatesOnlyForAnExpiredSession(t *testing.T) {
 				}
 			} else if finished.Status != store.TurnDone || len(requests.snapshot()) != 3 {
 				t.Fatalf("recovered task did not finish: status=%s model calls=%d error=%q", finished.Status, len(requests.snapshot()), finished.Error)
-			} else if tc.timeout {
+			} else if tc.timeout || tc.rateLimit {
 				if recovered := e.restoredMCPFailure(turn.ID, nil); recovered != nil {
-					t.Errorf("recovery would block after a call deadline: %v", recovered)
+					t.Errorf("recovery would reinstate a tool block: %v", recovered)
 				}
 			}
 

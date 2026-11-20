@@ -101,6 +101,9 @@ func TestMCPProgressKeepsParallelCallsSeparateAfterResultOrCancellation(t *testi
 			finishFirst := make(chan struct{})
 			finishSecond := make(chan struct{})
 			lateToken := make(chan string, 1)
+			// A cancelled client call can leave the server handler waiting for
+			// the fixture's gates. Release it before the HTTP server cleanup.
+			fixtureDone := t.Context().Done()
 			remote := progressFixture(t, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 				var args struct{ Label string }
 				if err := json.Unmarshal(req.Params.Arguments, &args); err != nil {
@@ -120,6 +123,8 @@ func TestMCPProgressKeepsParallelCallsSeparateAfterResultOrCancellation(t *testi
 						return progressFixtureResult(), nil
 					case <-ctx.Done():
 						return nil, ctx.Err()
+					case <-fixtureDone:
+						return nil, context.Canceled
 					}
 				}
 				select {
@@ -136,12 +141,16 @@ func TestMCPProgressKeepsParallelCallsSeparateAfterResultOrCancellation(t *testi
 					}
 				case <-ctx.Done():
 					return nil, ctx.Err()
+				case <-fixtureDone:
+					return nil, context.Canceled
 				}
 				select {
 				case <-finishSecond:
 					return progressFixtureResult(), nil
 				case <-ctx.Done():
 					return nil, ctx.Err()
+				case <-fixtureDone:
+					return nil, context.Canceled
 				}
 			})
 			firstCtx, cancelFirst := context.WithCancel(t.Context())

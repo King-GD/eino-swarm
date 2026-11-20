@@ -1164,10 +1164,13 @@ usable. Connection/discovery and actual calls each have their configured timeout
 waiting for an in-progress connection is cancellable. Calls and JSON results use
 the existing tool transcript, result limit and Trace, preserving error identity
 and `isError` across clipping. The shared call adapter checks required fields
-against the connected session's catalog before dispatch. A missing-field
-receipt uses the original call ID and leaves the Registry admission gate open.
-A remote `isError` still blocks admission because it carries no execution
-phase. No uncertain call is automatically retried.
+and explicit property and homogeneous array item types against the connected
+session's catalog before dispatch. Local rejections use the original call ID
+and leave Registry admission open for a corrected call.
+A remote `isError` with recognized HTTP 429 text also leaves admission open
+and keeps the existing session. Its result retains the remote text and advises
+verification before repeating the operation. Other remote tool errors block
+admission. Only confirmed session expiry permits automatic replay.
 
 An executing MCP proxy requests standard progress with a unique invocation
 token. Only matching notifications for an active call reach the registry's
