@@ -29,13 +29,30 @@ func TestLocalModeListsAuthorizedServerCatalogs(t *testing.T) {
 	}
 	g.extra = func(w http.ResponseWriter, r *http.Request) bool {
 		switch r.URL.Path {
-		case "/client/desktop/v1/chat/completions", "/client/models/v1/gateway/chat/completions":
+		case "/client/models/v1/capabilities":
+			sources := map[string]*provider.SourceCapabilities{}
+			for name, endpoints := range map[string][]string{
+				"preset":  {"chat_completions", "responses"},
+				"gateway": {"chat_completions"},
+			} {
+				sources[name] = &provider.SourceCapabilities{Authorized: true, Available: true, Configurable: true, Capabilities: map[string]provider.RoleCapability{
+					"conversation": {Supported: true, Available: true, Configurable: true, Endpoints: endpoints},
+				}}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": provider.ClientCapabilities{Version: 1, ModelRolesVersion: 3, Sources: sources}})
+			return true
+		case "/client/desktop/v1/responses", "/client/models/v1/gateway/chat/completions":
 			inferenceCalls.Add(1)
 			if r.Header.Get("Authorization") != "Bearer "+accountModelsToken {
 				t.Error("wrong source credential")
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"source reply"},"finish_reason":"stop"}]}`)
+			if r.URL.Path == "/client/desktop/v1/responses" {
+				_, _ = io.WriteString(w, `{"id":"r","object":"response","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"preset reply"}]}]}`)
+			} else {
+				_, _ = io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"gateway reply"},"finish_reason":"stop"}]}`)
+			}
 			return true
 		case "/client/models/v1/preset/models":
 			w.Header().Set("Content-Type", "application/json")
@@ -158,11 +175,11 @@ func TestLocalModeListsAuthorizedServerCatalogs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := presetModel.Generate(t.Context(), []*schema.Message{schema.UserMessage("source fixture")}); err != nil {
-		t.Fatal(err)
+	if out, err := presetModel.Generate(t.Context(), []*schema.Message{schema.UserMessage("source fixture")}); err != nil || out == nil || out.Content != "preset reply" {
+		t.Fatalf("preset Responses reply = %v, err = %v", out, err)
 	}
-	if _, err := gatewayModel.Generate(t.Context(), []*schema.Message{schema.UserMessage("source fixture")}); err != nil {
-		t.Fatal(err)
+	if out, err := gatewayModel.Generate(t.Context(), []*schema.Message{schema.UserMessage("source fixture")}); err != nil || out == nil || out.Content != "gateway reply" {
+		t.Fatalf("original gateway Chat Completions reply = %v, err = %v", out, err)
 	}
 	if inferenceCalls.Load() != 2 {
 		t.Fatal("LOCAL models did not reach both HTTP sources")

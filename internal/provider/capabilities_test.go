@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
+	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -126,5 +127,94 @@ func TestRoleUsesPublicResponsesAndRefusesAfterGrantRemoval(t *testing.T) {
 	}
 	if !strings.Contains(p.ModelPolicy().CapabilityStatus, "unavailable") {
 		t.Fatal("missing retry state")
+	}
+}
+
+func TestGatewayChatProtocolFollowsEachRoleAndKeepsOpenedClients(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if r.Method != http.MethodPost || r.Header.Get("Authorization") != "Bearer fixture-device" {
+			t.Error("gateway call did not use POST and the device credential")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/chat/completions":
+			fmt.Fprint(w, `{"choices":[{"message":{"role":"assistant","content":"chat"},"finish_reason":"stop"}]}`)
+		case "/v1/responses":
+			fmt.Fprint(w, `{"id":"r","object":"response","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"responses"}]}]}`)
+		default:
+			t.Errorf("unexpected gateway path %q", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	p := New(config.Default())
+	ctx := t.Context()
+	input := []*schema.Message{schema.UserMessage("input")}
+	src := accountSourceFor(t, server.URL+"/v1", "fixture-device")
+	src.SetModelPolicy(true, map[string]string{"conversation": "server-model", "translation": "server-model-2"})
+	publish := func(authorized bool, endpoints ...string) {
+		caps := roleManifest("translation", "chat_completions", true)
+		caps.Authorized = authorized
+		caps.Capabilities["conversation"] = RoleCapability{Supported: true, Available: true, Configurable: true, Endpoints: endpoints}
+		next := *src
+		next.SetCapabilities(caps)
+		p.SetAccountSource(&next)
+	}
+	openConversation := func() model.BaseChatModel {
+		t.Helper()
+		factory, err := p.ModelBuilder(ctx, src.id, "", "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return factory("manager", "test-agent")
+	}
+	checkReply := func(client model.BaseChatModel, want string) {
+		t.Helper()
+		out, err := client.Generate(ctx, input)
+		if err != nil || out == nil || out.Content != want {
+			t.Fatalf("gateway reply = %v, err = %v, want %q", out, err, want)
+		}
+	}
+
+	publish(true, "chat_completions")
+	existing := openConversation()
+	checkReply(existing, "chat")
+
+	publish(true, "chat_completions", "responses")
+	checkReply(openConversation(), "responses")
+	checkReply(existing, "chat")
+	translation, err := p.RoleModelBuilder(ctx, src.id, "server-model-2", "", nil, "translation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkReply(translation("translator", "test-agent"), "chat")
+	if out, err := p.CompleteFixedChat(ctx, src.id, "translation", "translate", "input", 100); err != nil || out != "chat" {
+		t.Fatalf("fixed role reply = %q, err = %v", out, err)
+	}
+
+	publish(true, "responses", "chat_completions")
+	checkReply(openConversation(), "responses")
+	publish(true, "responses")
+	checkReply(openConversation(), "responses")
+
+	before := requests.Load()
+	publish(true, "unknown")
+	if err := p.ValidateConversationSelection(src.id, "server-model"); !errors.Is(err, ErrModelPolicy) {
+		t.Fatalf("unknown endpoint selection = %v", err)
+	}
+	if _, err := existing.Generate(ctx, input); !errors.Is(err, ErrModelPolicy) {
+		t.Fatalf("opened client with no implemented endpoint = %v", err)
+	}
+	publish(false, "responses")
+	if err := p.ValidateConversationSelection(src.id, "server-model"); !errors.Is(err, ErrModelPolicy) {
+		t.Fatalf("unauthorized endpoint selection = %v", err)
+	}
+	if _, err := existing.Generate(ctx, input); !errors.Is(err, ErrModelPolicy) {
+		t.Fatalf("opened client with a revoked grant = %v", err)
+	}
+	if requests.Load() != before {
+		t.Fatal("a refused endpoint reached the gateway")
 	}
 }

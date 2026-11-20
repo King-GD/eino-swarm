@@ -80,6 +80,14 @@ export interface SpeechRecordingOptions {
   onCancel?: () => void
 }
 
+function isMissingInput(error: unknown): boolean {
+  if (!(error instanceof DOMException) && !(error instanceof Error)) return false
+  if (error.name === "NotFoundError") return true
+  // Browsers can withhold the name of the failed constraint before permission.
+  return error.name === "OverconstrainedError" &&
+    (!("constraint" in error) || !error.constraint || error.constraint === "deviceId")
+}
+
 /** The recording owns all acquired tracks, including a late permission grant. */
 export async function startSpeechRecording(options: SpeechRecordingOptions): Promise<SpeechRecording> {
   if (!speechRecordingSupported()) throw new Error("Microphone recording is not available in this browser.")
@@ -128,9 +136,15 @@ export async function startSpeechRecording(options: SpeechRecordingOptions): Pro
   claimAudio(cancel)
   options.signal.addEventListener("abort", cancel, { once: true })
   try {
-    // exact avoids falling back to a closed lid's built-in microphone.
     const deviceId = options.deviceId?.trim()
-    stream = await navigator.mediaDevices.getUserMedia({ audio: deviceId ? { deviceId: { exact: deviceId } } : true, video: false })
+    const media = navigator.mediaDevices
+    try {
+      stream = await media.getUserMedia({ audio: deviceId ? { deviceId: { exact: deviceId } } : true, video: false })
+    } catch (error) {
+      if (cancelled || options.signal.aborted) throw aborted()
+      if (!deviceId || !isMissingInput(error)) throw error
+      stream = await media.getUserMedia({ audio: true, video: false })
+    }
     if (cancelled || options.signal.aborted) throw aborted()
     const mime = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm", "audio/ogg;codecs=opus"]
       .find((type) => typeof MediaRecorder.isTypeSupported === "function" && MediaRecorder.isTypeSupported(type))

@@ -10,9 +10,11 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 - The phone composer's Add menu and slash suggestions list `/goal`, `/plan` and `/image` in PC chats, including after draft text. Direct chat offers `/image` when the selected Gateway source has authorized image generation. Choosing a leading command keeps the draft as its argument. (`F-150`, `F-182`, `F-220`, `C-009`, `C-051`)
 
-- PC and Web voice settings can choose the microphone. System default follows the operating-system input; a named device is used exactly, and an unplugged device asks for another choice instead of switching microphones silently. Phones keep the phone microphone. (`F-148`, `C-048`)
+- PC and Web voice settings can choose a preferred microphone or follow the operating-system input. Phones use their own microphone. (`F-148`, `C-048`)
 
 ### Changed
+
+- Authorized Gateway chat roles prefer Responses when the source publishes it. Chat-only sources continue using Chat Completions. (`F-171`, `C-040`)
 
 - The manager tool-round pause on desktop and web opens Settings → Swarm → Manager tool rounds. A paired phone names that computer setting. The continuation already offered keeps its size. (`F-130`, `F-170`, `F-220`, `C-009`)
 
@@ -26,6 +28,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - 网关模式下，普通网关和第三方接入会根据可用的识别、朗读模型分别默认开启语音。语音设置仅显示网关允许编辑的参数，录音格式和超时等设置默认折叠。(`F-148`, `C-048`)
 
 ### Fixed
+
+- PC and Web voice input shows and uses System default when the saved microphone is missing. The preferred microphone can be used again when it reconnects. (`F-148`, `C-048`)
 
 - A deferred answer check no longer pauses with the manager tool-round cap
   wording. The card shows rounds already used and the configured limit, and

@@ -50,7 +50,7 @@ overrides that direction. A personal binding, provider, or custom endpoint
 remains the request target. Without that login or role, the direction stays
 not ready.
 
-`speech.input.device_id` selects the PC or Web microphone. Empty follows the operating-system default. A saved id is the browser's audio input id, not a device name. If that device is unplugged, recording fails and the saved id stays until another choice is made. Phones ignore this field and use the phone microphone.
+`speech.input.device_id` is the preferred PC or Web microphone's browser audio input ID. Empty follows the operating-system default. When capture cannot find the saved device, it tries the system default once and keeps the preference for when that device returns. Selecting **System default** clears the saved ID. Phones use their own microphone.
 
 Under **Advanced settings**, `speech.input.recording_format` accepts `auto`
 and `wav`. Automatic recording

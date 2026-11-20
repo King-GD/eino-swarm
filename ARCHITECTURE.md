@@ -610,8 +610,12 @@ handling, the store or the event bus. These requests do not alter turn/worker,
 presence, handoff or event-sequence ordering.
 
 The shared browser recorder owns acquired microphone tracks through cancellation,
-including late permission grants. PC dictation updates the existing durable draft;
-phone dictation edits its existing composer. Playback extracts Markdown prose,
+including late permission grants. PC/Web Settings displays the system default
+when the saved microphone is absent from the device list. Capture uses that
+default when the browser cannot open the preferred device because it is missing.
+The fallback keeps the saved preference for a later recording. PC dictation
+updates the existing durable draft, and phone dictation edits its composer.
+Playback extracts Markdown prose,
 skips fenced code, and sequences bounded speech segments through one cancelable
 player. Selecting PCM enables incremental 24 kHz mono S16LE playback for PC/Web
 and direct phone HTTP calls. The Go service retains model ownership and

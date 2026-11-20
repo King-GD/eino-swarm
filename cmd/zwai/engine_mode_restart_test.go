@@ -50,9 +50,9 @@ func TestGatewayModeRestartResumesOriginalModelBeforeApplyingPreset(t *testing.T
 				"capabilities_url": base + "/client/models/v1/capabilities",
 			}})
 		case "/client/models/v1/capabilities":
-			roles := map[string]provider.RoleCapability{}
-			for _, role := range config.ModelRoles() {
-				roles[role] = provider.RoleCapability{Supported: true, Available: true, Configurable: true, Endpoints: provider.ImplementedEndpoints(role)}
+			// This restart fixture serves Chat Completions for both sources.
+			roles := map[string]provider.RoleCapability{
+				"conversation": {Supported: true, Available: true, Configurable: true, Endpoints: []string{config.APIModeChatCompletions}},
 			}
 			source := &provider.SourceCapabilities{Authorized: true, Available: true, Configurable: false, Capabilities: roles}
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": provider.ClientCapabilities{Version: 1, ModelRolesVersion: 3, Sources: map[string]*provider.SourceCapabilities{"preset": source, "gateway": source}}})

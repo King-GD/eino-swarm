@@ -128,8 +128,8 @@ func (s *AccountSource) allowsRole(role string) bool {
 }
 
 func (s *AccountSource) chatAPI(role string) string {
-	if s.capabilities != nil && !slices.Contains(s.capabilities.Capabilities[role].Endpoints, "chat_completions") && slices.Contains(s.capabilities.Capabilities[role].Endpoints, "responses") {
-		return "responses"
+	if s.capabilities != nil && slices.Contains(s.capabilities.Capabilities[role].Endpoints, config.APIModeResponses) {
+		return config.APIModeResponses
 	}
 	return config.APIModeChatCompletions
 }

@@ -24,10 +24,11 @@ The encrypted PC-local phone route downloads a completed segment, including PCM;
 it does not provide live synthesis streaming.
 
 The microphone appears beside Send only when recognition is enabled and ready.
-Settings → Voice chooses the input device. System default follows the operating
-system's current input, which is the right choice when a laptop lid is closed
-and an external microphone should take over. A named device is used exactly;
-if it disappears, recording stops instead of silently switching microphones.
+Choose an input device in the Voice input section of Settings. **System default**
+follows the operating system's current input. When a saved microphone is missing,
+Settings shows **System default** and new recordings fall back to that input.
+The saved microphone can be used again when it returns. Choose **System default**
+in the menu to clear that preference.
 
 On PC, click to record, click again to finish, or press Escape to cancel.
 On the phone, tap to open the recording panel and choose Finish or Cancel.

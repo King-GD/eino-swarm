@@ -1,4 +1,4 @@
-import { fixtureCapabilities } from "../src/test/capabilities"
+import { fixtureSourceCapabilities } from "../src/test/capabilities"
 import { expect, test } from "@playwright/test"
 
 const origin = "https://sources.invalid"
@@ -23,17 +23,31 @@ test("LOCAL groups both catalogs, routes duplicates and drops only a revoked sou
     gateway_models: { source_id: "gateway:global", source_kind: "gateway", execution: "phone", label: "Main", api_base_url: origin + gateway, catalog_url: origin + gateway + "/models", api_access_enabled: true },
     pairlink: { enabled: false, hub_url: origin, redeem_url: origin + "/pairlink/v1/pairings/redeem", info_url: origin + "/pairlink/v1/info", websocket_url: origin.replace("https:", "wss:") + "/pairlink/v1/ws" }, heartbeat_interval: 30, presence_ttl: 90,
   }
+  const presetCapabilities = fixtureSourceCapabilities()
+  presetCapabilities.capabilities.conversation!.endpoints = ["chat_completions", "responses"]
+  const gatewayCapabilities = fixtureSourceCapabilities()
+  gatewayCapabilities.capabilities.conversation!.endpoints = ["chat_completions"]
   let revoked = false
   const inference: { path: string; model: string }[] = []
   await page.route(origin + "/**", async route => {
     const request = route.request(), path = new URL(request.url()).pathname
     expect(request.headers().authorization).toBe("Bearer " + token)
     if (path.startsWith(gateway) && revoked) { await route.fulfill({ status: 403, json: { error: { code: "permission_denied" } } }); return }
+    if (path.endsWith("/responses")) {
+      expect(request.method()).toBe("POST")
+      inference.push({ path, model: request.postDataJSON().model })
+      const events = [
+        { type: "response.output_text.delta", delta: "PRESET REPLY" },
+        { type: "response.completed", response: { id: "fixture", status: "completed", output: [] } },
+      ]
+      await route.fulfill({ contentType: "text/event-stream", body: events.map(event => `data: ${JSON.stringify(event)}\n\n`).join("") })
+      return
+    }
     if (path.endsWith("/chat/completions")) {
       inference.push({ path, model: request.postDataJSON().model })
       await route.fulfill({ contentType: "text/event-stream", body: `data: ${JSON.stringify({ choices: [{ delta: { content: path.startsWith(gateway) ? "GATEWAY REPLY" : "PRESET REPLY" } }] })}\n\ndata: [DONE]\n\n` }); return
     }
-    const data = path === "/client/capabilities" ? fixtureCapabilities() : path.endsWith("/auth/me") ? { user, device } : path.endsWith("/bootstrap") ? bootstrap
+    const data = path === "/client/capabilities" ? { version: 1, model_roles_version: 3, sources: { preset: presetCapabilities, gateway: gatewayCapabilities } } : path.endsWith("/auth/me") ? { user, device } : path.endsWith("/bootstrap") ? bootstrap
       : path === preset ? ["compact", "title", "translation", "conversation"].map(id => ({ id, model_type: "chat" }))
       : path === gateway + "/models" ? [{ id: "conversation" }] : {}
     expect(path).not.toBe("/v1/models")
@@ -62,7 +76,7 @@ test("LOCAL groups both catalogs, routes duplicates and drops only a revoked sou
     await expect(page.getByText(reply, { exact: true })).toBeVisible()
     await page.getByRole("button", { name: "返回", exact: true }).click()
   }
-  expect(inference).toEqual([{ path: "personal", model: "conversation" }, { path: "/v1/chat/completions", model: "conversation" }, { path: gateway + "/chat/completions", model: "conversation" }])
+  expect(inference).toEqual([{ path: "personal", model: "conversation" }, { path: "/v1/responses", model: "conversation" }, { path: gateway + "/chat/completions", model: "conversation" }])
   revoked = true
   picker = await openPicker()
   await picker.getByRole("button", { name: "刷新模型", exact: true }).click()

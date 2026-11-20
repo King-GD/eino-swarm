@@ -56,9 +56,12 @@ and explicit refusal through the real HTTP route and a loopback Gateway.
 The settings trial in `frontend/e2e/speech.spec.ts` asserts disabled reasons,
 enables each speech direction, captures actual fake-device microphone chunks,
 checks the WAV upload and transcription field, then decodes and schedules the
-loopback provider's playback samples. Unit tests also keep Stop available when
-settings change during playback. This is browser/loopback validation, not native
-microphone or online gateway acceptance.
+loopback provider's playback samples. A saved, absent microphone exercises
+system-default capture in both Settings and the composer. The Settings case
+checks the displayed default, preserved preference and explicit clearing.
+Unit tests cover device reconnection, fallback errors, cancellation and keeping
+Stop available when settings change during playback. Browser tests use loopback
+services and fake audio devices.
 
 `internal/config/speech_test.go` and `internal/speech/service_test.go` cover
 independent switches, private settings, typed model discovery, Gateway role
