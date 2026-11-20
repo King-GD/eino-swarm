@@ -201,7 +201,7 @@ selectors. After a connected-PC debug switch to LOCAL, the composer exposes
 **Original interface** groups, and third-party groups titled with the name the
 gateway returned, using that PC’s authorized catalogs. Identical model names retain their source IDs and routes.
 The paired PC also supplies the hosted conversation role’s display name. The
-composer shows that name while requests keep the role ID.
+composer’s Model sheet shows that name while requests keep the role ID.
 The phone has no second Official/All models switch. LOCAL Chat
 shows third-party presets and Gateway models only when the server authorizes
 those sources. A source returning 403 disappears without signing out or hiding
@@ -367,9 +367,9 @@ answer stays on screen and splits that row. The live tail is **Thinking**
 / **Planning next moves** / **Editing** / **Reading** / **Exec**; open
 the row for the pieces. A `progress` pulse is not a chat
 row. `wait_agents` is a status count, not the `elapsed_ms` roster.
-A conversation with sub-agents offers **Agents / 子 Agent** in its header. Its
-number counts running workers only; the list separates running workers from
-finished and failed history. Each row shows role, ID, status, and latest
+A conversation with sub-agents offers **Agents / 子 Agent** above the message
+box. Its number counts running workers. The list separates running workers
+from finished and failed history. Each row shows role, ID, status, and latest
 permitted activity; open a row
 for that agent's separate thought, tool, and answer log. **Earlier** loads
 older events into the same list and log. Worker answers do not appear as
@@ -411,10 +411,9 @@ anything to the PC. Remove the nonblank quotations, or change the request into
 an ordinary message, then submit again explicitly.
 Ordinary quoted requests, paths and literal command text keep their usual
 behavior. Pure-text commands still use the PC engine's existing semantics.
-**Outputs** in a paired conversation lists that
-PC conversation's workspace, including uploads and generated files. It opens
-at the workspace root. Tap a folder to load that folder's complete contents,
-or search to list every match. A search does not show a shorter list first. Open a
+**Outputs** above the message box lists the paired PC conversation’s files.
+Tasks with their own file root open to **Results**. Tap a folder to load its
+complete contents, or search to list every match. A search does not show a shorter list first. Open a
 file to preview Markdown (.md/.markdown/.mdx) as a document, known source
 suffixes with syntax colors, plain text, a common image, PDF, tables, or supported
 Office and EPUB documents. HTML artifacts render in an isolated frame. SVG stays
@@ -446,7 +445,11 @@ over the reading area, so the current page stays in place. Reopening a file
 resets its view. Preview adjustments preserve the original download bytes.
 Full Settings, PTY and Trace stay on the PC; paired phones also expose PC timeout controls.
 
-While a PC turn runs, the empty composer shows a square Stop button. Typing a message or adding an attachment or quote switches it to Follow-up; Steer stays available for that draft. The header Stop remains available while drafting. A parked wait has no live turn to stop. In direct model chat, the square Stop cancels the stream, keeps the text received so far, and restores Send.
+The square **Stop** button stays at the right edge of the composer during a
+PC turn. A draft also exposes **Follow-up** and, when available, send
+options for inserting it into the current turn. Stop keeps the unsent draft.
+A parked wait has no live turn to stop. In direct model chat, the square Stop
+cancels the stream, keeps the text received so far, and restores Send.
 
 When a PC turn asks a question, pick an option or type Other and tap Submit.
 The phone uses the PC's normalized question ID in the answer; a rejected RPC
@@ -458,7 +461,9 @@ a short thread is bottom-aligned, and scrolling away from the tail raises
 **Jump to latest**. Answering inside a conversation is one rounded box
 (`components/composer.tsx`) that grows with the text up to a cap, Enter
 sends (Shift+Enter is a newline, and an IME candidate list is never a
-send). The leftmost control is **Add**. It attaches files and lists `/goal`,
+send). Tap the message field to expand it and show the available **Model**
+and **Thinking level** icons below. Each icon opens its settings sheet.
+The leftmost control is **Add**. It attaches files and lists `/goal`,
 `/plan` and `/image` in a paired PC conversation or new chat. Direct chat
 offers `/image` when the selected Gateway source has an authorized image model.
 Typing `/` at the start or after draft text opens the same command list, including
@@ -531,8 +536,9 @@ inside a client process row use the same separate, initially closed thought cont
 Menu → Models saves an OpenAI-compatible endpoint: base URL, optional key,
 chat completions or responses, discover, timeout. After one is saved, a
 Chat tab sits on the top row, including when no PC is bound. That chat uses
-the same composer as a PC thread. Tap its model button to choose from an
-in-app, provider-grouped list; long names wrap, and Back closes the list.
+the same composer as a PC thread. Tap the message field, then the model
+icon to choose from an in-app, provider-grouped list. Long names wrap.
+Back closes the list.
 The reply streams. Its process row shows the latest activity while it is arriving.
 Open that row, then the thought's own **Thought / 思考** control to read the complete
 reasoning; merely opening the process row keeps that reasoning closed. Chat Completions accepts both legacy

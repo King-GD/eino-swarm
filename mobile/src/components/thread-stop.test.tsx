@@ -30,7 +30,7 @@ describe("phone live-turn primary action", () => {
     fireEvent.change(view.input, { target: { value: "   " } })
     expect(view.form.getByRole("button", { name: "Stop" })).toBeEnabled()
     fireEvent.change(view.input, { target: { value: "next" } })
-    expect(view.form.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument()
+    expect(view.form.getByRole("button", { name: "Stop" })).toBeEnabled()
     fireEvent.click(view.form.getByRole("button", { name: "Follow-up" }))
     expect(view.onSend).toHaveBeenCalledWith("next")
     fireEvent.change(view.input, { target: { value: "nudge" } })
@@ -44,10 +44,10 @@ describe("phone live-turn primary action", () => {
     expect(view.form.getByRole("button", { name: "Send" })).toBeDisabled()
   })
 
-  it("answers an active question instead of stopping it and never offers Stop for a parked wait", () => {
+  it("keeps both Answer and Stop available for an active question, with no Stop for a parked wait", () => {
     const ask: CompactBlock = { id: "q1", kind: "question", text: "Which?", pending: true, callId: "call-1", questions: [] }
     const view = harness({ id: "t1", title: "question", running: { thread_id: "t1", title: "question" } }, [ask])
-    expect(view.form.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument()
+    expect(view.form.getByRole("button", { name: "Stop" })).toBeEnabled()
     fireEvent.change(view.input, { target: { value: "answer" } })
     fireEvent.click(view.form.getByRole("button", { name: "Answer" }))
     expect(view.onAnswer).toHaveBeenCalledWith("answer")

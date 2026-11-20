@@ -73,7 +73,8 @@ describe("App boot chrome", () => {
     render(<App />)
     expect(screen.getByRole("tab", { name: t("chat.tab") })).toHaveAttribute("aria-selected", "true")
     expect(screen.queryByRole("button", { name: t("scan.camera") })).not.toBeInTheDocument()
-    expect(screen.getByRole("button", { name: t("composer.model") })).toHaveTextContent("one")
+    fireEvent.focus(screen.getByLabelText(t("thread.message")))
+    expect(screen.getByRole("button", { name: t("composer.model") })).toHaveAccessibleDescription("one")
     expect(screen.getByLabelText(t("composer.thinking"))).toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: t("composer.add") }))
     expect(screen.getByRole("menuitem", { name: t("composer.attach") })).toBeInTheDocument()
@@ -760,6 +761,7 @@ describe("inbox window and thread loading", () => {
     render(<App />)
     for (const thread of conversations) {
       fireEvent.click(await screen.findByRole("button", { name: t("home.open", { title: thread.title }) }))
+      fireEvent.focus(await screen.findByRole("textbox", { name: t("thread.message") }))
       const model = await screen.findByRole("button", { name: t("composer.model") })
       await waitFor(() => expect(model.textContent).toBe(thread.model))
       fireEvent.change(screen.getByLabelText(t("thread.message")), { target: { value: "Continue" } })

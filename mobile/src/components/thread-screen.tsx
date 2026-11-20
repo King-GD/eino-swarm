@@ -1,6 +1,6 @@
 import { parseSlashSubmit } from "../../../frontend/src/lib/slash-core"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { ArrowDown, ChevronLeft, ChevronRight, FileText, Loader2 } from "lucide-react"
+import { ArrowDown, ChevronLeft, ChevronRight, FileText, Loader2, UsersRound } from "lucide-react"
 
 import type { ComposerPrediction } from "../../../frontend/src/lib/composer-prediction"
 import type { InsertMode } from "../../../frontend/src/lib/delivery-mode"
@@ -347,25 +347,6 @@ export function ThreadScreen({
           ) : null}
         </div>
         <PhoneTaskPanelButton view={taskPanels} />
-        {agentPage === "chat" && fileLink ? (
-          <Button variant="ghost" className="h-8 shrink-0 px-2 text-xs" onClick={() => changePage("files")}>
-            <FileText className="mr-1 size-4" />{t("thread.files")}
-          </Button>
-        ) : null}
-        {agentPage === "chat" && agents.length > 0 ? (
-          <Button variant="ghost" className="h-8 shrink-0 px-2 text-xs" onClick={() => changePage("agents")}>
-            {t("thread.agents")} ({activeAgents.length})
-          </Button>
-        ) : null}
-        {agentPage === "chat" && (running || restoring) ? (
-          <Button
-            variant="ghost"
-            className="h-8 shrink-0 px-2 text-destructive"
-            onClick={onStop}
-          >
-            {t("thread.stop")}
-          </Button>
-        ) : null}
         {agentPage === "chat" && onOpenAccount ? <AccountButton onClick={onOpenAccount} /> : null}
       </header>
       <GoalBanner
@@ -555,6 +536,20 @@ export function ThreadScreen({
         />
       ) : null}
       {agentPage === "chat" ? <Composer
+        above={fileLink || agents.length > 0 ? (
+          <div data-testid="thread-composer-links" className="mb-1.5 flex min-w-0 flex-wrap justify-center gap-2">
+            {agents.length > 0 ? (
+              <button type="button" className={composerLinkClass} onClick={() => changePage("agents")}>
+                <UsersRound className="size-3.5" aria-hidden />{t("thread.agents")} ({activeAgents.length})
+              </button>
+            ) : null}
+            {fileLink ? (
+              <button type="button" className={composerLinkClass} onClick={() => changePage("files")}>
+                <FileText className="size-3.5" aria-hidden />{t("thread.files")}
+              </button>
+            ) : null}
+          </div>
+        ) : undefined}
         prediction={!running && !asking && !waiting && caughtUp ? prediction : undefined}
         quotes={asking ? [] : quotes}
         onQuotesChange={setQuotes}
@@ -564,7 +559,7 @@ export function ThreadScreen({
         sendLabel={asking ? t("thread.answer") : running ? t("thread.followUp") : t("thread.send")}
         onInsert={turnId && !asking && onInsert ? (mode, text, extra) => onInsert(mode, turnId, text, extra) : undefined}
         stopLabel={t("thread.stop")}
-        onStop={running && !asking ? onStop : undefined}
+        onStop={running || restoring ? onStop : undefined}
         disabled={restoring}
         pending={composerPending}
         models={models}
@@ -587,6 +582,8 @@ export function ThreadScreen({
     </main><PhoneTaskPanelSheet view={taskPanels} /></>
   )
 }
+
+const composerLinkClass = "flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs text-muted-foreground active:bg-accent"
 
 function turnRow(scroller: HTMLElement, turnId: string): HTMLElement | null {
   const rows = Array.from(scroller.querySelectorAll<HTMLElement>("[data-phone-turn]"))

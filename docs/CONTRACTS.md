@@ -269,7 +269,7 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 - 队列消费：只有实际删除成功的一方取得该排队记录的投递权，返回的内容必须属于这次删除的记录；自动出队丢失消费权或遇到编辑时重新选择队首，不投递旧内容。PC 对同一会话／排队 ID 的进行中注入请求去重；旧会话的迟到响应不得改动当前队列或错误。已离队记录返回 `404 followup_unavailable`，刷新后按真实刷新结果提示，不冒称注入成功，不按旧文本再发。证据：`internal/store/followups_claim_test.go`、`internal/server/missing_record_test.go`、`frontend/src/store/app-followup.ts`、`frontend/src/store/app-followup.test.ts`、`frontend/e2e/followup-error.spec.ts`。
 - 提问选项：`ask_user` 的 PC 与手机表单必须遵循主机已接受的选项 ID 规则：先归一化显式 ID，结果为空则从 label 生成。不得因省略 ID 而丢弃合法选项或隐藏整张表单；实时、刷新及历史重放保持一致，提交保留原 label 与 call_id 并继续同一 turn。证据：`internal/engine/ask.go`、`frontend/src/lib/transcript-ask.test.ts`、`mobile/src/lib/ask.test.ts`、`frontend/e2e/plan.spec.ts`。
 - 显式 Stop 结清原回合尚无结果的主管 `ask_user`，保留同一 `call_id`，并在回合终态前发布结果。已接受的答案或已有结果优先。交接暂停沿 `C-027` 保留，不由普通 Stop 收尾。证据：`internal/engine/ask_test.go`。
-- 手机主按钮：真实运行且无可发送草稿（包括附件或引用）时显示可点击停止图标，连接既有停止请求；有内容时点发送默认排队，旁边可选两种插入，提问时保持回答，定时等待不显示停止。直连流式回复期间停止按钮可中止请求并保留已收到的文本；停止不发送空消息。
+- 手机输入区：可停止的 PC 轮次在输入框右侧显示唯一的停止图标，连接既有停止请求并保留未发草稿。有内容时同时可跟进，默认排队，支持插入时仍可从发送选项选择两种方式；提问保持回答入口，定时等待保持发送入口。直连流式回复期间停止按钮可中止请求并保留已收到的文本。
 - PC 停止交互：桌面和 Web 保留输入框的明确 Stop 按钮；Esc 不得调用停止请求，无弹层、输入框聚焦、关闭弹层后及连续按键均遵守该边界。Esc 继续关闭当前图片预览、Find 或其他局部弹层；图片预览优先于底层 Find。证据：实现 `frontend/src/App.tsx`；测试 `frontend/src/App.test.tsx`、`frontend/e2e/shell.spec.ts`。来源：用户 2026-10-21 避免 Esc 误停任务的要求。
 - PC 与手机停止展示：`cleanup` 只证明尚在运行的子代理已停止，不证明其任务成功完成；其派生状态为 `cancelled`，与真实完成及失败分组区分。绑定当前 `agent_id` 且有非空原因的引擎取消 `finished` 回执，无论早于清理、晚于清理或晚于主管终态，实时与历史回放都显示已停止，Trace 保留原始原因；普通取消字样、其他代理 ID、ID 前缀碰撞、provider／watchdog 失败不能据此变成停止。PC 已确认为 `cancelled` 的代理，迟到的正文、流式文本、工具调用通知及后续取消或成功 `finished` 不得恢复运行或改变停止活动、停止时间；实时、完整历史及 roster 回放遵守相同规则。稳定的人工 `interrupted` 终态不显示模型失败／重试。真实成功及失败结果不得被清理回退，显式 `spawned` 续办同一 ID 后按新执行结果更新。该派生展示不增加 wire event，也不改变存储／广播顺序。证据：`frontend/src/lib/transcript.ts`、`frontend/src/lib/transcript-stop.test.ts`、`frontend/src/lib/transcript-cancelled-finish.test.ts`、`frontend/src/components/app/panel.tsx`、`frontend/e2e/restart.spec.ts`、`mobile/src/lib/transcript.ts`、`mobile/src/lib/transcript-stop.test.ts`、`mobile/src/components/thread-stop-roster.test.tsx`、`mobile/e2e/worker-stop-replay.spec.ts`。
 - 允许行为：排队和插入；禁止行为：在同一对话并行启动两个 turn；失败语义：`ErrBusy`/`ErrIdle` 对应 409 与 code；不变量：turn 状态可恢复；边界条件：中断和等待。
@@ -573,6 +573,8 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 - 证据：实现 `mobile/src/app.tsx`；测试 `mobile/src/app.test.tsx`, `mobile/e2e/walkthrough.spec.ts`；变更规则：同步手机导航测试和使用文档；来源：GitHub Issue #37。
 
 ## C-017 Phone composer focus preserves the viewport
+
+- 消息输入框闲置时收为一行。聚焦扩展输入区，在下排用图标打开可用的模型或思考强度设置；关闭弹层或结束编辑后回到紧凑布局。产出物和子 Agent 入口位于输入区上方。证据 `mobile/e2e/composer-layout.spec.ts`、`mobile/e2e/ios-wait-layout.swift`。
 
 - 收件箱搜索栏和「新建对话」位于列表底部，搜索输入使用 16 CSS px。键盘打开时，收件箱对齐可见视口，底栏留在结果下方、键盘上方，顶部 PC 导航仍可见。键盘收起后恢复收件箱高度并保留搜索词。证据 `mobile/src/components/home-bar.tsx`、`mobile/src/components/home-screen.tsx`、`mobile/e2e/composer-layout.spec.ts`、`mobile/e2e/ios-inbox-search.swift`。
 

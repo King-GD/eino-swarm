@@ -333,7 +333,8 @@ describe("ThreadScreen", () => {
         onAnswerStructured={vi.fn()}
       />,
     )
-    fireEvent.click(within(screen.getByRole("banner")).getByRole("button", { name: "Stop" }))
+    expect(within(screen.getByRole("banner")).queryByRole("button", { name: "Stop" })).toBeNull()
+    fireEvent.click(within(screen.getByTestId("message-composer")).getByRole("button", { name: "Stop" }))
     expect(onStop).toHaveBeenCalled()
     fireEvent.change(screen.getByLabelText("Message"), {
       target: { value: "keep going" },

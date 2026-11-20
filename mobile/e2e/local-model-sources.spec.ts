@@ -1,3 +1,4 @@
+import { activateComposer } from "./composer-controls"
 import { fixtureSourceCapabilities } from "../src/test/capabilities"
 import { expect, test } from "@playwright/test"
 
@@ -60,6 +61,7 @@ test("LOCAL groups both catalogs, routes duplicates and drops only a revoked sou
   })
   await page.goto("/")
   const openPicker = async () => {
+    await activateComposer(page)
     await page.getByRole("button", { name: "模型", exact: true }).click()
     return page.getByRole("dialog", { name: "模型", exact: true })
   }

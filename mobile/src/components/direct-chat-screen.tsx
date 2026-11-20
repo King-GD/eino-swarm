@@ -307,11 +307,6 @@ export function DirectChatScreen({
             <ChevronLeft className="size-5" aria-hidden />
           </Button>
           <h1 className="min-w-0 flex-1 truncate text-sm font-medium">{open.title || t("chat.tab")}</h1>
-          {pending ? (
-            <Button variant="ghost" className="h-8 shrink-0 px-2 text-destructive" onClick={stop}>
-              {t("thread.stop")}
-            </Button>
-          ) : null}
           {onOpenAccount ? <AccountButton onClick={onOpenAccount} /> : null}
         </header>
       ) : (

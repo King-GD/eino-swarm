@@ -508,7 +508,10 @@ final class BindFlowTests: XCTestCase {
   }
 
   private func chooseModel(_ app: XCUIApplication, name: String, source: String) throws {
-    let model = app.buttons["Model"].firstMatch
+    let message = app.textViews["Message"].firstMatch
+    XCTAssertTrue(message.waitForExistence(timeout: 8))
+    message.tap()
+    let model = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Model")).firstMatch
     XCTAssertTrue(model.waitForExistence(timeout: 8))
     model.tap()
     let heading = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", source)).firstMatch

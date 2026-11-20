@@ -1,3 +1,4 @@
+import { activateComposer } from "./composer-controls"
 import { expect, test } from "@playwright/test"
 
 /** A phone with no PC can still talk to an OpenAI-compatible endpoint.
@@ -44,9 +45,10 @@ test("connecting a model adds a chat tab and answers on the phone", async ({ pag
   await page.getByRole("button", { name: "保存" }).click()
 
   await expect(page.getByRole("tab", { name: "对话" })).toHaveAttribute("aria-selected", "true")
-  await expect(page.getByLabel("模型")).toBeVisible()
-  await expect(page.getByLabel("思考强度")).toBeVisible()
-  await page.getByLabel("思考强度").selectOption("high")
+  await activateComposer(page)
+  await expect(page.getByRole("button", { name: "模型", exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "思考强度", exact: true }).tap()
+  await page.getByRole("dialog", { name: "思考强度" }).getByRole("radio", { name: "高思考" }).tap()
   await page.getByLabel("消息").fill("ping")
   await page.getByRole("button", { name: "发送" }).click()
   await expect(page.getByText("pong")).toBeVisible()

@@ -16,6 +16,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
+- 手机输入框默认收为单行，点开后用图标选择模型和思考强度。子 Agent 和产出物移到输入框上方，停止按钮留在输入区，麦克风和停止按钮之间留出更多间距。停止时保留未发草稿。 (`F-220`, `F-222`, `F-224`, `F-230`, `C-002`, `C-017`)
+
 - Authorized Gateway chat roles prefer Responses when the source publishes it. Chat-only sources continue using Chat Completions. (`F-171`, `C-040`)
 
 - The manager tool-round pause on desktop and web opens Settings → Swarm → Manager tool rounds. A paired phone names that computer setting. The continuation already offered keeps its size. (`F-130`, `F-170`, `F-220`, `C-009`)

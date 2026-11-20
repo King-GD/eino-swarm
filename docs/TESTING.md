@@ -8062,6 +8062,14 @@ checks the actual submit/steer bounds and sends long input from PC follow-up,
 New chat, and direct model chat with long model names. It runs on Chromium
 and iPhone WebKit; install both with `cd mobile && npx playwright install chromium webkit`
 before `npm run e2e`. JSDOM cannot prove WebKit focus zoom.
+The compact composer case verifies the Add-to-field and microphone-to-Stop
+gaps, the lower Agents and Outputs entrances, and the model and thinking
+sheets on a 320 CSS px viewport. The live-stop case verifies one Stop and
+retention of an unsent follow-up draft. The packaged XCTest
+`testComposerFocusRevealsSettingsAndMovesThreadLinks` uses
+`IOS_LAYOUT_QUERY='/?mock=1&tick=0&history=streamed-agents&speech=local'` and
+`IOS_LAYOUT_PHONE_MODE=local`. It drives the software keyboard, both settings
+sheets, lower links and Stop with a draft.
 `mobile/e2e/ask-answer.spec.ts` also checks the actual Other textarea font size
 before typing and retaining a rejected answer. The Issue #104 regression first
 observed 14 CSS px against the existing 16px focus boundary. Use

@@ -1,3 +1,4 @@
+import { activateComposer } from "./composer-controls"
 import { expect, test, type Page } from "@playwright/test"
 import { fixtureCapabilities } from "../src/test/capabilities"
 import { startAccountFixture } from "./account-fixture/browser-fixture"
@@ -177,6 +178,7 @@ test("LOCAL groups the signed-in gateway catalog and logout preserves private se
   })
   await page.goto("/")
   await expect(page.getByRole("tab", { name: "对话" })).toHaveAttribute("aria-selected", "true")
+  await activateComposer(page)
   await page.getByRole("button", { name: "模型", exact: true }).click()
   await expect(page.getByRole("heading", { name: "测试网关" })).toBeVisible()
   await expect(page.getByRole("heading", { name: "手机自配" })).toBeVisible()
@@ -197,6 +199,7 @@ test("LOCAL groups the signed-in gateway catalog and logout preserves private se
   await page.getByRole("button", { name: "关闭", exact: true }).click()
   expect(await page.evaluate(() => localStorage.getItem("zwai.phone.providers"))).toContain("private-key")
   expect(await page.evaluate(() => localStorage.getItem("zwai.phone.providers"))).not.toContain(token)
+  await activateComposer(page)
   await page.getByRole("button", { name: "模型", exact: true }).click()
   await expect(page.getByRole("radio", { name: "shared-model" })).toHaveCount(1)
   await page.getByRole("group", { name: "手机自配", exact: true }).getByRole("radio", { name: "shared-model" }).click()

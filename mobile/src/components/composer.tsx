@@ -1,6 +1,6 @@
 import { capabilityAllows } from "../../../frontend/src/lib/capabilities"
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react"
-import { ArrowUp, Loader2, Plus, Square, X } from "lucide-react"
+import { ArrowUp, Brain, Cpu, Loader2, Plus, Square, X } from "lucide-react"
 import type { InsertMode } from "../../../frontend/src/lib/delivery-mode"
 
 import { installAndroidBack } from "@/lib/android-back"
@@ -24,7 +24,7 @@ import { isVisionFile } from "@/lib/put-chunks"
 import type { ModelChoice } from "@/lib/rpc"
 import { ComposerAddMenu, ComposerSlashMenu } from "./composer-menu"
 import { DeliveryMenu } from "./delivery-menu"
-import { ModelPicker } from "./model-picker"
+import { ModelPicker, ThinkingPicker, thinkingLabel } from "./model-picker"
 import { SpeechCapture, type SpeechCapturePhase } from "./speech-capture"
 import { insertSpeechText } from "../../../frontend/src/lib/speech-text"
 
@@ -113,8 +113,12 @@ export function Composer({
   const [pick, setPick] = useState(() => chosen(models, providerId, model))
   const explicitPick = useRef(false)
   const [level, setLevel] = useState(reasoning)
-  const [modelPickerOpen, setModelPickerOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [picker, setPicker] = useState<"model" | "thinking">()
   const modelTextId = useId()
+  const thinkingTextId = useId()
+  const dock = useRef<HTMLDivElement>(null)
+  const mouseDown = useRef(false)
   const box = useRef<HTMLTextAreaElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
   const addRef = useRef<HTMLButtonElement>(null)
@@ -132,9 +136,12 @@ export function Composer({
   const textOnlyRefusal = imageCommand
     ? hasQuotes || attached.length > 0
     : hasQuotes && (command?.id === "goal" || command?.id === "plan")
-  const showStop = Boolean(onStop && stopLabel && (pending || !hasDraft))
-  const showModel = !hideModel && (models.length > 0 || catalogBusy || Boolean(onRefreshModels))
-  const showTools = showModel || reasoningLevels.length > 0
+  const showStop = Boolean(onStop && stopLabel)
+  const showSubmit = !capturingSpeech && (!showStop || (hasDraft && !disabled && !pending))
+  const showModel = !hideModel && (models.length > 0 || Boolean(onRefreshModels))
+  const showThinking = reasoningLevels.length > 0
+  const expanded = !capturingSpeech && (editing || Boolean(picker))
+  const modelUnavailableNow = modelUnavailable(models, pick)
   const lockedModel = models.length === 1 && Boolean(models[0]?.locked)
   const modelText = choiceLabel(models, pick) || t("composer.model")
   const catalog = slashCommands?.map((command) => ({
@@ -161,6 +168,28 @@ export function Composer({
     setLevel(reasoning)
   }, [reasoning])
 
+  useLayoutEffect(() => {
+    if (!editing) return
+    let frame = 0
+    const press = () => { mouseDown.current = true }
+    const release = () => {
+      mouseDown.current = false
+      // An outside button can move when the composer shrinks. Let the
+      // browser finish dispatching the click before shifting the transcript.
+      frame = requestAnimationFrame(() => {
+        if (!dock.current?.contains(document.activeElement)) setEditing(false)
+      })
+    }
+    window.addEventListener("mousedown", press, true)
+    window.addEventListener("mouseup", release, true)
+    return () => {
+      window.removeEventListener("mousedown", press, true)
+      window.removeEventListener("mouseup", release, true)
+      cancelAnimationFrame(frame)
+      mouseDown.current = false
+    }
+  }, [editing])
+
   // Grow with the text instead of scrolling a one-line slot, but stop before
   // the transcript loses its last answer.
   useLayoutEffect(() => {
@@ -168,7 +197,7 @@ export function Composer({
     if (!el || capturingSpeech) return
     el.style.height = "auto"
     el.style.height = Math.min(el.scrollHeight, 132) + "px"
-  }, [text, capturingSpeech])
+  }, [text, capturingSpeech, expanded])
 
   // A menu click blurs the field. Put the caret back after `/name ` lands.
   useLayoutEffect(() => {
@@ -260,7 +289,19 @@ export function Composer({
   }
 
   return (
-    <div className="min-w-0 shrink-0 border-t border-border bg-background px-3 pb-2 pt-1.5">
+    <div
+      ref={dock}
+      className="min-w-0 shrink-0 bg-background px-3 pb-2 pt-1.5"
+      onBlur={(event) => {
+        if (!mouseDown.current && !event.currentTarget.contains(event.relatedTarget)) setEditing(false)
+      }}
+      onMouseDown={(event) => {
+        // Keep the toolbar in place through click. Canceling pointerdown
+        // would suppress WebKit's synthetic mouse events on a touch tap.
+        if (document.activeElement === box.current && event.target instanceof Element &&
+            event.target.closest("button")) event.preventDefault()
+      }}
+    >
       {above}
       {suggestion ? <div className="mb-1 flex min-w-0 items-start gap-1" data-testid="composer-prediction">
         <button type="button" className="line-clamp-2 min-w-0 flex-1 wrap-break-word rounded-lg px-2 py-1 text-left text-sm text-muted-foreground active:bg-accent" aria-label={`${t("prediction.insert")}: ${suggestion.text}`} onClick={insertSuggestion}>{suggestion.text}</button>
@@ -317,9 +358,11 @@ export function Composer({
       ) : null}
       <form
         ref={formRef}
+        data-testid="message-composer"
         className={cn(
-          "flex min-w-0 flex-wrap items-end gap-1.5 rounded-3xl bg-muted p-1.5 transition-colors",
-          !capturingSpeech && "focus-within:ring-1 focus-within:ring-ring",
+          "flex min-w-0 flex-wrap items-end gap-y-1 rounded-[1.5rem] border border-border bg-card p-1 shadow-sm",
+          expanded && "border-ring/45",
+          "focus-within:ring-1 focus-within:ring-ring/40",
         )}
         aria-busy={pending || undefined}
         onSubmit={(e) => {
@@ -384,6 +427,7 @@ export function Composer({
           aria-expanded={slashOpen || undefined}
           aria-controls={slashOpen ? "slash-menu" : undefined}
           aria-autocomplete={catalog.length ? "list" : undefined}
+          onFocus={() => setEditing(true)}
           onChange={(e) => {
             const next = catalog.length ? normalizeSlashPrefix(e.target.value) : e.target.value
             if (catalog.length && slashDraft(next)) setAddOpen(false)
@@ -426,10 +470,47 @@ export function Composer({
             void fire(onSubmit)
           }}
           className={cn(
-            "min-h-9 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-base leading-5",
+            "min-h-9 min-w-0 resize-none bg-transparent py-2 text-base leading-5",
             "placeholder:text-muted-foreground focus-visible:outline-hidden disabled:opacity-60",
+            expanded ? "order-first min-h-11 w-full flex-none px-2.5 pt-3" : "flex-1",
           )}
         />
+        {expanded ? <>
+          {catalogBusy && models.length === 0 && !hideModel ? (
+            <span role="status" className="flex size-9 items-center justify-center text-muted-foreground">
+              <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden />
+              <span className="sr-only">{t("composer.loading")}</span>
+            </span>
+          ) : null}
+          {showModel ? <button
+            type="button"
+            aria-label={t("composer.model")}
+            aria-haspopup="dialog"
+            aria-describedby={modelTextId}
+            title={modelUnavailableNow && !lockedModel ? t("composer.modelUnavailable") : modelText}
+            data-unavailable={modelUnavailableNow && !lockedModel ? "true" : undefined}
+            className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-accent disabled:opacity-40"
+            disabled={disabled || pending}
+            onClick={() => { setPicker("model"); box.current?.blur() }}
+          >
+            <Cpu className="size-4" aria-hidden />
+            <span id={modelTextId} className="sr-only">{modelText}</span>
+          </button> : null}
+          {showThinking ? <button
+            type="button"
+            aria-label={t("composer.thinking")}
+            aria-haspopup="dialog"
+            aria-describedby={thinkingTextId}
+            title={thinkingLabel(level)}
+            className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-accent disabled:opacity-40"
+            disabled={disabled || pending}
+            onClick={() => { setPicker("thinking"); box.current?.blur() }}
+          >
+            <Brain className="size-4" aria-hidden />
+            <span id={thinkingTextId} className="sr-only">{thinkingLabel(level)}</span>
+          </button> : null}
+          <span className="flex-1" aria-hidden />
+        </> : null}
         <SpeechCapture disabled={disabled || pending}
           onPhaseChange={setSpeechPhase}
           onStart={() => {
@@ -443,81 +524,52 @@ export function Composer({
             setText(next.text)
             requestAnimationFrame(() => { box.current?.focus(); box.current?.setSelectionRange(next.caret, next.caret) })
           }} />
-        {!capturingSpeech && onInsert && !showStop && !command ? (
+        {!capturingSpeech && onInsert && (!showStop || hasDraft) && !command ? (
           <DeliveryMenu disabled={!ready} onSelect={(mode) => void fire((content, extra) => onInsert(mode, content, extra))} />
         ) : null}
-        {!capturingSpeech ? <button
-          type={showStop ? "button" : "submit"}
-          aria-label={showStop ? stopLabel : sendLabel}
-          title={showStop ? stopLabel : sendLabel}
-          disabled={!showStop && !ready}
-          onClick={showStop ? () => void onStop?.() : undefined}
-          className={cn(
-            "flex size-9 shrink-0 items-center justify-center rounded-full",
-            "bg-primary text-primary-foreground transition-opacity",
-            "disabled:opacity-30",
-          )}
+        {showSubmit ? <button
+          type="submit"
+          aria-label={sendLabel}
+          title={sendLabel}
+          disabled={!ready}
+          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-30"
         >
-          {showStop ? (
-            <Square className="size-4" fill="currentColor" aria-hidden />
-          ) : pending ? (
-            <Loader2 className="size-4 motion-safe:animate-spin motion-reduce:animate-none" aria-hidden />
-          ) : (
-            <ArrowUp className="size-4" aria-hidden />
-          )}
+          {pending ? <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden /> : <ArrowUp className="size-4" aria-hidden />}
+        </button> : null}
+        {showStop ? <button
+          type="button"
+          aria-label={stopLabel}
+          title={stopLabel}
+          onClick={() => void onStop?.()}
+          className={cn("flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground active:opacity-75",
+            capturingSpeech ? "ms-auto" : "ms-3")}
+        >
+          <Square className="size-3.5" fill="currentColor" aria-hidden />
         </button> : null}
       </form>
-      {showTools ? <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
-        {showModel && catalogBusy && models.length === 0 ? (
-          <div aria-busy="true" className="h-8 min-w-24 flex-1 animate-pulse rounded-full bg-muted motion-reduce:animate-none">
-            <span className="sr-only">{t("composer.loading")}</span>
-          </div>
-        ) : null}
-        {showModel && (models.length > 0 || onRefreshModels) ? (
-          <button
-            type="button"
-            aria-label={t("composer.model")}
-            aria-describedby={modelTextId}
-            title={!lockedModel && modelUnavailable(models, pick) ? t("composer.modelUnavailable") : undefined}
-            data-unavailable={!lockedModel && modelUnavailable(models, pick) ? "true" : undefined}
-            className={`h-8 w-0 min-w-0 flex-1 truncate rounded-full bg-muted px-2 text-left text-xs ${!lockedModel && modelUnavailable(models, pick) ? "text-muted-foreground" : "text-foreground"}`}
-            disabled={disabled || pending}
-            onClick={() => { if (!lockedModel) setModelPickerOpen(true) }}
-          >
-            <span id={modelTextId}>{modelText}</span>
-          </button>
-        ) : null}
-        {reasoningLevels.length > 0 ? (
-          <select
-            aria-label={t("composer.thinking")}
-            className="h-8 min-w-0 max-w-[46%] shrink truncate rounded-full bg-muted px-2 text-xs text-foreground"
-            value={level}
-            disabled={disabled || pending}
-            onChange={(e) => tune({ providerId: pick.providerId, model: pick.model, reasoning: e.target.value })}
-          >
-            <option value="">{t("composer.thinkingDefault")}</option>
-            {reasoningLevels.map((item) => (
-              <option key={item} value={item}>
-                {thinkingLabel(item)}
-              </option>
-            ))}
-          </select>
-        ) : null}
-      </div> : null}
-      {showModel && modelPickerOpen && !lockedModel ? (
+      {picker === "model" && showModel ? (
         <ModelPicker
           models={models}
           providerId={pick.providerId}
           model={pick.model}
+          readOnlyLabel={lockedModel ? modelText : undefined}
           onSelect={(nextProviderId, nextModel) => {
             tune({ providerId: nextProviderId, model: nextModel, reasoning: level })
-            setModelPickerOpen(false)
+            setPicker(undefined)
           }}
-          onRefresh={onRefreshModels}
+          onRefresh={lockedModel ? undefined : onRefreshModels}
           refreshBusy={refreshBusy}
           refreshError={refreshError}
-          onClose={() => setModelPickerOpen(false)}
+          onClose={() => setPicker(undefined)}
         />
+      ) : null}
+      {picker === "thinking" && showThinking ? (
+        <ThinkingPicker levels={reasoningLevels} value={level}
+          onSelect={(next) => {
+            tune({ providerId: pick.providerId, model: pick.model, reasoning: next })
+            setPicker(undefined)
+          }}
+          onClose={() => setPicker(undefined)} />
       ) : null}
       {hint ? <p className="px-3 pt-1.5 text-[11px] text-muted-foreground">{hint}</p> : null}
     </div>
@@ -564,13 +616,6 @@ function modelUnavailable(models: ModelChoice[], pick: { providerId: string; mod
   if (!pick.model) return false
   const row = models.find((item) => item.provider_id === pick.providerId && item.model === pick.model)
   return !row || row.ready === false
-}
-
-function thinkingLabel(level: string) {
-  if (level === "low") return t("reason.low")
-  if (level === "medium") return t("reason.medium")
-  if (level === "high") return t("reason.high")
-  return level
 }
 
 function putFallback(file: File) {

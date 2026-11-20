@@ -61,6 +61,7 @@ describe("DirectChatScreen", () => {
         onModels={vi.fn()}
       />,
     )
+    fireEvent.focus(screen.getByLabelText(t("thread.message")))
     expect(screen.getByLabelText(t("composer.model"))).toHaveTextContent("one")
     view.rerender(
       <DirectChatScreen
@@ -74,6 +75,7 @@ describe("DirectChatScreen", () => {
         onModels={vi.fn()}
       />,
     )
+    fireEvent.focus(screen.getByLabelText(t("thread.message")))
     expect(screen.getByLabelText(t("composer.model"))).toHaveTextContent("two")
     expect(screen.queryByText(t("account.sourceUnavailable"))).not.toBeInTheDocument()
   })
@@ -120,6 +122,7 @@ describe("DirectChatScreen", () => {
         }}
       />,
     )
+    fireEvent.focus(screen.getByLabelText(t("thread.message")))
     expect(screen.getByLabelText(t("composer.model"))).toHaveTextContent("one")
     expect(screen.getByText(t("account.sourceUnavailable"))).toBeInTheDocument()
   })
@@ -161,15 +164,18 @@ describe("DirectChatScreen", () => {
     )
     const view = render(chat([provider, keep]))
     view.rerender(chat(remaining))
+    fireEvent.focus(screen.getByLabelText(t("thread.message")))
     expect(screen.getByLabelText(t("composer.model"))).toHaveTextContent(keep.model)
 
     fireEvent.click(screen.getByRole("button", { name: t("home.open", { title: history.title }) }))
+    fireEvent.focus(screen.getByLabelText(t("thread.message")))
     expect(screen.getByLabelText(t("composer.model"))).toHaveTextContent(provider.model)
     expect(screen.getByText(t("account.sourceUnavailable"))).toBeInTheDocument()
     expect(localStorage.getItem("zwai.phone.directThreads")).toBe(savedHistory)
 
     // Reading a preserved conversation must not make a new draft use its removed source.
     fireEvent.click(screen.getByRole("button", { name: t("thread.back") }))
+    fireEvent.focus(screen.getByLabelText(t("thread.message")))
     expect(screen.getByLabelText(t("composer.model"))).toHaveTextContent(keep.model)
     expect(screen.queryByText(t("account.sourceUnavailable"))).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText(t("thread.message")), { target: { value: "new request" } })
@@ -227,12 +233,14 @@ describe("DirectChatScreen", () => {
     })
     harness(complete)
     expect(screen.getByRole("tab", { name: t("chat.tab") })).toHaveAttribute("aria-selected", "true")
+    fireEvent.focus(screen.getByLabelText(t("thread.message")))
     fireEvent.click(screen.getByRole("button", { name: t("composer.model") }))
     expect(screen.getByRole("radio", { name: "one" })).toHaveAttribute("aria-checked", "true")
     expect(screen.getByRole("radio", { name: "two" })).toBeInTheDocument()
     fireEvent.keyDown(window, { key: "Escape" })
-    expect(screen.getByRole("option", { name: t("reason.high") })).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText(t("composer.thinking")), { target: { value: "high" } })
+    fireEvent.focus(screen.getByLabelText(t("thread.message")))
+    fireEvent.click(screen.getByRole("button", { name: t("composer.thinking") }))
+    fireEvent.click(screen.getByRole("radio", { name: t("reason.high") }))
     fireEvent.change(screen.getByLabelText(t("thread.message")), { target: { value: "ping" } })
     fireEvent.click(screen.getByRole("button", { name: t("thread.send") }))
     await waitFor(() => expect(screen.getByText("pong")).toBeInTheDocument())
@@ -294,8 +302,10 @@ describe("DirectChatScreen", () => {
     harness(complete)
     fireEvent.change(screen.getByLabelText(t("thread.message")), { target: { value: "ping" } })
     fireEvent.click(screen.getByRole("button", { name: t("thread.send") }))
-    await waitFor(() => expect(within(screen.getByRole("banner")).getByRole("button", { name: t("thread.stop") })).toBeInTheDocument())
-    fireEvent.click(screen.getByRole("button", { name: t("thread.back") }))
+    const back = await screen.findByRole("button", { name: t("thread.back") })
+    expect(within(screen.getByTestId("message-composer")).getByRole("button", { name: t("thread.stop") })).toBeEnabled()
+    expect(within(screen.getByRole("banner")).queryByRole("button", { name: t("thread.stop") })).toBeNull()
+    fireEvent.click(back)
     await waitFor(() => expect(screen.getByLabelText(t("thread.message"))).toBeEnabled())
     expect(screen.queryByRole("button", { name: t("thread.stop") })).not.toBeInTheDocument()
     expect(screen.queryByRole("alert")).not.toBeInTheDocument()

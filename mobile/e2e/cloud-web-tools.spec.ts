@@ -1,3 +1,4 @@
+import { activateComposer } from "./composer-controls"
 import { expect, test, type Page, type Route } from "@playwright/test"
 
 const origin = "https://cloud.invalid"
@@ -74,6 +75,7 @@ async function fixture(page: Page, api: "chat" | "responses", denied = false, fe
 async function chooseModel(page: Page) {
   await page.goto("/")
   await expect(page.getByRole("tab", { name: "对话" })).toHaveAttribute("aria-selected", "true")
+  await activateComposer(page)
   await page.getByRole("button", { name: "模型", exact: true }).click()
   const group = page.getByRole("heading", { name: "手机自配工具模型" }).locator("..")
   await group.getByRole("radio", { name: "tool-model", exact: true }).click()
