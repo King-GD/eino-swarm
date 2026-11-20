@@ -439,6 +439,15 @@ export const en = {
   "transcript.limitContinued":
     "Continuing for another {extendBy} tool rounds.",
   "transcript.limitStopped": "Stopped after {limit} tool rounds.",
+  "transcript.deferredAsk":
+    "Answer verification was deferred, so this turn is paused. The manager round limit is still {extendBy}; this turn has used {limit} rounds. Continue the work?",
+  "transcript.deferredContinued": "Continuing. The next slice allows up to {extendBy} rounds.",
+  "transcript.deferredStopped": "Stopped. This turn used {limit} rounds. The manager round limit is still {extendBy}.",
+  "transcript.deferredContinueAria": "Continue after deferred answer verification",
+  "transcript.deferredStopAria": "Stop after deferred answer verification",
+  "transcript.limitSettingsHint":
+    "This continuation still adds the rounds above. Change the limit for later:",
+  "transcript.limitSettingsStopped": "Change the limit for the next pause:",
   "transcript.collectionWaiting": "Waiting for delegated work to finish. The manager will resume once to collect the results.",
   "transcript.collectionPaused": "Delegated results have not been collected. Continue to collect them, or Stop.",
   "transcript.collectionContinued": "Continuing to collect delegated results.",

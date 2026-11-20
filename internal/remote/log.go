@@ -118,7 +118,7 @@ func hasPhoneContent(events []store.Event) bool {
 					extend, hasExtend := pause["extend_by"]
 					extension, validExtend := extend.(float64)
 					if reason == "workers_uncollected" ||
-						(!hasReason || reason == "iterations") && validLimit && limit >= 0 && (!hasExtend || validExtend && extension > 0) {
+						(reason == "classification_deferred" || !hasReason || reason == "iterations") && validLimit && limit >= 0 && (!hasExtend || validExtend && extension > 0) {
 						return true
 					}
 				}

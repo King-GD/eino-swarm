@@ -14,6 +14,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
+- The manager tool-round pause on desktop and web opens Settings → Swarm → Manager tool rounds. A paired phone names that computer setting. The continuation already offered keeps its size. (`F-130`, `F-170`, `F-220`, `C-009`)
+
 - PC 主管与网关协商原生 Responses 固定指令继承后，用 `previous_response_id` 仅上传相同模型的增量。固定指令变化、历史改写或续接失效时，用本地完整历史重建。(`F-175`, `C-030`)
 
 - Settings → Tools shows built-in tools and MCP connections on separate tabs. The composer Tools menu opens that page. (`F-130`, `F-176`)
@@ -24,6 +26,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - 网关模式下，普通网关和第三方接入会根据可用的识别、朗读模型分别默认开启语音。语音设置仅显示网关允许编辑的参数，录音格式和超时等设置默认折叠。(`F-148`, `C-048`)
 
 ### Fixed
+
+- A deferred answer check no longer pauses with the manager tool-round cap
+  wording. The card shows rounds already used and the configured limit, and
+  it does not open that setting. (`F-130`, `F-150`, `F-220`, `C-009`)
 
 - 移动端轮次导航随聊天滚动高亮当前项，且只显示用户输入预览，不再用助手回复作标题。(`F-220`, `C-006`)
 

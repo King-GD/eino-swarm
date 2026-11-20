@@ -247,7 +247,7 @@ func TestPhoneHistoryRecognizesManagerAndWorkerCollectionPauses(t *testing.T) {
 			t.Fatalf("hidden or malformed pause became visible: %q", body)
 		}
 	}
-	for _, body := range []string{`{"reason":"workers_uncollected"}`, `{"limit":400}`, `{"reason":"iterations","limit":9,"extend_by":2000}`, `{"limit":0,"extend_by":1}`, `{"limit":0.5,"extend_by":1.5}`} {
+	for _, body := range []string{`{"reason":"workers_uncollected"}`, `{"limit":400}`, `{"reason":"iterations","limit":9,"extend_by":2000}`, `{"reason":"classification_deferred","limit":80,"extend_by":2000}`, `{"limit":0,"extend_by":1}`, `{"limit":0.5,"extend_by":1.5}`} {
 		if !hasPhoneContent([]store.Event{{Kind: "max_iterations", Text: body}}) {
 			t.Fatalf("valid pause is hidden on the phone: %s", body)
 		}

@@ -99,7 +99,9 @@ func (rt *runtime) continueAfterDeferredAnswer(ctx context.Context, turn *store.
 	}
 	if _, owner := rt.workerOwner(); owner == "" {
 		extend := rt.engine.cfg.SwarmSnapshot().ManagerIterations()
-		if !humanApproved && !rt.waitToExtend(ctx, turn, used, extend, reg) {
+		// used is rounds already spent. The configured cap is still extend;
+		// labeling this pause as that cap is what made 80 look like the limit.
+		if !humanApproved && !rt.waitToExtendReason(ctx, turn, used, extend, "classification_deferred", reg) {
 			if ctx.Err() != nil {
 				return nil, budget, ctx.Err()
 			}

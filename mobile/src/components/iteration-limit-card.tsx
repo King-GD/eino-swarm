@@ -26,13 +26,18 @@ export function IterationLimitCard({ pause, onContinue, disabled }: {
     <div data-testid="iteration-limit" className="my-2 rounded-lg border border-border bg-muted/50 px-3 py-3 text-sm">
       <p className="text-muted-foreground">{pause ? iterationConfirmationText(pause) : t("thread.limitPaused")}</p>
       {onContinue ? <div className="mt-3 flex gap-2">
-        <Button aria-label={t(pause ? "thread.limitContinueAria" : "thread.pausedContinueAria")} disabled={disabled || submitted} onClick={() => void decide(true)}>
+        <Button aria-label={t(pause?.reason === "classification_deferred" ? "thread.deferredContinueAria" : pause ? "thread.limitContinueAria" : "thread.pausedContinueAria")} disabled={disabled || submitted} onClick={() => void decide(true)}>
           {t("thread.limitContinue")}
         </Button>
-        <Button variant="outline" aria-label={t(pause ? "thread.limitStopAria" : "thread.pausedStopAria")} disabled={disabled || submitted} onClick={() => void decide(false)}>
+        <Button variant="outline" aria-label={t(pause?.reason === "classification_deferred" ? "thread.deferredStopAria" : pause ? "thread.limitStopAria" : "thread.pausedStopAria")} disabled={disabled || submitted} onClick={() => void decide(false)}>
           {t("thread.stop")}
         </Button>
       </div> : null}
+      {pause && !pause.continued && pause.reason !== "classification_deferred" ? (
+        <p className="mt-2 text-[13px] text-muted-foreground">
+          {t(pause.pending ? "thread.limitSettingsHint" : "thread.limitSettingsStopped")}
+        </p>
+      ) : null}
       {error ? <p role="alert" className="mt-2 text-sm text-destructive">{error}</p> : null}
     </div>
   )

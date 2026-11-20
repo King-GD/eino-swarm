@@ -9,14 +9,15 @@ async function capture(page: Page, info: TestInfo, name: string) {
 }
 
 for (const language of [
-  { locale: "en", back: "Back", open: "Open", continue: "Continue for more tool rounds", stop: "Stop at the tool-round limit", prompt: /limit \(6\).*24 rounds/ },
-  { locale: "zh", back: "返回", open: "打开", continue: "继续更多工具回合", stop: "在工具回合上限处停止", prompt: /上限（6）.*24/ },
+  { locale: "en", back: "Back", open: "Open", continue: "Continue for more tool rounds", stop: "Stop at the tool-round limit", prompt: /limit \(6\).*24 rounds/, settings: "Settings → Swarm → Manager tool rounds" },
+  { locale: "zh", back: "返回", open: "打开", continue: "继续更多工具回合", stop: "在工具回合上限处停止", prompt: /上限（6）.*24/, settings: "设置 → 集群 → 主管工具回合" },
 ]) {
   test(`a paused manager can continue from the phone after reopening: ${language.locale}`, async ({ page }, info) => {
     await page.addInitScript((locale) => localStorage.setItem("zwai.phone.locale", locale), language.locale)
     await page.goto("/?mock=1&tick=0&history=iteration-limit")
     const card = page.getByTestId("iteration-limit")
     await expect(card).toContainText(language.prompt)
+    await expect(card).toContainText(language.settings)
     const title = await page.getByRole("heading", { level: 1 }).textContent()
     await page.getByRole("button", { name: language.back, exact: true }).click()
     await page.getByRole("button", { name: `${language.open} ${title}`, exact: true }).first().click()
@@ -31,6 +32,7 @@ for (const language of [
     await proceed.click()
     await expect(page.getByTestId("transcript")).toContainText("The paused turn resumed.")
     await expect(card.getByRole("button")).toHaveCount(0)
+    await expect(card).not.toContainText(language.settings)
     await expect(page.getByTestId("turn-boundary")).toHaveCount(1)
     await expect(page.getByTestId("transcript").locator(".text-destructive")).toHaveCount(0)
   })
@@ -41,6 +43,7 @@ for (const language of [
     const card = page.getByTestId("iteration-limit")
     await card.getByRole("button", { name: language.stop, exact: true }).click()
     await expect(card.getByRole("button")).toHaveCount(0)
+    await expect(card).toContainText(language.settings)
     await expect(page.getByTestId("turn-boundary")).toHaveCount(1)
     await expect(page.getByTestId("transcript")).not.toContainText("The paused turn resumed.")
     await expect(page.getByTestId("transcript").locator(".text-destructive")).toHaveCount(0)
@@ -69,7 +72,7 @@ test("the live pause stays actionable when its cap event is outside the snapshot
   const card = page.getByTestId("iteration-limit")
   const proceed = card.getByRole("button", { name: "Continue this turn", exact: true })
   await expect(proceed).toBeEnabled()
-  await expect(card).not.toContainText(/\(6\)|24 rounds/)
+  await expect(card).not.toContainText(/\(6\)|24 rounds|Manager tool rounds|主管工具回合/)
   await capture(page, info, "snapshot-only-pause.png")
   await proceed.click()
   await expect(page.getByTestId("transcript")).toContainText("The paused turn resumed.")

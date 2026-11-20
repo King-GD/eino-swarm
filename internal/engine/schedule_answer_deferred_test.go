@@ -163,6 +163,32 @@ func TestDeferredOrdinaryAnswerRequiresHumanContinuation(t *testing.T) {
 			}
 			select {
 			case got := <-result:
+				events, err := e.store.ListTurnEvents(turn.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var pause *store.Event
+				for i := range events {
+					if events[i].Kind == KindMaxIterations {
+						pause = &events[i]
+					}
+				}
+				if action == "already-approved" || action == "already-stopped" {
+					// Stop that already landed, or a continuation already granted,
+					// must not paint another pause over the turn.
+					if pause != nil {
+						t.Fatalf("%s paused again: %s", action, pause.Text)
+					}
+				} else {
+					var body struct {
+						Limit  int    `json:"limit"`
+						Extend int    `json:"extend_by"`
+						Reason string `json:"reason"`
+					}
+					if pause == nil || json.Unmarshal([]byte(pause.Text), &body) != nil || body.Reason != "classification_deferred" || body.Limit != 20 || body.Extend != e.cfg.SwarmSnapshot().ManagerIterations() {
+						t.Fatalf("deferred pause was labeled as the round cap: %+v", pause)
+					}
+				}
 				switch action {
 				case "continue", "already-approved", "already-steered":
 					if got.err != nil || got.budget != e.cfg.SwarmSnapshot().ManagerIterations() || len(got.messages) < 2 || got.messages[len(got.messages)-1].Content != scheduleAnswerDeferredCue {

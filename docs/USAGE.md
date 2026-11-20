@@ -285,9 +285,18 @@ The same turn continues. Retry stays disabled while Settings is open or the
 conversation is busy.
 
 If the manager hits its tool-round limit, the transcript asks whether to add
-another slice. A paired phone shows the same prompt with **Continue** and
-**Stop**. Reopening restores the paused controls. A refused action keeps the
-prompt and its error. Update both the phone and the PC to use these controls.
+another slice. **Manager tool rounds** opens Settings → Swarm on that field.
+The continuation already offered keeps its size; the next pause uses the
+saved limit. A paired phone shows the same prompt with **Continue** and
+**Stop**, and names that computer setting. Reopening restores the paused
+controls. A refused action keeps the prompt and its error. Update both the
+phone and the PC to use these controls.
+
+A pause that says answer verification was deferred is a different stop. The
+smaller number is how many manager rounds this turn has already used. The
+larger number is still the configured limit. Continue resumes the same turn;
+it does not mean the round limit was reached, and that card does not open
+the round setting.
 
 ### Asking you, and side chat
 

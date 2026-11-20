@@ -6,6 +6,7 @@ export type IterationConfirmation = {
   extendBy?: number
   pending: boolean
   continued?: boolean
+  reason?: "iterations" | "classification_deferred"
 }
 
 export function parseIterationConfirmation(text: string): IterationConfirmation | undefined {
@@ -13,13 +14,21 @@ export function parseIterationConfirmation(text: string): IterationConfirmation 
   try { raw = JSON.parse(text) } catch { return }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return
   const body = raw as { reason?: unknown; limit?: unknown; extend_by?: unknown }
-  if (body.reason !== undefined && body.reason !== "iterations") return
+  if (body.reason !== undefined && body.reason !== "iterations" && body.reason !== "classification_deferred") return
   if (typeof body.limit !== "number" || !Number.isFinite(body.limit) || body.limit < 0) return
   if (body.extend_by !== undefined && (typeof body.extend_by !== "number" || !Number.isFinite(body.extend_by) || body.extend_by <= 0)) return
-  return { limit: body.limit, extendBy: body.extend_by as number | undefined, pending: true }
+  return {
+    limit: body.limit, extendBy: body.extend_by as number | undefined, pending: true,
+    ...(body.reason === "classification_deferred" ? { reason: "classification_deferred" as const } : {}),
+  }
 }
 
 export function iterationConfirmationText(pause: IterationConfirmation): string {
+  if (pause.reason === "classification_deferred") {
+    return t(pause.pending ? "thread.deferredAsk" : pause.continued ? "thread.deferredContinued" : "thread.deferredStopped", {
+      limit: pause.limit, extendBy: pause.extendBy ?? 0,
+    })
+  }
   if (!pause.pending) return t(pause.continued ? "thread.limitContinued" : "thread.limitStopped")
   return pause.extendBy === undefined ? t("thread.limitAskLegacy", { limit: pause.limit })
     : t("thread.limitAsk", { limit: pause.limit, extendBy: pause.extendBy })

@@ -3,6 +3,7 @@ import { useId, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { SelectItem } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { MANAGER_ROUNDS_SETTINGS_KEY } from "@/lib/manager-rounds"
 import { MAX_COMPLETION_SETTINGS_KEY } from "@/lib/output-budget"
 import { AGENT_MAX_TURNS_SETTINGS_KEY, AGENT_TIMEOUT_SETTINGS_KEY } from "@/lib/agent-failure"
 import type { Settings } from "@/lib/types"
@@ -144,6 +145,7 @@ export function SwarmTab({
           query={query}
           label={t("settings.swarm.managerRounds")}
           hint={t("settings.swarm.managerRoundsHint")}
+          anchor={MANAGER_ROUNDS_SETTINGS_KEY}
         >
           <Input
             type="number"

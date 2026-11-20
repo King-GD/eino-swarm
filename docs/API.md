@@ -2674,6 +2674,9 @@ Body `{"continue": true|false}`. Answers a pause at the manager's tool-round cap
 (`max_iterations` on the event stream). `true` extends the current turn by
 another `swarm.manager_max_iterations` rounds; `false` ends it as `cancelled`
 with a short "stopped after N tool rounds" rather than eino's graph error.
+The same endpoint also answers `reason:classification_deferred`: `limit` is
+rounds already used and `extend_by` is the configured next slice. That pause
+is an answer-verification deferral, not the round cap.
 Steering while paused also continues. `409 idle` when the turn is not waiting.
 
 普通回合因未收取 worker 而重复提前结束时，也使用同一 `max_iterations`

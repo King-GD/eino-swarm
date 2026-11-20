@@ -48,6 +48,12 @@ describe("Swarm schedule caps", () => {
       .toHaveAttribute("data-settings-key", "max_turns")
   })
 
+  it("exposes a stable target for the manager tool-round pause link", () => {
+    render(<SwarmTab settings={base} onChange={() => undefined} />)
+    expect(screen.getByLabelText("Manager tool rounds").closest("[data-settings-key]"))
+      .toHaveAttribute("data-settings-key", "manager_max_iterations")
+  })
+
   it("labels the visible schedule fields and hides the ticker", () => {
     render(<SwarmTab settings={base} onChange={() => undefined} />)
     expect(screen.getByLabelText("Shortest wait (seconds)")).toHaveValue(30)
