@@ -149,6 +149,8 @@ type Request struct {
 	// Directory is the workspace directory OpFiles lists. Empty is the root.
 	// Text on OpFiles searches the whole listed workspace instead of one directory.
 	Directory string `json:"directory,omitempty"`
+	FileScope string `json:"file_scope,omitempty"`
+	FileRoot  string `json:"file_root,omitempty"`
 
 	PanelID           string `json:"panel_id,omitempty"`
 	PanelBaseRevision *int64 `json:"base_revision,omitempty"`
@@ -207,6 +209,7 @@ type Response struct {
 	Clients               *ClientCatalog             `json:"clients,omitempty"`
 	ClientView            *ClientView                `json:"client_view,omitempty"`
 	Files                 []FileView                 `json:"files,omitempty"`
+	FileView              *engine.WorkspaceView      `json:"file_view,omitempty"`
 	FileChunk             *FileChunkView             `json:"file_chunk,omitempty"`
 	TaskPanels            *[]store.TaskPanelManifest `json:"task_panels,omitempty"`
 	PanelTransfer         *PanelTransferView         `json:"panel_transfer,omitempty"`

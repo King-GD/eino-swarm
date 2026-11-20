@@ -16,7 +16,7 @@ func TestFileSearchSharesOneScanAndIgnoresAFailedOne(t *testing.T) {
 	// must not become the answer for the next query.
 	e := newTestEngine(t)
 	th, _ := e.CreateThread("", "", "")
-	root := e.WorkspaceDir(th.ID)
+	root := e.TaskFileDir(th.ID)
 	if err := os.WriteFile(filepath.Join(root, "keep.txt"), []byte("ab"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestFileSearchSharesOneScanAndIgnoresAFailedOne(t *testing.T) {
 func TestCancelledFileSearchReturnsNoRowsWhileTheScanFinishes(t *testing.T) {
 	e := newTestEngine(t)
 	th, _ := e.CreateThread("", "", "")
-	root := e.WorkspaceDir(th.ID)
+	root := e.TaskFileDir(th.ID)
 	if err := os.WriteFile(filepath.Join(root, "keep.txt"), []byte("ab"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestCancelledFileSearchReturnsNoRowsWhileTheScanFinishes(t *testing.T) {
 func TestDeletingOrReplacingTheWorkspaceDropsTheFileScan(t *testing.T) {
 	e := newTestEngine(t)
 	th, _ := e.CreateThread("", "", "")
-	root := e.WorkspaceDir(th.ID)
+	root := e.TaskFileDir(th.ID)
 	kept := filepath.Join(root, "kept.txt")
 	if err := os.WriteFile(kept, []byte("ab"), 0o600); err != nil {
 		t.Fatal(err)
@@ -176,7 +176,7 @@ func TestDeletingOrReplacingTheWorkspaceDropsTheFileScan(t *testing.T) {
 func TestStoppedFileScanRejectsAnotherWalk(t *testing.T) {
 	e := newTestEngine(t)
 	th, _ := e.CreateThread("", "", "")
-	root := e.WorkspaceDir(th.ID)
+	root := e.TaskFileDir(th.ID)
 	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("a"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestStoppedFileScanRejectsAnotherWalk(t *testing.T) {
 func TestFileScanStopsWithTheEngine(t *testing.T) {
 	e := newTestEngine(t)
 	th, _ := e.CreateThread("", "", "")
-	root := e.WorkspaceDir(th.ID)
+	root := e.TaskFileDir(th.ID)
 	if err := os.WriteFile(filepath.Join(root, "keep.txt"), []byte("ab"), 0o600); err != nil {
 		t.Fatal(err)
 	}

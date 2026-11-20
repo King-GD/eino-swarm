@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
-import { mkdtempSync } from "node:fs"
+import { mkdtempSync, realpathSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { basename, join } from "node:path"
+import { join } from "node:path"
 
 import { readComposerPlate } from "./composer-plate"
 import { freshConversation, send, waitForIdle } from "./session"
@@ -119,11 +119,10 @@ test("the terminal button opens a shell in the conversation workspace", async ({
   await expect(panel).toBeVisible()
 })
 
-test("a terminal in a project conversation starts in that project's directory", async ({
+test("a terminal in a new project conversation starts in its task working directory", async ({
   page,
 }) => {
-  const dir = mkdtempSync(join(tmpdir(), "zwai-term-"))
-  const label = basename(dir)
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "zwai-term-")))
   await page.goto("/")
   await page.getByRole("button", { name: "New project" }).click()
   const name = `Term ${Date.now()}`
@@ -131,12 +130,14 @@ test("a terminal in a project conversation starts in that project's directory", 
   await page.getByLabel("Working directory").fill(dir)
   await page.getByRole("button", { name: "Create project" }).click()
   await page.getByRole("button", { name: `New conversation in ${name}` }).click()
+  const selected = page.locator('[data-testid="thread-row"][aria-current="true"]')
+  await expect(selected).toHaveAttribute("data-id", /.+/)
+  const threadID = (await selected.getAttribute("data-id"))!
   await page.getByRole("banner").getByRole("button", { name: "Open terminal" }).click()
   const panel = page.getByTestId("terminal-panel")
-  await expect(panel).toBeVisible()
-  await expect(panel.getByText(label, { exact: true })).toBeVisible({
-    timeout: 10_000,
-  })
+  await expect(panel.getByRole("button", { name: "work", exact: true })).toHaveAttribute(
+    "title", join(dir, ".zwai-tasks", threadID, "work"),
+  )
 })
 
 test("an external link opens a new window instead of replacing the app", async ({

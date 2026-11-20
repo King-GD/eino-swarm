@@ -162,7 +162,7 @@ func TestUploadIntoAnUnwritableWorkspace(t *testing.T) {
 	}
 	h := newHarness(t)
 	id := h.newThread()
-	uploads := filepath.Join(h.app.Engine.WorkspaceDir(id), "uploads")
+	uploads := filepath.Join(h.app.Engine.TaskFileDir(id), "uploads")
 	if err := os.MkdirAll(uploads, 0o700); err != nil {
 		t.Fatal(err)
 	}

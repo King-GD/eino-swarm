@@ -1,12 +1,13 @@
 import { api } from "@/lib/api"
+import type { FileLocation } from "@/lib/types"
 
 const MAX_ASSET_BYTES = 1024 * 1024
 
 /** Read one sibling of a preview. A missing or oversized asset is omitted;
  * it must not fail the document or be loaded through an iframe navigation. */
-export async function readWorkspaceBytes(threadId: string, path: string, signal: AbortSignal): Promise<Uint8Array | null> {
+export async function readWorkspaceBytes(threadId: string, path: string, signal: AbortSignal, location?: FileLocation): Promise<Uint8Array | null> {
   signal.throwIfAborted()
-  const response = await fetch(api.downloadURL(threadId, path), {
+  const response = await fetch(api.downloadURL(threadId, path, location), {
     signal,
     credentials: "same-origin",
     mode: "same-origin",

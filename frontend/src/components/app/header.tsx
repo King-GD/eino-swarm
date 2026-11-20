@@ -146,9 +146,7 @@ export function Header({
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {t("header.workingIn", {
-                    path: project.workdir || project.memory_dir,
-                  })}
+                  {project.workdir ? t("header.projectFolder", { path: project.workdir }) : t("header.managedProjectFolder")}
                 </TooltipContent>
               </Tooltip>
               <span className={cn(chromeTypeClass, "shrink-0 text-muted-foreground")}>·</span>

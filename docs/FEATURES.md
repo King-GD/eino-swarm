@@ -111,6 +111,8 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-120 Conversations and projects
 
+- 新任务的工作目录在创建时固定；项目选择仍决定共享资料和记忆，移动任务或编辑项目目录不会搬迁任务文件。关联 `C-052`；实现 `internal/engine/task_workspace.go`，验证 `internal/engine/task_workspace_test.go`。
+
 - 失败重试：桌面和 Web 的最新人类失败轮显示「重试」。点击即确认，从该轮失败时已存储的上下文继续，保留用户消息、图片和已完成的工具结果，不回退后续进度，也不打开编辑框。目标续办、定时检查、人工停止和没有可核对用户输入的失败不提供入口。设置打开、回合运行、引擎恢复或本次提交进行时禁用。关联契约 `C-003`。实现 `frontend/src/components/app/transcript-error.tsx`、`frontend/src/components/app/transcript.tsx`、`frontend/src/lib/use-retry-input.ts`、`internal/engine/retry_failed.go`。验证 `frontend/e2e/transcript-error-retry.spec.ts`、`internal/engine/retry_failed_http_test.go`。
 
 - 在项目会话中，可授权 manager 更新项目全局描述。成功回执带回已保存的描述，本回合没有单独的读取工具；后续回合使用新描述，Memory 关闭也可用。并发修改、对话移出项目或写入失败时返回拒绝回执。PC 项目编辑打开时读取当前描述，保存其他设置时省略未改动的描述。契约 `C-038`。实现 `internal/engine/project_description.go`、`internal/store/projects.go`、`frontend/src/components/app/project-dialog.tsx`。验证 `internal/engine/project_description_http_test.go`、`internal/engine/project_description_test.go`、`frontend/e2e/projects.spec.ts`。
@@ -232,6 +234,8 @@ This is the current user-facing capability map. The code and tests named below a
 - 升级时回填旧 turn 未记录的项目归属，既有 worker 可跨重启恢复。已记录归属与当前项目不符时，显式继续目标返回冲突并保留 checkpoint，归属修复后可继续。见 [归属迁移](DATA_MODEL.md#turns--one-request-and-everything-done-to-answer-it)。
 
 ### F-140 Files and attachments
+
+- 新任务按会话拥有独立文件根。PC「文件」默认展开成果，过程和上传独立折叠；可切换只读项目目录、预览和下载。旧会话仍使用原共享路径。关联 `C-052`；证据：`internal/engine/task_workspace.go`、`frontend/e2e/task-workspace.spec.ts`。
 
 - 目的：让对话使用工作区文件和附件；使用者：PC 用户；入口：文件面板、上传及下载 API；输入：文件或图片；输出：文件、预览或模型视觉输入；前置条件：工作区和权限可用；失败表现：上传或工具错误；关联契约：`C-004`, `C-005`；实现证据：`internal/server`, `internal/tools`, `frontend/src/components/app`。
 - 图片输入：png/jpeg/gif/webp 文件在空 MIME、通用 binary 或 UTI 标签下仍进入视觉输入；显式 text/PDF 保持文件附件。客户端只归一化 MIME 声明，不改原字节，服务端继续执行真实类型与声明匹配校验。关联契约：`C-028`；证据：`frontend/src/lib/paste-image.ts`、`frontend/src/lib/paste-image.test.ts`、`frontend/src/components/app/composer-image-drop.test.tsx`、`frontend/e2e/image-input.spec.ts`。
@@ -478,6 +482,8 @@ This is the current user-facing capability map. The code and tests named below a
 
 
 ### F-224 Browse and preview PC conversation files on the phone
+
+- 配对手机默认浏览当前任务成果，可切到项目目录；加密文件分页和预览沿用同一个文件根。旧 PC 不提供切换入口。关联 `C-052`；证据：`internal/remote/files.go`、`mobile/e2e/file-preview-controls.spec.ts`。
 
 - 目的：在已配对手机上查看 PC 对话的工作区产物；使用者：手机用户；入口：PC 对话页 → Outputs／产出物；输入：工作区列表、文件选择与搜索；输出：可折叠文件树、按后缀渲染的 Markdown／源码高亮／纯文本／HTML 沙箱／CSV 表格／DOCX／XLSX／PPTX／EPUB／常见图片／PDF 预览及其他文件的下载入口；前置条件：PC 在线且该对话存在；失败表现：RPC 错误、文件过大或不支持的预览明确显示；关联契约：`C-004`, `C-006`, `C-015`, `C-020`；实现证据：`internal/remote/files.go`, `internal/remote/files_test.go`, `mobile/src/components/file-browser.tsx`, `mobile/src/lib/remote-files.ts`, `mobile/src/lib/remote-files.test.ts`, `mobile/e2e/walkthrough.spec.ts`, `mobile/e2e/ios-wait-layout.swift`。
 - 手机产出物初次加载与刷新后只显示工作区根的全部直接子项；展开一个目录就读取该目录的全部直接子项。搜索返回每一个匹配，结果到达前不显示局部列表。读取失败不把未完成的分页当成完整结果。证据：`mobile/src/components/file-browser.tsx`, `mobile/src/components/file-browser.test.tsx`, `mobile/src/lib/remote-files.ts`, `mobile/e2e/walkthrough.spec.ts`。

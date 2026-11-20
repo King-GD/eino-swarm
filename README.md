@@ -135,10 +135,14 @@ one engine per data directory. Closing a window does not stop a running turn.
 ├── engine.json           pid and URL of that process
 ├── zwai.db               conversations, transcripts, event timeline, model calls
 ├── remote/               Host Token and device identity; not in yaml
-├── workspaces/<thread>/  one directory per standalone conversation, `uploads/` inside it
+├── workspaces/<thread>/  standalone task files
 ├── library/skills/       procedures recorded from conversations in no project
 └── projects/<project>/   a managed working directory, and the project's memory
 ```
+
+New project conversations have their own `.zwai-tasks/<thread>/` under the
+project workdir. Open **Files** to see deliverables first, or switch to
+**Project folder** for shared files. See [Files and the workspace](docs/USAGE.md#files-and-the-workspace).
 
 Settings → Backup and `zwai backup` / `zwai restore` write a `.zwai-backup`
 file. The page shows progress while the copy is running. Symbolic links

@@ -162,9 +162,10 @@ export function mockListedFiles(
   files: ReturnType<typeof mockOutputFiles>,
   directory = "",
   text = "",
+  folders = ["outputs"],
 ) {
   const rows = [
-    { path: "outputs", name: "outputs", size: 0, dir: true, modified: "", uploaded: false },
+    ...folders.map((path) => ({ path, name: path, size: 0, dir: true, modified: "", uploaded: false })),
     ...Object.entries(files).map(([path, file]) => ({
       path, name: path.split("/").at(-1)!, size: file.bytes.length, dir: false, modified: "", uploaded: false,
     })),
@@ -173,4 +174,16 @@ export function mockListedFiles(
   if (query) return rows.filter((file) => file.path.toLowerCase().includes(query))
   const prefix = directory ? `${directory}/` : ""
   return rows.filter((file) => file.path.startsWith(prefix) && !file.path.slice(prefix.length).includes("/") && file.path.length > prefix.length)
+}
+
+export function mockScopedFiles(project: boolean) {
+  const text = (value: string) => ({ bytes: new TextEncoder().encode(value), mime: "text/plain" })
+  const files: ReturnType<typeof mockOutputFiles> = project
+    ? { "report.txt": text("Shared project file") }
+    : { "results/report.txt": text("Current task deliverable"), "work/draft.txt": text("Current task draft") }
+  return {
+    files,
+    folders: project ? [".zwai-tasks"] : ["results", "work", "uploads"],
+    view: { root: project ? "project-fixture-root" : "task-fixture-root", isolated: true, has_project: true },
+  }
 }

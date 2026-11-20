@@ -15,6 +15,7 @@ async function openDocument(page: Page, title: string, source: string) {
   await page.getByTestId("dest-chats").click()
   await page.getByRole("button", { name: title, exact: true }).click()
   await page.getByRole("tab", { name: "Files", exact: true }).click()
+  await page.getByTestId("file-tree").getByRole("treeitem", { name: "Uploads", exact: true }).click()
   const row = page.getByTestId("file-tree").getByRole("treeitem", { name: "diagrams.md", exact: true })
   await row.click()
   return { preview: page.getByTestId("file-preview"), row }

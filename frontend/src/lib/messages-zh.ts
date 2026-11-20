@@ -72,7 +72,8 @@ export const zh: { [K in keyof typeof en]: string } = {
     "与应用的事件流断开。会自行重试并补上漏掉的事件。",
   "header.lostStreamWeb":
     "与服务器的事件流断开。会自行重试并补上漏掉的事件。",
-  "header.workingIn": "工作目录 {path}",
+  "header.projectFolder": "项目目录：{path}",
+  "header.managedProjectFolder": "应用托管的项目目录",
   "header.shared": "同时开着 {where}",
 
   "surface.desktop": "桌面",
@@ -117,7 +118,7 @@ export const zh: { [K in keyof typeof en]: string } = {
   "projects.title": "项目",
   "projects.new": "新建项目",
   "projects.empty":
-    "项目给会话一个工作目录、一条指令，以及共享记忆。",
+    "项目提供共享目录、指令和记忆。新会话有各自的任务工作区。",
   "projects.more": "更多",
   "projects.edit": "编辑",
   "projects.delete": "删除",
@@ -373,6 +374,14 @@ export const zh: { [K in keyof typeof en]: string } = {
   "files.filterPlaceholder": "筛选文件…",
   "files.searching": "正在查找…",
   "files.tree": "工作区文件",
+  "files.taskScope": "任务文件",
+  "files.projectScope": "项目目录",
+  "files.legacyShared": "旧版共享目录",
+  "files.resultsFolder": "成果",
+  "files.workFolder": "过程",
+  "files.uploadsFolder": "上传",
+  "files.tasksFolder": "任务工作区",
+  "files.noResults": "暂无成果",
   "files.empty": "这里还是空的。上传文件给代理处理，或等它们自己写出一些。",
   "files.noMatch": "没有匹配的文件。",
   "files.download": "下载",
@@ -866,7 +875,7 @@ export const zh: { [K in keyof typeof en]: string } = {
 
   "project.edit": "编辑项目",
   "project.new": "新建项目",
-  "project.desc": "同一项目里的会话共享工作目录、一条指令，以及先前会话学到的东西。",
+  "project.desc": "项目提供共享目录、指令和记忆，新会话的文件各自保存在独立任务目录。",
   "project.name": "名称",
   "project.instruction": "指令",
   "project.instructionHint":
@@ -963,7 +972,7 @@ export const zh: { [K in keyof typeof en]: string } = {
 
   "confirm.cancel": "取消",
   "thread.deleteTitle": "删除 {name}？",
-  "thread.deleteDesc": "会话记录和这个会话的工作目录会一起删掉。",
+  "thread.deleteDesc": "删除会话记录和应用托管的任务文件。自选项目目录里的文件保留。",
   "thread.deleteConfirm": "删除会话",
   "provider.deleteTitle": "移除 {name}？",
   "provider.deleteDesc": "会话记录还在。下一回合需要换一个端点。",

@@ -684,9 +684,17 @@ phone does not send the optional read acknowledgement to those hosts. See
 
 ## Files and the workspace
 
-Every standalone conversation has its own directory
-(`~/.zwai-swarm/workspaces/<thread-id>/`). Uploads land in `uploads/`. Agent
-output lands next to it. The **Files** tab is a collapsible tree: filter at
+New conversations have a directory of their own. In a project it is
+`<project workdir>/.zwai-tasks/<thread-id>/`; standalone tasks use
+`~/.zwai-swarm/workspaces/<thread-id>/`. **Files** starts in **Task files** with
+**Results** (`results/`) expanded. **Working files** (`work/`) and **Uploads**
+(`uploads/`) start collapsed. **Project folder** browses the current project's
+shared files and task directories without upload or delete controls. Results
+are files the agents explicitly save there; a text answer does not create one.
+Existing project conversations use their original shared folder and links.
+Renaming or moving a new task, or editing its project's workdir, does not move
+its files. Deletion only cleans up app-managed task files; external workdirs
+and their tasks stay on disk. The **Files** tab is a collapsible tree: filter at
 the top, directories expand, download on hover. In the desktop app the toolbar
 opens the workspace in the file manager. The selected directory keeps a button
 to open that folder. Click a file or press Enter to preview it. HTML opens in
@@ -700,8 +708,9 @@ completed scan of that workspace. Refresh, upload, and delete start a new scan;
 a search waits for the scan instead of showing a partial result.
 
 The title-bar terminal (⌘J, and every click on the icon) starts a real shell
-in that same directory — a project's working directory when the conversation
-is in one. The integrated terminal follows the app's light, dark, and color
+in the task's `work/` directory, matching the agents. The project terminal
+still opens the project root. Changing the Files view does not change either
+working directory. The integrated terminal follows the app's light, dark, and color
 theme, including a hidden tab. Appearance **System** follows the system while
 it is running. Explicit Light or Dark stays fixed.
 
@@ -725,9 +734,10 @@ progress mark in that column even if you are looking at another one.
 - **an instruction**, added to the system prompt of every conversation in the
   project. It is the business context. Settings → Personality is how you like
   to be worked with. When the two conflict, this project wins;
-- **a working directory**, an absolute path that already exists. Every
-  conversation in the project reads and writes it directly, with your
-  permissions. Leave it empty and zwai keeps one for you;
+- **a working directory**, an absolute path that already exists and must be
+  writable to create new tasks. Agents can explicitly use it for shared
+  project work with your existing permissions. Leave it empty and zwai
+  keeps one for you. It does not modify your repository's ignore rules;
 - **memory**, on by default.
 
 When a durable project instruction changes, ask the manager in a conversation

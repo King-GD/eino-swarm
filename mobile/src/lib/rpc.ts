@@ -93,6 +93,8 @@ export type RemoteRequest = {
   followup_id?: string
   task_id?: string
   file_path?: string
+  file_scope?: "task" | "project"
+  file_root?: string
   image_id?: string
   panel_id?: string
   base_revision?: number
@@ -318,6 +320,7 @@ export type RemoteResponse = EngineStartup & {
   client_view?: ClientView
   timeout_settings?: TimeoutSettings
   files?: WorkspaceFile[]
+  file_view?: import("../../../frontend/src/lib/types").FileView
   file_chunk?: FileChunk
   task_panels?: TaskPanelManifest[]
   panel_transfer?: TaskPanelTransfer

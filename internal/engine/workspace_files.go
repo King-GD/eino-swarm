@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 )
 
@@ -35,11 +36,19 @@ type FileEntry struct {
 // resolve inside the workspace. The last component is returned as named; the
 // callers that read or delete it go through os.Root as well.
 func (e *Engine) ResolveWorkspacePath(threadID, rel string) (string, error) {
+	view, err := e.FileWorkspace(threadID, "", "")
+	if err != nil {
+		return "", err
+	}
+	return view.ResolvePath(rel)
+}
+
+func (view WorkspaceView) ResolvePath(rel string) (string, error) {
 	name, err := workspaceRelName(rel)
 	if err != nil {
 		return "", err
 	}
-	rootAbs, err := filepath.Abs(e.WorkspaceDir(threadID))
+	rootAbs, err := filepath.Abs(view.Path)
 	if err != nil {
 		return "", fmt.Errorf("engine: workspace: %w", err)
 	}
@@ -47,7 +56,7 @@ func (e *Engine) ResolveWorkspacePath(threadID, rel string) (string, error) {
 	if !strings.HasPrefix(abs, rootAbs+string(os.PathSeparator)) {
 		return "", fmt.Errorf("engine: %q is outside the conversation workspace", rel)
 	}
-	root, err := os.OpenRoot(rootAbs)
+	root, err := view.openRoot()
 	if errors.Is(err, fs.ErrNotExist) {
 		return abs, nil
 	}
@@ -59,6 +68,22 @@ func (e *Engine) ResolveWorkspacePath(threadID, rel string) (string, error) {
 		return "", fmt.Errorf("engine: %q cannot be resolved inside the conversation workspace: %w", rel, err)
 	}
 	return abs, nil
+}
+
+func (view WorkspaceView) RevealPath(rel string) (string, error) {
+	name, err := workspaceRelName(rel)
+	if err != nil {
+		return "", err
+	}
+	root, err := view.openRoot()
+	if err != nil {
+		return "", err
+	}
+	defer root.Close()
+	if _, err := root.Stat(name); err != nil {
+		return "", err
+	}
+	return filepath.Join(view.Path, name), nil
 }
 
 // workspaceRelName validates a client-supplied workspace path and returns it
@@ -92,11 +117,19 @@ func missingPath(err error) bool {
 // OpenWorkspaceFile opens a client-named file for reading. A symlink is
 // followed only while its target stays inside the workspace.
 func (e *Engine) OpenWorkspaceFile(threadID, rel string) (*os.File, error) {
+	view, err := e.FileWorkspace(threadID, "", "")
+	if err != nil {
+		return nil, err
+	}
+	return view.OpenFile(rel)
+}
+
+func (view WorkspaceView) OpenFile(rel string) (*os.File, error) {
 	name, err := workspaceRelName(rel)
 	if err != nil {
 		return nil, err
 	}
-	root, err := os.OpenRoot(e.WorkspaceDir(threadID))
+	root, err := view.openRoot()
 	if err != nil {
 		return nil, fmt.Errorf("engine: workspace: %w", err)
 	}
@@ -111,17 +144,28 @@ func (e *Engine) OpenWorkspaceFile(threadID, rel string) (*os.File, error) {
 // SaveUpload writes an uploaded file into the conversation's workspace and
 // records it, returning the workspace-relative path the agents will see.
 func (e *Engine) SaveUpload(threadID, name string, read func(dst string) error) (*store.Attachment, error) {
-	if _, err := e.store.GetThread(threadID); err != nil {
+	e.workspaceMu.Lock()
+	defer e.workspaceMu.Unlock()
+	view, err := e.FileWorkspace(threadID, "", "")
+	if err != nil {
 		return nil, err
 	}
 	base := filepath.Base(filepath.FromSlash(name))
-	if base == "." || base == string(os.PathSeparator) || strings.TrimSpace(base) == "" {
+	if base == "." || base == ".." || base == string(os.PathSeparator) || strings.TrimSpace(base) == "" {
 		return nil, fmt.Errorf("engine: upload has no usable file name")
 	}
-	uploads := filepath.Join(e.WorkspaceDir(threadID), uploadsDir)
-	if err := os.MkdirAll(uploads, 0o700); err != nil {
+	root, err := view.openRoot()
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	if err := root.Mkdir(uploadsDir, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
 		return nil, fmt.Errorf("engine: create uploads dir: %w", err)
 	}
+	if err := requireDirectory(root, uploadsDir); err != nil {
+		return nil, err
+	}
+	uploads := filepath.Join(view.Path, uploadsDir)
 	dst := uniquePath(filepath.Join(uploads, base))
 	if err := read(dst); err != nil {
 		return nil, err
@@ -130,7 +174,7 @@ func (e *Engine) SaveUpload(threadID, name string, read func(dst string) error) 
 	if err != nil {
 		return nil, fmt.Errorf("engine: stat upload: %w", err)
 	}
-	rel, err := filepath.Rel(e.WorkspaceDir(threadID), dst)
+	rel, err := filepath.Rel(view.Path, dst)
 	if err != nil {
 		return nil, fmt.Errorf("engine: relative upload path: %w", err)
 	}
@@ -144,22 +188,38 @@ func (e *Engine) SaveUpload(threadID, name string, read func(dst string) error) 
 		return nil, err
 	}
 	_ = e.store.TouchThread(threadID)
-	e.invalidateFileScan(e.WorkspaceDir(threadID))
+	e.invalidateFileScan(view.Path)
 	return att, nil
 }
 
 // uploadsDir keeps user uploads together so the system prompt can point the
 // agents at one place and the Files panel can show provenance.
-const uploadsDir = "uploads"
+const uploadsDir = config.TaskUploads
 
 // DeleteFile removes one file from a conversation's workspace. Deleting a
 // symlink removes the link, never what it points at.
 func (e *Engine) DeleteFile(threadID, rel string) error {
-	if _, err := e.ResolveWorkspacePath(threadID, rel); err != nil {
+	return e.DeleteFileAtRoot(threadID, rel, "")
+}
+
+func (e *Engine) DeleteFileAtRoot(threadID, rel, expected string) error {
+	e.workspaceMu.Lock()
+	defer e.workspaceMu.Unlock()
+	view, err := e.FileWorkspace(threadID, "", expected)
+	if err != nil {
 		return err
 	}
-	name, _ := workspaceRelName(rel)
-	root, err := os.OpenRoot(e.WorkspaceDir(threadID))
+	name, err := workspaceRelName(rel)
+	if err != nil {
+		return err
+	}
+	if name == config.TaskDirectory || strings.HasPrefix(name, config.TaskDirectory+string(filepath.Separator)) {
+		return ErrFileScope
+	}
+	if view.Isolated && (name == config.TaskWork || name == config.TaskResults || name == config.TaskUploads) {
+		return ErrFileScope
+	}
+	root, err := view.openRoot()
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("engine: workspace: %w", err)
 	}
@@ -172,7 +232,7 @@ func (e *Engine) DeleteFile(threadID, rel string) error {
 	if err := e.store.DeleteAttachmentByPath(threadID, filepath.ToSlash(name)); err != nil {
 		return err
 	}
-	e.invalidateFileScan(e.WorkspaceDir(threadID))
+	e.invalidateFileScan(view.Path)
 	return nil
 }
 

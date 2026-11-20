@@ -259,6 +259,10 @@ func opErr(id, path, sessionID string, err error) Response {
 
 func mapErr(id, path, sessionID string, err error) Response {
 	switch {
+	case errors.Is(err, engine.ErrFileScope):
+		return fail(id, path, sessionID, "file_scope", err.Error())
+	case errors.Is(err, engine.ErrFileRoot):
+		return fail(id, path, sessionID, "file_root_changed", err.Error())
 	case errors.Is(err, provider.ErrModelPolicy):
 		return fail(id, path, sessionID, "custom_models_disabled", err.Error())
 	case errors.Is(err, provider.ErrAccountLoginRequired):

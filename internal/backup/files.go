@@ -15,7 +15,7 @@ import (
 // counter; those stay put so a restore cannot rewind them or drop the lease.
 var fullTrees = []string{"inputs", "plans", "workspaces", "library", "projects"}
 
-func collectTree(ctx context.Context, dataDir, rel string, skip map[string]struct{}, seen *int64, skippedLinks *int) ([]zipItem, error) {
+func collectTree(ctx context.Context, dataDir, rel string, skip map[string]struct{}, seen *int64, skippedLinks *int, taskAllow ...map[string]struct{}) ([]zipItem, error) {
 	if err := failNext(); err != nil {
 		return nil, err
 	}
@@ -57,6 +57,14 @@ func collectTree(ctx context.Context, dataDir, rel string, skip map[string]struc
 				return filepath.SkipDir
 			}
 			return nil
+		}
+		if task := managedProjectTask(itemRel); task != "" && len(taskAllow) != 0 {
+			if _, allowed := taskAllow[0][task]; !allowed {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
 		}
 		info, err := d.Info()
 		if err != nil {
@@ -108,7 +116,12 @@ func skippedThreadPath(rel string, skip map[string]struct{}) bool {
 		_, ok := skip[parts[1]]
 		return ok
 	default:
-		return false
+		task := managedProjectTask(rel)
+		if task == "" {
+			return false
+		}
+		_, ok := skip[filepath.Base(task)]
+		return ok
 	}
 }
 

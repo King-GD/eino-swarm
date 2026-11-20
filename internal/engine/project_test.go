@@ -129,9 +129,7 @@ func TestUpdatingAProjectChangesOnlyWhatWasSent(t *testing.T) {
 	}
 }
 
-// The point of a project is that its conversations share a directory: a second
-// conversation has to be able to read what the first one wrote.
-func TestConversationsInAProjectShareItsDirectory(t *testing.T) {
+func TestConversationsInAProjectHaveSeparateWorkspaces(t *testing.T) {
 	e := newTestEngine(t)
 	shared := t.TempDir()
 	p, err := e.CreateProject("P", "", shared, true)
@@ -150,11 +148,11 @@ func TestConversationsInAProjectShareItsDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e.WorkspaceDir(first.ID) != shared || e.WorkspaceDir(second.ID) != shared {
-		t.Fatalf("project conversations do not share a directory: %q / %q",
-			e.WorkspaceDir(first.ID), e.WorkspaceDir(second.ID))
+	if e.TaskFileDir(first.ID) != filepath.Join(shared, ".zwai-tasks", first.ID) ||
+		e.TaskFileDir(second.ID) != filepath.Join(shared, ".zwai-tasks", second.ID) {
+		t.Fatalf("task roots: %q / %q", e.TaskFileDir(first.ID), e.TaskFileDir(second.ID))
 	}
-	if e.WorkspaceDir(loose.ID) != e.Config().WorkspaceDir(loose.ID) {
+	if e.TaskFileDir(loose.ID) != e.Config().WorkspaceDir(loose.ID) {
 		t.Fatalf("a conversation in no project must keep its own workspace: %q", e.WorkspaceDir(loose.ID))
 	}
 	if _, err := e.CreateThread("x", "", "pj_missing"); !errors.Is(err, store.ErrNotFound) {
@@ -260,13 +258,13 @@ func TestMovingAConversationBetweenProjects(t *testing.T) {
 	if err := e.MoveThread(th.ID, p.ID); err != nil {
 		t.Fatalf("MoveThread: %v", err)
 	}
-	if got := e.WorkspaceDir(th.ID); got != e.Config().ProjectWorkspaceDir(p.ID) {
-		t.Fatalf("a moved conversation must work in its new project: %q", got)
+	if got := e.TaskFileDir(th.ID); got != e.Config().WorkspaceDir(th.ID) {
+		t.Fatalf("moving must preserve its existing directory: %q", got)
 	}
 	if err := e.MoveThread(th.ID, ""); err != nil {
 		t.Fatalf("MoveThread(out): %v", err)
 	}
-	if got := e.WorkspaceDir(th.ID); got != e.Config().WorkspaceDir(th.ID) {
+	if got := e.TaskFileDir(th.ID); got != e.Config().WorkspaceDir(th.ID) {
 		t.Fatalf("a conversation taken out of a project must go back to its own workspace: %q", got)
 	}
 	if err := e.MoveThread(th.ID, "pj_missing"); !errors.Is(err, store.ErrNotFound) {
@@ -291,7 +289,7 @@ func TestAConversationOutlivesAMissingProject(t *testing.T) {
 	if err := e.Store().SetThreadProject(th.ID, "pj_vanished"); err != nil {
 		t.Fatal(err)
 	}
-	if got := e.WorkspaceDir(th.ID); got != e.Config().WorkspaceDir(th.ID) {
+	if got := e.TaskFileDir(th.ID); got != e.Config().WorkspaceDir(th.ID) {
 		t.Fatalf("workspace=%q", got)
 	}
 	reloaded, err := e.Store().GetThread(th.ID)

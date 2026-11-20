@@ -82,7 +82,7 @@ func TestPhoneGoalCommandRefusalPreservesTheGoalAndRetryAttachmentBytes(t *testi
 						if err != nil || len(files) == 0 {
 							t.Fatalf("retry file not saved: %+v err=%v", files, err)
 						}
-						saved, err = os.ReadFile(filepath.Join(e.WorkspaceDir(th.ID), files[len(files)-1].RelPath))
+						saved, err = os.ReadFile(filepath.Join(e.TaskFileDir(th.ID), files[len(files)-1].RelPath))
 						if err != nil {
 							t.Fatal(err)
 						}

@@ -83,6 +83,11 @@ existing PC working directory (blank uses a managed directory), project memory,
 and Nuwa collaboration mode. Nuwa's planner and executor selectors use that PC's
 ready model catalog and save the pair together. Closing Nuwa retains the pair;
 settings apply to subsequent tasks, while running workers retain their model.
+
+In a paired conversation, **Files** opens the task's **Results** first. Its
+working files and uploads are separate. **Project folder** is a read-only
+view of the current project's files. Older PCs show their existing single
+file view.
 The phone sends only changed fields when editing, so changing a name does not
 overwrite an instruction changed on the PC. A failed save retains the draft for
 retry. Switching PCs or leaving the editor invalidates its pending UI responses.

@@ -54,13 +54,14 @@ func TestManagerPromptPreservesTheSelectedWorkspacePath(t *testing.T) {
 			e := newTestEngine(t)
 			selected, threadID := selectedPromptWorkspace(t, e, siblingExists)
 			set := buildTestToolset(t, e, threadID)
-			if set.WorkspaceDir != selected {
-				t.Fatalf("actual tool workspace=%q, want %q", set.WorkspaceDir, selected)
+			want := filepath.Join(selected, ".zwai-tasks", threadID, "work")
+			if set.WorkspaceDir != want {
+				t.Fatalf("actual tool workspace=%q, want %q", set.WorkspaceDir, want)
 			}
 			prompt := ManagerPrompt(set, "")
 			before, path, found := strings.Cut(prompt, "\n## Workspace path\n\n")
-			if !found || path != selected+"\n" {
-				t.Errorf("manager workspace bytes=%q, want %q", path, selected+"\n")
+			if !found || path != want+"\n" {
+				t.Errorf("manager workspace bytes=%q, want %q", path, want+"\n")
 			}
 			other := *set
 			other.WorkspaceDir = strings.TrimSpace(selected)
@@ -140,9 +141,11 @@ func TestManagerRequestKeepsTheSelectedWorkspacePath(t *testing.T) {
 	}
 	select {
 	case instruction := <-requests:
-		if !strings.Contains(instruction, "\n## Workspace path\n\n"+selected+"\n") {
+		want := filepath.Join(selected, ".zwai-tasks", threadID, "work")
+		if !strings.Contains(instruction, "\n## Workspace path\n\n"+want+"\n") ||
+			!strings.Contains(instruction, "The shared project directory is "+selected+".") {
 			_, path, _ := strings.Cut(instruction, "\n## Workspace path\n\n")
-			t.Fatalf("actual manager model input changed the selected path: got %q, want %q", strings.SplitN(path, "\n", 2)[0], selected)
+			t.Fatalf("actual manager model input changed the selected path: got %q, want %q", strings.SplitN(path, "\n", 2)[0], want)
 		}
 	default:
 		t.Fatal("no actual manager HTTP request was observed")

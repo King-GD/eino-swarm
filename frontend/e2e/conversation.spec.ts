@@ -162,9 +162,10 @@ test("runs a swarm turn end to end and keeps it after a reload", async ({ page }
   const thoughts = await transcript.getByText("Thought", { exact: true }).count()
   expect(thoughts).toBeGreaterThan(0)
 
-  // the workers left their notes in the conversation's workspace. A unique
-  // nested folder starts expanded so the files are visible without a click.
+  // Worker notes are intermediate files, not automatically promoted to results.
   const files = await openFiles(page)
+  await files.getByRole("treeitem", { name: "Working files", exact: true }).click()
+  await files.getByRole("treeitem", { name: "notes", exact: true }).click()
   await expect(files.getByRole("treeitem", { name: "researcher.md" })).toBeVisible()
   await expect(files.getByRole("treeitem", { name: "reviewer.md" })).toBeVisible()
 
@@ -567,6 +568,8 @@ test("collapses a workspace directory in Files", async ({ page }) => {
   await send(page, "Look at this from two angles and merge the findings")
   await waitForIdle(page)
   const files = await openFiles(page)
+  await files.getByRole("treeitem", { name: "Working files", exact: true }).click()
+  await files.getByRole("treeitem", { name: "notes", exact: true }).click()
   await expect(files.getByRole("treeitem", { name: "researcher.md" })).toBeVisible()
   await files.getByRole("treeitem", { name: "notes", exact: true }).click()
   await expect(files.getByRole("treeitem", { name: "researcher.md" })).toHaveCount(0)

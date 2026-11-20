@@ -212,7 +212,16 @@ func (e *Engine) recordNuwaWork(ctx context.Context, projectID, workspace string
 			return "", fmt.Errorf("unknown shared work id: omit id and version to create, or use an existing id and version from read_work to update: %w", store.ErrNotFound)
 		}
 	}
-	path, err := nuwaArtifactPath(workspace, input.ArtifactPath)
+	selected := input.ArtifactPath
+	fileRoot := e.TaskFileDir(turn.ThreadID)
+	if workspace != fileRoot && workspace == e.WorkspaceDir(turn.ThreadID) {
+		_, supplied := fields["artifact_path"]
+		if (supplied || input.ID == "") && strings.TrimSpace(selected) != "" && !filepath.IsAbs(selected) {
+			selected = filepath.Join(workspace, selected)
+		}
+		workspace = fileRoot
+	}
+	path, err := nuwaArtifactPath(workspace, selected)
 	if err != nil {
 		return "", err
 	}

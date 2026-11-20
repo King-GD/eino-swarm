@@ -8,6 +8,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Added
 
+- New tasks keep work, results and uploads in independent directories. PC and paired phone Files open to task results and can switch to a read-only project folder. Existing conversations and external files stay in place. (`F-140`, `F-224`, `C-052`)
+
 - The phone composer's Add menu and slash suggestions list `/goal`, `/plan` and `/image` in PC chats, including after draft text. Direct chat offers `/image` when the selected Gateway source has authorized image generation. Choosing a leading command keeps the draft as its argument. (`F-150`, `F-182`, `F-220`, `C-009`, `C-051`)
 
 - PC and Web voice settings can choose a preferred microphone or follow the operating-system input. Phones use their own microphone. (`F-148`, `C-048`)

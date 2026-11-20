@@ -94,7 +94,7 @@ func TestDownloadRefusesTraversal(t *testing.T) {
 		}
 	}
 	// a directory is not a download
-	root := h.app.Engine.WorkspaceDir(id)
+	root := h.app.Engine.TaskFileDir(id)
 	if err := os.MkdirAll(filepath.Join(root, "notes"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +267,7 @@ func TestRevealOnDesktop(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("reveal status %d", resp.StatusCode)
 	}
-	if revealed != h.app.Engine.WorkspaceDir(id) {
+	if revealed != h.app.Engine.TaskFileDir(id) {
 		t.Fatalf("an empty path should reveal the workspace, got %q", revealed)
 	}
 	resp = post(map[string]any{"path": "../../outside"})

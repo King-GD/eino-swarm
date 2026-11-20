@@ -435,6 +435,10 @@ export interface Turn {
   retry_turn_id?: string
 }
 
+export type FileScope = "task" | "project"
+export type FileLocation = { scope: FileScope; root?: string }
+export type FileView = { root: string; isolated: boolean; has_project: boolean }
+
 export interface FileEntry {
   /** Relative to the conversation's workspace, with `/` separators. */
   path: string

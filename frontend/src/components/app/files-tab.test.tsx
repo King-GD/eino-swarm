@@ -68,6 +68,17 @@ describe("Files tab", () => {
     expect(screen.queryByLabelText("Filter files")).not.toBeInTheDocument()
   })
 
+  it("shows the empty results section without opening uploads or working files", () => {
+    renderTab([entry("results", { dir: true }), entry("uploads", { dir: true }), entry("work", { dir: true })], {
+      fileView: { root: "task-root", isolated: true, has_project: true },
+      loadedDirs: ["", "results"],
+    })
+    expect(screen.getByText("No deliverables yet")).toBeVisible()
+    expect(screen.getByRole("treeitem", { name: "Results" })).toHaveAttribute("aria-expanded", "true")
+    expect(screen.getByRole("treeitem", { name: "Working files" })).toHaveAttribute("aria-expanded", "false")
+    expect(screen.getByRole("treeitem", { name: "Uploads" })).toHaveAttribute("aria-expanded", "false")
+  })
+
   it("starts a repository-shaped listing collapsed", () => {
     renderTab()
     const tree = screen.getByTestId("file-tree")

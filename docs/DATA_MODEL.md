@@ -288,7 +288,8 @@ allowance. The table is not a chat event and not a Settings value. See
 | `id` | text, PK | `th_` + 8 random bytes hex. **Also the workspace directory name**, so it must stay free of separators and shell metacharacters. |
 | `title` | text | placeholder from the first message, then a generated name from that opening line when the user did not supply one |
 | `title_auto` | bool | true while the engine still owns the title. A user rename or a landed generated name clears it so a later namer cannot overwrite the sidebar |
-| `project_id` | text, indexed | the project this conversation belongs to; empty for a standalone one. It decides where the tools work and what the prompt carries. Empty lists the shared skill library (`library/skills/`) in the prompt and reviews new procedures into that library |
+| `project_id` | text, indexed | current project membership for shared context, memory and project browsing. Empty lists the shared skill library (`library/skills/`); only legacy threads use membership to choose their task work directory |
+| `task_workspace` | text, default empty | immutable task file root; data-relative for managed directories and absolute for externally selected ones. A nonempty binding separates `work/`, `results/` and `uploads/`; the empty legacy value keeps the old directory and relative file URLs |
 | `provider_id` | text | which configured provider this conversation uses. Official presentation does not rewrite a stored own provider |
 | `model` | text | the name this conversation sends; empty follows the provider's default so a Settings change applies until someone picks in the composer. While official presentation is on, a stored own name stays here and the turn sends the alias `account` instead |
 | `reasoning_effort` | text | this conversation's thinking level (``, `low`, `medium`, `high`); empty means the model's own default. Switchable in the composer, applied from the next turn |

@@ -42,7 +42,7 @@ func TestProjectWorkingDirectoryPreservesTheSelectedIdentity(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := e.WorkspaceDir(th.ID); got != selected {
+			if got := e.TaskFileDir(th.ID); got != filepath.Join(selected, ".zwai-tasks", th.ID) {
 				t.Fatalf("conversation works in %q instead of selected %q", got, selected)
 			}
 			managed, err := e.CreateProject("Managed", "", "", false)

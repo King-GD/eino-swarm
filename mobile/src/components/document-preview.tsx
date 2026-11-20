@@ -13,6 +13,7 @@ import type { DocBlock, InlineRun } from "../../../frontend/src/lib/documents/ty
 import { t } from "@/lib/i18n"
 import type { RemoteLink } from "@/lib/link"
 import { readWorkspaceFile } from "@/lib/remote-files"
+import type { FileLocation } from "../../../frontend/src/lib/types"
 
 function Runs({ runs }: { runs: InlineRun[] }) {
   return runs.map((run, index) => run.href
@@ -68,23 +69,24 @@ function Chooser({ label, names, index, onChange }: { label: string; names: stri
   )
 }
 
-function readerFor(link: RemoteLink, threadId: string): AssetReader {
+function readerFor(link: RemoteLink, threadId: string, location?: FileLocation): AssetReader {
   return async (path, signal) => {
     if (signal.aborted) return null
     try {
-      return (await readWorkspaceFile(link, threadId, path)).bytes
+      return (await readWorkspaceFile(link, threadId, path, { signal }, location)).bytes
     } catch {
       return null
     }
   }
 }
 
-export function PhoneRichPreview({ link, threadId, path, text, bytes }: {
+export function PhoneRichPreview({ link, threadId, path, text, bytes, location }: {
   link: RemoteLink
   threadId: string
   path: string
   text: string
   bytes: Uint8Array
+  location?: FileLocation
 }) {
   const format = documentFormat(path)
   const delimiter = tableDelimiter(path)
@@ -102,7 +104,7 @@ export function PhoneRichPreview({ link, threadId, path, text, bytes }: {
       {switchable && mode === "source" ? <TextFilePreview path={path} text={text} /> : format && format !== "epub" ? (
         <PackageView format={format} bytes={bytes} />
       ) : html ? (
-        <HtmlView link={link} threadId={threadId} path={path} html={text} />
+        <HtmlView link={link} threadId={threadId} path={path} html={text} location={location} />
       ) : delimiter ? (
         <TableView text={text} delimiter={delimiter} />
       ) : null}
@@ -121,7 +123,7 @@ function TableView({ text, delimiter }: { text: string; delimiter: "," | "\t" })
   )
 }
 
-function HtmlView({ link, threadId, path, html }: { link: RemoteLink; threadId: string; path: string; html: string }) {
+function HtmlView({ link, threadId, path, html, location }: { link: RemoteLink; threadId: string; path: string; html: string; location?: FileLocation }) {
   const [srcDoc, setSrcDoc] = useState("")
   const [failed, setFailed] = useState(false)
   useEffect(() => {
@@ -129,11 +131,11 @@ function HtmlView({ link, threadId, path, html }: { link: RemoteLink; threadId: 
     let active = true
     setSrcDoc("")
     setFailed(false)
-    void buildHtmlArtifact(html, path, window.location.origin, readerFor(link, threadId), controller.signal, { scripts: true })
+    void buildHtmlArtifact(html, path, window.location.origin, readerFor(link, threadId, location), controller.signal, { scripts: true })
       .then((doc) => { if (active) setSrcDoc(doc) })
       .catch(() => { if (active && !controller.signal.aborted) setFailed(true) })
     return () => { active = false; controller.abort() }
-  }, [link, threadId, path, html])
+  }, [link, threadId, path, html, location])
   if (failed) return <p className="text-sm text-muted-foreground">{t("files.unavailable")}</p>
   if (!srcDoc) return <p role="status" className="flex items-center gap-2 text-sm"><Loader2 className="size-4 animate-spin" />{t("files.loading")}</p>
   const name = path.slice(path.lastIndexOf("/") + 1)

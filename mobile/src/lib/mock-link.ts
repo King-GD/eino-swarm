@@ -6,7 +6,7 @@ import { MockSpeech } from "./mock-speech"
 import { MOCK_FLAG, mockTickMs, mockPauseOpenMs, mockPauseClientsMs } from "./mock-link-timing"
 import { mockTaskPanelRPC, releaseMockTaskPanels, resetMockTaskPanels } from "./mock-task-panels"
 export { wantsMock, mockTickMs, mockPauseOpenMs } from "./mock-link-timing"
-import { mockFileChunk, mockListedFiles, mockOutputFiles } from "./mock-files"
+import { mockFileChunk, mockListedFiles, mockOutputFiles, mockScopedFiles } from "./mock-files"
 import { iterationLimitHistory, iterationSnapshotOnly, mockAwaitingContinue, mockContinueIteration } from "./mock-iteration-limit"
 import { restartAskHistory } from "./mock-ask-restart"
 import { generationHistory } from "./mock-generation"
@@ -884,6 +884,11 @@ export class MockLink {
         return this.ok({ id, threads: [this.host.older()], more: false, next: "" })
       case OpFiles: {
         if (!thread()) return this.missing(id)
+        if (new URLSearchParams(location.search).get("file-preview") === "task-workspaces") {
+          const { files, folders, view } = mockScopedFiles(req.file_scope === "project")
+          if (req.file_root && req.file_root !== view.root) return this.ok({ id, ok: false, code: "file_root_changed" })
+          return this.ok({ id, files: mockListedFiles(files, req.directory, req.text, folders), file_view: view, more: false })
+        }
         return this.ok({ id, files: mockListedFiles(this.outputFiles, req.directory, req.text), more: false })
       }
       case OpGeneratedImageChunk: {
@@ -893,6 +898,12 @@ export class MockLink {
       }
       case OpFileChunk: {
         if (!thread()) return this.missing(id)
+        if (new URLSearchParams(location.search).get("file-preview") === "task-workspaces") {
+          const { files, view } = mockScopedFiles(req.file_scope === "project")
+          if (req.file_root !== view.root) return this.ok({ id, ok: false, code: "file_root_changed" })
+          const file_chunk = await mockFileChunk(files, req.file_path ?? "", req.before ?? 0)
+          return file_chunk ? this.ok({ id, file_chunk, file_view: view }) : this.missing(id)
+        }
         const file_chunk = await mockFileChunk(this.outputFiles, req.file_path ?? "", req.before ?? 0)
         return file_chunk ? this.ok({ id, file_chunk }) : this.missing(id)
       }

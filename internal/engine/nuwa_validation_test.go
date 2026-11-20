@@ -445,7 +445,7 @@ func TestNuwaValidationActualManagerPreservesAndClearsCASPatchFields(t *testing.
 			}
 			args = map[string]any{"kind": "artifact", "title": "Reviewable file", "artifact_path": selected, "depends_on": []string{factID}}
 		case 7:
-			if result.Node.ArtifactPath != selected || result.Node.Kind != "artifact" {
+			if result.Node.ArtifactPath != "work/"+selected || result.Node.Kind != "artifact" {
 				t.Errorf("published artifact lost exact selected path: %+v", result.Node)
 			}
 			nuwaValidationTool(w, request, "validation-read", "read_work", `{}`)

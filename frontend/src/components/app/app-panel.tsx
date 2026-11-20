@@ -24,6 +24,9 @@ export function AppPanel({
   const loadedFileDirs = useApp((s) => s.loadedFileDirs)
   const fileDirErrors = useApp((s) => s.fileDirErrors)
   const workspace = useApp((s) => s.workspace)
+  const fileScope = useApp((s) => s.fileScope)
+  const fileView = useApp((s) => s.fileView)
+  const setFileScope = useApp((s) => s.setFileScope)
   const turns = useApp((s) => s.turns)
   const meta = useApp((s) => s.meta)
   const usage = useApp((s) => s.usage)
@@ -62,6 +65,10 @@ export function AppPanel({
     projects,
     threads.find((t) => t.id === activeId)?.project_id,
   )
+  useEffect(() => {
+    if (tab === "files") void refreshFiles()
+    return () => setFileScope("task")
+  }, [tab, activeId, conversationProject?.id, conversationProject?.workdir, refreshFiles, setFileScope])
   // A click on a sidebar skill is a request to look at that project's
   // memory, even when the open conversation belongs to another one — or
   // to none. The conversation's project is the default the rest of the
@@ -103,6 +110,9 @@ export function AppPanel({
       onOpenDir={ensureFileDir}
       onSearch={searchFiles}
       workspace={workspace}
+      fileScope={fileScope}
+      fileView={fileView}
+      onFileScope={setFileScope}
       turns={turns}
       meta={meta}
       threadId={activeId}
@@ -140,7 +150,7 @@ export function AppPanel({
       onDeleteFile={(path) => void removeFile(path)}
       onRefreshFiles={() => void refreshFiles()}
       onReveal={(path) => {
-        if (activeId) void api.reveal(activeId, path).catch(() => undefined)
+        if (activeId) void api.reveal(activeId, path, { scope: fileScope, root: fileView?.root }).catch(() => undefined)
       }}
       usage={usage}
     />

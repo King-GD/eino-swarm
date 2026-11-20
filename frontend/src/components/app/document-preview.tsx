@@ -87,20 +87,21 @@ export function TableFilePreview({ text, delimiter }: { text: string; delimiter:
   )
 }
 
-export function HtmlFilePreview({ threadId, path, html }: { threadId: string; path: string; html: string }) {
+export function HtmlFilePreview({ threadId, path, html, location }: { threadId: string; path: string; html: string; location?: import("@/lib/types").FileLocation }) {
   const t = useT()
   const [srcDoc, setSrcDoc] = useState("")
   const [failed, setFailed] = useState(false)
+  const { scope, root } = location ?? {}
   useEffect(() => {
     const controller = new AbortController()
     let active = true
     setSrcDoc("")
     setFailed(false)
-    void buildHtmlArtifact(html, path, window.location.origin, (asset, signal) => readWorkspaceBytes(threadId, asset, signal), controller.signal, { scripts: true })
+    void buildHtmlArtifact(html, path, window.location.origin, (asset, signal) => readWorkspaceBytes(threadId, asset, signal, scope && { scope, root }), controller.signal, { scripts: true })
       .then((doc) => { if (active) setSrcDoc(doc) })
       .catch(() => { if (active && !controller.signal.aborted) setFailed(true) })
     return () => { active = false; controller.abort() }
-  }, [threadId, path, html])
+  }, [threadId, path, html, scope, root])
   if (failed) return <p className="text-sm text-muted-foreground">{t("files.unsupported")}</p>
   if (!srcDoc) return <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />{t("files.loading")}</p>
   const name = path.slice(path.lastIndexOf("/") + 1)

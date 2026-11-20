@@ -1666,7 +1666,7 @@ bytes land in the workspace. The PC decides what the turn is: text with no
 attachments while a turn runs is a follow-up; attachments while a turn
 runs steer; an idle conversation starts a turn. The phone uploads, then
 calls `send` or `steer`; it does not reimplement that policy.
-`files` `{thread_id, directory?, text?, cursor?}` lists one complete directory,
+`files` `{thread_id, directory?, text?, cursor?, file_scope?, file_root?}` lists one complete directory,
 or every listed match when `text` is set. An empty or omitted `directory` is
 the workspace root. `cursor` pages that same result and must repeat
 `directory` or `text`. `files[]` carries relative `path`, `name`, `size`,
@@ -1674,12 +1674,17 @@ the workspace root. `cursor` pages that same result and must repeat
 an error, not a shorter tree. Dot-directories, `node_modules` and `vendor`
 are omitted. An older phone that omits `directory` sees only the root until
 it is updated.
-`file_chunk` `{thread_id, file_path, before?}` returns base64 `data`, MIME,
+`file_chunk` `{thread_id, file_path, before?, file_scope?, file_root?}` returns base64 `data`, MIME,
 file `size`, `offset`, `next_offset`, and `more` in slices no larger than
 36 KiB. An older PC that returns `unknown_op` shows an update-PC message in
 the phone file browser. The PC checks the thread and opens only a regular file beneath its
 workspace root, including symlink resolution; traversal and escaped symlinks
-fail. The phone limits assembled reads to 32 MiB. PNG, JPEG, GIF and WebP can
+fail. New PCs include `file_view: {root, isolated, has_project}`; the phone
+repeats `file_root` and `file_scope` on pages, child lists and chunks.
+`file_scope=project` is read-only and resolves the current project on the PC.
+Omitting it uses the task (legacy shared folder for old conversations).
+No `file_view` means the PC does not expose a scope switch.
+The phone limits assembled reads to 32 MiB. PNG, JPEG, GIF and WebP can
 be previewed up to that limit. Text, PDF, HTML, CSV/TSV, DOCX, XLSX, PPTX and
 EPUB previews are limited to 8 MiB. HTML renders in a sandboxed artifact
 without same-origin access. CSV/TSV render as tables. DOCX, XLSX, PPTX and
@@ -3437,6 +3442,7 @@ suggestion. The phone receives the event and does not show it.
 
 ```json
 {"workspace": "/Users/me/.zwai-swarm/workspaces/th_ab12…",
+ "file_view": {"root": "…", "isolated": true, "has_project": false},
  "files": [{"path": "uploads/notes.md", "name": "notes.md", "size": 812,
             "dir": false, "modified": "…", "uploaded": true}]}
 ```
@@ -3451,7 +3457,15 @@ the scan in progress. A failed or cancelled scan is an error with no partial
 human put there, as opposed to what agents produced. Dot-directories,
 `node_modules` and `vendor` are omitted (agents can still read those paths).
 The Files panel loads the next directory when it is opened and uses `q` for
-its filter. The payload stays a flat list of that one result.
+its filter. The payload stays a flat list of that one result. The reserved
+`.zwai-tasks` directory is visible in the project tree.
+
+File list, download and reveal accept `scope=task|project` (default `task`).
+The server derives the project scope from the conversation's current
+membership. A client can bind later operations to `file_view.root` with the
+`file_root` query parameter; a mismatch returns `409 file_root_changed`.
+An invalid scope or a project-scope upload/delete returns `400 file_scope`.
+The download path and upload `rel_path` remain relative to the scope root.
 
 ### `POST /api/threads/:id/files` → `201`
 
