@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -24,8 +26,8 @@ func TestClientsDefaultOffAndRepairBlankDirs(t *testing.T) {
 	custom.RunningStaleSeconds = 0
 	cfg.Clients = custom
 	cfg.normalizeClients()
-	if !cfg.Clients.Enabled {
-		t.Fatal("an explicit on switch was cleared")
+	if cfg.Clients.Enabled {
+		t.Fatal("a legacy enabled value reactivated local clients")
 	}
 	if cfg.Clients.ClaudeDir != custom.ClaudeDir {
 		t.Fatalf("custom dir replaced: %s", cfg.Clients.ClaudeDir)
@@ -38,5 +40,20 @@ func TestClientsDefaultOffAndRepairBlankDirs(t *testing.T) {
 		if strings.Contains(strings.ToLower(dir), "notes.md") {
 			t.Fatalf("example leaked into %s", dir)
 		}
+	}
+}
+
+func TestLegacyClientsStayDisabledOnStartup(t *testing.T) {
+	dir := t.TempDir()
+	const yaml = "clients:\n  enabled: true\n  recent_days: 9\n"
+	if err := os.WriteFile(filepath.Join(dir, FileName), []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Clients.Enabled || cfg.Clients.RecentDays != 9 {
+		t.Fatalf("loaded clients settings = %+v", cfg.Clients)
 	}
 }

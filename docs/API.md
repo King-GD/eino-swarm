@@ -603,57 +603,13 @@ enabled and is omitted otherwise. A `PUT /api/settings` request that supplies
 `memory.auto_dream` defaults to `true`. An explicit `false` disables automatic
 skill verification. Omitting `auto_dream` from a `PUT` preserves the saved choice.
 
-### `GET /api/clients`
+### Legacy local agent task endpoints
 
-Read-only progress for local Claude, Codex, and Cursor transcripts. `enabled`
-is false until Settings turns it on; then `tools` is three groups
-(`claude`, `codex`, `cursor`). Each task has `id`, `title`, `cwd`,
-`updated_at`, and `status` (`running` or `done`). `title` is the opening
-request. Codex ignores client context inserted ahead of that request, and
-still reads a request that sits past the start of a long transcript. With
-no request and no stated objective, `title` is the directory name in `cwd`.
-The desktop list and the phone `clients` task show that directory name after
-the task for Claude, Codex, and Cursor when the two differ. Cursor has no
-working directory in the transcript; its project folder is the encoded
-absolute path. `cwd` is that directory when it still exists. A leading dot
-in a path component is omitted from the folder name. When the leaf is gone,
-`cwd` is the git repository that contains the remaining path. The phone
-task includes `cwd` for the label. The first page is at most five tasks from the last `clients.recent_days`
-(default 3). `more` and `next` mean another page exists, still inside that
-window or older than it. `GET /api/clients?before=<unix ms>` returns the
-next five per tool. `GET /api/clients/task?id=` returns the live tail of that
-session: title, status, and the latest lines (`user`, `assistant`, `thinking`,
-`tool`), with the opening request on every page. `older` means lines exist
-before this page. `before` is the byte offset of the first line in the page;
-`?before=` returns the previous page. Each entry's `at` (line offset) and `n`
-(index on that line) stay stable as the file grows, so a poll can merge the
-tail without dropping a page already on screen. `before` that is not a
-non-negative integer is 400. The desktop follows that tail and **Earlier**
-loads the previous page. The phone uses `client_read` with `task_id` and
-optional `before`, and reads `client_view` (`older`, `before`, the same
-entry fields). A missing id is 404. `client_read` with a negative `before`
-is `bad_request`. Consecutive thinking and tool lines stay behind one
-collapsed row, the same work fold as a conversation. It does not send,
-steer, or resume.
-
-Finished catalog snapshots are immutable and sorted newest first once per
-refresh, preserving file order for equal timestamps. Paging copies only the
-visible rows. Background refreshes reuse parsed metadata when file identity,
-size, modification time and mode are unchanged; deleted files and a changed
-root drop those cached rows. Running status still follows each tool's finish
-markers and configured stale interval. Session detail reads remain live.
-
-The disk walk does not run inside the request. A cold read is
-`pending: true` with empty `tools` and must not replace rows already
-painted; the next poll carries the snapshot. A paired phone does not
-wait for that walk on inbox `list`. It asks `clients` on its own. When a
-snapshot is already finished, the first `list` still carries `clients`,
-clipped to 30 tasks per tool, so an older phone paints the groups. A
-`list` sent while the walk is in flight omits `clients`. `clients` with
-`before` and optional `group` loads the next page from the snapshot.
-A `list` that pages one inbox section omits `clients`,
-so a poll of page one can refresh the lights without dropping rows already
-loaded with More.
+`GET /api/clients` and its legacy `before` query return
+`{"enabled":false,"tools":[]}`. `GET /api/clients/task?id=…` returns 404 for
+valid requests. Malformed parameters still return 400. These endpoints
+perform no filesystem scans or transcript reads. Settings reads report
+`clients.enabled: false`, and Settings writes normalize it to false.
 
 ### `PUT /api/settings`
 
@@ -1361,8 +1317,11 @@ pages that section. `group` omitted keeps the global idle page for a phone
 that still has one More button. `more` pages that idle
 list. A later `list` is still the first page: the phone patches that page
 and keeps rows already loaded with `more`. A row that left the first page
-is not kept just because it was there last time. When `clients.enabled` is on, the phone polls `clients` beside the inbox. That reply is the last finished snapshot (`pending` while the first walk is still running) and does not hold the link open. A first `list` carries the same `clients` object only after a snapshot exists (three tool groups, 30 tasks each). `clients` `{before, group}` loads older tasks for one tool from that snapshot. A section `list` omits `clients` so that page does not reset the agent list. Replacing the window with
-the first page alone is how an expanded inbox collapsed on the next poll.
+is not kept just because it was there last time.
+The host omits `clients` from all inbox list and pagination responses.
+An explicit legacy `clients` RPC returns only `clients: {"enabled":false}`.
+A legacy `client_read` RPC returns `not_found`, or `bad_request` for a negative
+`before`. The phone ignores local agent tasks advertised by older hosts.
 `log` `{thread_id, before}` pages older transcript events (newest page older than
 `before`, size `watch_events`). `run_now` and `cancel_wait` target the soonest
 armed thread wake on `{thread_id}` (`409 idle` when none is parked;

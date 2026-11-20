@@ -3,8 +3,6 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { Header } from "./header"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { openClient } from "@/lib/client-open"
-import { setDeskDest } from "@/lib/desk-nav"
 import {
   SIDEBAR_WIDTH_DEFAULT,
   SIDEBAR_WIDTH_VAR,
@@ -149,14 +147,6 @@ describe("Header project chip", () => {
     expect(screen.getByTestId("thread-title")).toHaveTextContent("Scheduled")
     expect(screen.queryByTestId("thread-project")).not.toBeInTheDocument()
     expect(screen.queryByTestId("status-badge")).not.toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: "Toggle side panel" })).not.toBeInTheDocument()
-  })
-
-  it("hides the panel toggle while a local client session fills the task column", () => {
-    setDeskDest("clients")
-    openClient({ id: "claude:1", title: "Foreign task", status: "done" })
-    renderHeader()
-    expect(screen.getByTestId("thread-title")).toHaveTextContent("Foreign task")
     expect(screen.queryByRole("button", { name: "Toggle side panel" })).not.toBeInTheDocument()
   })
 })

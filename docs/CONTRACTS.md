@@ -318,6 +318,8 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 
 ## C-006 Phone remote protocol
 
+- 本地 Claude、Codex 和 Cursor 任务已禁用。PC 不扫描任务文件，所有手机收件箱响应省略 `clients`。仅旧手机显式调用 `clients` 时收到 `enabled:false`，无任务数据。旧 `client_read` 请求返回 `not_found`，负分页偏移仍返回 `bad_request`。新手机忽略旧 PC 返回的本地任务。证据：`internal/remote/clients_test.go`、`internal/server/clients_test.go`、`mobile/src/app.test.tsx`。
+
 - 轮次导航：PC 打开详情的 `turns[].user_text` 是可选的单行用户输入预览，受 `summary_chars` 限制；既有 `turns[].text` 的回复预览语义不变。手机优先使用已加载的用户消息，旧 PC 缺少输入预览时仅显示轮次号，绝不拿回复代替输入。证据：`internal/remote/snapshot_reads_test.go`、`mobile/e2e/conversation-open.spec.ts`。
 
 - Model discovery is refreshed on the same live link after a PC mode/scope change and after phone account model-policy changes. Refreshes to one PC are serialized; late old-scope responses cannot replace the current list. Voice-only catalog metadata does not refresh model choices. A legacy PC omitting Gateway capability metadata shows an explicit PC-update notice; phone authority never substitutes for that PC's grant. Evidence: `mobile/src/lib/model-source-refresh.test.ts`.
@@ -339,7 +341,7 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 
 - 匿名转账号接管（`F-211`）：只对已保存匿名 PC，按规范化完整 Hub base endpoint（保留 path 边界）、完整 `host_pub` 和严格 `owner_user_id === session.user.id` 匹配在线本人 PC；不凭名称／短指纹、其他 Hub／账号、缺字段或歧义身份合并。刷新、前台恢复、桌面后登录上线均可触发；共享同账号／Host 签发 flight，账号签发与同身份 QR 兑换互斥。Connect 成功后先原子保存受管票据，保留行序、active、名称和最后会话；仅原选中 PC 先关旧再连新，authority 包含完整公钥、Hub、ticket、session、owner／Mobile／Host。API 失败不伪造成功；本地写失败保留新票据于有界内存并暂停旧票据，刷新只重试保存，进程重启后需明确重新选择 PC；传输失败保留已保存新票据正常重连。换账号／注销／忘记或重扫使迟到回包不能恢复旧记录；旧 opening/recover 在 authority 变化及 unmount 后关闭候选，旧 finally 不清新代次状态。退出删除已接管的受管记录，不复活已退休匿名票据。证据：`mobile/src/lib/gateway-link-upgrade.test.ts`、`mobile/src/lib/use-gateway-account.test.tsx`、`mobile/src/app.test.tsx`、`mobile/e2e/gateway-account.spec.ts`。
 
-- 手机过程展示（`F-220`、`F-222`、`F-223`、`F-230`）：主管／子 Agent／直连聊天的纯思考组不增加一级过程聚合或活动末行预览，直接显示各自默认收起的思考控件；含工具的组保留一级聚合，展开只显示条目，每条思考正文仍由自身控件独立管理。单项与多项都须显式打开思考正文。正文保留完整原文，同一身份的实时追加和完成不改变用户的开合选择；不同思考身份不共享状态，外层关闭卸载后重新打开按默认收起。含工具的一级活动摘要可以显示既有末行预览，不能据该摘要把正文判作已展开；纯思考组加入或移除工具时，同一已挂载思考的开合选择保持；回答和工具折叠语义不变。Clients 保留既有任务聚合，其思考条目仍复用默认收起的自身控件。此条只改变手机展示，不改变事件、Pairlink 或 PC 的 `C-022`。证据：`mobile/src/components/thought.tsx`、`mobile/src/components/thread-blocks.tsx`、`mobile/src/components/client-groups.tsx`、`mobile/src/components/thread-blocks-reasoning.test.tsx`、`mobile/e2e/reasoning-fold.spec.ts`；来源：Issue #118、#129。
+- 手机过程展示（`F-220`、`F-222`、`F-230`）：主管／子 Agent／直连聊天的纯思考组不增加一级过程聚合或活动末行预览，直接显示各自默认收起的思考控件；含工具的组保留一级聚合，展开只显示条目，每条思考正文仍由自身控件独立管理。单项与多项都须显式打开思考正文。正文保留完整原文，同一身份的实时追加和完成不改变用户的开合选择；不同思考身份不共享状态，外层关闭卸载后重新打开按默认收起。含工具的一级活动摘要可以显示既有末行预览，不能据该摘要把正文判作已展开；纯思考组加入或移除工具时，同一已挂载思考的开合选择保持；回答和工具折叠语义不变。此条只改变手机展示，不改变事件、Pairlink 或 PC 的 `C-022`。证据：`mobile/src/components/thought.tsx`、`mobile/src/components/thread-blocks.tsx`、`mobile/src/components/thread-blocks-reasoning.test.tsx`、`mobile/e2e/reasoning-fold.spec.ts`；来源：Issue #118、#129。
 
 - 暂停目标的手机 send 保留 capped／blocked／idle 和连续预算，答完不启动目标下一轮；只有显式 `resume_goal` 按 `C-009` 恢复。协议操作名与载荷不变，UI 保留暂停投影和恢复操作。关联功能：`F-220`；证据：`internal/server/goal_pause_integration_test.go`、`internal/remote/rpc.go`；变更类型：Changed / Fixed。
 
@@ -456,7 +458,7 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 - 报告与发布身份：真实 `report_schedule` 保存已提交调度动作的原 tool-call 回执及私有 findings 后返回 `report_pending:true`，回执不代表 findings 已通过；释放全局 goal/wake 锁后再校验，分类重试及凭已保存回执的恢复不能重做该动作。调度动作与私有保存是两个提交：动作已发生但私有保存失败时，工具返回 answer_storage_failed、action_committed:true、report_published:false 及可用 schedule_id；无动作提交时明确 false。动作后／私有保存前崩溃仍属 unknown，必须核对现状态，不能宣称所有窗口 exactly-once。报告逐份核对；确认 no_matching_schedule／schedule_state_changed 时仅拒绝该报告并继续核对其余报告。通过校验的 findings 正常发布，不因另一份报告或后续终稿的具体虚假声明一同扣下；含该虚假声明的 findings 仍不发布。已经提交的调度动作保持有效，整轮仍最多一次主管纠正，不按关键词删改正文。每次发布重新核对 Stop、turn 和当前调度事实，公共事件／回答回放与候选 accepted 状态必须同事务提交；无公共正文仍需结清候选。再次准入已 accepted 的身份返回明确 AlreadyAdmitted，不能重复广播；错误归属、缺失、deferred／rejected 或混合 settled/pending 批次必须拒绝。证据：`internal/engine/report_admission.go`、`internal/engine/report_admission_test.go`、`internal/engine/schedule_report_isolation_http_test.go`、`internal/store/schedule_answer.go`、`internal/store/schedule_answer_pending.go`、`internal/store/schedule_answer_pending_test.go`；变更类型：Changed；关联功能及来源同上。
 
 - 命令识别一致：PC 提交的命令判定必须等于引擎对同一原文的判定（开头 `/plan` 优先，其次开头或句尾 `/goal`）；开头 `/compact` 只在 PC 本地执行。其他正文之后的命令 token（如句中 `/plan …`、`/goal …`、`/compact`）是普通消息内容，PC 不得据此设置目标、进入计划、压缩或丢弃其前文。PC 菜单在已有正文之后只提供 goal 与 compact。空白按 JavaScript `\s` 判定（含 U+FEFF、不含 U+0085），撇号是否开启引号看码点意义上的前一字符（转义字符本身亦计），两端一致。证据：`internal/slash/parse.go`、`internal/slash/trailing.go`、`internal/slash/testdata/submit-commands.json`、`internal/slash/submit_commands_test.go`、`frontend/src/lib/slash-core.ts`、`frontend/src/lib/slash.test.ts`、`frontend/src/lib/slash-differential.test.ts`、`frontend/src/components/app/composer-midline-command.test.tsx`；关联 `F-150`；变更类型：Fixed。
-- 手机命令入口：配对 PC 对话和新建对话的「+」与斜杠联想同列 `/goal`、`/plan` 和 `/image`。直连模型只在所选 Gateway 来源具备已授权生图能力时提供 `/image`。提问中的回答框和只读 Clients 不列出命令。输入草稿起始或正文后的 `/`（含全角 `／` 与输入法 `、`）按同一目录过滤。点选 `/plan` 或 `/image` 放到草稿开头并将已有正文保留为参数；点选只编辑草稿，空参数命令不可提交。路径、URL 及非命令正文不打开联想。系统返回先关闭添加菜单；关闭斜杠联想只去掉未完成的斜线标记。关联 `F-150`、`F-182`、`F-220`、`C-015`、`C-051`；证据：`mobile/src/lib/composer-commands.ts`、`mobile/src/components/composer-slash.test.tsx`、`mobile/e2e/composer-commands.spec.ts`、`mobile/e2e/direct-image-generation.spec.ts`；变更类型：Fixed。
+- 手机命令入口：配对 PC 对话和新建对话的「+」与斜杠联想同列 `/goal`、`/plan` 和 `/image`。直连模型只在所选 Gateway 来源具备已授权生图能力时提供 `/image`。提问中的回答框不列出命令。输入草稿起始或正文后的 `/`（含全角 `／` 与输入法 `、`）按同一目录过滤。点选 `/plan` 或 `/image` 放到草稿开头并将已有正文保留为参数；点选只编辑草稿，空参数命令不可提交。路径、URL 及非命令正文不打开联想。系统返回先关闭添加菜单；关闭斜杠联想只去掉未完成的斜线标记。关联 `F-150`、`F-182`、`F-220`、`C-015`、`C-051`；证据：`mobile/src/lib/composer-commands.ts`、`mobile/src/components/composer-slash.test.tsx`、`mobile/e2e/composer-commands.spec.ts`、`mobile/e2e/direct-image-generation.spec.ts`；变更类型：Fixed。
 - 目标附件边界：命令发送仅接受正文；携带图片或文件的前缀／句尾目标命令在改变目标前整体拒绝，运行中 send／steer 也不得返回成功后丢弃原附件。调用方保留原正文和附件，失败不激活新目标。证据：`internal/engine/slash.go`、`internal/remote/slash_goal_attachment_test.go`、`mobile/src/components/composer-goal-refusal.test.tsx`；来源：Issue #103。
 - 手机引用命令边界：PC／手机复用 `frontend/src/lib/slash-core.ts` 的 `parseSlashSubmit`；手机正文被识别为目标／计划命令且任一引用去空白后非空时，发送／插话／表单提交必须在引用封装、清稿和上传／RPC 回调前显示本地拒绝，保留原正文、引用和文件。拒绝不设置目标、不进入计划、不产生发送成功；修正正文或移除有效引用后须由用户重试。未知命令、路径、URL，以及引用／代码内的字面命令不得误拒；普通引用仍沿 `C-011` 格式，不剥离 `<user_request>` 或丢弃 `<selected_text>` 来激活命令。纯文本的既有引擎／RPC 语义与附件单独存在时的拒绝路径不变。关联 `F-150`、`F-221`、`C-033`；证据：`mobile/src/components/composer.tsx`、`mobile/src/components/composer-quoted-command.test.tsx`、`mobile/e2e/quoted-goal.spec.ts`、`internal/slash/testdata/trailing-goal.json`；变更类型：Fixed；来源：Issue #111。
 
@@ -550,20 +552,12 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 - 允许行为：点击遮罩、关闭按钮或 Escape 关闭列表；禁止行为：依赖不受应用样式控制的系统原生选项弹窗，或把不同服务商的同名模型混为一个选项；失败语义：列表关闭后保留原选择；不变量：选择只改变当前输入框的服务商和模型；边界条件：长模型名、多服务商和 Android 系统返回键。
 - 证据：实现 `mobile/src/components/model-picker.tsx`, `mobile/src/components/composer.tsx`；测试 `mobile/src/components/composer.test.tsx`, `mobile/src/components/direct-chat-screen.test.tsx`, `mobile/e2e/walkthrough.spec.ts`；变更规则：同步手机模型选择测试和使用文档；来源：GitHub Issue #34。
 
-## C-014 Phone client pagination feedback
-
-- 状态：active；类型：lifecycle；作用范围：主机 Clients 快照和 phone Clients 分页；关联功能：`F-223`。
-- 契约内容：点击 Clients 的 More 后立即显示加载动效和文字，等待 RPC 时禁用重复点击；成功时追加较旧任务，失败时保留现有列表、显示错误并恢复按钮。
-- 快照边界：后台刷新按文件身份／大小／修改时间／模式判断是否重新解析；仅保留当前配置根中最新扫描的解析行，不缓存原始记录。发布前按更新时间稳定排序，分页不得修改快照或全量重排；返回行由调用方独立持有。新增、删除和变化的文件在下一次完成刷新反映，详情始终读取实时记录。
-- 允许行为：不同工具分组独立显示任务；禁止行为：无反馈的重复分页、失败后永久禁用或静默丢弃异常；失败语义：已有任务继续可见，错误显示在手机页面；不变量：一个分页请求在途时不重复发起；边界条件：慢响应、RPC 拒绝、切换 PC。
-- 证据：实现 `mobile/src/lib/client-poll.ts`, `mobile/src/components/client-groups.tsx`；测试 `mobile/src/app.test.tsx`, `mobile/src/components/client-groups.test.tsx`, `mobile/e2e/walkthrough.spec.ts`；补充证据：`internal/clients/catalog_cache.go`、`internal/clients/catalog_cache_test.go`、`internal/clients/catalog_performance_test.go`、`internal/clients/view_test.go`；变更规则：同步主机缓存／并发／性能、手机 UI 测试和使用文档；来源：GitHub Issues #35、#66。
-
 ## C-015 Phone Back follows visible layers
 
-- 状态：active；类型：lifecycle；作用范围：Android／iOS 手机壳、手机页面及覆盖层；关联功能：`F-220`, `F-222`, `F-223`, `F-224`, `F-230`。
-- 契约内容：Android 系统返回及 iOS 从左侧 44 点内开始的有效右滑，先关闭当前可见的最上层详情或弹层。iOS 对短快滑使用速度及最短水平位移共同判定。子 Agent 详情→子 Agent 列表→对话→收件箱、Clients 任务详情、文件预览→文件列表→对话均遵守该层级。子 Agent 导航取决于已打开的页面，即使刷新历史时暂时找不到该 Agent，也不跳过列表。只有手机首页（收件箱、直接聊天列表或未绑定扫码页）返回时才允许 Android Activity 退出；iOS 首页滑动保留应用。
-- 允许行为：详情关闭后留在原列表，Android 再次从首页返回退出；禁止行为：详情可见时直接退出、迟到的任务读取结果在返回后重新打开详情、iOS 短滑／取消／垂直／非左边缘手势返回、把正文的横向滑动作为返回；失败语义：返回动作不依赖网络请求成功；不变量：一个有效手势只消费当前最上层，iOS 在完成手势时读取当前返回处理器，后来打开的模型选择弹层优先关闭；边界条件：异步任务读取中返回、多层覆盖、组件卸载、根页面。
-- 证据：实现 `mobile/src/lib/android-back.ts`, `mobile/ios/App/App/BridgeViewController.swift`, `mobile/src/components/model-picker.tsx`, `mobile/src/components/composer-menu.tsx`, `mobile/src/components/thread-screen.tsx`, `mobile/src/components/client-groups.tsx`, `mobile/src/components/file-browser.tsx`, `mobile/src/app.tsx`；测试 `mobile/src/lib/android-back.test.ts`, `mobile/src/components/thread-screen.test.tsx`, `mobile/src/components/composer-slash.test.tsx`, `mobile/src/app.test.tsx`, `mobile/src/components/client-groups.test.tsx`, `mobile/src/components/file-browser.test.tsx`, `mobile/e2e/walkthrough.spec.ts`, `mobile/e2e/ios-wait-layout.swift`；变更规则：新增手机覆盖层须同步测试 Android 系统返回、iOS 原生边缘滑动及各自首页行为；来源：GitHub Issue #36、#48、#54、#75。
+- 状态：active；类型：lifecycle；作用范围：Android／iOS 手机壳、手机页面及覆盖层；关联功能：`F-220`, `F-222`, `F-224`, `F-230`。
+- 契约内容：Android 系统返回及 iOS 从左侧 44 点内开始的有效右滑，先关闭当前可见的最上层详情或弹层。iOS 对短快滑使用速度及最短水平位移共同判定。子 Agent 详情→子 Agent 列表→对话→收件箱、文件预览→文件列表→对话均遵守该层级。子 Agent 导航取决于已打开的页面，即使刷新历史时暂时找不到该 Agent，也不跳过列表。只有手机首页（收件箱、直接聊天列表或未绑定扫码页）返回时才允许 Android Activity 退出；iOS 首页滑动保留应用。
+- 允许行为：详情关闭后留在原列表，Android 再次从首页返回退出；禁止行为：详情可见时直接退出、iOS 短滑／取消／垂直／非左边缘手势返回、把正文的横向滑动作为返回；失败语义：返回动作不依赖网络请求成功；不变量：一个有效手势只消费当前最上层，iOS 在完成手势时读取当前返回处理器，后来打开的模型选择弹层优先关闭；边界条件：多层覆盖、组件卸载、根页面。
+- 证据：实现 `mobile/src/lib/android-back.ts`, `mobile/ios/App/App/BridgeViewController.swift`, `mobile/src/components/model-picker.tsx`, `mobile/src/components/composer-menu.tsx`, `mobile/src/components/thread-screen.tsx`, `mobile/src/components/file-browser.tsx`, `mobile/src/app.tsx`；测试 `mobile/src/lib/android-back.test.ts`, `mobile/src/components/thread-screen.test.tsx`, `mobile/src/components/composer-slash.test.tsx`, `mobile/src/app.test.tsx`, `mobile/src/components/file-browser.test.tsx`, `mobile/e2e/walkthrough.spec.ts`, `mobile/e2e/ios-wait-layout.swift`；变更规则：新增手机覆盖层须同步测试 Android 系统返回、iOS 原生边缘滑动及各自首页行为；来源：GitHub Issue #36、#48、#54、#75。
 
 ## C-016 Explicit PC selection opens its inbox
 
@@ -582,13 +576,6 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 - 契约内容：消息、引用和 Ask Other 的可编辑文字至少为 16 CSS px，避免 iOS 聚焦小字输入框后留下自动放大；关闭键盘后，会话顶部仍在原有安全区域，等待操作及发送／跟进／插入／提问提交按钮不得超出屏幕右边缘；长输入和长模型名不要求用户横向拖动才能提交。Ask 拒绝保留草稿、重试成功后的页面也必须满足同一边界。
 - 允许行为：用户主动缩放；禁止行为：用禁止用户缩放代替修复，或在键盘关闭后留下自动缩放和顶部偏移；失败语义：布局恢复不依赖网络；不变量：聚焦输入框不改变关闭键盘后的导航、等待操作和提交可达性；边界条件：窄屏、长输入、长模型名、引用编辑、等待中的会话、PC／新建／直连对话。
 - 证据：实现 `mobile/src/components/composer.tsx`, `mobile/src/components/ask-card.tsx`；测试 `mobile/e2e/walkthrough.spec.ts`, `mobile/e2e/composer-layout.spec.ts`, `mobile/e2e/ask-answer.spec.ts`, `mobile/e2e/ios-wait-layout.swift`, `mobile/e2e/ios-ask-viewport.swift`, `mobile/scripts/ios-layout-fixture.py`；变更规则：修改编辑器字号须重验 Web 布局和 iOS 聚焦、键盘关闭、提问拒绝及重试后的真实页面，不得只用既有主输入框或 JSDOM 通过替代新入口；变更类型：Fixed；来源：GitHub Issues #40、#41、#104（Ask 曾遗漏同一聚焦边界）。
-
-## C-018 Phone client detail stays in the viewport
-
-- 状态：active；类型：lifecycle / compatibility；作用范围：手机 Clients 任务详情；关联功能：`F-223`。
-- 契约内容：任务详情覆盖手机视口；下拉收件箱、滚动任务记录或切换安全区域时，详情标题和返回按钮仍在可见视口内，返回按钮回到 Clients 列表。详情内的触摸不得触发底层收件箱下拉刷新。
-- 允许行为：底层收件箱继续管理自身下拉刷新；禁止行为：让详情随收件箱的 transform 移动，或露出底层收件箱的导航控件；失败语义：详情读取失败时保留可用的返回入口和错误提示；不变量：详情层的位置不取决于收件箱滚动容器的位置；边界条件：iOS 安全区域、下拉刷新、长任务记录与 Android 系统返回。
-- 证据：实现 `mobile/src/components/client-groups.tsx`, `mobile/src/components/pull-to-refresh.tsx`；测试 `mobile/src/components/client-groups.test.tsx`, `mobile/e2e/composer-layout.spec.ts`, `mobile/e2e/ios-wait-layout.swift`；变更规则：修改手机全屏详情或收件箱变换时同步验证 WebKit 和原生 iOS 的标题及返回；来源：GitHub Issue #45。
 
 ## C-019 Proactive delegation for time or quality
 

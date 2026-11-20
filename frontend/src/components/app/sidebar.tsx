@@ -9,7 +9,6 @@ import { SidebarSection } from "@/components/app/sidebar-section"
 import { SidebarThreadGroup } from "@/components/app/sidebar-thread-group"
 import { SidebarThreadRow } from "@/components/app/sidebar-thread-row"
 import { DestRail, useVisibleDest } from "@/components/app/dest-rail"
-import { LocalClientsSection } from "@/components/app/local-clients"
 import { ScheduleListPane } from "@/components/app/schedule-inbox"
 import { useApp } from "@/store/app"
 import {
@@ -88,8 +87,7 @@ function ListToolbar({
   )
 }
 
-/** Projects are the list. Conversations with no project, waits, and
- *  local clients each take the same column when their rail icon is current. */
+/** The active rail item selects projects, conversations without a project or waits. */
 export function Sidebar({
   threads,
   activeId,
@@ -326,11 +324,6 @@ export function Sidebar({
           </>
         ) : null}
         {pane === "scheduled" ? <ScheduleListPane /> : null}
-        {pane === "clients" ? (
-          <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto px-(--sidebar-list-px) py-2">
-            <LocalClientsSection bare />
-          </div>
-        ) : null}
 
         <div className="mt-auto px-(--sidebar-list-px) pb-2">
           <SidebarVersion />

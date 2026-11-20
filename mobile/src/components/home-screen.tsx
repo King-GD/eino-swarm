@@ -2,7 +2,6 @@ import { ChevronRight, Loader2, SquarePen } from "lucide-react"
 import { Children, useEffect, useLayoutEffect, useState, type ReactNode } from "react"
 
 import { ProjectManager } from "@/components/project-manager"
-import { ClientGroups } from "@/components/client-groups"
 import { HomeBar } from "@/components/home-bar"
 import { HostChrome } from "@/components/host-chrome"
 import { InboxRow, type RowState } from "@/components/inbox-row"
@@ -16,7 +15,7 @@ import { GROUP_RECENT, INBOX_PREVIEW, type InboxGroupState } from "@/lib/inbox-w
 import { inboxPreview } from "@/lib/inbox-preview"
 import { searchRunning, searchThreads } from "@/lib/inbox-search"
 import { collectLive } from "@/lib/resume"
-import { GROUP_ATTENTION, type ClientTool, type ProjectView, type RunningView, type ThreadView } from "@/lib/rpc"
+import { GROUP_ATTENTION, type ProjectView, type RunningView, type ThreadView } from "@/lib/rpc"
 import type { RemoteLink } from "@/lib/link"
 import type { SavedLink } from "@/lib/store"
 
@@ -103,11 +102,6 @@ export function HomeScreen({
   connecting = false,
   error,
   onToggleLocale,
-  clientsOn = false,
-  clientTools = [],
-  loadingClientMore = "",
-  onClientMore,
-  onClientRead,
 }: {
   hosts: SavedLink[]
   activeFingerprint: string
@@ -138,11 +132,6 @@ export function HomeScreen({
   connecting?: boolean
   error?: string
   onToggleLocale?: () => void
-  clientsOn?: boolean
-  clientTools?: ClientTool[]
-  loadingClientMore?: string
-  onClientMore?: (id: string, next?: string) => void
-  onClientRead?: (id: string, before?: number) => Promise<import("@/lib/rpc").ClientView | null>
 }) {
   const [managing, setManaging] = useState(false)
   useEffect(() => setManaging(false), [pcLink, activeFingerprint])
@@ -290,15 +279,7 @@ export function HomeScreen({
               </div>
             ) : null}
             {recent ? folderSection(recent) : null}
-            {clientsOn ? (
-              <ClientGroups
-                tools={clientTools}
-                loadingMore={loadingClientMore}
-                onMore={(id, next) => onClientMore?.(id, next)}
-                onRead={onClientRead}
-              />
-            ) : null}
-            {empty && !error && !clientsOn ? query ? <NoMatch /> : <EmptyInbox /> : null}
+            {empty && !error ? query ? <NoMatch /> : <EmptyInbox /> : null}
             {more && !sectioned && !query ? (
               <Button
                 variant="outline"

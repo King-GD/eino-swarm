@@ -817,32 +817,19 @@ final class BindFlowTests: XCTestCase {
     _ = try remaining()
   }
 
-  func testClientTaskHeaderStaysVisibleAfterPull() throws {
+  func testOlderPCClientTasksStayHidden() {
     let app = XCUIApplication()
     app.launch()
     let back = app.buttons["Back"].firstMatch
     XCTAssertTrue(back.waitForExistence(timeout: 12))
     back.tap()
-    let task = app.buttons["open session"]
-    XCTAssertTrue(task.waitForExistence(timeout: 8))
-    // The task starts near the inbox footer on this fixture. Bring it clear of
-    // the bottom action bar so XCTest taps the row rather than the overlay.
-    app.swipeUp()
-    XCTAssertTrue(task.isHittable)
-    task.tap()
+    let conversation = app.buttons["Open Trim the layout pass"].firstMatch
+    XCTAssertTrue(conversation.waitForExistence(timeout: 8))
+    XCTAssertFalse(app.staticTexts["Clients"].exists)
+    XCTAssertFalse(app.buttons["open session"].exists)
+    recordAgentPage(app, name: "inbox-without-local-client-tasks")
+    conversation.tap()
     XCTAssertTrue(back.waitForExistence(timeout: 8))
-    let headerY = back.frame.minY
-    let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
-    let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65))
-    start.press(forDuration: 0.15, thenDragTo: end)
-    let shot = XCTAttachment(screenshot: app.screenshot())
-    shot.name = "client-task-header-after-pull"
-    shot.lifetime = .keepAlways
-    add(shot)
-    XCTAssertTrue(back.isHittable, "client task Back must remain above the inbox")
-    XCTAssertEqual(back.frame.minY, headerY, accuracy: 2, "inbox pull moved the client task header")
-    back.tap()
-    XCTAssertTrue(task.waitForExistence(timeout: 5), "Back must return to the inbox")
   }
 
   func testQuoteActionBesideNativeSelectionMenu() throws {

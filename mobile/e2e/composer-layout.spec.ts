@@ -297,24 +297,14 @@ test("selected answer keeps Add to chat near the highlight in WebKit", async ({ 
   await expect(page.getByTestId("quote-draft")).toHaveValue("Here is what changed:")
 })
 
-test("local client detail keeps its Back header in the iPhone viewport during inbox pull", async ({ page }) => {
+test("older PC client tasks stay hidden from the phone inbox", async ({ page }) => {
   await page.goto("/?mock=1&tick=0")
   await page.getByRole("button", { name: "返回" }).click()
-  await page.getByRole("button", { name: "open session" }).click()
-  const detail = page.getByTestId("client-transcript")
-  await expect(detail).toBeVisible()
-
-  // The inbox pull applies a transform to its scrolling sheet. A full-screen
-  // detail must stay pinned to the viewport even while that sheet moves.
-  await page.getByTestId("inbox-scroller").evaluate((sheet) => {
-    sheet.scrollTop = 120
-    sheet.style.transform = "translateY(64px)"
-  })
-  const box = await detail.boundingBox()
-  expect(box).not.toBeNull()
-  expect(box!.y).toBe(0)
-  expect(box!.height).toBe(await page.evaluate(() => window.innerHeight))
-  await expect(detail.getByRole("button", { name: "返回" })).toBeInViewport()
-  await detail.getByRole("button", { name: "返回" }).click()
-  await expect(detail).toHaveCount(0)
+  const inbox = page.getByTestId("inbox-scroller")
+  const conversation = inbox.getByRole("button", { name: /^打开 Trim the layout pass$/ }).first()
+  await expect(conversation).toBeVisible()
+  await expect(inbox.getByTestId("client-groups")).toHaveCount(0)
+  await expect(inbox.getByRole("button", { name: "open session" })).toHaveCount(0)
+  await conversation.click()
+  await expect(page.getByTestId("transcript")).toBeVisible()
 })

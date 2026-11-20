@@ -18,9 +18,8 @@ const (
 	DefaultClientStaleSeconds = 90
 )
 
-// ClientsConfig is the read-only mount of local agent transcripts.
-// Enabled is the switch. Blank directories are filled with that tool's
-// own default location on this machine; a set path is left alone.
+// ClientsConfig retains the settings format for legacy local agent transcripts.
+// The application normalizes Enabled to false on load and save.
 type ClientsConfig struct {
 	Enabled             bool   `yaml:"enabled" json:"enabled"`
 	ClaudeDir           string `yaml:"claude_dir" json:"claude_dir"`
@@ -54,6 +53,7 @@ func joinHome(home, name string) string {
 }
 
 func (c *Config) normalizeClients() {
+	c.Clients.Enabled = false
 	d := DefaultClients()
 	if strings.TrimSpace(c.Clients.ClaudeDir) == "" {
 		c.Clients.ClaudeDir = d.ClaudeDir

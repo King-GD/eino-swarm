@@ -519,17 +519,8 @@ header is one row: which PC this is, not the app's own name. Pulling the
 list down past the top reloads the roster; an empty inbox says so. Search
 filters the roster this phone already holds.
 
-When that PC has `clients.enabled` on, the
-inbox also lists Clients, then Claude, Codex, and Cursor. Each row is the
-task title and a light: breathing while it is still running, steady when
-it is finished. Each tool group folds. The first page is at most five
-tasks from the last three days; More loads the next five. The phone does
-not scan its own disk. Opening a row fills the chat. The opening request stays pinned at the top.
-The column follows the latest lines, and **Earlier** loads the page above that.
-Adjacent thinking and tool calls start collapsed, the same row as a conversation. The composer stays
-on screen and cannot send. On iOS the task title and Back button remain visible
-when the inbox is pulled down; Back returns to the task list. Thinking entries
-inside a client process row use the same separate, initially closed thought control.
+The inbox shows Zwai conversations. Local Claude, Codex and Cursor tasks are
+disabled and are omitted even when an older PC advertises them.
 
 ## A model on the phone
 
@@ -558,9 +549,9 @@ the phone.
 ## Walking the screens without a PC
 
 `?mock=1` boots onto the inbox against a scripted host (`lib/mock-link.ts`):
-projects, a live turn, a parked wait, idle recents, and the read-only
-Clients groups (Claude, Codex, Cursor). It answers the same
-ops with the same shapes over no network and no model, so the inbox and a
+projects, a live turn, a parked wait and idle recents. The fixture also
+advertises a legacy local-task catalog for the inbox exclusion regression.
+The fixture needs no network or model, so the inbox and a
 conversation can be driven in a browser and in Playwright — the screens
 behind the scan form used to have no end-to-end coverage at all. Add
 `&tick=0` to play a turn as fast as the browser paints; the default paces it

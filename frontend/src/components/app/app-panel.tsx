@@ -1,8 +1,6 @@
 import { useEffect } from "react"
 import { RightPanel, type PanelTab } from "./panel"
-import { useVisibleDest } from "./dest-rail"
 import { api } from "@/lib/api"
-import { useOpenClient } from "@/lib/client-open"
 import { LIBRARY_ID } from "@/lib/library"
 import { useApp } from "@/store/app"
 import { projectOf, useProjects } from "@/store/projects"
@@ -89,11 +87,7 @@ export function AppPanel({
     if (!memoryTarget || memoryProjectId === memoryTarget) return
     void loadMemory(memoryTarget)
   }, [memoryTarget, memoryProjectId, loadMemory])
-  const pane = useVisibleDest()
-  const clientOpen = useOpenClient() != null
-  // Scheduled and a client list are pages, not this conversation. A foreign
-  // session uses the same column and is not this thread's agents, files, or trace.
-  if (scheduled || clientOpen || pane === "clients" || pane === "scheduled") return null
+  if (scheduled) return null
   return (
     <RightPanel
       tab={tab}

@@ -47,8 +47,8 @@ LOCAL direct Chat has independent voice settings in its personal model services.
 
 ## The window
 
-The left rail switches **Projects** (the default), **Conversations**,
-**Scheduled**, and **Clients**. Projects holds pinned topics and project
+The left rail switches between **Projects** (the default), **Conversations**
+and **Scheduled**. Projects holds pinned topics and project
 folders. Conversations is the list of threads that belong to no project.
 Launch and reload show the home page and select no conversation. Restart
 leaves the rail where you left it.
@@ -1092,10 +1092,6 @@ pages. The capability is advisory: wait for a peer's explicit agreement before
 relying on file division or execution order. It does not lock resources, wake
 idle tasks, interrupt work, answer a human pause, or grant new permissions.
 See [F-135](FEATURES.md#f-135-independent-task-coordination).
-
-`clients.enabled` lists Claude, Codex, and Cursor sessions already on this
-machine. Settings does not show that page. The behavior of the list is in
-[clients](CONFIG.md#clients).
 
 ## External MCP tools
 

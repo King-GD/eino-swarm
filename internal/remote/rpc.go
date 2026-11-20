@@ -69,9 +69,15 @@ func dispatch(eng *engine.Engine, cfg config.RemoteConfig, stage *Staging, req R
 	case OpList, OpMore:
 		return handleList(eng, cfg, req, path, sessionID)
 	case OpClients:
-		return handleClients(eng, req, path, sessionID)
+		// Older phones use this reply to clear their cached Clients section.
+		resp := okBase(req.ID, path, sessionID)
+		resp.Clients = &ClientCatalog{}
+		return resp
 	case OpClientRead:
-		return handleClientRead(eng, req, path, sessionID)
+		if req.Before < 0 {
+			return fail(req.ID, path, sessionID, "bad_request", "before must be a byte offset")
+		}
+		return fail(req.ID, path, sessionID, "not_found", "task not found")
 	case OpTaskPanels:
 		return handleTaskPanels(eng, req, path, sessionID)
 	case OpTaskPanelRead, OpTaskPanelCancel:
@@ -193,9 +199,6 @@ func handleList(eng *engine.Engine, cfg config.RemoteConfig, req Request, path, 
 	// an old phone never sends Group, so its global cursor is unchanged.
 	if req.Op == OpList && req.Group == "" && req.Cursor == "" {
 		resp.Groups = inboxGroups(eng, cfg, ps, idle)
-		resp.Clients = clientCatalog(eng.Config().Clients, 0, false)
-	}
-	if req.Op == OpList && req.Group == "" && req.Cursor == "" {
 		return packAttention(eng, cfg, req, resp)
 	}
 	return resp

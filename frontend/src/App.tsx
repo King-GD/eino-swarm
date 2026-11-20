@@ -12,9 +12,7 @@ import {
   isDark,
   SettingsIdleChrome,
 } from "@/components/app/app-chrome"
-import { ClientChat } from "@/components/app/client-transcript"
 import { CompletionReader } from "@/components/app/completion-reader"
-import { ClientsStage } from "@/components/app/local-clients"
 import { Composer } from "@/components/app/composer"
 import { displayedModel, rememberedCatalogModel } from "@/lib/models"
 import { DeleteProjectDialog } from "@/components/app/delete-project-dialog"
@@ -36,7 +34,6 @@ import { WelcomeGate } from "@/components/app/welcome-gate"
 import { Transcript } from "@/components/app/transcript"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { api } from "@/lib/api"
-import { closeClient, useOpenClient } from "@/lib/client-open"
 import { toggleContentWidth, toggleTranscriptMode } from "@/lib/appearance"
 import { attachExternalLinkHandler } from "@/lib/external-links"
 import { findShortcut } from "@/lib/find"
@@ -124,10 +121,8 @@ function ShellColumns({ children }: { children: ReactNode }) {
 
 function TaskBody({ chat }: { chat: ReactNode }) {
   const pane = useVisibleDest()
-  const client = useOpenClient()
   if (pane === "scheduled") return <ScheduleDetail />
-  if (pane === "clients" && !client) return <ClientsStage />
-  return <>{!client ? <CompletionReader /> : null}{chat}</>
+  return <><CompletionReader />{chat}</>
 }
 
 /** Chrome that must not re-render on every streamed token: sidebar, header,
@@ -209,8 +204,7 @@ function AppShell() {
     if (useTraceFocus.getState().turnId) showInspector("trace")
   }, [traceRequest, showInspector])
   const trafficLights = desktopShell() && isMac()
-  const client = useOpenClient()
-  const side = useSideChatScope(activeId, Boolean(client))
+  const side = useSideChatScope(activeId)
 
   const togglePanel = useCallback(() => {
     const chat = useSideChat.getState()
@@ -255,7 +249,6 @@ function AppShell() {
   )
 
   const startThread = useCallback(async () => {
-    closeClient()
     await newThread()
     focusComposer()
   }, [newThread, focusComposer])
@@ -265,7 +258,6 @@ function AppShell() {
       // Select first so the folder expands onto the conversation we are
       // about to create. Creating first and then refreshing used to wipe
       // the new row if the listing raced the insert.
-      closeClient()
       if (useProjects.getState().selectedId !== project.id) {
         useProjects.getState().select(project.id)
       }
@@ -427,7 +419,6 @@ function AppShell() {
             onNewProject={() => void openProjectDialog()}
             onNewInProject={(project) => void startThreadInProject(project)}
             onHistoryReport={(project) => {
-              closeClient()
               if (useApp.getState().creatingThread) return
               useProjects.getState().select(project.id)
               void (async () => {
@@ -469,21 +460,16 @@ function AppShell() {
             inert={loginWall || undefined}
           >
             <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden">
-              {client ? (
-                <ClientChat id={client.id} />
-              ) : (
-                <TranscriptPane
-                  onSelectAgent={openAgent}
-                  onPickIdea={pickIdea}
-                  onEditQueuedSteer={editUnreadSteer}
-                  findQuery={findOpen ? findQuery : ""}
-                  findIndex={findIndex}
-                  onFindCount={setFindTotal}
-                />
-              )}
+              <TranscriptPane
+                onSelectAgent={openAgent}
+                onPickIdea={pickIdea}
+                onEditQueuedSteer={editUnreadSteer}
+                findQuery={findOpen ? findQuery : ""}
+                findIndex={findIndex}
+                onFindCount={setFindTotal}
+              />
             </div>
             <AppComposer
-              locked={client != null}
               prefill={prefill}
               prefillToken={prefillToken}
               focusSignal={focusSignal}
@@ -690,7 +676,6 @@ function AppSidebar({
       askingIds={askingIds}
       onNew={onNew}
       onOpen={(id) => {
-        closeClient()
         void openThread(id)
       }}
       onRename={(id, title) => void renameThread(id, title)}
@@ -785,7 +770,6 @@ function AppComposer({
   onEditFollowup,
   onEditProviders,
   onOpenSideChat,
-  locked,
 }: {
   prefill: string
   prefillToken: number
@@ -793,7 +777,6 @@ function AppComposer({
   onEditFollowup: (id: string, text: string) => void
   onEditProviders: () => void
   onOpenSideChat: (question: string) => boolean
-  locked?: boolean
 }) {
   // Do not select `usage` here. That pulse is one object per model call and
   // would re-render the controlled textarea while a CJK IME is composing.
@@ -871,17 +854,15 @@ function AppComposer({
         if (activeId)
           void api.patchThread(activeId, { reasoning_effort: level }).then(() => refreshThreads())
       }}
-      onSend={
-        locked ? () => false : (text, images, opts) => send(text, images, opts)
-      }
+      onSend={(text, images, opts) => send(text, images, opts)}
       onStop={() => void interrupt()}
       onUpload={upload}
       onRefreshModels={() => refreshCatalogs()}
       onEditProviders={onEditProviders}
       onOpenSideChat={onOpenSideChat}
       restoring={meta?.startup === "restoring"}
-      canStopWhileRestoring={Boolean(activeId) && !locked}
-      disabled={locked || creatingThread}
+      canStopWhileRestoring={Boolean(activeId)}
+      disabled={creatingThread}
       prefill={prefill}
       prefillToken={prefillToken}
       focusSignal={focusSignal}

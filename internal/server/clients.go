@@ -3,8 +3,6 @@ package server
 import (
 	"net/http"
 	"strconv"
-	"time"
-
 	"strings"
 
 	"github.com/LubyRuffy/eino-swarm/internal/clients"
@@ -13,16 +11,13 @@ import (
 )
 
 func (s *Server) getClients(c *gin.Context) {
-	var before int64
 	if raw := c.Query("before"); raw != "" {
-		n, err := strconv.ParseInt(raw, 10, 64)
-		if err != nil {
+		if _, err := strconv.ParseInt(raw, 10, 64); err != nil {
 			badRequest(c, "before must be a unix millisecond")
 			return
 		}
-		before = n
 	}
-	c.JSON(http.StatusOK, clients.View(s.engine.Config().Clients, time.Now(), before))
+	c.JSON(http.StatusOK, clients.Catalog{Tools: []clients.Group{}})
 }
 
 func (s *Server) getClientTask(c *gin.Context) {
@@ -31,19 +26,12 @@ func (s *Server) getClientTask(c *gin.Context) {
 		badRequest(c, "id is required")
 		return
 	}
-	var before int64
 	if raw := c.Query("before"); raw != "" {
 		n, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || n < 0 {
 			badRequest(c, "before must be a byte offset")
 			return
 		}
-		before = n
 	}
-	doc, ok := clients.ReadPage(s.engine.Config().Clients, id, time.Now(), before, clients.PageLimit)
-	if !ok {
-		s.fail(c, store.ErrNotFound)
-		return
-	}
-	c.JSON(http.StatusOK, doc)
+	s.fail(c, store.ErrNotFound)
 }

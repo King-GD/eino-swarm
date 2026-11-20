@@ -4,9 +4,9 @@ import { useVisibleDest } from "@/components/app/dest-rail"
 import { useApp } from "@/store/app"
 import { useSideChat } from "@/store/app-side-chat"
 
-export function useSideChatScope(activeId: string | undefined, clientOpen: boolean) {
+export function useSideChatScope(activeId: string | undefined) {
   const pane = useVisibleDest()
-  const owner = !clientOpen && pane !== "clients" && pane !== "scheduled" ? activeId : undefined
+  const owner = pane === "scheduled" ? undefined : activeId
   const shown = useSideChat((s) => Boolean(owner && s.session?.threadId === owner))
   const button = useRef<HTMLButtonElement>(null)
 

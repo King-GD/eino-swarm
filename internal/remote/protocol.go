@@ -207,7 +207,6 @@ type Response struct {
 	Followups             *[]FollowupView            `json:"followups,omitempty"`
 	Delivery              *DeliveryView              `json:"delivery,omitempty"`
 	Clients               *ClientCatalog             `json:"clients,omitempty"`
-	ClientView            *ClientView                `json:"client_view,omitempty"`
 	Files                 []FileView                 `json:"files,omitempty"`
 	FileView              *engine.WorkspaceView      `json:"file_view,omitempty"`
 	FileChunk             *FileChunkView             `json:"file_chunk,omitempty"`
@@ -251,51 +250,9 @@ type FileChunkView struct {
 	More       bool   `json:"more"`
 }
 
-// ClientCatalog is the read-only local-agent list. Enabled false means the
-// switch is off and Tools is empty. A phone that does not know the field
-// ignores it.
+// ClientCatalog is the disabled response retained for old phones.
 type ClientCatalog struct {
-	Enabled bool         `json:"enabled"`
-	Pending bool         `json:"pending,omitempty"`
-	Tools   []ClientTool `json:"tools,omitempty"`
-}
-
-// ClientTool is one agent family's page. Next is the before-cursor for More.
-type ClientTool struct {
-	ID    string       `json:"id"`
-	Tasks []ClientTask `json:"tasks"`
-	More  bool         `json:"more"`
-	Next  string       `json:"next,omitempty"`
-}
-
-// ClientView is one page of a foreign session. Older means lines exist
-// before this page; Before is the byte offset for the previous page.
-type ClientView struct {
-	ID        string        `json:"id"`
-	Title     string        `json:"title"`
-	Status    string        `json:"status"`
-	UpdatedAt time.Time     `json:"updated_at"`
-	Entries   []ClientEntry `json:"entries"`
-	Older     bool          `json:"older,omitempty"`
-	Before    int64         `json:"before,omitempty"`
-}
-
-// ClientEntry is one visible line. Role is user, assistant, thinking, or
-// tool. At and N match the desktop transcript so a tail poll can merge.
-type ClientEntry struct {
-	Role string `json:"role"`
-	Text string `json:"text"`
-	At   int64  `json:"at"`
-	N    int    `json:"n,omitempty"`
-}
-
-// ClientTask is one foreign session. Status is "running" or "done".
-type ClientTask struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	CWD       string    `json:"cwd,omitempty"`
-	Status    string    `json:"status"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Enabled bool `json:"enabled"`
 }
 
 // ThreadGroup is one inbox section's idle page: a project, or recent.

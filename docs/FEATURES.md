@@ -35,7 +35,6 @@ This is the current user-facing capability map. The code and tests named below a
     - `F-220` Read and control PC conversations
     - `F-221` Quote PC conversation text
     - `F-222` Inspect sub-agents on the phone
-    - `F-223` Inspect local client tasks on the phone
     - `F-225` Manage PC projects from the phone
     - `F-224` Browse and preview PC conversation files on the phone
     - `F-230` Direct model chat
@@ -278,7 +277,7 @@ This is the current user-facing capability map. The code and tests named below a
 - 暂停后的单轮回答：capped／blocked／idle 目标遇普通 PC／手机发送时保留暂停标志和自动续轮计数（包括调度声明连续失败封顶及其原 reason／attempt／cap），仅回答当前消息；System 段携带人类来源与当前 turn 请求，工具限于该回答，暂停目标不授权新调查 worker。显式 Start、HTTP `goal_resume`、RPC `resume_goal` 才恢复追求；未暂停时人话仍归零连续计数。开放目标缺少可观察交付物或停止条件时，提示模型先对同一目标文本用一次 `ask_user` 明确完成判据，不逐轮重问；完成仍需 `complete_goal`。关联契约：`C-009`、`C-006`、`C-008`；实现／验证：`internal/engine/goal.go`、`internal/engine/prompt_goal_pause.go`、`internal/engine/goal_test.go`、`internal/engine/prompt_goal_pause_test.go`、`internal/server/goal_pause_integration_test.go`、`frontend/e2e/goal-pause.spec.ts`。
 
 - 手机引用命令准入：正文经 PC／手机共享的纯解析器识别为 `/goal` 或 `/plan`，且存在至少一条去空白后非空引用时，提交前显示本地拒绝提示；正文、引用和所选文件保留，不先封装引用、清稿、上传或调用发送／插话 RPC。用户修正正文或移除有效引用后自行重试，纯文本继续原有命令语义；未知命令、路径及引用／代码内的字面命令保持普通消息。关联契约：`C-009`、`C-033`、`C-011`；实现／验证：`frontend/src/lib/slash-core.ts`、`mobile/src/components/composer.tsx`、`mobile/src/components/composer-quoted-command.test.tsx`、`mobile/e2e/quoted-goal.spec.ts`；变更类型：Fixed；来源：Issue #111。
-- 手机命令入口：PC 对话和新建对话的输入框最前面提供添加菜单，集中添加文件与 `/goal`、`/plan`；输入 `/` 按同一目录过滤。点选写入 `/name `，没有参数时不发送。已有正文时不提供 plan。提问回答、直连模型和只读 Clients 不列出命令。`/compact` 仍只在电脑端执行。系统返回先关闭菜单。关联契约：`C-009`、`C-015`；实现／验证：`mobile/src/lib/composer-commands.ts`、`mobile/src/components/composer-menu.tsx`、`mobile/src/components/composer.tsx`、`mobile/src/components/composer-slash.test.tsx`、`mobile/e2e/composer-commands.spec.ts`。
+- 手机命令入口：PC 对话和新建对话的输入框最前面提供添加菜单，集中添加文件与 `/goal`、`/plan`；输入 `/` 按同一目录过滤。点选写入 `/name `，没有参数时不发送。已有正文时不提供 plan。提问回答和直连模型不列出这些 PC 命令。`/compact` 仍只在电脑端执行。系统返回先关闭菜单。关联契约：`C-009`、`C-015`；实现／验证：`mobile/src/lib/composer-commands.ts`、`mobile/src/components/composer-menu.tsx`、`mobile/src/components/composer.tsx`、`mobile/src/components/composer-slash.test.tsx`、`mobile/e2e/composer-commands.spec.ts`。
 - 显式命令参数：PC 目标与计划仅发送一次完整命令，命令参数中的 `/goal`、`/plan` 字面量保持原文，空闲到运行／待答的竞争不把命令当成跟进或回答。目标可更新并保留原待答问题；计划只创建新轮次，转忙时拒绝且保留草稿；裸计划与忙碌更新保持原有边界。关联契约：`C-002`、`C-009`、`C-033`；实现／验证：`frontend/src/store/app.ts`、`frontend/src/store/app-plan.ts`、`frontend/src/store/app-goal.test.ts`、`frontend/src/store/app-plan.test.ts`、`internal/engine/turn.go`、`internal/engine/slash_command_once_http_test.go`、`frontend/e2e/trailing-goal.spec.ts`、`frontend/e2e/plan.spec.ts`。
 - 显式目标命令：`<objective> /goal` 使用前置正文激活新持续目标，清除旧目标的完成状态；PC、HTTP 和手机发送／插话共用命令语义，普通消息、含中文的路径、引用及代码中的字面命令保持普通内容。关联契约：`C-009`；实现／验证：`internal/slash/trailing.go`、`internal/slash/trailing_goal_test.go`、`internal/slash/testdata/trailing-goal.json`、`internal/engine/slash_steer_test.go`、`internal/remote/slash_goal_test.go`、`frontend/src/lib/slash.ts`、`frontend/src/components/app/composer-trailing-goal.test.tsx`、`frontend/e2e/trailing-goal.spec.ts`。
 - 目标完成展示：桌面/Web 与配对手机在目标 `complete` 后立即隐藏输入框上方目标条，刷新或重新进入已完成会话仍不显示；保留持久化目标、完成状态、结果和历史记录，不自动清空或重新执行。桌面与手机对话历史保留 `goal_complete` 完成通知；桌面/Web 的完成通知置于已折叠目标会话外，早于或晚于最终回答到达都可见；新设 `/goal` 后重新显示目标条。未完成的暂停、受阻和计划等待继续保留状态及相应控制；已完成目标不再通过目标条显示 Start。关联契约：`C-009`、`C-003`；实现／验证证据：`frontend/src/components/app/goal-banner.tsx`、`frontend/src/components/app/goal-banner.test.tsx`、`frontend/src/lib/transcript.ts`、`frontend/src/components/app/transcript-session.tsx`、`frontend/src/components/app/transcript-session.test.tsx`、`frontend/e2e/goal-resume.spec.ts`、`frontend/e2e/goal-schedule.spec.ts`、`mobile/src/components/status-banners.tsx`、`mobile/src/components/thread-screen.test.tsx`、`mobile/src/lib/transcript.ts`、`mobile/src/lib/transcript-goal.test.ts`、`mobile/e2e/goal-completion.spec.ts`。
@@ -431,6 +430,8 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-220 Read and control PC conversations
 
+- 收件箱忽略旧版 PC 随列表返回的本地客户端任务，也不发起目录或详情 RPC。证据：`mobile/src/app.test.tsx`、`mobile/e2e/composer-layout.spec.ts`。关联 `C-006`。
+
 - 配对及手机直连对话从三轮起显示可点击的轮次导航：只预览用户输入，随阅读位置高亮并保持当前项可见；缺少目标历史时先补页。配对对话的「更早」定位到上一条主管正文，新版 PC 按需传输折叠的思考与工具。iOS 从左侧 44 点内水平右滑可逐层返回，顶部「对话」与各 PC 标签共用横向滚动条。证据：`mobile/src/components/turn-navigation.tsx`、`mobile/src/components/host-chrome.tsx`、`mobile/e2e/conversation-open.spec.ts`、`internal/remote/log_compact_test.go`。关联 `C-006`、`C-015`。
 
 - 进入应用后自动连接账号下全部启用的在线 PC，返回用户同样适用；保留当前在线选择，否则自动打开可用 PC。后台连接不轮流跳页，在线设备排在离线设备前，离线未配对设备仍可见。证据：`mobile/src/lib/use-auto-gateway-pcs.ts`、`mobile/src/lib/phone-pcs.ts`。
@@ -439,7 +440,7 @@ This is the current user-facing capability map. The code and tests named below a
 
 - 手机显示主管工具回合上限与延长轮数，提供「继续／停止」；继续延长原 turn，停止中断原 turn，不另发消息。有上限事件时说明到电脑的设置 → 集群 → 主管工具回合修改，手机不能编辑该项；已经继续后不再重复该说明，仅有 `awaiting_continue`、缺少上限事件的暂停不显示它。`classification_deferred` 显示已用轮数和仍生效的上限，不把已用轮数写成上限，也不指向这项设置。重开／重连通过 `awaiting_continue` 恢复操作，即使最新历史页不含上限事件；请求失败显示原因并保留提示，重复点击在确认期间禁用。手机和 PC 都需更新。关联 `C-006`、`C-009`；证据：`internal/remote/iteration_continue_test.go`、`mobile/src/lib/iteration-limit.test.ts`、`mobile/src/components/iteration-limit-card.test.tsx`、`mobile/e2e/iteration-limit.spec.ts`。
 
-- 手机主管／子 Agent／直连聊天的纯思考组直接显示每条默认收起的「思考」控件，一次点击可查看原文，不再额外包装活动末行摘要；包含工具时保留过程聚合，展开后每条思考仍以独立的「思考」控件默认收起；用户再次展开才挂载完整原文，显式开合选择在同一条实时追加和完成后保持，关闭外层再打开则从收起开始。回答继续可见，工具保持既有独立折叠。子 Agent 详情与直连聊天复用同一日志，Clients 的 thinking 条目复用同一思考控件。关联 `F-222`、`F-223`、`F-230`／`C-006`；证据：`mobile/src/components/thought.tsx`、`mobile/src/components/thread-blocks-reasoning.test.tsx`、`mobile/src/components/client-groups.test.tsx`、`mobile/e2e/reasoning-fold.spec.ts`；来源：Issue #118、#129。
+- 手机主管／子 Agent／直连聊天的纯思考组直接显示每条默认收起的「思考」控件，一次点击可查看原文，不再额外包装活动末行摘要；包含工具时保留过程聚合，展开后每条思考仍以独立的「思考」控件默认收起；用户再次展开才挂载完整原文，显式开合选择在同一条实时追加和完成后保持，关闭外层再打开则从收起开始。回答继续可见，工具保持既有独立折叠。子 Agent 详情与直连聊天复用同一日志。关联 `F-222`、`F-230`／`C-006`；证据：`mobile/src/components/thought.tsx`、`mobile/src/components/thread-blocks-reasoning.test.tsx`、`mobile/e2e/reasoning-fold.spec.ts`；来源：Issue #118、#129。
 
 - 首屏一次 `watch include_detail` 同时取得详情与最新事件；旧 PC 自动补读详情。摘要与轮次在 SQLite 中有界读取，跨隐藏协调记录仍能找到原有可见摘要；重连替换旧订阅，Stop／Reload 收口自有链接。关联契约：`C-006`；实现：`internal/remote/watch_snapshot.go`、`internal/remote/host_links.go`、`internal/store/phone_reads.go`、`mobile/src/lib/open-thread.ts`；验证：`internal/remote/watch_open_test.go`、`internal/remote/host_links_test.go`、`internal/remote/snapshot_reads_test.go`、`mobile/src/lib/open-thread.test.ts`、`mobile/e2e/conversation-open.spec.ts`。
 - 首次就绪后，主对话无可见项且还有历史时，自动沿 `log` 补到第一个可见项、历史耗尽或游标无法前进。最新 turn、实时序号和 seq=0 输出保持，Back、换会话／链接及新打开代次使旧回包失效。失败保留就绪对话并支持重试。关联 `C-006`；实现／验证：`mobile/src/lib/open-thread.ts`、`mobile/src/lib/open-thread.test.ts`、`mobile/src/app.test.tsx`、`mobile/e2e/conversation-open.spec.ts`；来源 Issue #121。
@@ -471,14 +472,6 @@ This is the current user-facing capability map. The code and tests named below a
 
 - 目的：在手机查看 PC 对话中的子 Agent 而不混入主 Agent 回答；使用者：已配对手机用户；入口：对话页输入框上方 → 子 Agent／Agents → 子 Agent 行；输入：Pairlink 已允许的事件及更早历史页；输出：入口仅统计运行中的子 Agent，列表按进行中／已停止／已结束分组，保留完成与失败历史的角色、ID、状态、活动摘要及独立思考、工具、回答记录；页面返回、Android 系统返回或 iOS 左边缘右滑按详情→列表→对话逐级返回；列表在实时多段输出与历史分页后仍不显示主管正文或工作折叠；前置条件：PC 端有可回放的子 Agent 事件；失败表现：离线时沿用重连提示，未加载到启动事件前角色暂以 ID 显示；关联契约：`C-002`, `C-003`, `C-006`, `C-015`；实现证据：`mobile/src/lib/transcript.ts`, `mobile/src/lib/session.ts`, `mobile/src/components/thread-screen.tsx`, `mobile/src/components/thread-screen.test.tsx`, `mobile/src/lib/transcript.test.ts`, `mobile/src/lib/session.test.ts`, `mobile/e2e/walkthrough.spec.ts`, `mobile/src/components/agent-page.test.tsx`, `mobile/e2e/agent-roster.spec.ts`。
 - 人工停止沿用 `C-002`：清理与当前代理的取消回执都显示已停止，重新打开和更早历史分页不改成完成或失败；详情保留诊断原因但不显示失败样式。真实成功／失败与显式续办保持独立。证据：`mobile/src/lib/transcript-stop.test.ts`、`mobile/src/components/thread-stop-roster.test.tsx`、`mobile/e2e/worker-stop-replay.spec.ts`；来源：Issue #85。
-
-### F-223 Inspect local client tasks on the phone
-
-- 目的：在已配对手机上只读查看 PC 的本地客户端任务；使用者：手机用户；入口：收件箱 → Clients → 工具分组和 More；输入：客户端任务页；输出：任务状态、记录及加载更多时的动效，任务详情覆盖手机视口且标题与返回按钮保持可用；前置条件：PC 已启用 Clients 且在线；失败表现：分页失败保留当前列表、显示错误并恢复 More；关联契约：`C-006`, `C-014`, `C-015`, `C-018`；实现证据：`mobile/src/lib/client-poll.ts`, `mobile/src/components/client-groups.tsx`, `mobile/src/app.test.tsx`, `mobile/e2e/walkthrough.spec.ts`, `mobile/e2e/composer-layout.spec.ts`, `mobile/e2e/ios-wait-layout.swift`。
-
-- 主机 Clients 刷新复用未变化文件的解析行，按最新时间稳定排序一次；桌面和配对手机分页只复制可见行，追加、删除和文件替换在下一次刷新反映。实现／测试：`internal/clients/catalog_cache.go`、`internal/clients/catalog_cache_test.go`、`internal/clients/catalog_performance_test.go`、`frontend/e2e/clients.spec.ts`；关联契约：`C-014`。
-- Codex 列表的名称是会话的第一条真实请求；插在请求前的说明、环境和应用事件不算任务名，长记录开头之后的请求仍然使用。没有请求也没有已声明目标时才退回目录名。Claude、Codex、Cursor 都在任务名之后显示项目目录名。Cursor 记录没有工作目录，项目文件夹是编码后的绝对路径，路径里的前导点不进入编码；目录仍存在时还原为该路径，叶子目录已删除时退回包含它的 git 仓库。证据：`internal/clients/scan.go`、`internal/clients/cursor_project.go`、`internal/clients/scan_test.go`、`internal/clients/cursor_project_test.go`、`frontend/src/lib/local-clients.ts`、`frontend/src/components/app/dest-rail.test.tsx`、`mobile/src/components/client-groups.tsx`、`mobile/src/components/client-groups.test.tsx`。
-
 
 ### F-224 Browse and preview PC conversation files on the phone
 

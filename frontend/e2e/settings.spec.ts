@@ -63,7 +63,7 @@ test("a switched-off provider leaves the composer model list", async ({
   }
 })
 
-test("local agent tasks stay hidden until clients are enabled in config", async ({ page, request }) => {
+test("settings omit local agent tasks and the config path", async ({ page }) => {
   await page.goto("/")
   await expect(page.getByTestId("clients-list")).toHaveCount(0)
   await page.getByRole("button", { name: "Settings" }).click()
@@ -72,17 +72,6 @@ test("local agent tasks stay hidden until clients are enabled in config", async 
   await expect(dialog.getByLabel("Show local agent tasks")).toHaveCount(0)
   await expect(dialog.getByText(/Stored in/)).toHaveCount(0)
   await dialog.getByRole("button", { name: "Back to app" }).click()
-  const empty = "/tmp/zwai-e2e-clients-none"
-  expect((await request.put("/api/settings", {
-    data: { clients: { enabled: true, claude_dir: empty, codex_dir: empty, cursor_dir: empty } },
-  })).ok()).toBeTruthy()
-  await expect(page.getByTestId("dest-clients")).toBeVisible()
-  await page.getByTestId("dest-clients").click()
-  await expect(page.getByTestId("clients-list")).toBeVisible()
-  await expect(page.getByTestId("client-tool-claude")).toBeVisible()
-  await expect(page.getByTestId("client-tool-codex")).toBeVisible()
-  await expect(page.getByTestId("client-tool-cursor")).toBeVisible()
-  await expect(page.getByTestId("client-task")).toHaveCount(0)
 })
 
 test("semantic search is off until a model is pinned", async ({ page, request }) => {

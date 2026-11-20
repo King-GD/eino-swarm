@@ -31,15 +31,11 @@ import { usePhoneLinkLifecycle } from "@/lib/use-phone-link-lifecycle"
 import { getLocale, t, toggleLocale } from "@/lib/i18n"
 import { emptyInbox, inboxThreads, reduceInbox, type InboxGroupState, type InboxWindow } from "@/lib/inbox-window"
 import type {
-  ClientTool,
   ProjectView,
   RemoteResponse,
   RunningView,
   ThreadView,
 } from "@/lib/rpc"
-import { useClientPages, useClientPoll } from "@/lib/client-poll"
-import { mergeClientTools } from "@/lib/local-clients"
-import { readClientTask } from "@/lib/read-client"
 import { parseSlashSubmit } from "../../../frontend/src/lib/slash-core"
 import {
   OpCancelWait,
@@ -125,8 +121,6 @@ export function PhoneApp() {
   const [running, setRunning] = useState<RunningView[]>([])
   const [more, setMore] = useState(false)
   const [groups, setGroups] = useState<InboxGroupState[]>([])
-  const [clientsOn, setClientsOn] = useState(false)
-  const [clientTools, setClientTools] = useState<ClientTool[]>([])
   const [loadingGroup, setLoadingGroup] = useState("")
   const [loadingMore, setLoadingMore] = useState(false)
   const startup = useEngineStartup(link)
@@ -143,7 +137,6 @@ export function PhoneApp() {
   const inboxRef = useRef(emptyInbox())
   const moreBusy = useRef(false)
   const linkRef = useRef<RemoteLink | null>(null)
-  const clientPages = useClientPages(linkRef, setClientTools, setError)
   const viewRef = useRef<PhoneView>(view)
   const addingRef = useRef(false)
   const composingRef = useRef(false)
@@ -204,15 +197,12 @@ export function PhoneApp() {
     rosterFp.current = ""
     moreBusy.current = false
     setLoadingMore(false)
-    clientPages.reset()
     setThreads([])
     setProjects([])
     setRunning([])
     setAttention([])
     setMore(false)
     setGroups([])
-    setClientsOn(false)
-    setClientTools([])
     setLoadingGroup("")
   }
 
@@ -232,12 +222,6 @@ export function PhoneApp() {
     const cur = target ?? linkRef.current
     if (resp.path && cur) cur.path = resp.path
     takeHostName(resp)
-    if (resp.clients) {
-      setClientsOn(resp.clients.enabled)
-      if (!resp.clients.pending && resp.clients.tools) {
-        setClientTools((prev) => mergeClientTools(prev, resp.clients?.tools ?? [], "replace"))
-      }
-    }
     if (!append && fp === rosterFp.current) return
     rosterFp.current = fp
     inboxRef.current = next
@@ -334,8 +318,6 @@ export function PhoneApp() {
     resetRosterRef.current()
     void refreshInboxRef.current(link)
   }, [link, startup?.data_generation])
-  useClientPoll(link, linkRef, setClientsOn, setClientTools)
-
 
   const onURI = async (uri: string) => {
     const isAdd = adding
@@ -962,11 +944,6 @@ export function PhoneApp() {
             }
           }}
           onMore={(group) => void loadMore(group)}
-          clientsOn={clientsOn}
-          clientTools={clientTools}
-          loadingClientMore={clientPages.loadingMore}
-          onClientMore={(id, next) => void clientPages.loadMore(id, next)}
-          onClientRead={(id, before) => readClientTask(linkRef.current, id, before)}
           onUnlink={unlink}
           onToggleLocale={flipLocale}
           showChat={account.officialOnly || providers.length > 0 || Boolean(account.gatewaySourceID)}

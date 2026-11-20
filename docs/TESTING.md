@@ -1221,7 +1221,7 @@ Each concurrent run needs its own port, data/output directories and built dist.
 The fixtures use loopback HTTP without provider credentials and disposable test
 workspaces. They do not read or modify an active user's data directory.
 
-## Phone nested reasoning disclosure (Issue #118, `F-220` / `F-222` / `F-223` / `F-230`, `C-006`)
+## Phone nested reasoning disclosure (Issue #118, `F-220` / `F-222` / `F-230`, `C-006`)
 
 `mobile/src/components/thread-blocks-reasoning.test.tsx` first reproduces the missing
 second disclosure through the real log renderer. It checks live/replay and single
@@ -4970,14 +4970,6 @@ iOS and Android trees ship with camera permission, no native override of the
 configurable Gateway or QR-selected Hub, and
 the zwai launcher (not Capacitor's default icon), and that Android release
 Gradle takes version/signing from the environment (no password in git).
-`mobile/src/app.test.tsx` and `mobile/src/components/client-groups.test.tsx`
-cover Clients More pending, duplicate tap, success, and failure. A Clients
-task's **Earlier** loads the page above the live tail and a later read keeps
-that page (`client-groups.test.tsx`, `frontend/src/lib/client-log.test.ts`). The mobile
-walkthrough holds a scripted Clients page briefly to verify the spinner.
-`mobile/src/lib/android-back.test.ts`, `mobile/src/app.test.tsx`, and the phone
-walkthrough prove that a Clients task consumes the first Android Back, root
-receives the next, and a delayed read cannot reopen a closed task.
 `mobile/src/components/thread-screen.test.tsx` and the phone walkthrough also
 verify that Android system Back and the header button return from a sub-agent
 log through its list and conversation, including a history refresh that omits
@@ -7888,10 +7880,10 @@ long enough for Steer; unit tests leave it unset.
 | `e2e/remote.spec.ts` | Settings → Phone hides the configured server, self-hosted editor, Hub URL, Host Token, connection sign-in, computer name, config-path footer, pairing QR, and keep-awake while phone connection is off. An empty bound-phone list stays hidden then too. A stubbed binding paints the reported model and last-connected, not a bare fingerprint, and can still be revoked. |
 | `mobile/e2e/goal-completion.spec.ts` | English/Chinese phone path starts with a visible unfinished goal, sends a turn that completes it, hides the composer goal strip and shows one localized completion notice; leaving and reopening the conversation preserves both |
 | `mobile/e2e/scan.spec.ts` | Capacitor shell Scan QR opens a live viewfinder (four corners, a beam whose `scan-beam` animation is running, a fake-camera preview); junk paste errors; a syntactically valid URI uses the same bind path; a saved ticket shows host chips and Connecting, not the scan form; Add a PC is a sheet |
-| `e2e/clients.spec.ts` | a long local agent session opens on the live reply, **Earlier** loads the lines above it, and that reply stays on screen |
+| `e2e/clients.spec.ts` | a legacy enable request and saved Clients tab leave the app on Projects without surfacing local task data |
 | `e2e/output-budget.spec.ts` | an output-budget error links to Settings → Swarm and focuses Max completion tokens. Retry is visible on the failed turn, disabled while Settings is open, and posts that turn id to `/retry` when Settings closes. A refused retry leaves the error card |
 | `e2e/composer-paste.spec.ts` | a trusted paste into an empty composer lands once, and a second paste appends instead of doubling each insert |
-| `e2e/settings.spec.ts` | Settings sheet: tool catalogue on a never-saved config, round-trip through the config file, per-note memory cap, personality, pinning a title-generation model, discovering models into the default dropdown, a failed listing toasting over the open provider, switching a provider off so it leaves the composer list while the open conversation keeps that name (switching it back lists it again), **Back to app** on a short window when Swarm is long, the Add-a-provider outline inside the Models scrollport, semantic search off by default, no Clients tab or config-path footer, local agent tasks hidden until `clients.enabled` (empty directories, three tool groups, no task rows), Color theme / font / conversation width, directory rows tracking UI size not conversation size, chrome language switching (restored to English) |
+| `e2e/settings.spec.ts` | Settings sheet: tool catalogue on a never-saved config, round-trip through the config file, per-note memory cap, personality, pinning a title-generation model, discovering models into the default dropdown, a failed listing toasting over the open provider, switching a provider off so it leaves the composer list while the open conversation keeps that name (switching it back lists it again), **Back to app** on a short window when Swarm is long, the Add-a-provider outline inside the Models scrollport, semantic search off by default, no Clients tab or config-path footer, Color theme / font / conversation width, directory rows tracking UI size not conversation size, chrome language switching (restored to English) |
 | `e2e/shell.spec.ts` | launch with an existing conversation stays on the home page (no row selected, no transcript), keyboard shortcuts (including hiding the conversation list, `⌘F` find in the conversation, and `⌘J` / the title-bar terminal opening a PTY in the conversation workspace — and in a project's working directory when the conversation belongs to one), dragging the conversation list and the side panel without selecting transcript text (the list width is remembered across reload and the title-bar leading cluster tracks it), the composer sitting on the transcript with a fade instead of a dock hairline (pins and the box share one slab; the join sits on that plate), Projects and Conversations sharing one left gutter (conversation titles in the icon column), collapsing Conversations so its rows stay hidden across reload, the Conversations header icon starting a conversation outside a project, an external link opening a new window instead of replacing the app, ⌘K finding a conversation by words in its body, theme switching persisted, the app-menu width control filling the pane in wide mode and restoring the reading column (also persisted), renaming a conversation and deleting it after a confirm, and dragging a Conversations row pinning that order across reload |
 
 E2E tests run against `frontend/dist`. Playwright starts
@@ -8086,14 +8078,10 @@ parked wait, type, dismiss the keyboard, then check that Back is hittable at
 its original vertical position and Run now remains inside the screen.
 A second test checks the submission button after typing and actually submits
 the draft without horizontal scrolling.
-The Clients task-detail test opens a read-only session, drags down while its
-underlying inbox is present, checks that the title/Back layer remains fixed
-and hittable, then returns to the task list. The matching Chromium/WebKit
-regression in `mobile/e2e/composer-layout.spec.ts` first failed with the detail
-64 CSS px above the viewport when the inbox scroller was transformed; it now
-checks full viewport bounds and Back navigation. This covers `C-018` and Issue
-#45 without changing the user's installed app. A component test also verifies
-that a touch inside the portaled detail does not bubble into inbox refresh.
+`testOlderPCClientTasksStayHidden` opens the packaged inbox against a host
+that supplies a legacy Clients catalog. It checks that the ordinary inbox
+conversation still opens and records the reached inbox screen. The matching
+`mobile/e2e/composer-layout.spec.ts` case runs on Chromium and WebKit.
 
 Use an isolated iPhone 17 / iOS 26 simulator; set `IOS_LAYOUT_SIMULATOR` to its
 UDID (`xcrun simctl list devices`). The fixture script copies the current
@@ -8139,7 +8127,7 @@ xcodebuild -project "$ios_layout_fixture/mobile/ios/App/App.xcodeproj" \
   -destination "platform=iOS Simulator,id=$IOS_LAYOUT_SIMULATOR" \
   -derivedDataPath "$ios_layout_fixture/DerivedData" CODE_SIGNING_ALLOWED=NO \
   -only-testing:AppUITests/BindFlowTests/testPhoneOutputPreview \
-  -only-testing:AppUITests/BindFlowTests/testClientTaskHeaderStaysVisibleAfterPull \
+  -only-testing:AppUITests/BindFlowTests/testOlderPCClientTasksStayHidden \
   -only-testing:AppUITests/BindFlowTests/testQuoteActionBesideNativeSelectionMenu \
   -only-testing:AppUITests/BindFlowTests/testComposerStopsLiveTurn \
   -only-testing:AppUITests/BindFlowTests/testComposerSubmissionAfterTyping \
@@ -8401,25 +8389,14 @@ public installer delivery remain separate gates; browser/launch is not proof.
 
 The timeout desktop path also verifies that the authoritative paused schedule clears Waiting. `frontend/src/store/app-schedule.test.ts` retains the armed-wake/stale-GET guard and another active wake while rejecting a paused-only wait.
 
-## Clients idle CPU and immutable snapshots (`F-223`, `C-014`)
+## Disabled local agent tasks
 
-`go test -race ./internal/clients ./internal/remote ./internal/server` covers
-unchanged transcript read counts, changed/empty/deleted/replaced files, root
-changes, status aging and Codex finish markers, concurrent readers and returned
-row isolation. The Issue #66 targeted race run measured 92.7% package coverage
-and 95.5–100% for the changed production functions. A 100,000-row chronological sort has a loose ten-second guard
-against the former quadratic algorithm. `frontend/e2e/clients.spec.ts` reads a
-600-session archive through the real HTTP/UI path, pages it, modifies one file
-and deletes it without stale rows remaining.
-
-`go test ./internal/clients -run '^$' -bench 'Benchmark(IdleTranscriptRefresh|CachedClientView|ChronologicalCatalogSort)$' -benchmem`
-compares isolated long-transcript refreshes and cached page reads. It uses
-temporary files and no model. The Issue #66 baseline on Apple M3 Max was
-1.43 s and 1.32 GB allocated per unchanged 1,000-file refresh; the parsed-row
-cache measured about 3 ms and 1.46 MB. Chronological 7,749-row sorting fell
-from about 152 ms to 1.4 ms. These are development measurements, not a promise
-for every filesystem or model-running CPU load. Inspect a real native Mac
-window separately before recording native acceptance.
+`internal/server/clients_test.go` exercises Settings and both legacy HTTP
+endpoints with a real session fixture. `internal/remote/clients_test.go`
+checks serialized inbox, pagination and legacy RPC replies, including an
+in-memory enabled value. `frontend/e2e/clients.spec.ts` covers a saved Clients
+tab and an enable attempt through Settings. `mobile/src/app.test.tsx` checks
+that a legacy catalog does not render or cause local-task RPCs.
 
 ## Native Mac acceptance recovery (`F-430`, `C-010`, `C-031`)
 
