@@ -3604,8 +3604,12 @@ human source has not been classified or its extraction failed. Both the tool
 boundary and storage transaction enforce the policy. A refusal leaves the wait
 row unchanged and emits no armed `schedule` event, so the UI cannot render a
 new armed card from assistant prose. A classified denial's `tool_result` has
-`source_seq`, `source_text` and `source_quote`; pending classification has
-`pending_seq` when the source is known. Source sequences are `events.seq`, not
+`source_seq`, `source_text` and `source_quote`. Pending classification
+includes the first `pending_seq` and the number of unclassified inputs in
+`pending_count` when known. Each verification classifies at most 16 inputs
+within a 30-second context deadline. `retry_same_turn:true` asks the manager to
+retry the same tool call and continue from saved decisions in the current turn.
+Source sequences are `events.seq`, not
 `messages.seq`. These existing tool results remain in the same turn's Trace.
 A human-cancellation refusal also carries `source_kind: "schedule_cancelled"`;
 its `source_text` is the cancelled schedule ID and `source_quote` is empty.
@@ -3824,7 +3828,8 @@ One request, one turn, everything about it — the same data `zwai trace` prints
 Thread-wake tool refusals retain `thread_wake_prohibited` or
 `thread_wake_policy_pending` in the existing `tool_result` JSON. A classified
 denial retains `source_seq`, `source_text` and `source_quote`; pending
-classification retains `pending_seq` when known. Compaction may remove the
+classification retains the known `pending_seq` and `pending_count`, plus
+`retry_same_turn:true` when the tool advises a same-turn retry. Compaction may remove the
 original message from model replay but does not remove this event-based policy
 evidence.
 No armed `schedule` event is emitted by a refused arm or recadence.

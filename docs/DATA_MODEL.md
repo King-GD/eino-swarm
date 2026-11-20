@@ -795,10 +795,11 @@ keeps the cancellation in force. Policy diagnostics identify it with
 `source_text`, leaving `source_quote` empty.
 Source text is read from the effective event, rather than copied into this
 table. Classification runs lazily on a manager's thread-wake attempt, with at
-most 16 uncached inputs per turn and a total 30-second verification deadline
-including cancellable gate waiting. Successful cached decisions allow later
-turns to continue backfill; a failed input is not requested again in the same
-turn and remains pending. Refused `schedule_wake` and thread `report_schedule(next_in_s)` leave the
+most 16 uncached inputs per call and a total 30-second verification deadline
+including cancellable gate waiting. Successful cached decisions let the next
+call continue in the same turn. A classifier failure while the context is live
+leaves the input pending and suppresses another request for it in that turn.
+Refused `schedule_wake` and thread `report_schedule(next_in_s)` leave the
 entire schedule row unchanged and emit no armed event. Reports without
 recadence, including `keep:false` cancellation, remain available; a refused
 recadence does not partially cancel the wait.

@@ -588,6 +588,10 @@ human turn, an independent job (`schedule_task`). `schedule_wake` does not
 take an id. It arms or replaces the open wait. The host assigns the id.
 Cancel copies an id from the open-wait list.
 
+When the history needs several batches of policy classification, the manager
+can continue in the current turn and arm the wait once those checks finish.
+An explicit prohibition on parking this conversation still blocks the wait.
+
 A successful check with another wake scheduled keeps its unfinished sub-agents
 running for that next check. Pausing or cancelling the last wake stops workers
 that have no continuing goal. A failed check also keeps workers that still

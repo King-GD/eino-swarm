@@ -31,6 +31,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Conversation waits can finish classifying long human histories across tool calls in the same turn. Pending classification reports the remaining inputs separately from an explicit prohibition. (`F-160`, `C-009`, `C-012`)
+
 - PC and Web voice input shows and uses System default when the saved microphone is missing. The preferred microphone can be used again when it reconnects. (`F-148`, `C-048`)
 
 - A deferred answer check no longer pauses with the manager tool-round cap

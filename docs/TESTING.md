@@ -5631,6 +5631,35 @@ event identity and atomic storage actions remain assumptions. Quote/digest
 validation, source revision, Go locks, SQLite rollback and liveness still need
 their real implementation tests.
 
+## Same-turn wake classification model (`C-009` / `C-012`)
+
+`models/scheduling/WakePolicyBackfill.tla` models one turn with 20 uncached
+neutral inputs, a 16-input call budget and one optional prohibition that may
+arrive between verification and the schedule write. `StartCall` and
+`Classify` represent `verifyThreadWakePolicy` resuming from the durable
+classification prefix. `FinishCheck` returns a pending count or checks the
+settled policy. `Commit` represents the transactional `checkThreadWakePolicy`
+recheck before a write.
+
+With a live caller, continued retries and responsive classification, TLC
+checks that the request eventually settles. The safety checks require that
+every batch with pending inputs advances classification, the refused calls
+report the exact pending count, and a wait is written only when the effective
+inputs are fully classified and no denial applies. `PerTurnBudget` reproduces
+the observed second pending receipt with no progress. `SkipWritePolicyRecheck`
+admits a write after a new human instruction and fails authorization. Four
+witnesses reach a batch refusal, a same-turn arm, a write-time pending refusal
+and a settled denial.
+
+Run `python3 tools/model_check.py --fetch wake-backfill-current wake-backfill-pre-fix wake-backfill-stale-write wake-backfill-reach-pending wake-backfill-reach-arm wake-backfill-reach-late-input wake-backfill-reach-denial`.
+`TestScheduleWakeFinishesHumanBackfillAcrossCallsInTheSameTurn` and
+`TestHumanSteeringAtTheWriteBoundaryCannotBeBypassed` exercise those boundaries
+in the real Registry, classifier adapter and store. The finite model assumes
+correct classifier labels, atomic cache and write transitions, and a live
+caller that continues retrying. It excludes wall-clock limits, provider
+failures and SQLite locking. Cancellation and classifier failures have Go
+regressions.
+
 ## Fuzz and property tests
 
 Example tests pin the inputs someone thought of. Where the input space is
@@ -6389,9 +6418,15 @@ requests in that turn. `TestWakeClassificationCannotOutrunANewHumanInstruction`
 and `TestParallelWakeAttemptsShareOneHumanClassification` cover late human input
 and concurrent attempts. `TestHumanSteeringAtTheWriteBoundaryCannotBeBypassed`
 injects new human input at the first schedule query after verification, proving
-the write transaction must recheck authority. `TestWakeClassificationHasACancellableGateAndPerTurnBudget`
-covers cancellation while waiting for the classification gate, the 16-input
-turn budget, and continued backfill from persisted successes in a later turn.
+the write transaction must recheck authority.
+`TestScheduleWakeFinishesHumanBackfillAcrossCallsInTheSameTurn` drives two real
+manager tool calls in one turn. The first classifies 16 of 20 inputs, reports the
+remaining four and writes no wait or armed event. The second classifies the
+rest and arms exactly one wait. A subsequent explicit human prohibition keeps
+that row intact and retains the denial source. `TestWakeClassificationGateIsCancellable`
+covers cancellation while waiting for the classification gate.
+`TestCancelledWakeClassificationCanResumeInTheSameTurn` cancels a real policy
+request and verifies that a fresh call in the same turn can finish.
 `internal/store/wake_policy_test.go` covers effective human-only sources,
 exact quotes, immutable classification, unread-steer edits/retractions,
 compaction, restart and a later explicit human allowance.

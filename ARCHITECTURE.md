@@ -1532,11 +1532,13 @@ worker before closing SQLite.
    Classification is lazy: ordinary work makes no policy model call until it
    attempts to arm a thread wake. Each verification has a total 30-second
    deadline, including cancellable waiting for the conversation's classification
-   gate. One turn classifies at most 16 uncached human inputs; successful
-   decisions persist across turns, so another turn may continue the backfill.
-   A failed extraction of the same input is not retried in that turn. Deadline,
-   budget or extraction failure returns pending and asks the manager to continue
-   work in the current turn.
+   gate, and classifies at most 16 uncached human inputs. Successful decisions
+   persist, so another call in the same turn can continue classification.
+   `models/scheduling/WakePolicyBackfill.tla` checks this progress and the
+   write-time recheck when a human instruction arrives between them.
+   An extraction failure while the context is live suppresses another request
+   for that input in the same turn. A deadline or cancellation leaves that
+   input available to a subsequent call.
    Manager output, peer data, schedule prompts and summaries are not human
    authority. The tool checks the policy and the schedule mutation transaction
    checks it again, so parallel calls or a late human prohibition cannot arm
@@ -1545,7 +1547,9 @@ worker before closing SQLite.
    source event seq, text and exact quote in a classified denial's tool-result
    Trace. A human-cancellation denial instead retains `source_kind` as
    `schedule_cancelled`, the source seq and schedule ID, with an empty quote.
-   A pending refusal retains its known source seq. Reports without
+   A pending refusal reports incomplete classification, with the first pending
+   source seq and remaining count when known. `retry_same_turn:true` asks the
+   manager to continue with the same tool call. Reports without
    `next_in_s`, including `keep:false` cancellation, remain available; a
    refused recadence does not partially cancel the wait.
    New scheduled turns persist their claimed-run binding before the runtime

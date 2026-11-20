@@ -15,6 +15,8 @@ models/generation/AskPublicationBoundary.tla checks clean-EOF publication across
 late owner cancellation and the actual Ask tool context identity.
 models/scheduling/WakeConsentTimeline.tla checks multiple original human
 decisions, asynchronous classification and exact-ID cancellation deduplication.
+models/scheduling/WakePolicyBackfill.tla checks bounded calls, same-turn
+classification progress and the atomic schedule-write recheck (C-009 / C-012).
 models/stream/ManagerCommentary.tla checks the order and privacy of admitted
 manager commentary before it enters the event stream.
 models/account/DeviceLogin.tla checks validated public-link publication, manual
@@ -321,6 +323,13 @@ MODELS = {
             ("TypeOK", "EveryArmAuthorized", "SettledPolicyMatchesLatestIntent", "ExactIDReceiptUniqueness",
              "LaterAllowanceSurvivesDuplicate"),
             (("MaxHumanEvents", 5),),
+        ),
+        Model(
+            "wake-backfill", ROOT / "models" / "scheduling" / "WakePolicyBackfill.tla",
+            ("PerTurnBudget", "SkipWritePolicyRecheck"),
+            ("TypeOK", "EveryArmAuthorized", "PendingBackfillAdvances"),
+            (("BatchSize", 16), ("InitialInputs", 20)),
+            ("EventuallySettled",),
         ),
     )
 }
@@ -1044,6 +1053,18 @@ CASES: tuple[Case, ...] = (
         ("consent-reach-continue-retains-deny", "NeverOrdinaryContinuePreservesDenial"),
         ("consent-reach-second-allow-survives-late-result", "NeverSecondAllowSurvivesEarlierResult"),
     )),
+    _case("wake-backfill-current", "per-call budget and a fresh write-time policy check", model="wake-backfill"),
+    _case("wake-backfill-pre-fix", "observed same-turn retry makes no progress after its first batch",
+          ("PerTurnBudget",), "PendingBackfillAdvances", model="wake-backfill"),
+    _case("wake-backfill-stale-write", "seeded write ignores a new human instruction after verification",
+          ("SkipWritePolicyRecheck",), "EveryArmAuthorized", model="wake-backfill"),
+    *(_case("wake-backfill-reach-" + name, "same-turn backfill reachability", witness=witness, model="wake-backfill")
+      for name, witness in (
+          ("pending", "NeverBatchPending"),
+          ("arm", "NeverSameTurnArm"),
+          ("late-input", "NeverWritePending"),
+          ("denial", "NeverDenialSettles"),
+      )),
 )
 
 

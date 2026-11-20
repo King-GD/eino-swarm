@@ -246,7 +246,8 @@ func TestUnverifiedWakePermissionFailsClosedWithoutRetryingThisTurn(t *testing.T
 			e.record(store.Event{ThreadID: th.ID, TurnID: turn.ID, Kind: KindUser, Text: "Keep the conversation active."})
 			for i := 0; i < 3; i++ {
 				out, err := e.scheduleWakeJSON(th.ID, turn.ID, `{"delay_s":60,"prompt":"check later"}`)
-				if err != nil || !strings.Contains(out, `"code":"thread_wake_policy_pending"`) {
+				if err != nil || !strings.Contains(out, `"code":"thread_wake_policy_pending"`) ||
+					!strings.Contains(out, `"pending_count":1`) || strings.Contains(out, `"retry_same_turn"`) {
 					t.Fatalf("unverified permission armed: %s %v", out, err)
 				}
 			}
@@ -313,39 +314,133 @@ func TestParallelWakeAttemptsShareOneHumanClassification(t *testing.T) {
 	}
 }
 
-func TestWakeClassificationHasACancellableGateAndPerTurnBudget(t *testing.T) {
-	calls := new(atomic.Int32)
-	e := newWakePolicyResponseEngine(t, func(store.WakePolicyInput) (int, string) {
+func TestScheduleWakeFinishesHumanBackfillAcrossCallsInTheSameTurn(t *testing.T) {
+	const (
+		batchSize = 16
+		tailSize  = 4
+		request   = "Check and report progress on a fixed interval."
+		ban       = "Stay active here without parking this conversation for a later check."
+		args      = `{"every_s":480,"prompt":"Check progress","title":"Progress check"}`
+	)
+	var calls atomic.Int32
+	e := newWakePolicyResponseEngine(t, func(input store.WakePolicyInput) (int, string) {
 		calls.Add(1)
+		if input.Text == ban {
+			answer, _ := json.Marshal(map[string]string{"decision": "deny", "quote": input.Text})
+			return http.StatusOK, string(answer)
+		}
 		return http.StatusOK, `{"decision":"unchanged","quote":""}`
 	})
 	th, _ := e.CreateThread("bounded backfill", "", "")
-	turn := mustStoredTurn(t, e, th.ID, store.Turn{})
-	for i := 0; i < wakePolicyMaxInputsPerTurn+1; i++ {
-		e.record(store.Event{ThreadID: th.ID, TurnID: turn.ID, Kind: KindUser, Text: "Inspect the outstanding work."})
-	}
-	for i := 0; i < 2; i++ {
-		if err := e.verifyThreadWakePolicy(context.Background(), th.ID, turn.ID); !errors.Is(err, store.ErrWakePolicyPending) {
-			t.Fatalf("uncategorized budget refusal: %v", err)
+	history := mustStoredTurn(t, e, th.ID, store.Turn{})
+	var pendingSeq int64
+	for i := 0; i < batchSize+tailSize-1; i++ {
+		input := store.Event{ThreadID: th.ID, TurnID: history.ID, Kind: KindUser, Text: "Inspect the outstanding work."}
+		if err := e.store.AppendEvent(&input); err != nil {
+			t.Fatal(err)
+		}
+		if i == batchSize {
+			pendingSeq = input.Seq
 		}
 	}
-	if calls.Load() != wakePolicyMaxInputsPerTurn {
-		t.Fatalf("unbounded backfill: %d", calls.Load())
+	turn := mustStoredTurn(t, e, th.ID, store.Turn{})
+	e.record(store.Event{ThreadID: th.ID, TurnID: turn.ID, Kind: KindUser, Text: request})
+	var pending struct {
+		OK            bool   `json:"ok"`
+		Code          string `json:"code"`
+		Seq           int64  `json:"pending_seq"`
+		Count         int    `json:"pending_count"`
+		RetrySameTurn bool   `json:"retry_same_turn"`
+		Error         string `json:"error"`
 	}
-	if err := e.verifyThreadWakePolicy(context.Background(), th.ID, "later-turn"); err != nil {
-		t.Fatalf("later turn could not resume bounded classification: %v", err)
+	var accepted bool
+	set := buildTestToolset(t, e, th.ID)
+	cm := &coordinationModel{steps: []func([]*schema.Message) *schema.Message{
+		func(_ []*schema.Message) *schema.Message {
+			return coordinationCall("backfill-first", ToolScheduleWake, args)
+		},
+		func(msgs []*schema.Message) *schema.Message {
+			if err := json.Unmarshal([]byte(msgs[len(msgs)-1].Content), &pending); err != nil {
+				t.Errorf("invalid pending result: %v", err)
+			}
+			rows, err := e.store.ListSchedules()
+			if err != nil || len(rows) != 0 || calls.Load() != batchSize || hasKind(t, e, th.ID, KindSchedule) {
+				t.Errorf("first batch armed a wait or used the wrong budget: rows=%+v calls=%d err=%v", rows, calls.Load(), err)
+			}
+			return coordinationCall("backfill-retry", ToolScheduleWake, args)
+		},
+		func(msgs []*schema.Message) *schema.Message {
+			accepted = strings.Contains(msgs[len(msgs)-1].Content, `"ok":true`)
+			return schema.AssistantMessage("The progress check request has been processed.", nil)
+		},
+	}}
+	reg := e.newTurnRegistry(func(string, string) model.BaseChatModel { return cm }, set, nil)
+	defer reg.Close()
+	acc := newAccumulator(e, th.ID, turn.ID, 0)
+	if _, err := e.runtimeFor(th.ID).runOwnedTestManager(context.Background(), turn, reg, acc, set, nil, []adk.Message{schema.UserMessage(request)}); err != nil {
+		t.Fatal(err)
 	}
+	acc.flushAll()
+	rows, err := e.store.ListSchedules()
+	if err != nil || !accepted || calls.Load() != batchSize+tailSize || len(rows) != 1 ||
+		rows[0].ThreadID != th.ID || rows[0].Status != store.ScheduleActive || rows[0].EveryS != 480 {
+		t.Fatalf("same-turn retry did not arm the requested wait: accepted=%v calls=%d rows=%+v err=%v", accepted, calls.Load(), rows, err)
+	}
+	if pending.OK || pending.Code != "thread_wake_policy_pending" || pending.Seq != pendingSeq ||
+		pending.Count != tailSize || !pending.RetrySameTurn || !strings.Contains(pending.Error, "classification") ||
+		strings.Contains(pending.Error, "authorization") {
+		t.Fatalf("batch refusal did not explain pending classification: %+v", pending)
+	}
+	next := mustStoredTurn(t, e, th.ID, store.Turn{})
+	e.record(store.Event{ThreadID: th.ID, TurnID: next.ID, Kind: KindUser, Text: ban})
+	runWakePolicyManager(t, e, next, ToolScheduleWake, args, "thread_wake_prohibited", ban)
+	after, err := e.store.GetSchedule(rows[0].ID)
+	if err != nil || !reflect.DeepEqual(&rows[0], after) || calls.Load() != batchSize+tailSize+1 {
+		t.Fatalf("subsequent prohibition changed the wait or reclassified cached inputs: row=%+v calls=%d err=%v", after, calls.Load(), err)
+	}
+}
+
+func TestWakeClassificationGateIsCancellable(t *testing.T) {
+	e := newTestEngine(t)
+	th, _ := e.CreateThread("cancelled classification", "", "")
 	check := &e.runtimeFor(th.ID).wakePolicyCheck
+	check.once.Do(func() { check.gate = make(chan struct{}, 1) })
 	check.gate <- struct{}{}
+	defer func() { <-check.gate }()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	started := time.Now()
-	if err := e.verifyThreadWakePolicy(ctx, th.ID, turn.ID); !errors.Is(err, store.ErrWakePolicyPending) {
+	if err := e.verifyThreadWakePolicy(ctx, th.ID, "turn"); !errors.Is(err, store.ErrWakePolicyPending) {
 		t.Fatalf("cancelled gate did not refuse: %v", err)
 	}
-	<-check.gate
 	if time.Since(started) > time.Second {
 		t.Fatal("cancelled tool blocked on classification lock")
+	}
+}
+
+func TestCancelledWakeClassificationCanResumeInTheSameTurn(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var calls atomic.Int32
+	e := newWakePolicyResponseEngine(t, func(store.WakePolicyInput) (int, string) {
+		if calls.Add(1) == 1 {
+			cancel()
+			return http.StatusBadRequest, ""
+		}
+		return http.StatusOK, `{"decision":"unchanged","quote":""}`
+	})
+	th, _ := e.CreateThread("cancel a classification request", "", "")
+	turn := mustStoredTurn(t, e, th.ID, store.Turn{})
+	e.record(store.Event{ThreadID: th.ID, TurnID: turn.ID, Kind: KindUser, Text: "Check current progress later."})
+	const args = `{"delay_s":60,"prompt":"Inspect progress","title":"Progress check"}`
+	out, err := e.scheduleWakeContextJSON(ctx, th.ID, turn.ID, args)
+	if err != nil || !strings.Contains(out, `"code":"thread_wake_policy_pending"`) ||
+		!strings.Contains(out, `"pending_count":1`) || strings.Contains(out, `"retry_same_turn"`) {
+		t.Fatalf("cancelled attempt did not leave its input pending: %s %v", out, err)
+	}
+	out, err = e.scheduleWakeJSON(th.ID, turn.ID, args)
+	if err != nil || !strings.Contains(out, `"ok":true`) || calls.Load() != 2 {
+		t.Fatalf("cancelled attempt poisoned this turn: %s calls=%d err=%v", out, calls.Load(), err)
 	}
 }
 
@@ -461,7 +556,8 @@ func TestHumanSteeringAtTheWriteBoundaryCannotBeBypassed(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Callback().Query().Remove(name) })
 	out, err := e.scheduleWakeJSON(th.ID, turn.ID, `{"delay_s":120,"prompt":"inspect later"}`)
-	if err != nil || !injected.Load() || !strings.Contains(out, `"code":"thread_wake_policy_pending"`) {
+	if err != nil || !injected.Load() || !strings.Contains(out, `"code":"thread_wake_policy_pending"`) ||
+		!strings.Contains(out, `"pending_count":1`) || !strings.Contains(out, `"retry_same_turn":true`) {
 		t.Fatalf("write-time human input lost its refusal: injected=%v out=%s err=%v", injected.Load(), out, err)
 	}
 	after, _ := e.store.GetSchedule(row.ID)

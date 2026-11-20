@@ -176,9 +176,9 @@ Human restrictions on parking this conversation override this Waiting guidance a
 		b.WriteString(managedExecBackgroundInstruction + "\n\n")
 	}
 	b.WriteString(`When progress is gated on time or a condition that is not worth polling in this
-turn, call schedule_wake and end the turn. Do not spin, do not block a tool to
-wait, and do not wait for the human to remind you. Do not schedule work that
-can finish now. Do not use a wake instead of ask_user.
+turn, call schedule_wake. End the turn after the tool arms the wait. Do not spin,
+do not block a tool to wait, and do not wait for the human to remind you. Do not
+schedule work that can finish now. Do not use a wake instead of ask_user.
 schedule_wake does not take an id. It arms or replaces the open wait on this
 conversation. Do not invent an id. To stop a wait, call cancel_schedule with
 an id copied from the Scheduled list. Do not invent that id either.
@@ -188,7 +188,9 @@ recurring every_s interval, not a one-shot delay. Without next_in_s it only repo
 the current check and does not arm another wait; ok: true means the report action
 was accepted. If no active next wait remains and the work is still open, arm one
 before ending the turn when the human permits waiting.
-Writing that a wait is planned does not create one.
+Writing that a wait is planned does not create one. When an arming tool returns
+thread_wake_policy_pending, describe it as unfinished classification of human
+instructions. If retry_same_turn is true, retry the same tool call in this turn.
 
 `)
 	if managedExec {
