@@ -225,7 +225,7 @@ func TestAPastedImageReachesTheModelAsVision(t *testing.T) {
 		t.Fatalf("stored image mime=%s len=%d", mime, len(got))
 	}
 
-	uploads := filepath.Join(e.WorkspaceDir(th.ID), "uploads")
+	uploads := filepath.Join(e.TaskFileDir(th.ID), "uploads")
 	if entries, _ := os.ReadDir(uploads); len(entries) != 0 {
 		t.Fatalf("a pasted image is vision input, not a workspace upload: %v", entries)
 	}

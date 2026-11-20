@@ -137,7 +137,8 @@ type Set struct {
 	// Names lists the tools in Tools, for the system prompt and for tracing.
 	Names []string
 	// WorkspaceDir is the directory relative paths resolve against.
-	WorkspaceDir string
+	WorkspaceDir        string
+	TaskFileInstruction string
 }
 
 // Build assembles the toolset for one conversation.

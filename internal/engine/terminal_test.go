@@ -3,12 +3,13 @@ package engine
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 )
 
-func TestTerminalDirFollowsTheProjectNotTheScratchWorkspace(t *testing.T) {
+func TestTerminalDirFollowsTheTaskWorkspace(t *testing.T) {
 	e := newTestEngine(t)
 	shared := t.TempDir()
 	p, err := e.CreateProject("P", "", shared, true)
@@ -23,8 +24,9 @@ func TestTerminalDirFollowsTheProjectNotTheScratchWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TerminalDir: %v", err)
 	}
-	if got != shared {
-		t.Fatalf("terminal cwd=%q, want the project directory %q", got, shared)
+	want := filepath.Join(shared, ".zwai-tasks", th.ID, "work")
+	if got != want {
+		t.Fatalf("terminal cwd=%q, want %q", got, want)
 	}
 	// A client that also names a different project must not win: the open
 	// conversation is where the agents are working.
@@ -36,7 +38,7 @@ func TestTerminalDirFollowsTheProjectNotTheScratchWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != shared {
+	if got != want {
 		t.Fatalf("a thread target must ignore a spare project id: %q", got)
 	}
 }
@@ -51,7 +53,7 @@ func TestTerminalDirUsesTheConversationWorkspaceWithoutAProject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := e.Config().WorkspaceDir(th.ID)
+	want := filepath.Join(e.Config().WorkspaceDir(th.ID), "work")
 	if got != want {
 		t.Fatalf("cwd=%q want=%q", got, want)
 	}
@@ -86,7 +88,7 @@ func TestTerminalDirRefusesNothingAndUnknownIds(t *testing.T) {
 	}
 }
 
-func TestTerminalDirRebuildsAMissingScratchWorkspace(t *testing.T) {
+func TestTerminalDirDoesNotRecreateAMissingTaskWorkspace(t *testing.T) {
 	e := newTestEngine(t)
 	th, err := e.CreateThread("loose", "", "")
 	if err != nil {
@@ -96,15 +98,11 @@ func TestTerminalDirRebuildsAMissingScratchWorkspace(t *testing.T) {
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatal(err)
 	}
-	got, err := e.TerminalDir(th.ID, "")
-	if err != nil {
-		t.Fatal(err)
+	if _, err := e.TerminalDir(th.ID, ""); !os.IsNotExist(errors.Unwrap(err)) {
+		t.Fatalf("the missing task directory must be reported: %v", err)
 	}
-	if got != dir {
-		t.Fatalf("cwd=%q want=%q", got, dir)
-	}
-	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-		t.Fatalf("scratch workspace was not rebuilt: %v", err)
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("the missing directory must not be rebuilt: %v", err)
 	}
 }
 

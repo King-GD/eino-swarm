@@ -25,7 +25,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useTranscriptFollow } from "@/lib/follow-scroll"
 import { MANAGER_ID, type AgentState, type TranscriptState } from "@/lib/transcript"
-import type { FileEntry, Meta, Project, Turn, UsageSnapshot } from "@/lib/types"
+import type { FileEntry, FileScope, FileView, Meta, Project, Turn, UsageSnapshot } from "@/lib/types"
 import { agentRosterLabel } from "@/lib/agent-label"
 import {
   defaultAgentRosterSort,
@@ -51,6 +51,9 @@ export function RightPanel({
   onSelectAgent,
   files,
   workspace,
+  fileScope,
+  fileView,
+  onFileScope,
   turns,
   meta,
   threadId,
@@ -73,6 +76,9 @@ export function RightPanel({
   onSelectAgent: (id?: string) => void
   files: FileEntry[]
   workspace: string
+  fileScope?: FileScope
+  fileView?: FileView
+  onFileScope?: (scope: FileScope) => void
   turns: Turn[]
   meta?: Meta
   threadId?: string
@@ -205,8 +211,12 @@ export function RightPanel({
             className="flex min-h-0 flex-1 flex-col overflow-hidden bg-card"
           >
             <FilesTab
+              key={JSON.stringify([threadId, fileScope, fileView?.root])}
               files={files}
               workspace={workspace}
+              fileScope={fileScope}
+              fileView={fileView}
+              onFileScope={onFileScope}
               threadId={threadId}
               canReveal={Boolean(meta?.capabilities?.reveal)}
               onUpload={onUpload}

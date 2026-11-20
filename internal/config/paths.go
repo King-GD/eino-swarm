@@ -1,6 +1,16 @@
 package config
 
-import "path/filepath"
+import (
+	"path/filepath"
+	"strings"
+)
+
+const (
+	TaskDirectory = ".zwai-tasks"
+	TaskWork      = "work"
+	TaskResults   = "results"
+	TaskUploads   = "uploads"
+)
 
 // Directory names under the data directory. They are also what tells a
 // managed directory apart from a path the user chose: deleting a conversation
@@ -64,6 +74,20 @@ func (c *Config) ProjectDir(projectID string) string {
 // one of its own.
 func (c *Config) ProjectWorkspaceDir(projectID string) string {
 	return filepath.Join(c.ProjectDir(projectID), projectWorkspaceName)
+}
+
+func ManagedTaskPath(binding, threadID string) bool {
+	if !filepath.IsLocal(filepath.FromSlash(binding)) || !filepath.IsLocal(threadID) ||
+		threadID == "." || strings.ContainsAny(threadID, "/\\:") {
+		return false
+	}
+	if binding == workspacesDirName+"/"+threadID {
+		return true
+	}
+	parts := strings.Split(binding, "/")
+	return len(parts) == 5 && parts[0] == projectsDirName && filepath.IsLocal(parts[1]) &&
+		parts[1] != "." && !strings.ContainsAny(parts[1], "\\:") &&
+		parts[2] == projectWorkspaceName && parts[3] == TaskDirectory && parts[4] == threadID
 }
 
 // ProjectMemoryDir holds a project's MEMORY.md and its skills.

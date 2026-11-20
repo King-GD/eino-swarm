@@ -13,7 +13,7 @@ func TestListFilesReturnsEveryDirectChild(t *testing.T) {
 	// panel showed a directory that disagreed with the file manager.
 	e := newTestEngine(t)
 	th, _ := e.CreateThread("", "", "")
-	root := e.WorkspaceDir(th.ID)
+	root := e.TaskFileDir(th.ID)
 	kept := filepath.Join(root, "kept")
 	noise := filepath.Join(root, "noise")
 	if err := os.Mkdir(kept, 0o700); err != nil {
@@ -44,7 +44,7 @@ func TestListFilesReturnsEveryDirectChild(t *testing.T) {
 	for _, entry := range rootEntries {
 		gotRoot[entry.Path] = entry
 	}
-	if len(gotRoot) != 3 || !gotRoot["kept"].Dir || !gotRoot["noise"].Dir || gotRoot["root.txt"].Dir {
+	if len(gotRoot) != 6 || !gotRoot["kept"].Dir || !gotRoot["noise"].Dir || gotRoot["root.txt"].Dir {
 		t.Fatalf("root listing = %+v", rootEntries)
 	}
 	for _, entry := range rootEntries {
@@ -75,7 +75,7 @@ func TestListFilesReturnsEveryDirectChild(t *testing.T) {
 func TestListFilesRejectsEscapeAndNonDirectories(t *testing.T) {
 	e := newTestEngine(t)
 	th, _ := e.CreateThread("", "", "")
-	root := e.WorkspaceDir(th.ID)
+	root := e.TaskFileDir(th.ID)
 	if err := os.WriteFile(filepath.Join(root, "notes.txt"), []byte("hi"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestListFilesRejectsEscapeAndNonDirectories(t *testing.T) {
 func TestSearchFilesReturnsEveryMatchAndSkipsHiddenTrees(t *testing.T) {
 	e := newTestEngine(t)
 	th, _ := e.CreateThread("", "", "")
-	root := e.WorkspaceDir(th.ID)
+	root := e.TaskFileDir(th.ID)
 	for _, dir := range []string{
 		filepath.Join(root, "notes"),
 		filepath.Join(root, "node_modules", "pkg"),
@@ -155,7 +155,7 @@ func TestFileSearchReusesAFinishedScanUntilTheRootIsListedAgain(t *testing.T) {
 	// out of that answer until the root is listed again.
 	e := newTestEngine(t)
 	th, _ := e.CreateThread("", "", "")
-	root := e.WorkspaceDir(th.ID)
+	root := e.TaskFileDir(th.ID)
 	notes := filepath.Join(root, "notes")
 	if err := os.MkdirAll(notes, 0o700); err != nil {
 		t.Fatal(err)
@@ -201,7 +201,7 @@ func TestFileSearchReusesAFinishedScanUntilTheRootIsListedAgain(t *testing.T) {
 func TestWorkspaceListingFailsClosedWhenItCannotBeRead(t *testing.T) {
 	e := newTestEngine(t)
 	th, _ := e.CreateThread("", "", "")
-	root := e.WorkspaceDir(th.ID)
+	root := e.TaskFileDir(th.ID)
 	blocked := filepath.Join(root, "blocked")
 	if err := os.Mkdir(blocked, 0o700); err != nil {
 		t.Fatal(err)

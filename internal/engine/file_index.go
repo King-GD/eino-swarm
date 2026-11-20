@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/LubyRuffy/eino-swarm/internal/store"
 )
 
 // workspaceEntry is one path the Files panel is willing to show. Size and
@@ -44,8 +46,27 @@ type workspaceScans struct {
 	wg      sync.WaitGroup
 	ctx     context.Context
 	cancel  context.CancelFunc
+	roots   map[string]workspaceRootIdentity
 }
 
+type workspaceRootIdentity struct {
+	info fs.FileInfo
+	key  string
+}
+
+func (s *workspaceScans) rootKey(path string, info fs.FileInfo) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.initLocked()
+	if record, ok := s.roots[path]; ok && os.SameFile(record.info, info) {
+		return record.key
+	}
+	key := store.NewID("root_")
+	s.roots[path] = workspaceRootIdentity{info: info, key: key}
+	s.gen[path]++
+	delete(s.current, path)
+	return key
+}
 func (s *workspaceScans) initLocked() {
 	if s.gen != nil {
 		return
@@ -54,6 +75,7 @@ func (s *workspaceScans) initLocked() {
 	s.gen = map[string]uint64{}
 	s.current = map[string]*workspaceScanResult{}
 	s.flight = map[string]*workspaceScanFlight{}
+	s.roots = map[string]workspaceRootIdentity{}
 }
 
 func (s *workspaceScans) stop() {

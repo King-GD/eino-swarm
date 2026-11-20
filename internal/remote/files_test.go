@@ -19,7 +19,7 @@ func TestPhoneCanListAndPreviewConversationFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root := e.WorkspaceDir(th.ID)
+	root := e.TaskFileDir(th.ID)
 	if err := os.MkdirAll(filepath.Join(root, "reports"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -34,14 +34,18 @@ func TestPhoneCanListAndPreviewConversationFiles(t *testing.T) {
 	if !listed.OK {
 		t.Fatalf("phone cannot list conversation outputs: %+v", listed)
 	}
-	if len(listed.Files) != 1 || listed.Files[0].Path != "reports" || !listed.Files[0].Dir {
+	foundReports := false
+	for _, file := range listed.Files {
+		foundReports = foundReports || (file.Path == "reports" && file.Dir)
+	}
+	if len(listed.Files) != 4 || !foundReports {
 		t.Fatalf("root listing = %+v", listed.Files)
 	}
 	nested := Handle(e, config.RemoteConfig{}, Request{ID: "nested", Op: "files", ThreadID: th.ID, Directory: "reports"}, "relay", "session")
 	if !nested.OK || len(nested.Files) != 1 || nested.Files[0].Path != "reports/result.txt" || nested.Files[0].Dir || !nested.Files[0].Uploaded {
 		t.Fatalf("directory listing = %+v", nested.Files)
 	}
-	found := Handle(e, config.RemoteConfig{}, Request{ID: "search", Op: "files", ThreadID: th.ID, Text: "result"}, "relay", "session")
+	found := Handle(e, config.RemoteConfig{}, Request{ID: "search", Op: "files", ThreadID: th.ID, Text: "result.txt"}, "relay", "session")
 	if !found.OK || len(found.Files) != 1 || found.Files[0].Path != "reports/result.txt" {
 		t.Fatalf("search = %+v", found.Files)
 	}
@@ -61,13 +65,57 @@ func TestPhoneCanListAndPreviewConversationFiles(t *testing.T) {
 	}
 }
 
+func TestPhoneProjectReadRejectsAReplacedRootAtTheSamePath(t *testing.T) {
+	e := testEngine(t)
+	parent := t.TempDir()
+	selected := filepath.Join(parent, "project")
+	if err := os.Mkdir(selected, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	project, err := e.CreateProject("Phone project", "", selected, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	thread, err := e.CreateThread("Scoped files", "", project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	send := func(request Request) Response {
+		request.ID, request.ThreadID, request.FileScope = "scoped", thread.ID, "project"
+		return Handle(e, config.RemoteConfig{}, request, "relay", "session")
+	}
+	if err := os.WriteFile(filepath.Join(selected, "shared.txt"), []byte("first"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	list := send(Request{Op: OpFiles})
+	if !list.OK || list.FileView == nil || len(list.Files) != 2 {
+		t.Fatalf("project listing: %+v", list)
+	}
+	root := list.FileView.Root
+	if result := send(Request{Op: OpFileChunk, FileRoot: root, FilePath: "shared.txt"}); !result.OK {
+		t.Fatalf("valid scoped read failed: %+v", result)
+	}
+	if err := os.Rename(selected, filepath.Join(parent, "previous")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(selected, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(selected, "shared.txt"), []byte("other"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if result := send(Request{Op: OpFileChunk, FileRoot: root, FilePath: "shared.txt"}); result.OK || result.Code != "file_root_changed" || result.FileChunk != nil {
+		t.Fatalf("stale project read was not rejected: %+v", result)
+	}
+}
+
 func TestPhoneFileReadHandlesMissingWorkspaceAndUnknownType(t *testing.T) {
 	e := testEngine(t)
 	th, err := e.CreateThread("outputs", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	root := e.WorkspaceDir(th.ID)
+	root := e.TaskFileDir(th.ID)
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +151,7 @@ func TestPhoneFileChunksStayInsideFramesAndWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root := e.WorkspaceDir(th.ID)
+	root := e.TaskFileDir(th.ID)
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +219,7 @@ func TestPhoneFileListingPagesBeforeTheSealedFrameCap(t *testing.T) {
 	cursor := ""
 	seen := map[string]bool{}
 	for {
-		resp := Handle(e, config.RemoteConfig{}, Request{Op: OpFiles, ThreadID: th.ID, Cursor: cursor}, "relay", "session")
+		resp := Handle(e, config.RemoteConfig{}, Request{Op: OpFiles, ThreadID: th.ID, Directory: "work", Cursor: cursor}, "relay", "session")
 		if !resp.OK || len(resp.Files) == 0 {
 			t.Fatalf("file page failed: %+v", resp)
 		}

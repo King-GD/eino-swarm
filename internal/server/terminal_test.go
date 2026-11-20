@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -18,7 +19,7 @@ func TestTerminalIs404ForAMissingConversation(t *testing.T) {
 	h.json(http.MethodGet, "/api/projects/pj_missing/terminal", nil, http.StatusNotFound)
 }
 
-func TestTerminalStartsInTheProjectDirectory(t *testing.T) {
+func TestTerminalStartsInTheTaskWorkingDirectory(t *testing.T) {
 	h := newHarness(t)
 	t.Setenv("SHELL", "/bin/sh")
 	repo := t.TempDir()
@@ -29,13 +30,14 @@ func TestTerminalStartsInTheProjectDirectory(t *testing.T) {
 	ws := dialTerminal(t, h, "/api/threads/"+th["id"].(string)+"/terminal?cols=80&rows=24")
 	defer ws.Close()
 	ready := readReady(t, ws)
-	if ready["cwd"] != repo {
-		t.Fatalf("ready cwd=%v want %s", ready["cwd"], repo)
+	want := filepath.Join(repo, ".zwai-tasks", th["id"].(string), "work")
+	if ready["cwd"] != want {
+		t.Fatalf("ready cwd=%v want %s", ready["cwd"], want)
 	}
-	got := terminalPWD(t, ws, repo)
-	if !strings.Contains(got, repo) {
+	got := terminalPWD(t, ws, want)
+	if !strings.Contains(got, want) {
 		skipIfPTYForbidden(t, got)
-		t.Fatalf("shell pwd output %q does not contain the project directory %q", got, repo)
+		t.Fatalf("shell pwd output %q does not contain the task directory %q", got, want)
 	}
 }
 

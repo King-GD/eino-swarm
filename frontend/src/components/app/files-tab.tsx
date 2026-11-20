@@ -33,7 +33,7 @@ import {
   type FileKind,
   type FileTreeNode,
 } from "@/lib/file-tree"
-import type { FileEntry } from "@/lib/types"
+import type { FileEntry, FileLocation, FileScope, FileView } from "@/lib/types"
 import { cn, formatBytes } from "@/lib/utils"
 import { useT } from "@/lib/use-t"
 
@@ -50,6 +50,9 @@ export function FilesTab({
   files,
   workspace,
   threadId,
+  fileScope = "task",
+  fileView,
+  onFileScope,
   canReveal,
   loadedDirs,
   dirErrors,
@@ -63,6 +66,9 @@ export function FilesTab({
   files: FileEntry[]
   workspace: string
   threadId?: string
+  fileScope?: FileScope
+  fileView?: FileView
+  onFileScope?: (scope: FileScope) => void
   canReveal: boolean
   loadedDirs?: readonly string[]
   dirErrors?: Record<string, string>
@@ -74,6 +80,9 @@ export function FilesTab({
   onSearch?: (query: string) => Promise<FileEntry[]>
 }) {
   const t = useT()
+  const project = fileScope === "project"
+  const isolated = !project && Boolean(fileView?.isolated)
+  const location: FileLocation | undefined = project || fileView?.root ? { scope: fileScope, root: fileView?.root } : undefined
   const inputRef = useRef<HTMLInputElement>(null)
   const treeRef = useRef<HTMLDivElement>(null)
   const userTouched = useRef(false)
@@ -86,6 +95,7 @@ export function FilesTab({
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState("")
   const loaded = useMemo(() => new Set(loadedDirs ?? []), [loadedDirs])
+  const loadingRoot = Boolean(threadId && loadedDirs && !loaded.has(""))
   const query = filter.trim()
   const serverSearch = Boolean(onSearch) && query.length > 0
   const tree = useMemo(
@@ -107,11 +117,12 @@ export function FilesTab({
 
   useEffect(() => {
     if (!userTouched.current) {
-      setExpanded(initialExpanded(tree))
+      setExpanded(isolated ? new Set(tree.some((node) => node.path === "results" && node.dir) ? ["results"] : [])
+        : project ? new Set() : initialExpanded(tree))
       return
     }
     setExpanded((prev) => pruneExpanded(prev, tree))
-  }, [threadId, tree])
+  }, [threadId, tree, isolated, project])
 
   useEffect(() => {
     if (!onOpenDir) return
@@ -161,7 +172,19 @@ export function FilesTab({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-col gap-2 px-2 pb-2 pt-2">
+        {fileView?.has_project && onFileScope ? (
+          <div className="flex items-center gap-1" role="group" aria-label={t("files.tree")}>
+            <Button size="sm" variant={project ? "ghost" : "secondary"} aria-pressed={!project} onClick={() => onFileScope("task")}>
+              {t("files.taskScope")}
+            </Button>
+            <Button size="sm" variant={project ? "secondary" : "ghost"} aria-pressed={project} onClick={() => onFileScope("project")}>
+              {t("files.projectScope")}
+            </Button>
+          </div>
+        ) : null}
+        {!project && fileView?.has_project && !isolated ? <p className="px-1 text-xs text-muted-foreground">{t("files.legacyShared")}</p> : null}
         <div className="flex items-center gap-1">
+          {!project ? <>
           <input
             ref={inputRef}
             type="file"
@@ -182,6 +205,7 @@ export function FilesTab({
             <Upload />
             {t("files.upload")}
           </Button>
+          </> : null}
           <Button variant="ghost" size="icon-sm" onClick={onRefresh} title={t("files.refresh")}>
             <RefreshCw />
           </Button>
@@ -190,6 +214,7 @@ export function FilesTab({
               variant="ghost"
               size="icon-sm"
               onClick={() => onReveal()}
+              disabled={!workspace}
               title={t("files.reveal")}
             >
               <FolderOpen />
@@ -225,8 +250,8 @@ export function FilesTab({
           {t("files.searching")}
         </p>
       ) : files.length === 0 && !serverSearch && !dirErrors?.[""] ? (
-        <p className="px-3 py-8 text-center text-(length:--chrome-font-size) text-muted-foreground">
-          {t("files.empty")}
+        <p role={loadingRoot ? "status" : undefined} className="px-3 py-8 text-center text-(length:--chrome-font-size) text-muted-foreground">
+          {t(loadingRoot ? "files.loading" : "files.empty")}
         </p>
       ) : rows.length === 0 && !(dirErrors?.[""] && !serverSearch && files.length === 0) ? (
         <p className="px-3 py-8 text-center text-(length:--chrome-font-size) text-muted-foreground">
@@ -260,6 +285,9 @@ export function FilesTab({
             const pending = !serverSearch && onOpenDir && node.dir && expanded.has(node.path) && !loaded.has(node.path)
               ? dirErrors?.[node.path] ?? t("files.loadingDir")
               : ""
+            const section = isolated ? taskSectionLabel(node.path) : undefined
+            const noResults = isolated && !filtering && node.path === "results" &&
+              expanded.has(node.path) && loaded.has(node.path) && node.children.length === 0
             return (
               <div key={node.path}>
                 <FileRow
@@ -268,21 +296,23 @@ export function FilesTab({
                   open={expanded.has(node.path)}
                   focused={focused === node.path}
                   threadId={threadId}
+                  location={location}
+                  label={section ? t(section) : project && node.path === ".zwai-tasks" ? t("files.tasksFolder") : node.name}
                   filtering={filtering}
                   canReveal={canReveal}
                   onFocus={setFocused}
                   onToggle={applyToggle}
                   onOpen={openFile}
                   onReveal={onReveal}
-                  onDelete={setDoomed}
+                  onDelete={project ? undefined : setDoomed}
                 />
-                {pending ? (
+                {pending || noResults ? (
                   <p
                     role={dirErrors?.[node.path] ? "alert" : "status"}
                     className="truncate px-3 py-1 text-(length:--chrome-font-size) text-muted-foreground"
                     style={{ paddingLeft: 28 + depth * 12 }}
                   >
-                    {pending}
+                    {pending || t("files.noResults")}
                   </p>
                 ) : null}
               </div>
@@ -295,6 +325,7 @@ export function FilesTab({
           key={`${preview.threadId}/${preview.path}`}
           threadId={preview.threadId}
           path={preview.path}
+          location={location}
           canReveal={canReveal}
           onReveal={onReveal}
           onClose={() => setPreview(undefined)}
@@ -320,12 +351,21 @@ export function FilesTab({
   )
 }
 
+function taskSectionLabel(path: string) {
+  if (path === "results") return "files.resultsFolder"
+  if (path === "work") return "files.workFolder"
+  if (path === "uploads") return "files.uploadsFolder"
+  return undefined
+}
+
 function FileRow({
   node,
   depth,
   open,
   focused,
   threadId,
+  location,
+  label,
   filtering,
   canReveal,
   onFocus,
@@ -339,13 +379,15 @@ function FileRow({
   open: boolean
   focused: boolean
   threadId?: string
+  location?: FileLocation
+  label: string
   filtering: boolean
   canReveal: boolean
   onFocus: (path: string) => void
   onToggle: (path: string) => void
   onOpen: (path: string) => void
   onReveal: (path?: string) => void
-  onDelete: (path: string) => void
+  onDelete?: (path: string) => void
 }) {
   const t = useT()
   const expanded = node.dir ? filtering || open : undefined
@@ -356,7 +398,7 @@ function FileRow({
   return (
     <div
       role="treeitem"
-      aria-label={node.name}
+      aria-label={label}
       aria-expanded={expanded}
       aria-level={depth + 1}
       aria-selected={focused}
@@ -384,7 +426,7 @@ function FileRow({
       </span>
       <FileGlyph node={node} open={Boolean(expanded)} />
       <span className="min-w-0 flex-1 truncate" title={title}>
-        {node.name}
+        {label}
       </span>
       {node.uploaded ? (
         <Badge variant="outline" className="shrink-0 px-1 py-0 text-[10px]">
@@ -415,18 +457,18 @@ function FileRow({
           onClick={(e) => e.stopPropagation()}
         >
           <Button variant="ghost" size="icon-sm" asChild title={t("files.download")}>
-            <a href={api.downloadURL(threadId, node.path)} download>
+            <a href={api.downloadURL(threadId, node.path, location)} download>
               <Download />
             </a>
           </Button>
-          <Button
+          {onDelete ? <Button
             variant="ghost"
             size="icon-sm"
             title={t("files.delete")}
             onClick={() => onDelete(node.path)}
           >
             <Trash2 />
-          </Button>
+          </Button> : null}
         </div>
       ) : null}
     </div>

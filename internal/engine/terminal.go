@@ -8,19 +8,26 @@ import (
 
 // TerminalDir is where a human terminal for this conversation or project
 // starts. The client names the conversation or the project; it does not
-// name a path. A conversation in a project shares that project's directory,
-// the same way the agents do — otherwise the shell and the tools would
-// silently edit different trees.
+// name a path. The conversation terminal follows the agents' working directory.
 func (e *Engine) TerminalDir(threadID, projectID string) (string, error) {
 	threadID = strings.TrimSpace(threadID)
 	projectID = strings.TrimSpace(projectID)
 	var dir string
 	switch {
 	case threadID != "":
-		if _, err := e.store.GetThread(threadID); err != nil {
+		thread, err := e.store.GetThread(threadID)
+		if err != nil {
 			return "", err
 		}
-		dir = e.WorkspaceDir(threadID)
+		dir, err = e.executionWorkspace(thread)
+		if err != nil {
+			return "", err
+		}
+		if thread.TaskWorkspace == "" && dir == e.cfg.WorkspaceDir(thread.ID) {
+			if err := os.MkdirAll(dir, 0o700); err != nil {
+				return "", fmt.Errorf("engine: create workspace: %w", err)
+			}
+		}
 	case projectID != "":
 		p, err := e.store.GetProject(projectID)
 		if err != nil {
@@ -30,20 +37,12 @@ func (e *Engine) TerminalDir(threadID, projectID string) (string, error) {
 	default:
 		return "", fmt.Errorf("engine: a conversation or a project is required")
 	}
-	return ensureTerminalDir(e, dir)
+	return ensureTerminalDir(dir)
 }
 
-func ensureTerminalDir(e *Engine, dir string) (string, error) {
+func ensureTerminalDir(dir string) (string, error) {
 	info, err := os.Stat(dir)
 	if err != nil {
-		if os.IsNotExist(err) && e.ownsWorkspace(dir) {
-			// A scratch workspace zwai created can be rebuilt; a path the
-			// user typed must not, or a typo becomes a new empty tree.
-			if err := os.MkdirAll(dir, 0o700); err != nil {
-				return "", fmt.Errorf("engine: create workspace: %w", err)
-			}
-			return dir, nil
-		}
 		return "", fmt.Errorf("engine: working directory %s: %w", dir, err)
 	}
 	if !info.IsDir() {

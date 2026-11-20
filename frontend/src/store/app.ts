@@ -22,6 +22,8 @@ import type { DeliveryOptions, InsertMode } from "@/lib/delivery-mode"
 import { parseSlashSubmit } from "@/lib/slash-core"
 import { imageGenerationErrorKey } from "@/lib/messages-image-generation"
 import {
+  changeWorkspaceScope,
+  emptyWorkspaceFiles,
   ensureWorkspaceDir,
   refreshWorkspaceFiles,
   resetWorkspaceFileLoads,
@@ -57,6 +59,8 @@ import { persistPayload } from "@/lib/settings-persist"
 import type {
   Attachment,
   FileEntry,
+  FileScope,
+  FileView,
   Followup,
   Meta,
   ModelInfo,
@@ -107,6 +111,8 @@ export interface AppState extends ScheduleSlice {
   loadedFileDirs: string[]
   fileDirErrors: Record<string, string>
   workspace: string
+  fileScope: FileScope
+  fileView?: FileView
   usage?: UsageSnapshot
   /** The first tail page is ready, or fallback SSE replay has acknowledged.
    *  Context usage and other metadata can still be loading. */
@@ -179,6 +185,7 @@ export interface AppState extends ScheduleSlice {
   extendTurn: (proceed: boolean) => Promise<void>
   upload: (files: File[], threadId?: string) => Promise<Attachment[]>
   refreshFiles: () => Promise<void>
+  setFileScope: (scope: FileScope) => void
   ensureFileDir: (dir: string) => Promise<void>
   searchFiles: (query: string) => Promise<FileEntry[]>
   removeFile: (path: string) => Promise<void>
@@ -216,11 +223,7 @@ export const useApp = create<AppState>((set, get) => ({
   status: { running: false },
   turns: [],
   followups: [],
-  files: [],
-  fileListings: {},
-  loadedFileDirs: [],
-  fileDirErrors: {},
-  workspace: "",
+  ...emptyWorkspaceFiles(),
   loaded: false,
   historyHasMore: false,
   historyLoading: false,
@@ -416,10 +419,7 @@ export const useApp = create<AppState>((set, get) => ({
       transcript: emptyTranscript(),
       turns: [],
       followups: [],
-      files: [],
-      fileListings: {},
-      loadedFileDirs: [],
-      fileDirErrors: {},
+      ...emptyWorkspaceFiles(),
       loaded: false,
       historyHasMore: false,
       historyLoading: false,
@@ -853,14 +853,17 @@ export const useApp = create<AppState>((set, get) => ({
   refreshFiles: () => refreshWorkspaceFiles(get, set).catch(() => {
     // The Files panel is secondary; a failure here must not break the chat.
   }),
+  setFileScope: (fileScope) => {
+    if (changeWorkspaceScope(get, set, fileScope)) void get().refreshFiles()
+  },
   ensureFileDir: (dir) => ensureWorkspaceDir(get, set, dir),
   searchFiles: (query) => searchWorkspaceFiles(get, query),
 
   removeFile: async (path) => {
-    const id = get().activeId
-    if (!id) return
+    const { activeId: id, fileScope: scope, fileView } = get()
+    if (!id || scope === "project") return
     try {
-      await api.deleteFile(id, path)
+      await api.deleteFile(id, path, { scope, root: fileView?.root })
       await get().refreshFiles()
     } catch (e) {
       set({ error: message(e) })

@@ -44,6 +44,13 @@ copy the manager's composed system prompt or personality. Forks still exclude
 System history. Nonempty saved worker instructions restore as recorded; legacy
 empty instructions retain the existing configuration-based fallback.
 
+New conversations persist a task file root independent of project membership.
+Tool execution and the conversation terminal anchor at its `work/`; file
+transports resolve `results/` and `uploads/` relative to the task root.
+The explicit project file scope resolves the currently selected project's
+directory and never grants mutation. Legacy conversations retain the old
+workspace resolver.
+
 Nuwa model wrappers refresh a bounded project-state preview at each Generate or
 Stream entry. They validate the original project/thread/turn owner through
 `Store.NuwaSnapshotForTurn` and add a transient runtime System message to a new
@@ -1451,9 +1458,8 @@ worker before closing SQLite.
    by provider — `enabled: false` stays out of that list and out of the paired
    phone catalog, and a conversation already on it keeps the name), builds a
    `swarm.Registry` with the configured limits, and builds the toolset anchored
-   at the conversation's working directory — `workspaces/<thread-id>/`, or the
-   project's directory when it belongs to one, so every conversation in a
-   project works on the same files. The registry's `ToolOutputBinder` is
+   at the new conversation's task-local `work/`, or its original workspace
+   for a legacy conversation. The registry's `ToolOutputBinder` is
    `tools.BindExecOutput`: live `exec` chunks become `tool_delta` events; other
    tools are left alone. The model still receives one JSON `tool_result`.
    `/plan` on an idle conversation sets
@@ -2576,7 +2582,7 @@ $ZWAI_HOME (default ~/.zwai-swarm)
 ├── config.yaml            0600, holds the API key
 ├── zwai.db                everything else
 ├── remote/                Host Token + X25519 identity (0600); not in yaml
-├── workspaces/<thread>/   one per standalone conversation; uploads/ inside
+├── workspaces/<thread>/   one per standalone conversation
 ├── plans/<thread>/PLAN.md `/plan` draft; not in the workspace
 ├── library/               shared skills from conversations in no project
 │   └── skills/<name>/SKILL.md
@@ -2588,16 +2594,19 @@ $ZWAI_HOME (default ~/.zwai-swarm)
                             origin_project `library` is the shared library, not a project row)
 ```
 
-The workspace is where relative tool paths resolve and what the Files panel
-shows. `GET /api/threads/:id/files` lists one directory's complete direct
+The task file root contains `work/`, `results/` and `uploads/`. Relative
+tool paths resolve in `work/`, while the Files panel can browse the task root
+or the shared project root. Legacy tasks keep their previous layout.
+`GET /api/threads/:id/files` lists one directory's complete direct
 children, or every listed match when `q` is set. The panel loads the next
-directory when it is opened. Dot-directories, `node_modules` and `vendor`
-are omitted. It is **not** a sandbox:
+directory when it is opened. The reserved task container is visible in the
+project tree. Other dot-directories, `node_modules` and `vendor` are omitted.
+The workspace is a working-directory anchor, not a permissions boundary:
 `exec` runs as the user, and absolute paths work.
 That is the "Full access" model, stated plainly in the UI rather than implied.
 
-A project's memory is kept here rather than in the working directory: a project
-pointed at a repository must not leave files in it. `skill_view` opens learned
+A project's memory is kept here rather than in the working directory so it does
+not change a repository as a side effect of a turn. `skill_view` opens learned
 skills from the memory tree. User-installed packages live separately under
 `installed-skills`. The engine snapshots their metadata at turn start and
 binds the project-scoped `load_skill` tool to the manager and workers.
@@ -2607,17 +2616,16 @@ workspace file. The installer stages validated ZIP files inside the project
 data directory and publishes the complete package with a directory rename.
 Project deletion invalidates the external catalog before removing its files.
 A request holding the old catalog cannot publish a staged upload.
-For the same reason, deleting a conversation removes its workspace **only when
-zwai created it** — `DeleteThread` on a project conversation would otherwise
-delete the user's repository — and deleting a project removes its memory and
-its managed workspace, never a `workdir` the user supplied.
+Deleting a conversation removes only its app-managed task files. Project
+deletion preserves user-selected workdirs and task roots still owned by other
+conversations, even when those roots are physically under the deleted project.
 
 ## Integrated terminal
 
 The title-bar icon (every click) and ⌘J are a bottom PTY, not a second
 workspace. The client names a conversation or a project; `engine.TerminalDir`
-picks the directory the agents already use — a project's working directory
-when the conversation is in one, otherwise `workspaces/<thread-id>/`. A
+picks the conversation's execution directory (task-local `work/` for new
+conversations), or the project root for a project-only terminal. A
 `cwd` query is ignored. `GET /api/threads/:id/terminal` (or
 `/api/projects/:id/terminal`) upgrades a same-origin WebSocket, `internal/terminal`
 starts `$SHELL` there, and the first text frame is

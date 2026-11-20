@@ -311,7 +311,7 @@ export function ThreadScreen({
 
   if (agentPage === "files" && fileLink) {
     return <><div className="flex min-h-0 flex-1 flex-col" inert={taskPanels.open} aria-hidden={taskPanels.open}>
-      <FileBrowser link={fileLink} threadId={detail.id} onClose={() => changePage("chat")}
+      <FileBrowser key={`${detail.id}:${panelOwnerKey ?? ""}`} link={fileLink} threadId={detail.id} running={running} onClose={() => changePage("chat")}
         status={<GoalBanner detail={detail} running={running} />} />
     </div><PhoneTaskPanelSheet view={taskPanels} /></>
   }

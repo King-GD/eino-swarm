@@ -163,7 +163,11 @@ func restoreOneProject(ctx context.Context, conn *sql.Conn, dataDir string, arc 
 	if err != nil {
 		return err
 	}
-	backupThreads, err := threadsIn(ctx, conn, arc.dbPath, projectID)
+	liveTaskRoots, err := projectTaskRoots(ctx, conn, "main", projectID)
+	if err != nil {
+		return err
+	}
+	backupThreads, backupTaskRoots, err := threadsIn(ctx, conn, arc.dbPath, projectID)
 	if err != nil {
 		return err
 	}
@@ -171,6 +175,11 @@ func restoreOneProject(ctx context.Context, conn *sql.Conn, dataDir string, arc 
 	if err != nil {
 		return err
 	}
+	roots, err := projectSwapRoots(rels[0], dataDir, arc.filesDir, unionIDs(liveTaskRoots, backupTaskRoots))
+	if err != nil {
+		return err
+	}
+	rels = append(rels[1:], roots...)
 	snapDB, err := tempFile(dataDir, ".backup-project-*")
 	if err != nil {
 		return err
@@ -274,18 +283,23 @@ func inspectProject(ctx context.Context, conn *sql.Conn, dbPath, projectID strin
 	return exists, conflicts, nil
 }
 
-func threadsIn(ctx context.Context, conn *sql.Conn, dbPath, projectID string) ([]string, error) {
+func threadsIn(ctx context.Context, conn *sql.Conn, dbPath, projectID string) ([]string, []string, error) {
 	if err := failNext(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := prepareExportDB(dbPath); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := attach(ctx, conn, "incoming", dbPath); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer detach(context.Background(), conn, "incoming")
-	return listThreads(ctx, conn, "incoming", projectID)
+	threads, err := listThreads(ctx, conn, "incoming", projectID)
+	if err != nil {
+		return nil, nil, err
+	}
+	roots, err := projectTaskRoots(ctx, conn, "incoming", projectID)
+	return threads, roots, err
 }
 
 func unionIDs(a, b []string) []string {

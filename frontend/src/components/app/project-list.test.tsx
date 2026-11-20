@@ -290,7 +290,7 @@ describe("Project list", () => {
 
   it("explains what a project is when there are none", () => {
     renderList({ projects: [] })
-    expect(screen.getByText(/one working directory/)).toBeInTheDocument()
+    expect(screen.getByText(/separate task workspaces/)).toBeInTheDocument()
   })
 
   it("opens skills from the row menu instead of listing them under the name", () => {

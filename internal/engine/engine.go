@@ -51,6 +51,7 @@ var (
 type Engine struct {
 	generations    generationLogs
 	configUpdateMu sync.Mutex
+	workspaceMu    sync.Mutex
 	cfg            *config.Config
 	store          *store.Store
 	pool           *provider.Pool
@@ -259,8 +260,7 @@ func (e *Engine) Providers() *provider.Pool { return e.pool }
 
 // ---------- conversations ----------
 
-// CreateThread opens a new conversation. A conversation in a project works in
-// the project's directory; one in no project gets a workspace of its own.
+// CreateThread opens a conversation with its own task directory.
 func (e *Engine) CreateThread(title, providerID, projectID string) (*store.Thread, error) {
 	if providerID != "" && e.pool.OfficialOnly() {
 		if err := e.pool.ValidateConversationSelection(providerID, ""); err != nil {
@@ -274,6 +274,9 @@ func (e *Engine) CreateThread(title, providerID, projectID string) (*store.Threa
 		return nil, err
 	}
 	projectID = strings.TrimSpace(projectID)
+	e.workspaceMu.Lock()
+	defer e.workspaceMu.Unlock()
+	var project *store.Project
 	if projectID != "" {
 		p, err := e.store.GetProject(projectID)
 		if err != nil {
@@ -282,9 +285,11 @@ func (e *Engine) CreateThread(title, providerID, projectID string) (*store.Threa
 		if err := e.prepareProjectDirs(p); err != nil {
 			return nil, err
 		}
+		project = p
 	}
 	title = strings.TrimSpace(title)
 	th := &store.Thread{
+		ID:         store.NewID("th_"),
 		Title:      title,
 		TitleAuto:  title == "",
 		ProviderID: providerID,
@@ -296,11 +301,16 @@ func (e *Engine) CreateThread(title, providerID, projectID string) (*store.Threa
 	if name, follows, ok := e.pool.ConversationDefault(providerID); ok && !follows && name != "" {
 		th.Model = name
 	}
-	if err := e.store.CreateThread(th); err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(e.WorkspaceDir(th.ID), 0o700); err != nil {
+	if err := e.initTaskWorkspace(th, project); err != nil {
 		return nil, fmt.Errorf("engine: create workspace: %w", err)
+	}
+	if err := e.store.CreateThread(th); err != nil {
+		if _, lookupErr := e.store.GetThread(th.ID); errors.Is(lookupErr, store.ErrNotFound) {
+			if path, pathErr := e.validatedTaskWorkspace(th); pathErr == nil {
+				return nil, errors.Join(err, os.RemoveAll(path))
+			}
+		}
+		return nil, err
 	}
 	e.reindex(th.ID)
 	return th, nil
@@ -317,21 +327,21 @@ func (e *Engine) logPersistFailure(msg string, err error, args ...any) {
 	e.log.Log(context.Background(), level, msg, append(args, "err", err)...)
 }
 
-// DeleteThread stops any running turn, drops the rows and removes the
-// workspace. A conversation the user deleted must not leave its files behind.
-//
-// A conversation in a project is the exception: its directory belongs to the
-// project and is shared with every other conversation in it — and may be the
-// user's own repository. Deleting one conversation must not take that with it.
+// DeleteThread removes its own managed files, never shared or external files.
 func (e *Engine) DeleteThread(id string) error {
+	e.workspaceMu.Lock()
+	defer e.workspaceMu.Unlock()
+	th, err := e.store.GetThread(id)
+	if err != nil {
+		return err
+	}
 	if err := e.Interrupt(id); err != nil && !errors.Is(err, ErrIdle) && !errors.Is(err, ErrNotFound) {
 		return err
 	}
 	e.closeRuntime(id)
-	ws := e.WorkspaceDir(id)
 	e.generations.Lock()
 	e.recordMu.Lock()
-	err := e.store.DeleteThread(id)
+	err = e.store.DeleteThread(id)
 	e.recordMu.Unlock()
 	if err == nil {
 		delete(e.generations.threads, id)
@@ -341,11 +351,7 @@ func (e *Engine) DeleteThread(id string) error {
 		return err
 	}
 	e.dropIndex(id)
-	if e.ownsWorkspace(ws) {
-		if err := os.RemoveAll(ws); err != nil {
-			e.log.Warn("could not remove workspace", "thread", id, "path", ws, "err", err)
-		}
-	}
+	e.removeManagedTaskWorkspace(th)
 	e.removeInputImages(id)
 	if path := e.threadPlanFile(id); path != "" {
 		if err := os.RemoveAll(filepath.Dir(path)); err != nil {
@@ -354,14 +360,6 @@ func (e *Engine) DeleteThread(id string) error {
 	}
 	e.dropSubscribers(id)
 	return nil
-}
-
-// ownsWorkspace reports whether a directory is one zwai created per
-// conversation. Everything else — a project's directory, and above all a path
-// the user typed — is not this function's to delete.
-func (e *Engine) ownsWorkspace(dir string) bool {
-	root := e.cfg.WorkspacesDir()
-	return dir != root && strings.HasPrefix(dir, root+string(os.PathSeparator))
 }
 
 // RenameThread sets a conversation's title. It takes ownership: a namer
@@ -453,28 +451,25 @@ func (e *Engine) SetThreadPinned(id string, pinned bool) error {
 	return e.store.UpdateThread(id, fields)
 }
 
-// WorkspaceDir is where a conversation's agents work.
-//
-// A conversation in a project shares the project's directory: that is the
-// point of a project, and it is why a second conversation can read what the
-// first one wrote. A conversation in no project keeps one of its own, named
-// after it.
-//
-// A project that has gone missing falls back to the per-conversation
-// workspace. Answering with an empty path instead would anchor the tools at
-// the process's own working directory, which is nobody's intent.
+// WorkspaceDir is the working directory of the conversation's agents.
 func (e *Engine) WorkspaceDir(threadID string) string {
+	return e.threadDirectory(threadID, true)
+}
+
+func (e *Engine) TaskFileDir(threadID string) string {
+	return e.threadDirectory(threadID, false)
+}
+
+func (e *Engine) threadDirectory(threadID string, working bool) string {
 	th, err := e.store.GetThread(threadID)
-	if err != nil || strings.TrimSpace(th.ProjectID) == "" {
-		return e.cfg.WorkspaceDir(threadID)
-	}
-	p, err := e.store.GetProject(th.ProjectID)
 	if err != nil {
-		e.log.Warn("conversation points at a project that is not there",
-			"thread", threadID, "project", th.ProjectID, "err", err)
 		return e.cfg.WorkspaceDir(threadID)
 	}
-	return e.ProjectWorkdir(p)
+	root, _ := e.workspacePath(th)
+	if working && root != "" && th.TaskWorkspace != "" {
+		return filepath.Join(root, config.TaskWork)
+	}
+	return root
 }
 
 // ---------- status ----------

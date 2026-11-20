@@ -8712,6 +8712,13 @@ Directory identity regressions in `internal/engine/project_workdir_identity_test
 
 ## PC workspace file preview (F-140 / C-005)
 
+Task-workspace acceptance (`C-052`): the loopback model test runs the real
+manager and write tool in two tasks with the same filenames. Backup tests
+exercise source paths retained after membership changes and exclusion of live
+tasks. `frontend/e2e/task-workspace.spec.ts` drives the production file API;
+the paired-phone scope case in `mobile/e2e/file-preview-controls.spec.ts`
+checks the UI's root-bound file requests and original download bytes.
+
 `frontend/src/lib/file-preview.test.ts` checks actual streamed-byte limits,
 UTF-8/binary classification, safe image MIME selection, cancellation and failed
 HTTP reads. The file-preview hook/component and Files-tab unit tests cover

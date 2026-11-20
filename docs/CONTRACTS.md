@@ -59,6 +59,7 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 - `--omit-secrets` 或不勾选凭据时，备份里的 API key、MCP 秘密写空，并且不含 `remote/`。还原这种备份时，用目标机器上已有的非空 API key、MCP 秘密覆盖备份里的空值，并保留目标机器的 `remote/`。目标机器从未保存过配置时，空配置是成功，不是错误。
 - 成功还原把数据目录外的单调 `data-generation` 加一。该文件不进入备份，旧备份不能把它倒拨。`GET /api/meta` 返回 `data_generation`。桌面和 Web 看到变化后重新加载。手机在同一次连接的轮询里发现代际变化后清空已加载对话列表再拉第一页；第一次读到的数字只作为基线。
 - 不进入备份：`engine.lock`、`engine.json`、`engine.log`、`diagnostics/`、`releases/`、`ios-signing/`、WAL／SHM、`data-generation`。用户自选的外部 `workdir` 只记录路径。被复制目录里的符号链接不跟随、不写入归档，清单用 `skipped_symlinks` 计数；链接仍留在本机。被复制的类别目录本身如果是符号链接，这次备份失败，不写文件。无项目的独立对话只随整库备份迁移。
+- 隔离任务的托管文件依据任务绑定与当前成员关系收集，而非根据物理父目录归属；跳过的任务不复制其任务目录。项目替换保留其他项目或独立对话仍持有的托管目录。见 `C-052`。
 - 实现 `internal/backup`。验证 `internal/backup/backup_test.go`、`internal/engine/backup_test.go`、`internal/server/backup_http_test.go`、`frontend/src/components/app/settings-backup.test.tsx`、`models/backup/DataBackup.tla`。有界模型只检查这个状态机：还原不能在有活跃工作时进入；备份只有在把这些工作标成已跳过时才能在它们仍活跃时进入，否则违反 `RestoringImpliesIdle`。整库失败不改变代际且快照已恢复。项目还原不能写入另一个项目持有的身份。来源：GitHub Issue #164。
 
 ## C-043 External skill packages have an independent catalog
@@ -863,6 +864,13 @@ multimodal System messages and a second refusal do not authorize another retry.
 语音设置按当前来源协商到的 transcription／speech 能力分别显示；LOCAL 个人配置保留自身能力。可配置网关来源在 Models 显示获准角色的模型选择，固定来源仅在 Speech 显示已获准的语音参数。缺失或失败的能力清单不能由旧 configurable 布尔值重新开放控件；保存的选择保留，重试后恢复。
 
 模型配置权限独立于账号目录可用性：有效 bootstrap 的 `configurable` 在 API 权限关闭时仍保留同账号 scope。普通账号可以继续配置和调用自己的服务，托管第三方仍不能切换；不可用账号来源不产生目录项、不能发起模型调用。尚未取得有效网关策略的账号不能借保留的个人选择执行模型请求。验证：`internal/remote/model_policy_no_access_test.go`。
+
+## C-052 Task workspaces stay bound to their files
+
+- 状态 active；关联 `F-120`、`F-140`、`F-224`。新任务以任务 ID 和持久化路径绑定文件；项目内使用 `<项目根>/.zwai-tasks/<id>/`，Agent 和会话终端以 `work/` 为默认路径。成果和上传是同级目录；工具权限不随浏览切换改变。
+- 项目范围以服务端当前成员关系解析，只读，并适用 `C-004`。文件续读使用列表返回的根标识，不允许静默读另一范围。旧会话继续解析原相对路径。目录准备失败不新增会话；已绑定目录缺失时不创建替代目录。改名、移动和项目换目录不搬任务文件。
+- 删除只清理被删任务的托管文件；原项目清理不跨任务归属。备份按当前所属项目收集托管任务根，跳过运行任务时不带它的文件；自选目录只记录路径。
+- 实现 `internal/engine/task_workspace.go`、`internal/backup/task_workspaces.go`；测试 `internal/engine/task_workspace_test.go`、`internal/backup/task_workspaces_test.go`、`frontend/e2e/task-workspace.spec.ts`。
 
 ## C-051 Image generation preserves authority, attempt identity and original pixels
 

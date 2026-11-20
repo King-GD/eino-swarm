@@ -8,6 +8,7 @@ import { SOURCE_KIND_CLASS } from "@/components/app/source-code"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { api } from "@/lib/api"
+import type { FileLocation } from "@/lib/types"
 import { isHtmlPreviewPath, tableDelimiter } from "@/lib/documents/kind"
 import { MAX_RENDERED_PREVIEW_CHARS } from "@/lib/file-preview"
 import { isMarkdownPath } from "@/lib/read-result"
@@ -16,16 +17,17 @@ import { useFilePreview } from "@/lib/use-file-preview"
 import { FilePreviewImage } from "@/components/app/file-preview-image"
 import { useT } from "@/lib/use-t"
 
-export function FilePreviewDialog({ threadId, path, canReveal, onReveal, onClose, onReturnFocus }: {
+export function FilePreviewDialog({ threadId, path, location, canReveal, onReveal, onClose, onReturnFocus }: {
   threadId: string
   path: string
+  location?: FileLocation
   canReveal: boolean
   onReveal: (path: string) => void
   onClose: () => void
   onReturnFocus: () => void
 }) {
   const t = useT()
-  const { file, url, error, loading, refresh } = useFilePreview(threadId, path)
+  const { file, url, error, loading, refresh } = useFilePreview(threadId, path, location)
   const [mode, setMode] = useState("preview")
   const [modePath, setModePath] = useState(path)
   if (modePath !== path) {
@@ -70,7 +72,7 @@ export function FilePreviewDialog({ threadId, path, canReveal, onReveal, onClose
               </Button>
             ) : null}
             <Button variant="ghost" size="sm" className="gap-1.5" asChild>
-              <a href={api.downloadURL(threadId, path)} download><Download />{t("files.download")}</a>
+              <a href={api.downloadURL(threadId, path, location)} download><Download />{t("files.download")}</a>
             </Button>
           </div>
         </div>
@@ -82,7 +84,7 @@ export function FilePreviewDialog({ threadId, path, canReveal, onReveal, onClose
           {file?.kind === "document" ? <PackageFilePreview key={`${path}:${file.bytes.byteLength}`} format={file.format} bytes={file.bytes} /> : null}
           {file?.kind === "text" ? (
             file.text === "" ? <p className="text-sm text-muted-foreground">{t("files.emptyFile")}</p> : html && mode === "preview" ? (
-              <HtmlFilePreview threadId={threadId} path={path} html={file.text} />
+              <HtmlFilePreview threadId={threadId} path={path} html={file.text} location={location} />
             ) : delimiter && mode === "preview" ? (
               <TableFilePreview text={file.text} delimiter={delimiter} />
             ) : markdown && mode === "preview" ? (

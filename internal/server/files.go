@@ -25,23 +25,31 @@ func (s *Server) listFiles(c *gin.Context) {
 	if !ok {
 		return
 	}
+	scope := c.Query("scope")
+	view, err := s.engine.FileWorkspace(th.ID, scope, c.Query("file_root"))
+	if err != nil {
+		s.fail(c, err)
+		return
+	}
 	dir := c.Query("dir")
 	query := strings.TrimSpace(c.Query("q"))
 	var files []engine.FileEntry
-	var err error
 	if query != "" {
-		files, err = s.engine.SearchFiles(c.Request.Context(), th.ID, query)
+		files, err = s.engine.SearchWorkspace(c.Request.Context(), view, query)
 	} else {
-		files, err = s.engine.ListFiles(th.ID, dir)
+		files, err = s.engine.ListWorkspace(view, dir)
 	}
 	if err != nil {
 		s.fail(c, err)
 		return
 	}
-	uploads, err := s.engine.Store().ListAttachments(th.ID)
-	if err != nil {
-		s.fail(c, err)
-		return
+	var uploads []store.Attachment
+	if scope != engine.FileScopeProject {
+		uploads, err = s.engine.Store().ListAttachments(th.ID)
+		if err != nil {
+			s.fail(c, err)
+			return
+		}
 	}
 	// Mark which files the human put there, so the Files panel can separate
 	// "what I gave it" from "what it produced".
@@ -58,7 +66,8 @@ func (s *Server) listFiles(c *gin.Context) {
 		out = append(out, fileView{engineFile: engineFile(f), Uploaded: uploaded[f.Path]})
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"workspace": s.engine.WorkspaceDir(th.ID),
+		"workspace": view.Path,
+		"file_view": view,
 		"files":     out,
 	})
 }
@@ -70,6 +79,10 @@ type engineFile = fileEntryAlias
 func (s *Server) uploadFiles(c *gin.Context) {
 	th, ok := s.thread(c)
 	if !ok {
+		return
+	}
+	if scope := c.Query("scope"); scope != "" && scope != engine.FileScopeTask {
+		s.fail(c, engine.ErrFileScope)
 		return
 	}
 	// The same WebKit filename bytes that break a draft save break this upload.
@@ -132,7 +145,12 @@ func (s *Server) downloadFile(c *gin.Context) {
 		return
 	}
 	rel := strings.TrimPrefix(c.Param("path"), "/")
-	f, err := s.engine.OpenWorkspaceFile(th.ID, rel)
+	view, err := s.engine.FileWorkspace(th.ID, c.Query("scope"), c.Query("file_root"))
+	if err != nil {
+		s.fail(c, err)
+		return
+	}
+	f, err := view.OpenFile(rel)
 	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "no such file in this conversation's workspace"})
 		return
@@ -166,8 +184,12 @@ func (s *Server) deleteFile(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if scope := c.Query("scope"); scope != "" && scope != engine.FileScopeTask {
+		s.fail(c, engine.ErrFileScope)
+		return
+	}
 	rel := strings.TrimPrefix(c.Param("path"), "/")
-	if err := s.engine.DeleteFile(th.ID, rel); err != nil {
+	if err := s.engine.DeleteFileAtRoot(th.ID, rel, c.Query("file_root")); err != nil {
 		s.fail(c, err)
 		return
 	}
@@ -196,9 +218,14 @@ func (s *Server) reveal(c *gin.Context) {
 		badRequest(c, "could not read the request body: %v", err)
 		return
 	}
-	target := s.engine.WorkspaceDir(th.ID)
+	view, err := s.engine.FileWorkspace(th.ID, c.Query("scope"), c.Query("file_root"))
+	if err != nil {
+		s.fail(c, err)
+		return
+	}
+	target := view.Path
 	if strings.TrimSpace(req.Path) != "" {
-		abs, err := s.engine.ResolveWorkspacePath(th.ID, req.Path)
+		abs, err := view.RevealPath(req.Path)
 		if err != nil {
 			s.fail(c, err)
 			return

@@ -17,7 +17,7 @@ import (
 func TestWorkspaceSymlinkCannotCarryHTTPFileRequestsOutside(t *testing.T) {
 	h := newHarness(t)
 	id := h.newThread()
-	root := h.app.Engine.WorkspaceDir(id)
+	root := h.app.Engine.TaskFileDir(id)
 	outside := t.TempDir()
 	secret := filepath.Join(outside, "secret.txt")
 	if err := os.WriteFile(secret, []byte("outside bytes"), 0o600); err != nil {
@@ -72,7 +72,7 @@ func TestWorkspaceSymlinkCannotCarryHTTPFileRequestsOutside(t *testing.T) {
 func TestWorkspaceFileRequestsKeepTheExactName(t *testing.T) {
 	h := newHarness(t)
 	id := h.newThread()
-	root := h.app.Engine.WorkspaceDir(id)
+	root := h.app.Engine.TaskFileDir(id)
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		t.Fatal(err)
 	}
