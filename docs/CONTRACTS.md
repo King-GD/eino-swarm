@@ -320,7 +320,7 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 
 - 本地 Claude、Codex 和 Cursor 任务已禁用。PC 不扫描任务文件，所有手机收件箱响应省略 `clients`。仅旧手机显式调用 `clients` 时收到 `enabled:false`，无任务数据。旧 `client_read` 请求返回 `not_found`，负分页偏移仍返回 `bad_request`。新手机忽略旧 PC 返回的本地任务。证据：`internal/remote/clients_test.go`、`internal/server/clients_test.go`、`mobile/src/app.test.tsx`。
 
-- 轮次导航：PC 打开详情的 `turns[].user_text` 是可选的单行用户输入预览，受 `summary_chars` 限制；既有 `turns[].text` 的回复预览语义不变。手机优先使用已加载的用户消息。旧 PC 缺少输入预览时，手机对当前会话最多额外读取八页历史，按轮次 ID 提取用户输入，且不改变正文、分页游标或阅读位置。没有已验证输入时显示「暂无输入预览」。点选配对会话的轮次时，已加载的回复仍可继续向前读取，直到找到该轮提问或确认到达轮次起点。没有提问时使用该轮第一条可见内容跟踪位置。跟随正文时，宽度足够便保持当前轮和上一轮完整可点。横滑导航条后保留浏览位置，重新滚动正文或选中轮次后恢复跟随。证据：`internal/remote/snapshot_reads_test.go`、`mobile/e2e/conversation-open.spec.ts`。
+- 轮次导航：PC 打开详情的 `turns[].user_text` 是可选的单行用户输入预览，受 `summary_chars` 限制；既有 `turns[].text` 的回复预览语义不变。运行轮次即使只有工具活动可见也进入导航；打开运行中的会话或跟随到实时末尾时高亮该轮，向上阅读仍按正文位置高亮。手机优先使用已加载的用户消息；运行轮次的输入不在实时页、或旧 PC 缺少输入预览时，对当前会话最多额外读取八页历史，按轮次 ID 提取用户输入，且不改变正文、分页游标或阅读位置。没有已验证输入时显示「暂无输入预览」。点选配对会话的轮次时，已加载的回复仍可继续向前读取，直到找到该轮提问或确认到达轮次起点。没有提问时使用该轮第一条可见内容跟踪位置。跟随正文时，宽度足够便保持当前轮和上一轮完整可点。横滑导航条后保留浏览位置，重新滚动正文或选中轮次后恢复跟随。证据：`internal/remote/snapshot_reads_test.go`、`mobile/e2e/conversation-open.spec.ts`。
 
 - Model discovery is refreshed on the same live link after a PC mode/scope change and after phone account model-policy changes. Refreshes to one PC are serialized; late old-scope responses cannot replace the current list. Voice-only catalog metadata does not refresh model choices. A legacy PC omitting Gateway capability metadata shows an explicit PC-update notice; phone authority never substitutes for that PC's grant. Evidence: `mobile/src/lib/model-source-refresh.test.ts`.
 
@@ -555,9 +555,9 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 ## C-015 Phone Back follows visible layers
 
 - 状态：active；类型：lifecycle；作用范围：Android／iOS 手机壳、手机页面及覆盖层；关联功能：`F-220`, `F-222`, `F-224`, `F-230`。
-- 契约内容：Android 系统返回及 iOS 从左侧 44 点内开始的有效右滑，先关闭当前可见的最上层详情或弹层。iOS 对短快滑使用速度及最短水平位移共同判定。子 Agent 详情→子 Agent 列表→对话→收件箱、文件预览→文件列表→对话均遵守该层级。子 Agent 导航取决于已打开的页面，即使刷新历史时暂时找不到该 Agent，也不跳过列表。只有手机首页（收件箱、直接聊天列表或未绑定扫码页）返回时才允许 Android Activity 退出；iOS 首页滑动保留应用。
-- 允许行为：详情关闭后留在原列表，Android 再次从首页返回退出；禁止行为：详情可见时直接退出、iOS 短滑／取消／垂直／非左边缘手势返回、把正文的横向滑动作为返回；失败语义：返回动作不依赖网络请求成功；不变量：一个有效手势只消费当前最上层，iOS 在完成手势时读取当前返回处理器，后来打开的模型选择弹层优先关闭；边界条件：多层覆盖、组件卸载、根页面。
-- 证据：实现 `mobile/src/lib/android-back.ts`, `mobile/ios/App/App/BridgeViewController.swift`, `mobile/src/components/model-picker.tsx`, `mobile/src/components/composer-menu.tsx`, `mobile/src/components/thread-screen.tsx`, `mobile/src/components/file-browser.tsx`, `mobile/src/app.tsx`；测试 `mobile/src/lib/android-back.test.ts`, `mobile/src/components/thread-screen.test.tsx`, `mobile/src/components/composer-slash.test.tsx`, `mobile/src/app.test.tsx`, `mobile/src/components/file-browser.test.tsx`, `mobile/e2e/walkthrough.spec.ts`, `mobile/e2e/ios-wait-layout.swift`；变更规则：新增手机覆盖层须同步测试 Android 系统返回、iOS 原生边缘滑动及各自首页行为；来源：GitHub Issue #36、#48、#54、#75。
+- 契约内容：Android 系统返回及 iOS 有效右滑先关闭当前可见的最上层详情或弹层。iOS 从左侧 44 点内开始的右滑保留原生识别（短快滑同时要求速度和最短位移）；从内容区开始则须水平右移至少 72 CSS px，松手时位于右侧 44 CSS px 内，且不接管横向滚动区、编辑或选中文字的触摸。子 Agent 详情→子 Agent 列表→对话→收件箱、文件预览→文件列表→对话均遵守该层级。子 Agent 导航取决于已打开的页面，即使刷新历史时暂时找不到该 Agent，也不跳过列表。只有手机首页（收件箱、直接聊天列表或未绑定扫码页）返回时才允许 Android Activity 退出；iOS 首页滑动保留应用。
+- 允许行为：详情关闭后留在原列表，Android 再次从首页返回退出；禁止行为：详情可见时直接退出、iOS 位移不足／取消／垂直滑动返回、把导航条和表格等区域的横向滚动作为内容区返回；失败语义：返回动作不依赖网络请求成功；不变量：一个有效手势只消费当前最上层，iOS 在完成手势时读取当前返回处理器，后来打开的模型选择弹层优先关闭；边界条件：多层覆盖、组件卸载、根页面。
+- 证据：实现 `mobile/src/lib/android-back.ts`, `mobile/src/lib/ios-content-back.ts`, `mobile/ios/App/App/BridgeViewController.swift`, `mobile/src/components/model-picker.tsx`, `mobile/src/components/composer-menu.tsx`, `mobile/src/components/thread-screen.tsx`, `mobile/src/components/file-browser.tsx`, `mobile/src/app.tsx`；测试 `mobile/src/lib/android-back.test.ts`, `mobile/src/lib/ios-content-back.test.ts`, `mobile/src/components/thread-screen.test.tsx`, `mobile/src/components/composer-slash.test.tsx`, `mobile/src/app.test.tsx`, `mobile/src/components/file-browser.test.tsx`, `mobile/e2e/walkthrough.spec.ts`, `mobile/e2e/ios-wait-layout.swift`, `mobile/e2e/ios-conversation-open.swift`；变更规则：新增手机覆盖层须同步测试 Android 系统返回、iOS 左缘和内容区右滑及各自首页行为；来源：GitHub Issue #36、#48、#54、#75。
 
 ## C-016 Explicit PC selection opens its inbox
 

@@ -5,9 +5,9 @@ in Chromium and iPhone WebKit. The compact fixture exercises three turns,
 one-tap Earlier, deferred work expansion and shared Chat/PC scrolling.
 `internal/remote/log_compact_test.go` checks the encrypted watch and expansion,
 hundreds of work events between answers, ask receipts, and the frame budget.
-For native back, `testLeftEdgeSwipeReturnsThroughAgentPages` in
-`mobile/e2e/ios-wait-layout.swift` also starts a fast swipe 30 points from the
-left edge, within the content viewport.
+For native back, `testRightSwipeReturnsThroughAgentPages` in
+`mobile/e2e/ios-wait-layout.swift` checks both a swipe from the center to
+near the right edge and a fast swipe starting 30 points from the left edge.
 
 The inbox search regression in `mobile/e2e/composer-layout.spec.ts` checks the
 search font and visual viewport layout on both phone browser profiles.
@@ -8093,18 +8093,19 @@ The formal `mobile/ios/App/AppUITests/BindFlowTests.swift`
 button and asserts that the keyboard disappears before opening the menu.
 iOS 26 exposes its checkmark as `selected`, so looking for a literal `Done`
 fails before the menu assertions; those version/update-entry assertions remain.
-For Issue #75, set `IOS_LAYOUT_QUERY='/?mock=1&tick=150&history=streamed-agents'`
+For phone Back, set `IOS_LAYOUT_QUERY='/?mock=1&tick=150&history=streamed-agents'`
 when creating the fixture and select these three native XCTests from
-`mobile/e2e/ios-wait-layout.swift`: `testLeftEdgeSwipeReturnsThroughAgentPages`,
-`testLeftEdgeSwipeDismissesModelPickerBeforeThread` and
-`testEdgeSwipeIgnoresShortVerticalAndNonEdgeMotion` (each with
+`mobile/e2e/ios-wait-layout.swift`: `testRightSwipeReturnsThroughAgentPages`,
+`testCenterSwipeDismissesModelPickerBeforeThread` and
+`testRightSwipeIgnoresShortVerticalAndUncommittedMotion` (each with
 `-only-testing:AppUITests/BindFlowTests/<test-name>`).
-Start at the left screen edge rather than
-using a centre-screen `swipeRight()`: the packaged app must return worker →
-Agents → conversation → inbox, keep the root open, dismiss the current model
-picker before its conversation and ignore short, vertical, centre and opposite
-edge gestures. Browser tests of the same return hook prove page-layer behavior;
-they do not prove recognition of the UIKit gesture.
+The packaged app must return worker → Agents → conversation → inbox using both
+swipe paths, keep the root open, and dismiss the model picker before its
+conversation. Short, vertical, diagonal, opposite-direction and center swipes
+ending early must not return. `testLegacyTurnPreviewsStayBrowsableBeforeJumping`
+uses the compact legacy fixture below and verifies that the same long right
+swipe moves the navigation strip instead of leaving the conversation. Browser
+tests of the return hook do not prove recognition of a real iOS touch sequence.
 For the hidden-history opening regression, use the dedicated
 `mobile/e2e/ios-conversation-open.swift` case and disposable fixture described
 under Phone conversation loading below. The opening must reach a visible
@@ -9078,6 +9079,12 @@ force, saved reasons do not authorize later runs, and check-only runs do not
 write publication receipts.
 
 ### Phone conversation loading (F-220 / C-006)
+
+The running-tail case serves only live thinking and tools in the watch
+window, with the running turn omitted from the completed summaries.
+Opening or reopening must highlight the running turn, recover its prompt
+preview without inserting history into the transcript, and still let a reader
+jump to an earlier prompt. Both current and legacy summary shapes are tested.
 
 The legacy turn-navigation case strips the prompt previews from the PC
 snapshot. Its phone must populate earlier labels through compact history

@@ -120,7 +120,8 @@ export function ThreadScreen({
   ]
   const [agentPage, setAgentPage] = useState("chat")
   const taskPanels = usePhoneTaskPanelView(fileLink, detail.id, panelOwnerKey)
-  const destinations = pairedTurnDestinations(detail.turns ?? [], manager)
+  const turnId = detail.running?.turn_id
+  const destinations = pairedTurnDestinations(detail.turns ?? [], manager, turnId)
   const suppliedPreviews = new Set(detail.turns?.filter((turn) => turn.user_text).map((turn) => turn.id))
   const olderPreviews = useOlderTurnPreviews(
     caughtUp && hasMore && destinations.length >= 3 ? fileLink : undefined,
@@ -132,7 +133,6 @@ export function ThreadScreen({
   const opening = !caughtUp && blocks.length === 0
   const asking = Boolean(detail.running?.ask_user || ask?.pending)
   const running = Boolean(detail.running)
-  const turnId = detail.running?.turn_id
   const iterationLimit = pendingIterationLimit(manager, detail.running?.turn_id)
   const waiting = Boolean(detail.waiting && !running)
   const scroller = useRef<HTMLDivElement>(null)
@@ -380,7 +380,7 @@ export function ThreadScreen({
         <TurnNavigation turns={destinations.map((turn) => ({
           ...turn, label: turn.label || olderPreviews?.get(turn.id) || "",
         }))}
-          scroller={scroller} pending={loadingOlder} onJump={jumpToTurn} />
+          scroller={scroller} runningTurnId={turnId} pending={loadingOlder} onJump={jumpToTurn} />
       ) : null}
 
       {hasMore ? (

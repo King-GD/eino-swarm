@@ -78,6 +78,37 @@ test("turn six leaves turn five fully tappable without moving the strip", async 
   await expect(fifth).toHaveAttribute("aria-current", "location")
 })
 
+for (const legacy of [false, true]) {
+  test(`opens at the running turn with its input outside the watch window${legacy ? " on a legacy PC" : ""}`, async ({ page }, info) => {
+    await page.addInitScript(() => localStorage.setItem("zwai.phone.locale", "en"))
+    await page.goto(`/?mock=1&tick=0&history=compact&running-tail=1${legacy ? "&legacy-turn-previews=1" : ""}`)
+    const rail = page.getByRole("navigation", { name: "Conversation turns" })
+    const transcript = page.getByTestId("transcript")
+    const prompt = transcript.getByText("Continue the analysis", { exact: true })
+    const last = rail.getByRole("button", { name: /^Jump to turn 4:/ })
+    for (let visit = 0; visit < 2; visit++) {
+      await expect(transcript.getByTestId("work-fold")).toBeInViewport()
+      await expect(prompt).toHaveCount(0)
+      await expect(last).toHaveAttribute("aria-current", "location")
+      await expect(last).toHaveAccessibleName("Jump to turn 4: Continue the analysis")
+      await expect(rail.getByRole("button", { name: "Jump to turn 1: First prompt" })).toHaveCount(1)
+      await expect(rail.getByRole("button", { name: "Jump to turn 3: Third prompt" })).toBeInViewport({ ratio: 0.99 })
+      await expect(last).toBeInViewport({ ratio: 0.99 })
+      if (visit === 0) {
+        await page.getByRole("button", { name: "Back", exact: true }).tap()
+        await page.getByTestId("project-stack").getByRole("button", { name: "Open Trim the layout pass", exact: true }).tap()
+      }
+    }
+    await expect(prompt).toHaveCount(0)
+    await page.screenshot({ path: info.outputPath("running-tail-with-prompt-previews.png") })
+    await rail.evaluate((strip) => { strip.scrollLeft = 0 })
+    const first = rail.getByRole("button", { name: "Jump to turn 1: First prompt" })
+    await first.tap()
+    await expect(transcript.getByText("First prompt", { exact: true })).toBeInViewport()
+    await expect(first).toHaveAttribute("aria-current", "location")
+  })
+}
+
 for (const earlierFirst of [false, true]) {
   test(`a turn jump finds its prompt across a split history page${earlierFirst ? " after Earlier loaded the reply" : ""}`, async ({ page }) => {
     await page.addInitScript(() => localStorage.setItem("zwai.phone.locale", "en"))

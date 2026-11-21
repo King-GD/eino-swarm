@@ -221,7 +221,7 @@ final class BindFlowTests: XCTestCase {
     return XCTWaiter.wait(for: [reached], timeout: 8) == .completed
   }
 
-  func testLeftEdgeSwipeReturnsThroughAgentPages() throws {
+  func testRightSwipeReturnsThroughAgentPages() throws {
     let app = XCUIApplication()
     app.launch()
     let agents = app.buttons["Agents (3)"]
@@ -235,15 +235,15 @@ final class BindFlowTests: XCTestCase {
     XCTAssertTrue(app.staticTexts["Worker evidence"].waitForExistence(timeout: 8))
     recordAgentPage(app, name: "edge-back-worker-before")
 
-    nearEdgeBack(app)
+    centerBack(app)
     let workerReturned = group.waitForExistence(timeout: 5)
     recordAgentPage(app, name: "edge-back-worker-to-roster")
-    XCTAssertTrue(workerReturned, "one native left-edge swipe must return from worker to the Agents list")
+    XCTAssertTrue(workerReturned, "one swipe from the center to the right edge must return from worker to the Agents list")
     guard workerReturned else { return }
     XCTAssertFalse(app.staticTexts["Worker evidence"].exists)
     assertNoManagerHistory(app)
 
-    leftEdgeBack(app)
+    nearEdgeBack(app)
     XCTAssertTrue(agents.waitForExistence(timeout: 5), "one swipe from Agents must return to the manager, not skip to the inbox")
     XCTAssertTrue(app.textViews["Message"].exists)
     recordAgentPage(app, name: "edge-back-roster-to-manager")
@@ -253,13 +253,13 @@ final class BindFlowTests: XCTestCase {
     XCTAssertTrue(inboxThread.waitForExistence(timeout: 5), "the next swipe must return to the inbox")
     XCTAssertFalse(app.buttons["Back"].exists)
     recordAgentPage(app, name: "edge-back-manager-to-inbox")
-    leftEdgeBack(app)
-    XCTAssertTrue(inboxThread.exists, "a root swipe must leave the inbox open")
+    centerBack(app)
+    XCTAssertTrue(inboxThread.isHittable, "a root swipe must leave the inbox open")
     XCTAssertFalse(app.buttons["Back"].exists)
     recordAgentPage(app, name: "edge-back-inbox-root-unchanged")
   }
 
-  func testLeftEdgeSwipeDismissesModelPickerBeforeThread() throws {
+  func testCenterSwipeDismissesModelPickerBeforeThread() throws {
     let app = XCUIApplication()
     app.launch()
     let agents = app.buttons["Agents (3)"]
@@ -271,7 +271,7 @@ final class BindFlowTests: XCTestCase {
     let close = app.buttons["Close"].firstMatch
     XCTAssertTrue(close.waitForExistence(timeout: 5))
     recordAgentPage(app, name: "edge-back-model-picker-before")
-    leftEdgeBack(app, y: 0.8)
+    centerBack(app, y: 0.8)
     XCTAssertTrue(close.waitForNonExistence(timeout: 5), "the dynamically installed model-picker hook must own the first swipe")
     XCTAssertTrue(agents.exists, "dismissing the model picker must preserve the conversation")
     XCTAssertTrue(app.textViews["Message"].exists)
@@ -282,7 +282,7 @@ final class BindFlowTests: XCTestCase {
     recordAgentPage(app, name: "edge-back-after-model-picker-to-inbox")
   }
 
-  func testEdgeSwipeIgnoresShortVerticalAndNonEdgeMotion() throws {
+  func testRightSwipeIgnoresShortVerticalAndUncommittedMotion() throws {
     let app = XCUIApplication()
     app.launch()
     let agents = app.buttons["Agents (3)"]
@@ -293,7 +293,8 @@ final class BindFlowTests: XCTestCase {
     for (name, start, end) in [
       ("short", CGVector(dx: 0.01, dy: 0.45), CGVector(dx: 0.09, dy: 0.45)),
       ("vertical", CGVector(dx: 0.01, dy: 0.4), CGVector(dx: 0.01, dy: 0.7)),
-      ("center-right", CGVector(dx: 0.4, dy: 0.6), CGVector(dx: 0.85, dy: 0.6)),
+      ("center-stops-early", CGVector(dx: 0.4, dy: 0.6), CGVector(dx: 0.8, dy: 0.6)),
+      ("center-diagonal", CGVector(dx: 0.5, dy: 0.35), CGVector(dx: 0.97, dy: 0.7)),
       ("right-edge-left", CGVector(dx: 0.99, dy: 0.6), CGVector(dx: 0.2, dy: 0.6)),
     ] {
       app.coordinate(withNormalizedOffset: start).press(forDuration: 0.05,
@@ -307,9 +308,15 @@ final class BindFlowTests: XCTestCase {
     recordAgentPage(app, name: "edge-back-valid-after-ignored-motion")
   }
 
-  private func leftEdgeBack(_ app: XCUIApplication, y: CGFloat = 0.45) {
-    let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: y))
-    let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: y))
+  private func centerBack(_ app: XCUIApplication, y: CGFloat = 0.45) {
+    let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: y))
+    let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: y))
+    start.press(forDuration: 0.05, thenDragTo: end)
+  }
+
+  private func leftEdgeBack(_ app: XCUIApplication) {
+    let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.45))
+    let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.45))
     start.press(forDuration: 0.05, thenDragTo: end)
   }
 

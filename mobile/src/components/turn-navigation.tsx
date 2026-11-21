@@ -8,7 +8,7 @@ export type TurnDestination = { id: string; label: string }
 
 const promptInset = 8
 
-export function pairedTurnDestinations(turns: TurnView[], blocks: CompactBlock[]): TurnDestination[] {
+export function pairedTurnDestinations(turns: TurnView[], blocks: CompactBlock[], runningTurnId?: string): TurnDestination[] {
   const prompts = new Map<string, string>()
   const loaded = new Map<string, number>()
   blocks.forEach((block, index) => {
@@ -22,6 +22,7 @@ export function pairedTurnDestinations(turns: TurnView[], blocks: CompactBlock[]
   const listed = new Set(turns.map((turn) => turn.id))
   const firstListed = Math.min(...turns.map((turn) => loaded.get(turn.id) ?? Infinity))
   const extra = [...prompts].filter(([id]) => !listed.has(id))
+  if (runningTurnId && !listed.has(runningTurnId) && !prompts.has(runningTurnId)) extra.push([runningTurnId, ""])
   const make = (id: string, label: string) => ({ id, label })
   return [
     ...extra.filter(([id]) => (loaded.get(id) ?? Infinity) < firstListed && Number.isFinite(firstListed))
@@ -32,9 +33,10 @@ export function pairedTurnDestinations(turns: TurnView[], blocks: CompactBlock[]
   ]
 }
 
-export function TurnNavigation({ turns, scroller, pending, onJump }: {
+export function TurnNavigation({ turns, scroller, runningTurnId, pending, onJump }: {
   turns: TurnDestination[]
   scroller: RefObject<HTMLElement | null>
+  runningTurnId?: string
   pending?: boolean
   onJump: (id: string) => void
 }) {
@@ -60,8 +62,8 @@ export function TurnNavigation({ turns, scroller, pending, onJump }: {
       }
       const starts = rows.filter((row) => byTurn.get(row.dataset.phoneTurn ?? "") === row)
       const maxScroll = viewport.scrollHeight - viewport.clientHeight
-      if (maxScroll > 1 && viewport.scrollTop >= maxScroll - 1) {
-        setCurrent(starts.at(-1)?.dataset.phoneTurn)
+      if ((maxScroll > 1 || runningTurnId) && viewport.scrollTop >= maxScroll - 1) {
+        setCurrent(runningTurnId && ids.has(runningTurnId) ? runningTurnId : starts.at(-1)?.dataset.phoneTurn)
         return
       }
       const readingLine = viewport.getBoundingClientRect().top + promptInset + 1
@@ -88,7 +90,7 @@ export function TurnNavigation({ turns, scroller, pending, onJump }: {
       viewport.removeEventListener("keydown", resumeFollowing)
       observer.disconnect()
     }
-  }, [scroller, turns])
+  }, [scroller, turns, runningTurnId])
 
   // A new render or newly loaded label cannot move a manually browsed strip.
   useLayoutEffect(() => {

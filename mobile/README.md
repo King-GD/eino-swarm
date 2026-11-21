@@ -351,7 +351,9 @@ While following the transcript, the strip keeps the current and previous
 buttons fully in view when both fit.
 Swipe the strip sideways to browse other prompts. It keeps that position
 through live updates until you scroll the transcript again or tap a turn.
-If a paired PC omits older prompt previews, the phone reads a bounded number
+Opening a running paired conversation highlights its latest turn, even if
+the live page contains only tool activity. When a prompt is outside the live
+page and the PC has not supplied a preview, the phone reads a bounded number
 of history pages without moving the transcript. Entries with missing input
 show **No prompt preview**. Tap a turn to jump to its prompt. When the reply
 and prompt are on separate history pages, the phone keeps loading until it
@@ -386,11 +388,12 @@ The header Back button and Android system Back return from a worker log to
 the Agents list, then to the conversation, before leaving for the inbox.
 Loading Earlier history after several streamed replies keeps the Agents list free
 of manager paragraphs and work folds; those remain in the manager conversation.
-On iOS, swipe right from near the left edge to return through the same visible
-layers, including dismissing an open model picker first. One completed gesture
-returns one layer; root screens stay open. Cancelled, vertical, non-edge or
-below-threshold swipes leave the page open, and swiping left does not create forward
-navigation. The gesture does not use browser history.
+On iOS, swipe right from the left edge as before, or swipe from the middle
+of the content to near the right edge. One completed gesture returns one
+layer, dismissing an open model picker first; root screens stay open.
+The middle swipe leaves horizontally scrollable content and text editing alone.
+Cancelled, vertical, short or incomplete swipes do not return, and swiping
+left does not go forward. The gesture does not use browser history.
 The `schedule` event is still **A wait is armed.** in the transcript; the live
 wait is the banner (next check, **Run now**, **Cancel wait**).
 Each finished PC turn leaves a divider stamped with its host completion time,

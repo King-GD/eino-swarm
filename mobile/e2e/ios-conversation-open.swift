@@ -54,7 +54,7 @@ final class BindFlowTests: XCTestCase {
     XCTAssertTrue(second.exists)
     let railY = (newest.frame.midY - app.frame.minY) / app.frame.height
     let left = app.coordinate(withNormalizedOffset: CGVector(dx: 0.36, dy: railY))
-    let right = app.coordinate(withNormalizedOffset: CGVector(dx: 0.83, dy: railY))
+    let right = app.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: railY))
     left.press(forDuration: 0.06, thenDragTo: right)
     let olderX = second.frame.minX
     right.press(forDuration: 0.06, thenDragTo: left)
@@ -69,7 +69,7 @@ final class BindFlowTests: XCTestCase {
       first.isHittable && second.frame.minX > newerX + 15
     }, object: nil)
     XCTAssertEqual(XCTWaiter.wait(for: [reachedOlder], timeout: 5), .completed,
-      "the older prompt preview must stay in view after the swipe")
+      "a swipe ending at the right edge must scroll the rail, not navigate back")
     XCTAssertTrue(app.buttons["Back"].firstMatch.isHittable)
     XCTAssertFalse(app.staticTexts["Response 1"].firstMatch.exists, "browsing labels must not load the transcript")
     record(app, "legacy-turn-previews-before-jump")

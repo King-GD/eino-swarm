@@ -1,5 +1,5 @@
 import { mockGeneratedImageChunk, mockGeneratedImageTurn } from "./mock-generated-image"
-import { compactHistoryFixture, compactHistorySteps, compactTurnSummaries, mockCompactPage } from "./mock-compact-history"
+import { compactHistoryFixture, compactHistoryRunning, compactHistorySteps, compactTurnSummaries, mockCompactPage } from "./mock-compact-history"
 import { MockProjects } from "./mock-projects"
 import { MockProductMode } from "./mock-product-mode"
 import { MockSpeech } from "./mock-speech"
@@ -225,7 +225,7 @@ export class MockHost {
     if (live) {
       const goalFixture = mockGoalFixture(new URLSearchParams(location.search).get("history"))
       if (compactHistoryFixture(live.id)) {
-        this.seed(live, compactHistorySteps(), false)
+        this.seed(live, compactHistorySteps(), compactHistoryRunning())
         live.readSeq = live.completedSeq
       } else if (new URLSearchParams(location.search).get("history") === "reasoning-only") {
         this.seed(live, reasoningOnlyTurn(true), true)
