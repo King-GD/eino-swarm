@@ -33,3 +33,34 @@ func TestTaskPanelDefaultsAreDetachedAndLimitsAreValidated(t *testing.T) {
 		t.Fatal("defaults shares switch")
 	}
 }
+
+// A user can retarget or switch off one portrait lookup without losing the
+// defaults of the others, and a snapshot never shares the live tool map.
+func TestEASMToolDefaultsKeepUserOverrides(t *testing.T) {
+	p := (TaskPanelConfig{EASM: EASMPanelConfig{Tools: map[string]string{"heat": "", "stats": "custom_stats"}}}).WithDefaults()
+	if err := p.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if p.EASM.Tools["heat"] != "" || p.EASM.Tools["stats"] != "custom_stats" || p.EASM.Tools["organizations"] != EASMToolRoles["organizations"] || p.EASM.MaxDomains != 20 {
+		t.Fatalf("tools=%v max=%d", p.EASM.Tools, p.EASM.MaxDomains)
+	}
+	copy := p.WithDefaults()
+	copy.EASM.Tools["stats"] = "changed"
+	if p.EASM.Tools["stats"] != "custom_stats" {
+		t.Fatal("defaults share the tool map")
+	}
+	for _, edit := range []func(*EASMPanelConfig){
+		func(c *EASMPanelConfig) { c.MaxDomains = 201 },
+		func(c *EASMPanelConfig) { c.MaxComponents = 4 },
+		func(c *EASMPanelConfig) { c.Tools = map[string]string{"unknown": "x"} },
+		func(c *EASMPanelConfig) { c.Tools = map[string]string{"stats": " padded"} },
+		func(c *EASMPanelConfig) { c.ServerID = "id " },
+	} {
+		bad := p
+		bad.EASM = p.EASM.withDefaults()
+		edit(&bad.EASM)
+		if bad.Validate() == nil {
+			t.Fatalf("accepted %+v", bad.EASM)
+		}
+	}
+}

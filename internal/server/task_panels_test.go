@@ -53,6 +53,27 @@ func TestTaskPanelHTTPSettingsAndConversationIsolation(t *testing.T) {
 	h.json(http.MethodGet, "/api/threads/missing/panels", nil, http.StatusNotFound)
 }
 
+// The EASM bindings save as one object: clearing one role keeps the user's
+// other bindings, and an unknown role is refused instead of silently ignored.
+func TestTaskPanelHTTPSettingsSaveEASMBindings(t *testing.T) {
+	h := newHarness(t)
+	before := h.json(http.MethodGet, "/api/task-panels/settings", nil, http.StatusOK)
+	easm := before["easm"].(map[string]any)
+	tools := easm["tools"].(map[string]any)
+	tools["heat"] = ""
+	tools["stats"] = "custom_stats"
+	easm["server_id"] = "fixture-server"
+	after := h.json(http.MethodPut, "/api/task-panels/settings", map[string]any{"easm": easm}, http.StatusOK)
+	saved := after["easm"].(map[string]any)
+	savedTools := saved["tools"].(map[string]any)
+	if saved["server_id"] != "fixture-server" || savedTools["heat"] != "" || savedTools["stats"] != "custom_stats" || savedTools["organizations"] != tools["organizations"] || after["concurrency"] != before["concurrency"] {
+		t.Fatalf("saved=%v", after)
+	}
+	for _, bad := range []map[string]any{{"tools": map[string]any{"unknown": "x"}, "max_domains": 20, "max_components": 20}, {"tools": tools, "max_domains": 0, "max_components": 20}} {
+		h.json(http.MethodPut, "/api/task-panels/settings", map[string]any{"easm": bad}, http.StatusBadRequest)
+	}
+}
+
 func TestTaskPanelSSEDeliversCommittedPatchWithoutChatSequence(t *testing.T) {
 	h := newHarness(t)
 	thread := h.newThread()

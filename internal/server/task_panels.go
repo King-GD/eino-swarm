@@ -48,7 +48,7 @@ func (s *Server) putTaskPanelSettings(c *gin.Context) {
 		badRequest(c, "settings must contain one JSON object")
 		return
 	}
-	allowed := map[string]bool{"enabled": true, "fofa_client": true, "max_assets": true, "batch_size": true, "concurrency": true, "timeout_seconds": true, "flush_interval_ms": true, "max_state_bytes": true, "max_update_bytes": true}
+	allowed := map[string]bool{"enabled": true, "fofa_client": true, "max_assets": true, "batch_size": true, "concurrency": true, "timeout_seconds": true, "flush_interval_ms": true, "max_state_bytes": true, "max_update_bytes": true, "easm": true}
 	for key, raw := range fields {
 		if !allowed[key] || string(raw) == "null" {
 			badRequest(c, "unknown or null task panel setting")

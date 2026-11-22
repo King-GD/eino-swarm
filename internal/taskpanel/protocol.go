@@ -46,13 +46,19 @@ type SourceDefinition struct {
 	InputSchema json.RawMessage `json:"input_schema"`
 }
 
+// RendererNative marks a definition drawn by a bundled application component.
+const RendererNative = "native"
+
 // Definition is a bundled plugin's immutable code and state contract.
 type Definition struct {
-	ID           string            `json:"id"`
-	Version      string            `json:"version"`
-	Name         string            `json:"name"`
-	Description  string            `json:"description"`
-	Entry        string            `json:"entry"`
+	ID          string `json:"id"`
+	Version     string `json:"version"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Entry       string `json:"entry"`
+	// Renderer "native" names a first-party component bundled with the app
+	// instead of an iframe entry. Only repository code can register one.
+	Renderer     string            `json:"renderer,omitempty"`
 	Schema       json.RawMessage   `json:"schema"`
 	InitialState json.RawMessage   `json:"initial_state,omitempty"`
 	Source       *SourceDefinition `json:"source,omitempty"`
@@ -108,7 +114,10 @@ type Change struct {
 
 // ValidateDefinition refuses invalid state contracts and executable path ambiguity.
 func ValidateDefinition(d Definition) error {
-	if d.ID == "" || len(d.ID) > 128 || strings.ContainsAny(d.ID, "/\\\x00") || d.Version == "" || d.Name == "" || d.Entry == "" || path.IsAbs(d.Entry) || path.Clean(d.Entry) != d.Entry || strings.HasPrefix(d.Entry, "../") || strings.ContainsAny(d.Entry, "\\?#\x00") {
+	if d.Renderer != "" && d.Renderer != RendererNative || d.Renderer == RendererNative && d.Entry != "" {
+		return fmt.Errorf("%w: definition renderer", ErrInvalid)
+	}
+	if d.ID == "" || len(d.ID) > 128 || strings.ContainsAny(d.ID, "/\\\x00") || d.Version == "" || d.Name == "" || d.Renderer == "" && (d.Entry == "" || path.IsAbs(d.Entry) || path.Clean(d.Entry) != d.Entry || strings.HasPrefix(d.Entry, "../") || strings.ContainsAny(d.Entry, "\\?#\x00")) {
 		return fmt.Errorf("%w: definition identity or entry", ErrInvalid)
 	}
 	raw, err := json.Marshal(d)

@@ -186,7 +186,7 @@ func (e *Engine) runPanelSource(ctx context.Context, turn *store.Turn, workspace
 	if definition == nil {
 		return nil, fmt.Errorf("panel has no registered source")
 	}
-	runner := panelProducerFor(definition.ID)
+	runner := e.panelProducerFor(definition.ID)
 	if runner == nil {
 		return nil, fmt.Errorf("panel source is unavailable")
 	}

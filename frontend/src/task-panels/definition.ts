@@ -10,5 +10,6 @@ function canonical(value: unknown): string {
 /** Stored data may only be executed by its matching bundled definition. */
 export function panelDefinitionCompatible(panel: TaskPanel): boolean {
   const current = catalog.find((definition) => definition.id === panel.plugin_id)
-  return Boolean(current && current.version === panel.plugin_version && panel.definition.id === current.id && panel.definition.version === current.version && panel.definition.entry === current.entry && canonical(panel.definition.schema) === canonical(current.schema))
+  const renderer = (definition: object) => "renderer" in definition ? definition.renderer : undefined
+  return Boolean(current && current.version === panel.plugin_version && panel.definition.id === current.id && panel.definition.version === current.version && panel.definition.entry === current.entry && renderer(panel.definition) === renderer(current) && canonical(panel.definition.schema) === canonical(current.schema))
 }

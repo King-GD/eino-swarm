@@ -4,6 +4,8 @@ export interface PanelDefinition {
   name: string
   description: string
   entry: string
+  /** "native" is a bundled app component instead of an iframe entry. */
+  renderer?: string
   schema: unknown
   initial_state?: unknown
 }
