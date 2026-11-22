@@ -23,7 +23,9 @@ func runMetrics(t *testing.T, settings Settings, caller *fakeCaller) State {
 func metricCalls(caller *fakeCaller, tool string) []map[string]any {
 	var out []map[string]any
 	for _, call := range caller.calls {
-		if call.Tool == tool {
+		// The certificate step aggregates through the same role; metric
+		// assertions concern only the metric requests.
+		if call.Tool == tool && call.Arguments["fields"] != "cert.sn" {
 			out = append(out, call.Arguments)
 		}
 	}
@@ -165,7 +167,7 @@ func TestComponentsKeepSourceNamesAndIDsWithoutRuleLookup(t *testing.T) {
 		t.Fatalf("components = %+v", state.Components)
 	}
 	calls := metricCalls(caller, RoleStats)
-	if len(calls) != 2 || calls[1]["fields"] != "product1,product5" || calls[1]["tool"] != "fofa" || calls[1]["query"] != metricQuery || calls[1]["size"] != testSettings().MaxComponents {
+	if len(calls) != 2 || calls[1]["fields"] != componentLayers || calls[1]["tool"] != "fofa" || calls[1]["query"] != metricQuery || calls[1]["size"] != testSettings().MaxComponents {
 		t.Fatalf("component arguments = %v", calls)
 	}
 	if len(metricCalls(caller, RoleProductRules)) != 0 {

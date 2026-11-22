@@ -7,6 +7,9 @@ import (
 	"strings"
 )
 
+// componentLayers are the hardware, service, support and application layers.
+const componentLayers = "product1,product3,product4,product5"
+
 func init() {
 	stepFuncs[StepComponents] = stepDef{roles: []string{RoleStats}, fn: (*run).components}
 }
@@ -25,7 +28,9 @@ func (r *run) components(ctx context.Context) error {
 			} `json:"product"`
 		} `json:"aggs"`
 	}
-	arguments := map[string]any{"query": r.input.Query, "fields": "product1,product5", "tool": fofaSource, "size": r.settings.MaxComponents}
+	// FOFA merges the requested layers into one "product" bucket list. The
+	// operating-system layer (product2) is not a third-party component.
+	arguments := map[string]any{"query": r.input.Query, "fields": componentLayers, "tool": fofaSource, "size": r.settings.MaxComponents}
 	if err := r.call(ctx, RoleStats, arguments, &reply); err != nil {
 		return err
 	}

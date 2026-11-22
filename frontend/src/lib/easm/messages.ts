@@ -15,7 +15,7 @@ const en = {
   tags: { hot: "Trending", kev: "KEV", cve: "CVE" } satisfies Record<TagType, string>,
   basisSources: {
     organizations: "organization lookup", relations: "investment relations", branches: "branch registry", filings: "ICP filing",
-    asset_rules: "asset rule", certificate_search: "certificate search", asset_lookup: "TLS asset record",
+    asset_rules: "asset rule", certificates: "certificate aggregation",
   } as Record<string, string>,
   basis: (source: string, via?: string, date?: string) => `From ${source}${via ? `: ${via}` : ""}${date ? ` (${date})` : ""}`,
   certificateLabel: (tail: string) => `Cert · ${tail}`,
@@ -57,7 +57,7 @@ const zh: EasmText = {
   tags: { hot: "热搜", kev: "KEV", cve: "CVE" },
   basisSources: {
     organizations: "组织查询记录", relations: "投资关系记录", branches: "分支机构记录", filings: "ICP 备案记录",
-    asset_rules: "资产规则", certificate_search: "证书搜索", asset_lookup: "TLS 资产记录",
+    asset_rules: "资产规则", certificates: "证书聚合",
   },
   basis: (source, via, date) => `线索来源于${source}${via ? `：${via}` : ""}${date ? `（${date}）` : ""}`,
   certificateLabel: (tail) => `证书 · ${tail}`,

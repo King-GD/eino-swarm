@@ -19,7 +19,7 @@ interface PanelSettings {
   easm: EasmSettings
 }
 interface EasmSettings { server_id: string; tools: Record<string, string>; max_domains: number; max_components: number }
-const easmRoles = ["organizations", "relations", "branches", "filings", "asset_rules", "certificate_search", "asset_lookup", "stats", "heat", "product_rules"] as const
+const easmRoles = ["organizations", "relations", "branches", "filings", "asset_rules", "stats", "heat", "product_rules"] as const
 const numbers = ["max_assets", "batch_size", "concurrency", "timeout_seconds", "flush_interval_ms", "max_state_bytes", "max_update_bytes"] as const
 
 export function TaskPanelSettings({ query }: { query: string }) {

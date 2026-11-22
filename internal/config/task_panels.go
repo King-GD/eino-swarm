@@ -35,16 +35,14 @@ type EASMPanelConfig struct {
 // names of the FOFA MCP server as defaults. The asset-rule role has no
 // default because that server does not offer it.
 var EASMToolRoles = map[string]string{
-	"organizations":      "fofa_org_lookup",
-	"relations":          "mcp_company_relation",
-	"branches":           "mcp_company_branch",
-	"filings":            "mcp_icp_query",
-	"asset_rules":        "",
-	"certificate_search": "mcp_fofa_search",
-	"asset_lookup":       "fofa_asset_lookup",
-	"stats":              "mcp_fofa_stats",
-	"heat":               "fofa_asset_attention_trend",
-	"product_rules":      "fofa_product_rule_lookup",
+	"organizations": "fofa_org_lookup",
+	"relations":     "mcp_company_relation",
+	"branches":      "mcp_company_branch",
+	"filings":       "mcp_icp_query",
+	"asset_rules":   "",
+	"stats":         "mcp_fofa_stats",
+	"heat":          "fofa_asset_attention_trend",
+	"product_rules": "fofa_product_rule_lookup",
 }
 
 // WithDefaults returns independent settings for old and partially filled files.

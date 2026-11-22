@@ -29,20 +29,18 @@ const (
 // Tool roles. Several steps can share one role, e.g. summary and components
 // both aggregate through RoleStats.
 const (
-	RoleOrganizations     = "organizations"
-	RoleRelations         = "relations"
-	RoleBranches          = "branches"
-	RoleFilings           = "filings"
-	RoleAssetRules        = "asset_rules"
-	RoleCertificateSearch = "certificate_search"
-	RoleAssetLookup       = "asset_lookup"
-	RoleStats             = "stats"
-	RoleHeat              = "heat"
-	RoleProductRules      = "product_rules"
+	RoleOrganizations = "organizations"
+	RoleRelations     = "relations"
+	RoleBranches      = "branches"
+	RoleFilings       = "filings"
+	RoleAssetRules    = "asset_rules"
+	RoleStats         = "stats"
+	RoleHeat          = "heat"
+	RoleProductRules  = "product_rules"
 )
 
 // Roles lists every role a configuration can bind.
-var Roles = []string{RoleOrganizations, RoleRelations, RoleBranches, RoleFilings, RoleAssetRules, RoleCertificateSearch, RoleAssetLookup, RoleStats, RoleHeat, RoleProductRules}
+var Roles = []string{RoleOrganizations, RoleRelations, RoleBranches, RoleFilings, RoleAssetRules, RoleStats, RoleHeat, RoleProductRules}
 
 // Steps is the pipeline order. Graph steps run before metrics so the root and
 // its first branches are visible while the slower aggregations run.
