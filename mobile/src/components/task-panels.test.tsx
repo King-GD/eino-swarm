@@ -6,6 +6,17 @@ import type { RemoteLink } from "@/lib/link"
 import { PhoneTaskPanelButton, PhoneTaskPanelSheet, usePhoneTaskPanelView } from "./task-panels"
 
 const { read } = vi.hoisted(() => ({ read: vi.fn() }))
+// A native panel that opens one of its own dialogs inside the phone sheet.
+vi.mock("../../../frontend/src/components/app/easm/easm-task-panel", async () => {
+  const { useState } = await import("react")
+  const { Dialog, DialogContent, DialogTitle } = await import("../../../frontend/src/components/ui/dialog")
+  return {
+    EasmTaskPanel: ({ sheet }: { sheet?: HTMLElement | null }) => {
+      const [open, setOpen] = useState(true)
+      return <><p>native body</p><Dialog open={open} onOpenChange={setOpen}><DialogContent container={sheet}><DialogTitle>Inner detail</DialogTitle></DialogContent></Dialog></>
+    },
+  }
+})
 vi.mock("@/lib/use-task-panels", () => ({ useTaskPanels: read }))
 const link = { alive: () => true, rpc: vi.fn(), path: "relay", close: vi.fn(), announceDevice: vi.fn() } as RemoteLink
 const definition = catalog[0]
@@ -103,4 +114,21 @@ it("replaces a same-PC same-thread iframe when restore changes only the data gen
   view.rerender(<Harness authority={`${pc}:1`} />)
   await waitFor(() => expect(screen.getByTestId("task-panel-frame")).not.toBe(previous))
   expect(read).toHaveBeenLastCalledWith(link, "thread", `${pc}:1`, true)
+})
+
+// Android Back must close the panel's own dialog before the sheet, and the
+// dialog must live inside the sheet or the sheet's modal layer makes it inert.
+it("lets a native panel dialog own the first Android Back press", async () => {
+  const easm = catalog.find((item) => item.id === "easm-asset-portrait")!
+  const native: TaskPanel = { id: "n", thread_id: "thread", plugin_id: easm.id, plugin_version: easm.version, revision: 1, state: easm.initial_state, definition: easm }
+  read.mockReturnValue(data([native]))
+  render(<Harness />)
+  const sheet = await screen.findByTestId("phone-task-panels")
+  const inner = await screen.findByRole("dialog", { name: "Inner detail" })
+  expect(sheet.contains(inner)).toBe(true)
+  act(() => { window.__zwaiAndroidBack?.() })
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: "Inner detail" })).toBeNull())
+  expect(screen.getByText("native body")).toBeVisible()
+  act(() => { window.__zwaiAndroidBack?.() })
+  expect(screen.queryByRole("dialog", { name: "Task panels" })).toBeNull()
 })
