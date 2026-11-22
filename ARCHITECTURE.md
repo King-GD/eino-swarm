@@ -2961,16 +2961,19 @@ Nuwa graph.
 
 `internal/taskpanel` defines the versioned state protocol; `internal/store/task_panels.go` persists conversation-owned projections and a separate delivery journal. Runtime tools provide trusted provenance and bounded producer publication. Repository HTML/JS plugins under `frontend/src/task-panels` own their layout and run in dedicated opaque-origin iframes through an acknowledged SDK channel. The FOFA example producer uses CLI batches and locally owned HTTP checks; no asset fields enter the generic host protocol. See [Task panels](docs/TASK_PANELS.md), `F-137` and `C-050`.
 
-A catalog definition with `renderer:"native"` has no iframe entry; its state is drawn by a bundled React component registered in `frontend/src/components/app/native-task-panels.tsx`, which the desktop, Web and phone hosts share. The EASM portrait is the one native panel. Its producer, `internal/panelplugins/easm`, receives a subject from `run_panel_source`, calls the configured MCP tools itself through `mcpclient.Manager.CallTool` and publishes the complete state after each step:
+A catalog definition with `renderer:"native"` has no iframe entry; its state is drawn by a bundled React component registered in `frontend/src/components/app/native-task-panels.tsx`, which the desktop, Web and phone hosts share. The EASM portrait is the one native panel. Its producer, `internal/panelplugins/easm`, takes two inputs from `run_panel_source`: the batch of findings the agent's own lookups produced, and the panel state the call starts from. It merges that batch into the graph already in the panel and, when the batch carries the final asset query, collects the totals, trend and components itself through the configured MCP tools:
 
 ```
-agent: open_task_panel → run_panel_source({subject, query?})
-  engine registry (task_panel_sources.go) → easm.Run(input, settings, caller, publish)
-    step → MCP tool (role → tool name from task_panels.easm) → reducer on easm.Graph
-    publish(state) → engine diff → store revision → SSE / Pairlink → EASM renderer
+agent lookups (its own MCP tools) → run_panel_source({subject, companies?, domains?, certificates?, query?})
+  engine registry (task_panel_sources.go) → easm.Run(input, settings, currentState, caller, publish)
+    restore easm.Graph from currentState → merge the batch → publish(state)
+    query given → three aggregations in parallel (role → tool name from task_panels.easm)
+    each step → publish(state) → engine diff → store revision → SSE / Pairlink → EASM renderer
 ```
 
-The engine knows only the registry entry: no EASM fields enter the turn lifecycle, the task-panel protocol, the event stream or the phone transport. Step status lives in the panel state, so loading indicators survive reload and reach the phone through the ordinary revision. A failed lookup marks its own step and runs outside the task's MCP execution admission, so it never blocks the agent's own tools.
+The producer performs no discovery lookup: which companies, domains and certificates belong to the portrait is the agent's finding, and every entry keeps the tool that reported it as its evidence. `easm.Graph` owns the tree invariants (one subject root, one parent per node, confirmation only ever upgrades), so a later batch can enrich the portrait but never re-parent or downgrade it, and a different subject starts a new portrait. Domain nodes are bounded by `max_domains`; entries over it are refused and counted in the receipt.
+
+The engine knows only the registry entry: no EASM fields enter the turn lifecycle, the task-panel protocol, the event stream or the phone transport. Step status lives in the panel state, so loading indicators survive reload and reach the phone through the ordinary revision. A failed aggregation marks its own step and runs outside the task's MCP execution admission, so it never blocks the agent's own tools.
 
 The paired phone bundles the same plugin documents and `TaskPanelFrame` host.
 `mobile/src/lib/use-task-panels.ts` polls small manifests over the existing

@@ -12,7 +12,7 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Added
 
-- Task panels can show an enterprise asset portrait (EASM). After the subject is confirmed, the panel collects organizations, investment relations, branches, ICP filings, certificates, asset totals, attention trend and components through the configured MCP tools, shows each step's progress, and keeps working when one lookup fails. The panel follows the app language on PC, Web and paired phones.
+- Task panels can show an enterprise asset portrait (EASM). The agent confirms the subject, performs the discovery lookups itself, and pushes each finished batch of companies, domains and certificates into the panel, which merges the batches into one graph; on the batch that carries the final asset query the panel collects the asset totals, attention trend and components itself. Each aggregation shows its own progress and a failure never stops the others. The panel follows the app language on PC, Web and paired phones.
 
 - New tasks keep work, results and uploads in independent directories. PC and paired phone Files open to task results and can switch to a read-only project folder. Existing conversations and external files stay in place. (`F-140`, `F-224`, `C-052`)
 
@@ -21,6 +21,9 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - PC and Web voice settings can choose a preferred microphone or follow the operating-system input. Phones use their own microphone. (`F-148`, `C-048`)
 
 ### Changed
+
+- The EASM portrait keeps the subject as its root when the agent writes the subject with a bracketed short name or also reports the subject's own registry row; that row enriches the root instead of becoming a copy that took every child. The batch that collects the final numbers tells the agent to summarize and stop, so the conversation no longer keeps researching after the panel is complete.
+- The EASM panel takes the agent's own findings instead of looking them up: the Go producer no longer queries the company, investment, branch, filing, asset-rule or certificate sources, and the certificates the agent reports never add domains on their own. `task_panels.easm` binds only `stats`, `heat` and `product_rules`; retired roles in an existing configuration are dropped when it loads, and `max_domains` now bounds the domain nodes of the whole portrait instead of the certificate lookups of one run.
 
 - Settings → Tools → Task panels shows the common panel options. EASM lookup bindings and limits are managed through `task_panels.easm` in the configuration file.
 
