@@ -6,12 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
-// stepFunc performs one lookup against the run's graph and metrics. It returns
-// ErrUnavailable, a *ToolError or a cancellation; any other error is reported
-// as a malformed reply for that step only.
+// stepFunc performs one aggregation against the run's query.
 type stepFunc func(*run, context.Context) error
 
 // stepDef binds a step to the tool roles it needs. A step whose roles are
@@ -21,27 +20,33 @@ type stepDef struct {
 	fn    stepFunc
 }
 
-// stepFuncs is filled by the per-source files.
+// stepFuncs is filled by the per-step files.
 var stepFuncs = map[Step]stepDef{}
 
 const interruptRecordTimeout = 2 * time.Second
-
-// metricSteps need an asset query; they are skipped without one.
-var metricSteps = map[Step]bool{StepSummary: true, StepHeat: true, StepComponents: true}
 
 type run struct {
 	input    Input
 	settings Settings
 	caller   Caller
-	graph    *Graph
-	state    State
 	publish  Publish
+
+	// mu orders the state writes and publications of the concurrent steps, so
+	// stored order and streamed order cannot diverge.
+	mu    sync.Mutex
+	graph *Graph
+	state State
+	// previousQuery is the query the metrics in the panel were collected for.
+	previousQuery     string
+	unresolvedParents int
+	refusedDomains    int
 }
 
-// Run collects the portrait step by step and publishes the complete state
-// after every step. A failed or unavailable lookup marks only its own step;
-// the run fails only on cancellation or when publication itself fails.
-func Run(ctx context.Context, input Input, settings Settings, caller Caller, publish Publish) (Result, error) {
+// Run merges this call's batch into the portrait in current and publishes the
+// result. With a query it also collects the asset aggregations, publishing each
+// as it finishes; a failed or unavailable aggregation marks only its own step.
+// The run fails on cancellation or when publication itself fails.
+func Run(ctx context.Context, input Input, settings Settings, current json.RawMessage, caller Caller, publish Publish) (Result, error) {
 	input.Subject = strings.TrimSpace(input.Subject)
 	input.Query = strings.TrimSpace(input.Query)
 	if input.Subject == "" {
@@ -53,48 +58,158 @@ func Run(ctx context.Context, input Input, settings Settings, caller Caller, pub
 	if settings.MaxDomains < 1 || settings.MaxComponents < 1 {
 		return Result{}, fmt.Errorf("max domains and components must be positive")
 	}
-	detail := &Detail{Description: input.Description, Logo: safeLogo(input.Logo), Website: safeWebsite(input.Website)}
-	if detail.Description == "" && detail.Logo == "" && detail.Website == "" {
-		detail = nil
+	r := &run{input: input, settings: settings, caller: caller, publish: publish}
+	if err := r.begin(current); err != nil {
+		return r.result(), err
 	}
-	r := &run{input: input, settings: settings, caller: caller, publish: publish, graph: NewGraph(input.Subject, detail)}
-	r.state = State{SchemaVersion: 1, Title: input.Subject, Query: input.Query, Collection: Collection{Status: statusRunning}, Heat: []HeatPoint{}, Components: []Component{}}
-	for _, step := range Steps {
-		r.state.Collection.Steps = append(r.state.Collection.Steps, StepStatus{ID: step, Status: statusPending})
-	}
+	r.mergeCompanies()
+	r.mergeDomains()
+	r.mergeCertificates()
+	// The merge is published on its own so the graph appears while the slower
+	// aggregations still run.
+	collect := r.planMetrics()
 	if err := r.flush(ctx); err != nil {
 		return r.result(), err
 	}
+	if !collect {
+		return r.result(), nil
+	}
+	if err := r.collect(ctx); err != nil {
+		return r.result(), err
+	}
+	result := r.result()
+	result.Next = finishedNext
+	return result, nil
+}
+
+// finishedNext is the receipt's instruction once the panel holds the final
+// aggregations. Without it the agent keeps researching after the portrait is
+// complete, and the conversation outlives the panel by minutes.
+const finishedNext = "The panel now holds the totals, trend and components for this query. Reply with a short summary of the panel and end the turn without calling more tools."
+
+// begin decides whether this call continues the portrait already in the panel.
+// A different subject starts a new portrait: the old graph and its metrics
+// describe another subject and must not be mixed with the new one.
+func (r *run) begin(current json.RawMessage) error {
+	r.graph = NewGraph(r.input.Subject, rootDetail(r.input))
+	r.state = State{SchemaVersion: 1, Title: r.input.Subject, Collection: Collection{Status: statusIdle}, Heat: []HeatPoint{}, Components: []Component{}}
+	for _, step := range Steps {
+		r.state.Collection.Steps = append(r.state.Collection.Steps, StepStatus{ID: step, Status: statusPending})
+	}
+	previous, continuing, err := continuation(current, r.input.Subject)
+	if err != nil || !continuing {
+		return err
+	}
+	graph, err := Restore(previous)
+	if err != nil {
+		return err
+	}
+	r.graph = graph
+	r.graph.Upsert(Node{ID: RootID, Label: r.input.Subject, Detail: rootDetail(r.input)})
+	r.previousQuery = strings.TrimSpace(previous.Query)
+	r.state.Query = r.previousQuery
+	r.state.Summary = previous.Summary
+	r.state.Heat = orEmptyHeat(previous.Heat)
+	r.state.Components = orEmptyComponents(previous.Components)
+	// Steps are rebuilt from the current pipeline, so a panel stored before a
+	// step retired keeps only the statuses this producer still reports.
 	for i, step := range Steps {
-		if err := ctx.Err(); err != nil {
-			r.interrupt(ctx, i)
-			return r.result(), err
-		}
-		status := &r.state.Collection.Steps[i]
-		def, ok := stepFuncs[step]
-		switch {
-		case metricSteps[step] && input.Query == "":
-			status.Status, status.Code = statusSkipped, "no_query"
-		case !ok || !settings.configured(def.roles):
-			status.Status, status.Code = statusUnavailable, "not_configured"
-		default:
-			status.Status = statusRunning
-			if err := r.flush(ctx); err != nil {
-				return r.result(), err
+		for _, stored := range previous.Collection.Steps {
+			if stored.ID == step {
+				r.state.Collection.Steps[i] = StepStatus{ID: step, Status: stored.Status, Code: stored.Code}
 			}
-			err := def.fn(r, ctx)
-			if ctx.Err() != nil {
-				r.interrupt(ctx, i)
-				return r.result(), ctx.Err()
-			}
-			status.Status, status.Code = outcome(err)
-		}
-		if err := r.flush(ctx); err != nil {
-			return r.result(), err
 		}
 	}
+	return nil
+}
+
+// planMetrics decides whether this call collects the aggregations and sets the
+// collection status its merge publication shows.
+func (r *run) planMetrics() bool {
+	if r.input.Query == "" {
+		r.state.Collection.Status = statusIdle
+		if r.allStepsDone() {
+			r.state.Collection.Status = statusDone
+		}
+		return false
+	}
+	if r.input.Query == r.previousQuery && r.allStepsDone() {
+		r.state.Collection.Status = statusDone
+		return false
+	}
+	// Numbers collected for another query describe another asset range, so they
+	// leave the panel before the new range is aggregated.
+	if r.input.Query != r.previousQuery {
+		r.state.Query = r.input.Query
+		r.state.Summary = nil
+		r.state.Heat = []HeatPoint{}
+		r.state.Components = []Component{}
+	}
+	for i := range r.state.Collection.Steps {
+		r.state.Collection.Steps[i] = StepStatus{ID: Steps[i], Status: statusRunning}
+	}
+	r.state.Collection.Status = statusRunning
+	return true
+}
+
+// collect runs the aggregations concurrently and publishes each completion.
+func (r *run) collect(ctx context.Context) error {
+	ready := make([]bool, len(Steps))
+	r.mu.Lock()
+	for i, step := range Steps {
+		def, known := stepFuncs[step]
+		ready[i] = known && r.settings.configured(def.roles)
+		if !ready[i] {
+			r.state.Collection.Steps[i] = StepStatus{ID: step, Status: statusUnavailable, Code: "not_configured"}
+		}
+	}
+	r.mu.Unlock()
+
+	flushes := make([]error, len(Steps))
+	var wg sync.WaitGroup
+	for i, step := range Steps {
+		if !ready[i] {
+			continue
+		}
+		def := stepFuncs[step]
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := def.fn(r, ctx)
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			// A cancelled step keeps its running status: interrupt records every
+			// unfinished step on a context that outlives this one.
+			if ctx.Err() == nil {
+				r.state.Collection.Steps[i] = StepStatus{ID: step, Status: outcomeStatus(err), Code: outcomeCode(err)}
+				flushes[i] = r.flushLocked(ctx)
+			}
+		}()
+	}
+	wg.Wait()
+	if err := ctx.Err(); err != nil {
+		r.interrupt(ctx)
+		return err
+	}
+	for _, err := range flushes {
+		if err != nil {
+			return err
+		}
+	}
+	r.mu.Lock()
 	r.state.Collection.Status = statusDone
-	return r.result(), r.flush(ctx)
+	r.mu.Unlock()
+	return r.flush(ctx)
+}
+
+func outcomeStatus(err error) string {
+	status, _ := outcome(err)
+	return status
+}
+
+func outcomeCode(err error) string {
+	_, code := outcome(err)
+	return code
 }
 
 func outcome(err error) (string, string) {
@@ -111,30 +226,58 @@ func outcome(err error) (string, string) {
 	}
 }
 
+// allStepsDone reports whether every aggregation has a finished result for the
+// query in the panel.
+func (r *run) allStepsDone() bool {
+	for _, status := range r.state.Collection.Steps {
+		if status.Status != statusDone {
+			return false
+		}
+	}
+	return true
+}
+
 // interrupt marks the running and pending steps so a reloaded panel does not
 // show a spinner for work that no longer exists. The record is written on a
 // short detached context because the run's own context has already ended.
-func (r *run) interrupt(ctx context.Context, from int) {
-	defer func() {
-		record, cancel := context.WithTimeout(context.WithoutCancel(ctx), interruptRecordTimeout)
-		defer cancel()
-		_ = r.flush(record)
-	}()
-	for i := from; i < len(r.state.Collection.Steps); i++ {
+func (r *run) interrupt(ctx context.Context) {
+	r.mu.Lock()
+	for i := range r.state.Collection.Steps {
 		if status := &r.state.Collection.Steps[i]; status.Status == statusPending || status.Status == statusRunning {
 			status.Status = statusInterrupted
 		}
 	}
 	r.state.Collection.Status = statusInterrupted
+	r.mu.Unlock()
+	record, cancel := context.WithTimeout(context.WithoutCancel(ctx), interruptRecordTimeout)
+	defer cancel()
+	_ = r.flush(record)
 }
 
 func (r *run) result() Result {
-	nodes, edges := r.graph.Len()
-	return Result{Nodes: nodes, Edges: edges, Components: len(r.state.Components), Steps: append([]StepStatus(nil), r.state.Collection.Steps...)}
+	result := Result{Components: len(r.state.Components), Steps: append([]StepStatus(nil), r.state.Collection.Steps...), UnresolvedParents: r.unresolvedParents, RefusedDomains: r.refusedDomains}
+	if r.graph != nil {
+		result.Nodes, result.Edges = r.graph.Len()
+	}
+	return result
+}
+
+// apply writes one step's result under the state lock: the aggregations run
+// concurrently and each publishes as it finishes.
+func (r *run) apply(write func(*State)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	write(&r.state)
 }
 
 // flush publishes the complete state; the host computes the patch.
 func (r *run) flush(ctx context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.flushLocked(ctx)
+}
+
+func (r *run) flushLocked(ctx context.Context) error {
 	r.state.Nodes, r.state.Edges = r.graph.Snapshot()
 	body, err := json.Marshal(r.state)
 	if err != nil {
@@ -149,7 +292,7 @@ func (s Settings) configured(roles []string) bool {
 			return false
 		}
 	}
-	return len(roles) > 0
+	return true
 }
 
 // call runs the tool configured for role and decodes its reply into out.
@@ -189,7 +332,48 @@ func decodeReply(body json.RawMessage, out any) error {
 	return decoder.Decode(out)
 }
 
+// continuation decodes the panel state this call starts from. Only a portrait of
+// the same subject is continued; anything else starts a new one.
+func continuation(current json.RawMessage, subject string) (State, bool, error) {
+	if len(current) == 0 || string(current) == "null" {
+		return State{}, false, nil
+	}
+	var previous State
+	if err := json.Unmarshal(current, &previous); err != nil {
+		return State{}, false, fmt.Errorf("panel state cannot be read: %w", err)
+	}
+	if len(previous.Nodes) == 0 || legalName(previous.Title) != legalName(subject) {
+		return State{}, false, nil
+	}
+	return previous, true, nil
+}
+
+// rootDetail carries the subject's own description. It is shown as reported and
+// never used to widen a lookup.
+func rootDetail(input Input) *Detail {
+	detail := &Detail{Description: strings.TrimSpace(input.Description), Logo: safeLogo(input.Logo), Website: safeWebsite(input.Website)}
+	if detail.Description == "" && detail.Logo == "" && detail.Website == "" {
+		return nil
+	}
+	return detail
+}
+
+func orEmptyHeat(points []HeatPoint) []HeatPoint {
+	if points == nil {
+		return []HeatPoint{}
+	}
+	return points
+}
+
+func orEmptyComponents(components []Component) []Component {
+	if components == nil {
+		return []Component{}
+	}
+	return components
+}
+
 func safeLogo(value string) string {
+	value = strings.TrimSpace(value)
 	if strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "data:image/") {
 		return value
 	}
@@ -197,6 +381,7 @@ func safeLogo(value string) string {
 }
 
 func safeWebsite(value string) string {
+	value = strings.TrimSpace(value)
 	if strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "http://") {
 		return value
 	}

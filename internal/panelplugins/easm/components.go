@@ -62,13 +62,15 @@ func (r *run) components(ctx context.Context) error {
 			ruleIDs = append(ruleIDs, name)
 		}
 	}
-	r.state.Components = components
 	if len(ruleIDs) > 0 && r.settings.Tools[RoleProductRules] != "" {
 		labels := r.productLabels(ctx, ruleIDs)
-		for i := range r.state.Components {
-			r.state.Components[i].DisplayName = labels[r.state.Components[i].Name]
+		for i := range components {
+			components[i].DisplayName = labels[components[i].Name]
 		}
 	}
+	// The finished list, names included, is published once: the state must never
+	// observe a half-labelled slice from another step's publication.
+	r.apply(func(state *State) { state.Components = components })
 	return nil
 }
 

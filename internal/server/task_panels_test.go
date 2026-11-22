@@ -66,7 +66,7 @@ func TestTaskPanelHTTPSettingsSaveEASMBindings(t *testing.T) {
 	after := h.json(http.MethodPut, "/api/task-panels/settings", map[string]any{"easm": easm}, http.StatusOK)
 	saved := after["easm"].(map[string]any)
 	savedTools := saved["tools"].(map[string]any)
-	if saved["server_id"] != "fixture-server" || savedTools["heat"] != "" || savedTools["stats"] != "custom_stats" || savedTools["organizations"] != tools["organizations"] || after["concurrency"] != before["concurrency"] {
+	if saved["server_id"] != "fixture-server" || savedTools["heat"] != "" || savedTools["stats"] != "custom_stats" || savedTools["product_rules"] != tools["product_rules"] || after["concurrency"] != before["concurrency"] {
 		t.Fatalf("saved=%v", after)
 	}
 	for _, bad := range []map[string]any{{"tools": map[string]any{"unknown": "x"}, "max_domains": 20, "max_components": 20}, {"tools": tools, "max_domains": 0, "max_components": 20}} {

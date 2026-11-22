@@ -1,6 +1,8 @@
-// Package easm builds the enterprise asset portrait panel from configured MCP
-// lookups. The engine only supplies a tool caller and a publisher; every rule
-// about organizations, filings, certificates and metrics lives here.
+// Package easm builds the enterprise asset portrait panel. The agent performs
+// every discovery lookup itself and pushes each finished batch through the
+// source; this package merges those batches into one graph and owns the asset
+// aggregations the agent should not repeat. The engine only supplies a tool
+// caller, the panel state the call starts from, and a publisher.
 package easm
 
 import (
@@ -10,51 +12,86 @@ import (
 	"time"
 )
 
-// Step identifies one lookup in the pipeline. Its configured tool name comes
-// from settings; the identifier itself is part of the panel state contract.
+// Step identifies one aggregation the producer performs. The graph comes from
+// the agent, so only the asset metrics remain. The state schema keeps the
+// retired graph identifiers so an already stored panel still validates.
 type Step string
 
 const (
-	StepOrganizations Step = "organizations"
-	StepRelations     Step = "relations"
-	StepBranches      Step = "branches"
-	StepFilings       Step = "filings"
-	StepAssetRules    Step = "asset_rules"
-	StepCertificates  Step = "certificates"
-	StepSummary       Step = "summary"
-	StepHeat          Step = "heat"
-	StepComponents    Step = "components"
+	StepSummary    Step = "summary"
+	StepHeat       Step = "heat"
+	StepComponents Step = "components"
 )
 
-// Tool roles. Several steps can share one role, e.g. summary and components
-// both aggregate through RoleStats.
+// Tool roles. Several steps can share one role: summary and components both
+// aggregate through RoleStats.
 const (
-	RoleOrganizations = "organizations"
-	RoleRelations     = "relations"
-	RoleBranches      = "branches"
-	RoleFilings       = "filings"
-	RoleAssetRules    = "asset_rules"
-	RoleStats         = "stats"
-	RoleHeat          = "heat"
-	RoleProductRules  = "product_rules"
+	RoleStats        = "stats"
+	RoleHeat         = "heat"
+	RoleProductRules = "product_rules"
 )
 
 // Roles lists every role a configuration can bind.
-var Roles = []string{RoleOrganizations, RoleRelations, RoleBranches, RoleFilings, RoleAssetRules, RoleStats, RoleHeat, RoleProductRules}
+var Roles = []string{RoleStats, RoleHeat, RoleProductRules}
 
-// Steps is the pipeline order. Graph steps run before metrics so the root and
-// its first branches are visible while the slower aggregations run.
-var Steps = []Step{StepOrganizations, StepRelations, StepBranches, StepFilings, StepAssetRules, StepCertificates, StepSummary, StepHeat, StepComponents}
+// Steps is the aggregation order. All three are independent, so the producer
+// runs them concurrently and publishes each as it finishes.
+var Steps = []Step{StepSummary, StepHeat, StepComponents}
 
-// Input is the agent-supplied run request. Subject is the confirmed target;
-// the descriptive fields come from the agent's own research and are shown on
-// the root card as reported, never used to widen a lookup.
+// Input is one batch of the agent's own findings. Subject is the confirmed
+// target; every list is merged into the portrait already in the panel.
+// Query, when given, is the final FOFA asset query behind the metrics.
 type Input struct {
-	Subject     string `json:"subject"`
-	Query       string `json:"query,omitempty"`
-	Description string `json:"description,omitempty"`
-	Logo        string `json:"logo,omitempty"`
-	Website     string `json:"website,omitempty"`
+	Subject      string             `json:"subject"`
+	Description  string             `json:"description,omitempty"`
+	Logo         string             `json:"logo,omitempty"`
+	Website      string             `json:"website,omitempty"`
+	Companies    []CompanyInput     `json:"companies,omitempty"`
+	Domains      []DomainInput      `json:"domains,omitempty"`
+	Certificates []CertificateInput `json:"certificates,omitempty"`
+	Query        string             `json:"query,omitempty"`
+}
+
+// CompanyInput is one reported company. Parent names the upper company it was
+// reported under; without it the company hangs under the subject. Source is the
+// tool that reported it.
+type CompanyInput struct {
+	Name       string `json:"name"`
+	Parent     string `json:"parent,omitempty"`
+	Relation   string `json:"relation,omitempty"`
+	Share      string `json:"share,omitempty"`
+	RegistryID string `json:"registry_id,omitempty"`
+	Confirmed  bool   `json:"confirmed,omitempty"`
+	Source     string `json:"source"`
+	Via        string `json:"via,omitempty"`
+}
+
+// DomainInput is one reported domain. Parent names the company it belongs to;
+// without it the domain hangs under the subject.
+type DomainInput struct {
+	Domain    string `json:"domain"`
+	Parent    string `json:"parent,omitempty"`
+	Confirmed bool   `json:"confirmed,omitempty"`
+	Source    string `json:"source"`
+	Via       string `json:"via,omitempty"`
+}
+
+// CertificateInput is one certificate as the aggregation reported it. Serial
+// and issuer together identify it; Domain is where it was observed.
+type CertificateInput struct {
+	Serial     string   `json:"serial"`
+	Domain     string   `json:"domain"`
+	Issuer     string   `json:"issuer,omitempty"`
+	SubjectCN  string   `json:"subject_cn,omitempty"`
+	SubjectOrg string   `json:"subject_org,omitempty"`
+	Names      []string `json:"names,omitempty"`
+	NotBefore  string   `json:"not_before,omitempty"`
+	NotAfter   string   `json:"not_after,omitempty"`
+	Valid      *bool    `json:"valid,omitempty"`
+	Match      *bool    `json:"match,omitempty"`
+	Expired    *bool    `json:"expired,omitempty"`
+	Source     string   `json:"source"`
+	Via        string   `json:"via,omitempty"`
 }
 
 // Settings are resolved by the host from the user's configuration.
@@ -62,7 +99,8 @@ type Settings struct {
 	// Tools maps each tool role (Role* constants) to the remote tool name it
 	// calls. A missing entry marks the steps needing it unavailable.
 	Tools map[string]string
-	// MaxDomains bounds the per-domain certificate lookups of one run.
+	// MaxDomains bounds the domain nodes of one portrait; entries beyond it are
+	// refused and counted in the receipt.
 	MaxDomains int
 	// MaxComponents is the TopN product buckets one aggregation requests.
 	MaxComponents int
@@ -128,9 +166,9 @@ const (
 	statusRunning     = "running"
 	statusDone        = "done"
 	statusFailed      = "failed"
-	statusSkipped     = "skipped"
 	statusUnavailable = "unavailable"
 	statusInterrupted = "interrupted"
+	statusIdle        = "idle"
 )
 
 type Node struct {
@@ -184,6 +222,7 @@ type Detail struct {
 	RegistryName   string         `json:"registry_name,omitempty"`
 	OrganizationID string         `json:"organization_id,omitempty"`
 	Status         string         `json:"status,omitempty"`
+	Relation       string         `json:"relation,omitempty"`
 	Share          string         `json:"share,omitempty"`
 	Features       []Feature      `json:"features,omitempty"`
 	Serial         string         `json:"serial,omitempty"`
@@ -235,11 +274,18 @@ type Evidence struct {
 	Detail string `json:"detail,omitempty"`
 }
 
-// Result is the tool receipt returned to the agent: counts and step outcomes,
-// never bulk data, which stays in the panel.
+// Result is the tool receipt returned to the agent: counts, step outcomes and
+// what could not be placed, never bulk data, which stays in the panel.
 type Result struct {
 	Nodes      int          `json:"nodes"`
 	Edges      int          `json:"edges"`
 	Components int          `json:"components"`
 	Steps      []StepStatus `json:"steps"`
+	// UnresolvedParents counts entries whose reported parent was not on the
+	// graph; they were attached to the subject as clues instead.
+	UnresolvedParents int `json:"unresolved_parents"`
+	// RefusedDomains counts domain entries over the configured domain budget.
+	RefusedDomains int `json:"refused_domains"`
+	// Next tells the agent what to do once the final aggregations are in.
+	Next string `json:"next,omitempty"`
 }

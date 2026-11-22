@@ -146,7 +146,7 @@ func (e *Engine) taskPanelTools(turn *store.Turn, workspace string, readOnly, pl
 	})
 	out := []tool.BaseTool{read, open, publish}
 	if !planner {
-		out = append(out, makeTool("run_panel_source", "Run an installed panel's registered data source for this task. Input must follow that source's schema; progress reaches the panel directly. It performs external work only when the user requested it. The tool finishes after collecting and joining all work.", map[string]*schema.ParameterInfo{"panel_id": {Type: schema.String, Required: true}, "input": {Type: schema.Object, Required: true}}, func(ctx context.Context, args string) (any, error) {
+		out = append(out, makeTool("run_panel_source", "Run an installed panel's registered data source for this task. Input must follow that source's schema; progress reaches the panel directly. A source run is merged into the panel state the call starts from, so a source that accepts batches can be run again for the next batch. It performs external work only when the user requested it. The tool finishes after collecting and joining all work.", map[string]*schema.ParameterInfo{"panel_id": {Type: schema.String, Required: true}, "input": {Type: schema.Object, Required: true}}, func(ctx context.Context, args string) (any, error) {
 			return e.runPanelSource(ctx, turn, workspace, args)
 		}))
 	}
@@ -224,7 +224,7 @@ func (e *Engine) runPanelSource(ctx context.Context, turn *store.Turn, workspace
 		return nil, err
 	}
 	counter := 0
-	summary, runErr := runner(ctx, in.Input, settings, workspace, func(ctx context.Context, state json.RawMessage) error {
+	summary, runErr := runner(ctx, in.Input, panel.State, settings, workspace, func(ctx context.Context, state json.RawMessage) error {
 		current, err := e.store.TaskPanel(ctx, source.ThreadID, panel.ID)
 		if err != nil {
 			return err

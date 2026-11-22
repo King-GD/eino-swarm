@@ -11,42 +11,60 @@ const metricQuery = `org="Subject"`
 
 type metricReplies = map[string]func(map[string]any) (string, error)
 
-func runMetrics(t *testing.T, settings Settings, caller *fakeCaller) State {
+// runMetrics collects the aggregations for one portrait. current carries a graph
+// the agent pushed earlier; nil starts from an empty panel.
+func runMetrics(t *testing.T, current json.RawMessage, settings Settings, caller *fakeCaller) State {
 	t.Helper()
 	var out published
-	if _, err := Run(t.Context(), Input{Subject: "S", Query: metricQuery}, settings, caller, out.publish); err != nil {
+	if _, err := Run(t.Context(), Input{Subject: "Subject", Query: metricQuery}, settings, current, caller, out.publish); err != nil {
 		t.Fatal(err)
 	}
 	return out.last()
 }
 
-func metricCalls(caller *fakeCaller, tool string) []map[string]any {
-	var out []map[string]any
-	for _, call := range caller.calls {
-		// The certificate step aggregates through the same role; metric
-		// assertions concern only the metric requests.
-		if call.Tool == tool && call.Arguments["fields"] != "cert.sn" {
-			out = append(out, call.Arguments)
+// portrait pushes a graph without a query, so metric tests can start from it.
+func portrait(t *testing.T, input Input) json.RawMessage {
+	t.Helper()
+	state, _, err := push(t, nil, input, onlyRoles(), &fakeCaller{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return stateJSON(t, state)
+}
+
+// findRequest returns the recorded request carrying this fields value; the
+// aggregations run concurrently, so their order is not a contract.
+func findRequest(t *testing.T, caller *fakeCaller, tool, fields string) map[string]any {
+	t.Helper()
+	for _, arguments := range caller.requests(tool) {
+		if arguments["fields"] == fields {
+			return arguments
 		}
 	}
-	return out
+	t.Fatalf("no %s request for fields %q", tool, fields)
+	return nil
 }
 
 // The summary row shows FOFA's own totals for the confirmed query; sending
 // another backend or field would report different numbers under FOFA's name.
-// Clues count what the graph steps found, not an agent-supplied number.
+// Clues count what the agent pushed into the graph, not its own prose.
 func TestSummaryShowsFOFATotalsAndGraphClues(t *testing.T) {
 	caller := &fakeCaller{replies: metricReplies{
-		RoleOrganizations: fixed(`{"results":[{"id":1,"name":"S","domains":[{"domain":"a.test"},{"domain":"b.test"}]}]}`),
-		RoleStats:         fixed(`{"query":"org=\"Subject\"","size":9007199254740993,"distinct":{"ip":"76"}}`),
+		RoleStats: func(arguments map[string]any) (string, error) {
+			if arguments["fields"] == "ip" {
+				return `{"query":"org=\"Subject\"","size":9007199254740993,"distinct":{"ip":"76"}}`, nil
+			}
+			return `{"aggs":{"product":[]}}`, nil
+		},
 	}}
-	state := runMetrics(t, onlyRoles(RoleOrganizations, RoleStats), caller)
+	current := portrait(t, Input{Subject: "Subject", Companies: []CompanyInput{{Name: "A", Source: "t"}, {Name: "B", Source: "t"}}})
+	state := runMetrics(t, current, onlyRoles(RoleStats), caller)
 	summary := state.Summary
 	if summary == nil || *summary.Clues != 2 || *summary.FOFAAssets != 9007199254740993 || *summary.FOFAIPs != 76 {
 		t.Fatalf("summary = %+v", summary)
 	}
 	want := map[string]any{"query": metricQuery, "fields": "ip", "uniq_count": "ip", "tool": "fofa"}
-	if got := metricCalls(caller, RoleStats)[0]; !reflect.DeepEqual(got, want) {
+	if got := findRequest(t, caller, RoleStats, "ip"); !reflect.DeepEqual(got, want) {
 		t.Fatalf("summary arguments = %v", got)
 	}
 	if stepStatus(state, StepSummary).Status != statusDone {
@@ -57,8 +75,13 @@ func TestSummaryShowsFOFATotalsAndGraphClues(t *testing.T) {
 // A reply that carries only one total keeps the other absent instead of
 // showing a zero the source never reported.
 func TestSummaryKeepsAnAbsentTotalAbsent(t *testing.T) {
-	caller := &fakeCaller{replies: metricReplies{RoleStats: fixed(`{"distinct":{"ip":0}}`)}}
-	state := runMetrics(t, onlyRoles(RoleStats), caller)
+	caller := &fakeCaller{replies: metricReplies{RoleStats: func(arguments map[string]any) (string, error) {
+		if arguments["fields"] == "ip" {
+			return `{"distinct":{"ip":0}}`, nil
+		}
+		return `{"aggs":{"product":[]}}`, nil
+	}}}
+	state := runMetrics(t, nil, onlyRoles(RoleStats), caller)
 	if s := state.Summary; s == nil || s.FOFAAssets != nil || s.FOFAIPs == nil || *s.FOFAIPs != 0 || *s.Clues != 0 {
 		t.Fatalf("summary = %+v", s)
 	}
@@ -73,7 +96,7 @@ func TestSummaryRefusesInexactTotals(t *testing.T) {
 		`{"query":"other","size":3}`, `{"query":5,"size":3}`, `[1]`,
 	} {
 		caller := &fakeCaller{replies: metricReplies{RoleStats: fixed(body)}}
-		state := runMetrics(t, onlyRoles(RoleStats), caller)
+		state := runMetrics(t, nil, onlyRoles(RoleStats), caller)
 		if got := stepStatus(state, StepSummary); got.Status != statusFailed || got.Code != "malformed_reply" {
 			t.Fatalf("%s: summary step = %+v", body, got)
 		}
@@ -83,14 +106,14 @@ func TestSummaryRefusesInexactTotals(t *testing.T) {
 	}
 }
 
-// Error envelopes and unavailable tools fail only the metric step that hit
-// them, with a stable code instead of the remote's message.
+// Error envelopes and unavailable tools fail only the step that hit them, with
+// a stable code instead of the remote's message.
 func TestMetricToolFailuresMarkOnlyTheirStep(t *testing.T) {
 	caller := &fakeCaller{replies: metricReplies{
 		RoleStats: fixed(`{"error":true,"errmsg":"quota for key abc"}`),
 		RoleHeat:  func(map[string]any) (string, error) { return "", ErrUnavailable },
 	}}
-	state := runMetrics(t, onlyRoles(RoleStats, RoleHeat), caller)
+	state := runMetrics(t, nil, onlyRoles(RoleStats, RoleHeat), caller)
 	for step, want := range map[Step]StepStatus{
 		StepSummary:    {ID: StepSummary, Status: statusFailed, Code: "tool_error"},
 		StepHeat:       {ID: StepHeat, Status: statusUnavailable, Code: "unavailable"},
@@ -109,15 +132,15 @@ func TestMetricToolFailuresMarkOnlyTheirStep(t *testing.T) {
 // and zero values, in the order the source reported them.
 func TestHeatKeepsReturnedPoints(t *testing.T) {
 	caller := &fakeCaller{replies: metricReplies{RoleHeat: fixed(`{"hot_trend":[{"date":"2026-01-02","value":0},{"date":"2026-01-09","value":"8"},{"date":"2026-01-16","value":2.5}]}`)}}
-	state := runMetrics(t, onlyRoles(RoleHeat), caller)
+	state := runMetrics(t, nil, onlyRoles(RoleHeat), caller)
 	want := []HeatPoint{{"2026-01-02", 0}, {"2026-01-09", 8}, {"2026-01-16", 2.5}}
 	if !reflect.DeepEqual(state.Heat, want) {
 		t.Fatalf("heat = %+v", state.Heat)
 	}
-	if got := metricCalls(caller, RoleHeat)[0]; !reflect.DeepEqual(got, map[string]any{"query": metricQuery}) {
+	if got := caller.requests(RoleHeat); len(got) != 1 || !reflect.DeepEqual(got[0], map[string]any{"query": metricQuery}) {
 		t.Fatalf("heat arguments = %v", got)
 	}
-	empty := runMetrics(t, onlyRoles(RoleHeat), &fakeCaller{replies: metricReplies{RoleHeat: fixed(`{"hot_trend":[]}`)}})
+	empty := runMetrics(t, nil, onlyRoles(RoleHeat), &fakeCaller{replies: metricReplies{RoleHeat: fixed(`{"hot_trend":[]}`)}})
 	if stepStatus(empty, StepHeat).Status != statusDone || empty.Heat == nil || len(empty.Heat) != 0 {
 		t.Fatalf("empty trend = %+v", empty.Heat)
 	}
@@ -138,7 +161,7 @@ func TestHeatRefusesPointsTheChartCannotPlot(t *testing.T) {
 		`{"hot_trend":null}`, `{}`, `{"hot_trend":{}}`,
 		`{"query":"other","hot_trend":[]}`,
 	} {
-		state := runMetrics(t, onlyRoles(RoleHeat), &fakeCaller{replies: metricReplies{RoleHeat: fixed(body)}})
+		state := runMetrics(t, nil, onlyRoles(RoleHeat), &fakeCaller{replies: metricReplies{RoleHeat: fixed(body)}})
 		if got := stepStatus(state, StepHeat); got.Status != statusFailed || got.Code != "malformed_reply" || len(state.Heat) != 0 {
 			t.Fatalf("%s: heat = %+v %+v", body, got, state.Heat)
 		}
@@ -161,16 +184,15 @@ func componentCaller(products string, rules func(map[string]any) (string, error)
 // repeated buckets with the same count are one product.
 func TestComponentsKeepSourceNamesAndIDsWithoutRuleLookup(t *testing.T) {
 	caller := componentCaller(`{"aggs":{"product":[{"name":"Product A","count":5},{"name":9007199254740993,"count":"4"},{"name":"Product A","count":5},{"name":7,"count":0}]}}`, nil)
-	state := runMetrics(t, onlyRoles(RoleStats), caller)
+	state := runMetrics(t, nil, onlyRoles(RoleStats), caller)
 	want := []Component{{Name: "Product A", Count: 5}, {Name: "9007199254740993", Count: 4}, {Name: "7", Count: 0}}
 	if !reflect.DeepEqual(state.Components, want) {
 		t.Fatalf("components = %+v", state.Components)
 	}
-	calls := metricCalls(caller, RoleStats)
-	if len(calls) != 2 || calls[1]["fields"] != componentLayers || calls[1]["tool"] != "fofa" || calls[1]["query"] != metricQuery || calls[1]["size"] != testSettings().MaxComponents {
-		t.Fatalf("component arguments = %v", calls)
+	if got := findRequest(t, caller, RoleStats, componentLayers); got["tool"] != "fofa" || got["query"] != metricQuery || got["size"] != testSettings().MaxComponents {
+		t.Fatalf("component arguments = %v", got)
 	}
-	if len(metricCalls(caller, RoleProductRules)) != 0 {
+	if len(caller.requests(RoleProductRules)) != 0 {
 		t.Fatal("an unconfigured rule lookup was called")
 	}
 }
@@ -184,7 +206,7 @@ func TestComponentsUseRuleNamesWhenConfigured(t *testing.T) {
 			requested = arguments["rule_ids"]
 			return `{"results":[{"rule_id":901,"product":"Rule A"},{"rule_id":"902","product":"","en_product":"Rule B"},{"rule_id":903,"product":"One"},{"rule_id":903,"product":"Two"},{"rule_id":999,"product":"Unrequested"},{"product":"No id"}]}`, nil
 		})
-	state := runMetrics(t, onlyRoles(RoleStats, RoleProductRules), caller)
+	state := runMetrics(t, nil, onlyRoles(RoleStats, RoleProductRules), caller)
 	labels := map[string]string{}
 	for _, component := range state.Components {
 		labels[component.Name] = component.DisplayName
@@ -209,14 +231,14 @@ func TestComponentsSurviveAFailedRuleLookup(t *testing.T) {
 		func(map[string]any) (string, error) { return "", errors.New("transport down") },
 	} {
 		caller := componentCaller(`{"aggs":{"product":[{"name":901,"count":9}]}}`, rules)
-		state := runMetrics(t, onlyRoles(RoleStats, RoleProductRules), caller)
+		state := runMetrics(t, nil, onlyRoles(RoleStats, RoleProductRules), caller)
 		if len(state.Components) != 1 || state.Components[0].DisplayName != "" || stepStatus(state, StepComponents).Status != statusDone {
 			t.Fatalf("components = %+v step=%+v", state.Components, stepStatus(state, StepComponents))
 		}
 	}
 	caller := componentCaller(`{"aggs":{"product":[{"name":"Named","count":9}]}}`, fixed(`{"results":[]}`))
-	runMetrics(t, onlyRoles(RoleStats, RoleProductRules), caller)
-	if len(metricCalls(caller, RoleProductRules)) != 0 {
+	runMetrics(t, nil, onlyRoles(RoleStats, RoleProductRules), caller)
+	if len(caller.requests(RoleProductRules)) != 0 {
 		t.Fatal("rule lookup called without numeric product IDs")
 	}
 }
@@ -236,7 +258,7 @@ func TestComponentsRefuseMalformedBuckets(t *testing.T) {
 		`{"aggs":{"product":null}}`, `{"aggs":{"ip":[]}}`, `{"aggs":{"product":{}}}`,
 		`{"query":"other","aggs":{"product":[]}}`,
 	} {
-		state := runMetrics(t, onlyRoles(RoleStats), componentCaller(body, nil))
+		state := runMetrics(t, nil, onlyRoles(RoleStats), componentCaller(body, nil))
 		if got := stepStatus(state, StepComponents); got.Status != statusFailed || got.Code != "malformed_reply" || len(state.Components) != 0 {
 			t.Fatalf("%s: components = %+v %+v", body, got, state.Components)
 		}

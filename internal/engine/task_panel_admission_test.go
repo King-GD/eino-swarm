@@ -234,7 +234,7 @@ func TestTaskPanelDelegatedWorkerPublishesAtActualHTTPBoundary(t *testing.T) {
 func TestTaskPanelSourceArgumentAndFailureCategories(t *testing.T) {
 	settings := config.TaskPanelConfig{}.WithDefaults()
 	for _, input := range []string{`{"extra":true}`, `{"query":"","max_assets":1}`, `{"query":"fixture","max_assets":-1}`, fmt.Sprintf(`{"query":"fixture","max_assets":%d}`, settings.MaxAssets+1)} {
-		if _, err := runFOFAWorldSource(t.Context(), []byte(input), settings, t.TempDir(), func(context.Context, json.RawMessage) error { return nil }); err == nil {
+		if _, err := runFOFAWorldSource(t.Context(), []byte(input), nil, settings, t.TempDir(), func(context.Context, json.RawMessage) error { return nil }); err == nil {
 			t.Fatal("source input accepted", input)
 		}
 	}

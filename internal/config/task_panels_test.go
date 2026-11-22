@@ -41,7 +41,7 @@ func TestEASMToolDefaultsKeepUserOverrides(t *testing.T) {
 	if err := p.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if p.EASM.Tools["heat"] != "" || p.EASM.Tools["stats"] != "custom_stats" || p.EASM.Tools["organizations"] != EASMToolRoles["organizations"] || p.EASM.MaxDomains != 20 {
+	if p.EASM.Tools["heat"] != "" || p.EASM.Tools["stats"] != "custom_stats" || p.EASM.Tools["product_rules"] != EASMToolRoles["product_rules"] || p.EASM.MaxDomains != 20 {
 		t.Fatalf("tools=%v max=%d", p.EASM.Tools, p.EASM.MaxDomains)
 	}
 	copy := p.WithDefaults()
@@ -62,5 +62,42 @@ func TestEASMToolDefaultsKeepUserOverrides(t *testing.T) {
 		if bad.Validate() == nil {
 			t.Fatalf("accepted %+v", bad.EASM)
 		}
+	}
+}
+
+// A configuration saved while the producer still looked companies up itself
+// names roles it no longer has. Loading must drop them, or an upgrade would
+// refuse to start over a lookup that no longer exists.
+func TestRetiredEASMRolesAreDroppedOnLoad(t *testing.T) {
+	tools := make(map[string]string, len(EASMToolRoles)+len(retiredEASMToolRoles))
+	for role, name := range EASMToolRoles {
+		tools[role] = name
+	}
+	for role := range retiredEASMToolRoles {
+		tools[role] = "old_tool"
+	}
+	settings := (TaskPanelConfig{EASM: EASMPanelConfig{Tools: tools}}).WithDefaults()
+	if err := settings.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for role := range retiredEASMToolRoles {
+		if _, kept := settings.EASM.Tools[role]; kept {
+			t.Fatalf("retired role %q survived the load", role)
+		}
+	}
+	for role := range EASMToolRoles {
+		if _, kept := settings.EASM.Tools[role]; !kept {
+			t.Fatalf("live role %q was dropped", role)
+		}
+	}
+	// A settings client that still sends a retired role is not locked out
+	// either, while a role nobody ever defined stays an error.
+	direct := EASMPanelConfig{Tools: map[string]string{"organizations": "x", "stats": "s"}, MaxDomains: 20, MaxComponents: 20}
+	if err := direct.validate(); err != nil {
+		t.Fatalf("a retired role was refused: %v", err)
+	}
+	direct.Tools["unknown"] = "x"
+	if direct.validate() == nil {
+		t.Fatal("an unknown role was accepted")
 	}
 }

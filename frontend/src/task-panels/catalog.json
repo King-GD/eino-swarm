@@ -220,7 +220,7 @@
     "id": "easm-asset-portrait",
     "version": "1",
     "name": "EASM",
-    "description": "Show an enterprise asset portrait: the confirmed organization, its related companies, domains, filings and certificates as a graph, with asset totals, attention trend and component distribution. Use when the user asks for an organization's external asset portrait. Confirm the subject first (ask the user when it is ambiguous), open this panel, then run its source once with that subject and, when available, an asset query; the source performs every lookup itself and reports per-step status.",
+    "description": "Show an enterprise asset portrait: the confirmed organization, its related companies, domains and certificates as a graph, with asset totals, attention trend and component distribution. Use when the user asks for an organization's external asset portrait. Confirm the subject first (ask the user when it is ambiguous) and open this panel. Then run its source once per finished batch of the agent's own lookups: pass the companies, domains and certificates that batch newly confirmed, and on the last batch the final asset query. The panel keeps every batch and collects the totals, trend and components for that query itself; do not look those three up separately.",
     "entry": "",
     "renderer": "native",
     "schema": {
@@ -561,6 +561,9 @@
                 "status": {
                   "type": "string"
                 },
+                "relation": {
+                  "type": "string"
+                },
                 "share": {
                   "type": "string"
                 },
@@ -708,10 +711,6 @@
             "minLength": 1,
             "maxLength": 200
           },
-          "query": {
-            "type": "string",
-            "maxLength": 2000
-          },
           "description": {
             "type": "string",
             "maxLength": 400
@@ -724,6 +723,163 @@
           "website": {
             "type": "string",
             "pattern": "^https?://",
+            "maxLength": 2000
+          },
+          "companies": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "source"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "parent": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "relation": {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                "share": {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                "registry_id": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "confirmed": {
+                  "type": "boolean"
+                },
+                "source": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "via": {
+                  "type": "string",
+                  "maxLength": 200
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "domains": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "object",
+              "required": [
+                "domain",
+                "source"
+              ],
+              "properties": {
+                "domain": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 253
+                },
+                "parent": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "confirmed": {
+                  "type": "boolean"
+                },
+                "source": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "via": {
+                  "type": "string",
+                  "maxLength": 200
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "certificates": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "object",
+              "required": [
+                "serial",
+                "domain",
+                "source"
+              ],
+              "properties": {
+                "serial": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "domain": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 253
+                },
+                "issuer": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "subject_cn": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "subject_org": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "names": {
+                  "type": "array",
+                  "maxItems": 100,
+                  "items": {
+                    "type": "string",
+                    "maxLength": 253
+                  }
+                },
+                "not_before": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "not_after": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "valid": {
+                  "type": "boolean"
+                },
+                "match": {
+                  "type": "boolean"
+                },
+                "expired": {
+                  "type": "boolean"
+                },
+                "source": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "via": {
+                  "type": "string",
+                  "maxLength": 200
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "query": {
+            "type": "string",
             "maxLength": 2000
           }
         },

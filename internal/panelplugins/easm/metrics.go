@@ -20,13 +20,11 @@ func init() {
 const fofaSource = "fofa"
 
 // summary records the asset and distinct-IP totals of the run's query. Clues
-// counts the non-root nodes the graph steps found: the old panel took this
-// number from the agent, but here the producer owns the graph, so the count
-// is derived from it and is present even when the totals lookup fails.
+// counts the non-root nodes the agent pushed: the number is derived from the
+// graph, so it is present even when the totals lookup fails.
 func (r *run) summary(ctx context.Context) error {
-	nodes, _ := r.graph.Len()
-	clues := int64(nodes - 1)
-	r.state.Summary = &Summary{Clues: &clues}
+	clues := r.clueCount()
+	r.apply(func(state *State) { state.Summary = &Summary{Clues: &clues} })
 	var reply struct {
 		Query    json.RawMessage            `json:"query"`
 		Size     json.RawMessage            `json:"size"`
@@ -50,13 +48,24 @@ func (r *run) summary(ctx context.Context) error {
 	if !hasAssets && !hasIPs {
 		return fmt.Errorf("reply carries no totals")
 	}
-	if hasAssets {
-		r.state.Summary.FOFAAssets = &assets
-	}
-	if hasIPs {
-		r.state.Summary.FOFAIPs = &ips
-	}
+	r.apply(func(state *State) {
+		if state.Summary == nil {
+			state.Summary = &Summary{Clues: &clues}
+		}
+		if hasAssets {
+			state.Summary.FOFAAssets = &assets
+		}
+		if hasIPs {
+			state.Summary.FOFAIPs = &ips
+		}
+	})
 	return nil
+}
+
+// clueCount reports what the portrait holds beyond the subject itself.
+func (r *run) clueCount() int64 {
+	nodes, _ := r.graph.Len()
+	return int64(nodes - 1)
 }
 
 // heat records the query's attention trend. The renderer draws it as a time
@@ -93,7 +102,7 @@ func (r *run) heat(ctx context.Context) error {
 		}
 		points = append(points, HeatPoint{Date: item.Date, Value: value})
 	}
-	r.state.Heat = points
+	r.apply(func(state *State) { state.Heat = points })
 	return nil
 }
 

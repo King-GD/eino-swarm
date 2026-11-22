@@ -21,9 +21,10 @@ type TaskPanelConfig struct {
 	EASM EASMPanelConfig `yaml:"easm" json:"easm"`
 }
 
-// EASMPanelConfig binds the portrait's lookup roles to MCP tools. An empty
+// EASMPanelConfig binds the portrait's aggregation roles to MCP tools. An empty
 // server ID selects the one enabled server whose catalog offers each tool; an
-// empty tool name turns off the steps that need that role.
+// empty tool name turns off the steps that need that role. The agent pushes the
+// graph itself, so no discovery role is configured here.
 type EASMPanelConfig struct {
 	ServerID      string            `yaml:"server_id" json:"server_id"`
 	Tools         map[string]string `yaml:"tools" json:"tools"`
@@ -31,18 +32,24 @@ type EASMPanelConfig struct {
 	MaxComponents int               `yaml:"max_components" json:"max_components"`
 }
 
-// EASMToolRoles are the lookup roles of the portrait producer, with the tool
-// names of the FOFA MCP server as defaults. The asset-rule role has no
-// default because that server does not offer it.
+// EASMToolRoles are the aggregation roles of the portrait producer, with the
+// tool names of the FOFA MCP server as defaults. The agent performs the
+// discovery lookups itself and pushes their results into the panel.
 var EASMToolRoles = map[string]string{
-	"organizations": "fofa_org_lookup",
-	"relations":     "mcp_company_relation",
-	"branches":      "mcp_company_branch",
-	"filings":       "mcp_icp_query",
-	"asset_rules":   "",
 	"stats":         "mcp_fofa_stats",
 	"heat":          "fofa_asset_attention_trend",
 	"product_rules": "fofa_product_rule_lookup",
+}
+
+// retiredEASMToolRoles are lookups the producer no longer performs. A saved
+// configuration still names them; ignoring them keeps an upgrade from failing
+// validation over a role that no longer exists.
+var retiredEASMToolRoles = map[string]bool{
+	"organizations": true,
+	"relations":     true,
+	"branches":      true,
+	"filings":       true,
+	"asset_rules":   true,
 }
 
 // WithDefaults returns independent settings for old and partially filled files.
@@ -99,7 +106,7 @@ func (c EASMPanelConfig) withDefaults() EASMPanelConfig {
 		tools[role] = name
 	}
 	for role, name := range c.Tools {
-		if _, known := tools[role]; !known {
+		if _, known := tools[role]; !known && !retiredEASMToolRoles[role] {
 			tools[role] = name
 		}
 	}
@@ -118,6 +125,11 @@ func (c EASMPanelConfig) validate() error {
 		return fmt.Errorf("invalid EASM settings: max_domains must be 1..200 and max_components 5..100")
 	}
 	for role, name := range c.Tools {
+		if retiredEASMToolRoles[role] {
+			// Saved files and older settings clients still carry a retired
+			// lookup; it is neither an unknown role nor a live binding.
+			continue
+		}
 		if _, known := EASMToolRoles[role]; !known {
 			return fmt.Errorf("invalid EASM settings: unknown tool role %q", role)
 		}

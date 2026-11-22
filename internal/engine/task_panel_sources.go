@@ -13,7 +13,9 @@ import (
 	"github.com/LubyRuffy/eino-swarm/internal/panelplugins/fofaworld"
 )
 
-type panelProducer func(context.Context, json.RawMessage, config.TaskPanelConfig, string, func(context.Context, json.RawMessage) error) (any, error)
+// panelProducer is one registered source. current is the panel state the call
+// starts from, so a producer can merge into what the user already sees.
+type panelProducer func(context.Context, json.RawMessage, json.RawMessage, config.TaskPanelConfig, string, func(context.Context, json.RawMessage) error) (any, error)
 
 // This registry is the only host wiring that knows the bundled producers.
 // A producer receives its input, settings and a publisher; it never adds
@@ -28,7 +30,7 @@ func (e *Engine) panelProducerFor(id string) panelProducer {
 	return nil
 }
 
-func runFOFAWorldSource(ctx context.Context, raw json.RawMessage, settings config.TaskPanelConfig, workspace string, publish func(context.Context, json.RawMessage) error) (any, error) {
+func runFOFAWorldSource(ctx context.Context, raw json.RawMessage, _ json.RawMessage, settings config.TaskPanelConfig, workspace string, publish func(context.Context, json.RawMessage) error) (any, error) {
 	var input struct {
 		Query     string `json:"query"`
 		MaxAssets int    `json:"max_assets,omitempty"`
@@ -46,7 +48,7 @@ func runFOFAWorldSource(ctx context.Context, raw json.RawMessage, settings confi
 	return fofaworld.Run(ctx, fofaworld.Input{Query: input.Query, ClientPath: settings.FOFAClient, Workspace: workspace, MaxAssets: maxAssets, BatchSize: min(settings.BatchSize, maxAssets), Concurrency: settings.Concurrency, Timeout: time.Duration(settings.TimeoutSeconds) * time.Second, FlushInterval: time.Duration(settings.FlushIntervalMS) * time.Millisecond}, publish)
 }
 
-func (e *Engine) runEASMSource(ctx context.Context, raw json.RawMessage, settings config.TaskPanelConfig, workspace string, publish func(context.Context, json.RawMessage) error) (any, error) {
+func (e *Engine) runEASMSource(ctx context.Context, raw json.RawMessage, current json.RawMessage, settings config.TaskPanelConfig, workspace string, publish func(context.Context, json.RawMessage) error) (any, error) {
 	var input easm.Input
 	if err := decodeNuwaArgs(string(raw), &input); err != nil {
 		return nil, err
@@ -56,7 +58,7 @@ func (e *Engine) runEASMSource(ctx context.Context, raw json.RawMessage, setting
 		tools[role] = name
 	}
 	caller := &easmCaller{manager: e.mcp, servers: e.cfg.Snapshot().MCP.Servers, serverID: settings.EASM.ServerID, workspace: workspace}
-	return easm.Run(ctx, input, easm.Settings{Tools: tools, MaxDomains: settings.EASM.MaxDomains, MaxComponents: settings.EASM.MaxComponents}, caller, publish)
+	return easm.Run(ctx, input, easm.Settings{Tools: tools, MaxDomains: settings.EASM.MaxDomains, MaxComponents: settings.EASM.MaxComponents}, current, caller, publish)
 }
 
 // easmCaller resolves each tool to one configured MCP server and maps

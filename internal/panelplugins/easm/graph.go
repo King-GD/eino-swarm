@@ -1,6 +1,7 @@
 package easm
 
 import (
+	"fmt"
 	"net"
 	"strings"
 
@@ -26,6 +27,47 @@ func NewGraph(subject string, detail *Detail) *Graph {
 	g := &Graph{byID: map[string]*Node{}, parent: map[string]*Edge{}}
 	g.Upsert(Node{ID: RootID, Kind: "root", Label: subject, Detail: detail})
 	return g
+}
+
+// Restore rebuilds the graph from a published state so a later call merges into
+// the portrait the user already sees. It enforces the same tree invariants as
+// Graph: exactly the subject root, no second incoming edge, no edge into it.
+// A state that breaks them cannot be continued without inventing a parent.
+func Restore(state State) (*Graph, error) {
+	g := &Graph{byID: map[string]*Node{}, parent: map[string]*Edge{}}
+	roots := 0
+	for _, node := range state.Nodes {
+		if node.ID == "" || node.Label == "" {
+			return nil, fmt.Errorf("panel state has a node without identity")
+		}
+		if _, duplicate := g.byID[node.ID]; duplicate {
+			return nil, fmt.Errorf("panel state repeats node %q", node.ID)
+		}
+		added := node
+		g.nodes = append(g.nodes, &added)
+		g.byID[node.ID] = &added
+		if node.Kind == "root" {
+			roots++
+		}
+	}
+	if roots != 1 || g.byID[RootID] == nil || g.byID[RootID].Kind != "root" {
+		return nil, fmt.Errorf("panel state has no single subject root")
+	}
+	for _, edge := range state.Edges {
+		if g.byID[edge.Source] == nil || g.byID[edge.Target] == nil {
+			return nil, fmt.Errorf("panel state has a dangling edge")
+		}
+		if edge.Source == edge.Target || edge.Target == RootID {
+			return nil, fmt.Errorf("panel state has an edge into the subject root")
+		}
+		if _, second := g.parent[edge.Target]; second {
+			return nil, fmt.Errorf("panel state gives %q a second parent", edge.Target)
+		}
+		added := edge
+		g.edges = append(g.edges, &added)
+		g.parent[edge.Target] = &added
+	}
+	return g, nil
 }
 
 // Root returns the subject node.
@@ -116,15 +158,16 @@ func (g *Graph) AddBasis(id string, basis Basis) {
 	node.Detail.Basis = append(node.Detail.Basis, basis)
 }
 
-// Domains returns the normalized domains on the graph in insertion order.
-func (g *Graph) Domains() []string {
-	var out []string
+// DomainCount reports the domain nodes of the whole portrait, which is what the
+// configured domain budget bounds.
+func (g *Graph) DomainCount() int {
+	count := 0
 	for _, node := range g.nodes {
 		if node.Kind == "domain" {
-			out = append(out, node.Label)
+			count++
 		}
 	}
-	return out
+	return count
 }
 
 // Len returns the node and edge counts.
@@ -203,6 +246,7 @@ func mergeDetail(current, next *Detail) *Detail {
 	fill(&current.RegistryName, next.RegistryName)
 	fill(&current.OrganizationID, next.OrganizationID)
 	fill(&current.Status, next.Status)
+	fill(&current.Relation, next.Relation)
 	fill(&current.Share, next.Share)
 	fill(&current.Serial, next.Serial)
 	fill(&current.Issuer, next.Issuer)
