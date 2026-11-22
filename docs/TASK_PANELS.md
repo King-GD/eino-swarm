@@ -48,11 +48,13 @@ The Vite task-panel builder bundles scripts/styles/data into one HTML document. 
 
 宿主上下文包含面板和会话 ID、版本、主题、语言、尺寸、可见性和数据源状态。工具结果始终按数据处理，不作为可执行 HTML 或指令。
 
+第一方面板也可以不用 iframe：catalog 中设置 `renderer: "native"` 且 `entry` 为空，再在 [native-task-panels.tsx](../frontend/src/components/app/native-task-panels.tsx) 按插件 ID 注册 React 组件。桌面、Web 和配对手机共用这份注册表；未注册的 native 定义显示不兼容提示，不会回退到 iframe。组件只读面板 state，文案放进自己的 en/zh 词表，跟随用户语言。
+
 ### 后端开发：选择数据入口并发布状态
 
 **复用现有工具结果。** Agent 调用 `open_task_panel({plugin_id})` 拿到 `panel_id`，再用 `read_panel_state({panel_id})` 读取当前版本和 Schema。把已有结构化结果经 `publish_panel_update` 发布：全量用 `snapshot`，局部变化用 JSON Patch。请求带当前 `base_revision` 和唯一 `operation_id`；相同请求重试保留原 ID 和请求体，版本冲突时重新读状态、按新版本生成新操作。此路径不配置 `source`，无需新增 Go producer。
 
-**注册 Go producer。** 需要程序直接持续发布进度时，在 catalog 中声明 `source.id` 和 `source.input_schema`，并在 [panelProducerFor](../internal/engine/task_panel_sources.go) 注册同一 source ID 的适配器。Agent 打开面板后调用 `run_panel_source({panel_id,input})`。producer 校验业务输入，遵守任务的 `context`、取消和资源限制；将每批结果折叠为符合 Schema 的完整状态，串行调用 `publish(ctx, state)` 并处理错误。引擎比较状态生成 patch，补丁比完整状态大或操作过多时改用 snapshot，并负责身份、版本、持久化和通知。producer 不直接操作 SQLite、SSE 或 Pairlink；配对手机只读同步同一份已提交状态。
+**注册 Go producer。** 需要程序直接持续发布进度时，在 catalog 中声明 `source.id` 和 `source.input_schema`，并在 [panelProducerFor](../internal/engine/task_panel_sources.go) 注册同一 source ID 的适配器（业务代码放在 `internal/panelplugins/<id>`，引擎只保留这一处接线）。Agent 打开面板后调用 `run_panel_source({panel_id,input})`。producer 校验业务输入，遵守任务的 `context`、取消和资源限制；将每批结果折叠为符合 Schema 的完整状态，串行调用 `publish(ctx, state)` 并处理错误。引擎比较状态生成 patch，补丁比完整状态大或操作过多时改用 snapshot，并负责身份、版本、持久化和通知。producer 不直接操作 SQLite、SSE 或 Pairlink；配对手机只读同步同一份已提交状态。
 
 后端验收使用隔离数据，经真实工具入口覆盖首次打开、幂等重试、版本冲突；专用 producer 另外覆盖输入拒绝、运行进度、取消和失败。端到端检查见 [Validation](#validation)。
 
@@ -86,9 +88,25 @@ Startup settles sources separately for each conversation before its ordinary rec
 
 Stop preserves an HTTP observation already returned to the source reducer, but does not grant permission to publish new data after cancellation. A failed final flush can leave the display at its last committed state; source metadata marks the incomplete work. A recorded collection failure keeps its known reason rather than being relabeled as user cancellation.
 
+## EASM portrait
+
+`easm-asset-portrait` is a native panel with a registered source. The agent confirms the subject (asking the user when it is ambiguous), opens the panel, then calls `run_panel_source` once with `{subject, query?, description?, logo?, website?}`. `query` is the FOFA asset query used for totals, attention trend and components; without it those steps are `skipped` with code `no_query`. `description`, `logo` (HTTPS or image data URI) and `website` come from the agent's own research and are shown on the root card as reported.
+
+The producer in `internal/panelplugins/easm` runs these steps in order and publishes the complete state after each one: `organizations`, `relations`, `branches`, `filings`, `asset_rules`, `certificates`, `summary`, `heat`, `components`. Each step calls the tools bound to its roles in `task_panels.easm` ([Config](CONFIG.md#task-panels)). `collection.steps[]` records `pending`, `running`, `done`, `failed`, `skipped`, `unavailable` or `interrupted` with a stable `code` (`tool_error`, `malformed_reply`, `not_configured`, ...); a remote error message is never stored. A failed step does not stop later steps or the agent's turn. Stop marks unfinished steps `interrupted`, so a reload never shows a spinner for work that no longer runs.
+
+Graph rules are enforced by one `Graph` type: a single root without incoming edges; every other node keeps its first source edge; a later observation may confirm that same edge or enrich details but never re-parents a node or closes a cycle. Domains use one IDNA normalization in every step. Node evidence is structured `detail.basis[] = {source, via?, date?}`; the renderer words it in the user's language and shows `via` exactly as the source returned it. Highlights per source:
+
+- Organization lookup: a single record with the subject's exact name is the subject, and its domains are confirmed under the root. Other records, including several registrations sharing the subject's name, are pending related companies whose reported domains are confirmed under them.
+- Investment relations keep the legal parent → direct subsidiary direction with exact registry IDs and share; same-name companies with different IDs stay separate. Branch lookups use the root's verified registry ID or legal name; a branch found only by display name stays pending.
+- ICP filings draw registrant → filing → domain. Asset rules add evidence and link a domain only to an unambiguous existing company of that exact name; unknown names create nothing.
+- Certificates come from search rows and, when configured, TLS asset lookup. Identity is the fingerprint, else issuer + serial, else an asset-local observation; subject organizations stay attributes. Per-service observations keep validity, matching and expiry flags; only a valid, matching, unexpired observation confirms the domain → certificate edge. A domain first seen in a certificate reply hangs under the root as a pending clue.
+- `summary` reads the exact asset total and distinct IPs; `clues` counts non-root nodes. `heat` requires strictly ascending `YYYY-MM-DD` points. `components` reads product buckets and, when the product-rule role is configured, resolves numeric rule IDs to names; a failed name lookup keeps the IDs.
+
+The renderer shows the graph, attention trend and component table, derives heat loading from the `heat` step, and keeps all copy in `frontend/src/lib/easm/messages.ts`. Component trending days and KEV/CVE tags have no configured source yet and stay empty.
+
 ## Validation
 
-`go test -race ./internal/taskpanel ./internal/store ./internal/panelplugins/fofaworld ./internal/engine ./internal/server` covers protocol, storage, producer and real model/HTTP boundaries. Producer fixtures include the real installed CLI against a loopback fake FOFA API and local HTTP/HTTPS targets: no real account or public asset is needed. `make model-check` includes task-panel ownership, commit-before-delivery, idempotency, cleanup identity and orphan-recovery counterexamples. Frontend unit tests and the task-panel Playwright case exercise the packaged iframe, incremental map, zoom retention, full snapshots, version refusal and failed-plugin handling. Native desktop acceptance remains a separate ci-macOS gate.
+`go test -race ./internal/taskpanel ./internal/store ./internal/panelplugins/fofaworld ./internal/panelplugins/easm ./internal/engine ./internal/server` covers protocol, storage, producer and real model/HTTP boundaries. Producer fixtures include the real installed CLI against a loopback fake FOFA API and local HTTP/HTTPS targets: no real account or public asset is needed. `make model-check` includes task-panel ownership, commit-before-delivery, idempotency, cleanup identity and orphan-recovery counterexamples. EASM producer tests use a fake tool caller per step plus one engine test through the real model → `run_panel_source` → MCP streamable HTTP boundary; every published state is validated against the catalog schema. `frontend/e2e/easm.spec.ts` drives the native renderer with served panel state and real SSE patches. Frontend unit tests and the task-panel Playwright case exercise the packaged iframe, incremental map, zoom retention, full snapshots, version refusal and failed-plugin handling. Native desktop acceptance remains a separate ci-macOS gate.
 
 The [model mapping and bounds](../models/panels/README.md) cover competing writers, source ownership, per-conversation recovery isolation, snapshot/SSE crossings, iframe acknowledgements and probe receipt cancellation. These checks prove finite protocol properties under their stated assumptions; they do not replace implementation race tests, native acceptance or establish that every possible failure is absent.
 
