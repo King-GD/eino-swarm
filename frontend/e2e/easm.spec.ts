@@ -56,18 +56,35 @@ const portrait: EasmResult = {
 }
 
 // The producer stores structured evidence and step status only. The user must
-// see the graph, evidence worded in their language, and a heat spinner that
-// follows the saved step rather than a transient signal.
-test("EASM renders the producer state, words evidence and follows step status", async ({ page }) => {
+// see matching loading indicators before the first data, then the graph and
+// evidence worded in their language as the producer publishes results.
+test("EASM renders the producer state, words evidence and follows step status", async ({ page }, info) => {
   const title = `EASM portrait ${Date.now()}`
   const created = await (await page.request.post("/api/threads", { data: { title } })).json()
   const thread = created.thread.id as string
-  await servePanel(page, thread, portrait)
+  await servePanel(page, thread, {
+    ...portrait, nodes: [], edges: [], summary: undefined,
+    collection: { status: "running", steps: portrait.collection.steps.map((step) => ({ ...step, status: "pending" })) },
+  })
   await page.goto("/")
   await page.getByTestId("dest-chats").click()
   await page.getByRole("button", { name: title, exact: true }).click()
   const panel = page.getByTestId("easm-task-panel")
   await expect(panel).toHaveAttribute("data-revision", "1")
+  await expect(panel.getByRole("progressbar", { name: "Loading asset data", exact: true })).toBeVisible()
+  await expect(panel.getByRole("progressbar", { name: "Loading asset attention trend" })).toBeVisible()
+  await expect(panel.getByRole("progressbar", { name: "Loading supply chain components" })).toBeVisible()
+  await expect(panel.getByText("Waiting for asset data")).toHaveCount(0)
+  await panel.screenshot({ path: info.outputPath("easm-loading.png") })
+  await panel.getByRole("button", { name: "Expand EASM", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  await expect(dialog.getByRole("progressbar", { name: "Loading asset data", exact: true })).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(dialog).toBeHidden()
+
+  await emit(page, { cursor: 2, thread_id: thread, panel_id: "easm-e2e", revision: 2, base_revision: 1, kind: "snapshot", state: portrait })
+  await expect(panel).toHaveAttribute("data-revision", "2")
+  await expect(panel.getByRole("progressbar", { name: "Loading asset data", exact: true })).toHaveCount(0)
   await expect(panel.getByText("120", { exact: true })).toBeVisible()
   await expect(panel.getByText("FOFA assets")).toBeVisible()
   await expect(panel.getByRole("progressbar", { name: "Loading asset attention trend" })).toBeVisible()
@@ -85,7 +102,7 @@ test("EASM renders the producer state, words evidence and follows step status", 
   await card.getByRole("button", { name: "Close node card" }).click()
 
   await emit(page, {
-    cursor: 2, thread_id: thread, panel_id: "easm-e2e", revision: 2, base_revision: 1, kind: "patch",
+    cursor: 3, thread_id: thread, panel_id: "easm-e2e", revision: 3, base_revision: 2, kind: "patch",
     operations: [
       { op: "replace", path: "/collection/status", value: "done" },
       { op: "replace", path: "/collection/steps/2/status", value: "done" },
@@ -93,22 +110,26 @@ test("EASM renders the producer state, words evidence and follows step status", 
       { op: "replace", path: "/heat", value: [{ date: "2026-01-05", value: 3 }, { date: "2026-01-12", value: 8 }] },
     ],
   })
-  await expect(panel).toHaveAttribute("data-revision", "2")
+  await expect(panel).toHaveAttribute("data-revision", "3")
   await expect(panel.getByRole("progressbar")).toHaveCount(0)
   await expect(panel.getByTestId("easm-heat")).toBeVisible()
   await expect(panel.getByText("No component data")).toBeVisible()
 })
 
 // An interrupted run (Stop, restart) must not leave a spinner after reload.
-test("EASM shows no heat spinner for an interrupted collection", async ({ page }) => {
+test("EASM shows no loading spinners for an interrupted empty collection", async ({ page }) => {
   const title = `EASM interrupted ${Date.now()}`
   const created = await (await page.request.post("/api/threads", { data: { title } })).json()
   const thread = created.thread.id as string
-  await servePanel(page, thread, { ...portrait, collection: { status: "interrupted", steps: [{ id: "heat", status: "interrupted" }] } })
+  await servePanel(page, thread, {
+    ...portrait, nodes: [], edges: [], summary: undefined,
+    collection: { status: "interrupted", steps: portrait.collection.steps.map((step) => ({ ...step, status: "interrupted" })) },
+  })
   await page.goto("/")
   await page.getByTestId("dest-chats").click()
   await page.getByRole("button", { name: title, exact: true }).click()
   const panel = page.getByTestId("easm-task-panel")
+  await expect(panel.getByText("No asset data", { exact: true })).toBeVisible()
   await expect(panel.getByText("No attention trend data")).toBeVisible()
   await expect(panel.getByRole("progressbar")).toHaveCount(0)
 })

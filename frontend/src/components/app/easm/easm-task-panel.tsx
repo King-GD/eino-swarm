@@ -20,7 +20,7 @@ export function EasmTaskPanel({ panel, visible, locale, sheet, active = false }:
   if (!result) return <p role="alert" className="p-3 text-sm">{panelText(locale, "invalidEasm")} {panelText(locale, "regenerateEasm")}</p>
   return <div className="min-h-0 flex-1" data-testid="easm-task-panel" data-revision={panel.revision}>
     <EasmTextContext value={easmText(locale)}>
-      <EasmPanel result={result} heatLoading={sectionLoading(result, "heat", active)} componentsLoading={sectionLoading(result, "components", active)} visible={visible} sheet={sheet} />
+      <EasmPanel result={result} graphLoading={sectionLoading(result, "organizations", active)} heatLoading={sectionLoading(result, "heat", active)} componentsLoading={sectionLoading(result, "components", active)} visible={visible} sheet={sheet} />
     </EasmTextContext>
   </div>
 }

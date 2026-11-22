@@ -1,5 +1,5 @@
 import ForceGraph from "force-graph"
-import { Search } from "lucide-react"
+import { Loader2, Search } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import enlargeIcon from "../../../assets/easm/enlarge.svg"
 import expandIcon from "../../../assets/easm/expand.svg"
@@ -54,9 +54,10 @@ function MaskIcon({ src }: { src: string }) {
 const toolButton = "grid size-7 place-items-center rounded-md border bg-card/95 text-muted-foreground shadow-sm hover:border-primary hover:text-primary"
 const hasImage = (image: HTMLImageElement | null): image is HTMLImageElement => Boolean(image?.complete && image.naturalWidth && image.naturalHeight)
 
-export function AssetGraph({ result, index, expanded = false, mobile = false, visible: active = true, onExpand }: {
+export function AssetGraph({ result, index, loading = false, expanded = false, mobile = false, visible: active = true, onExpand }: {
   result: EasmResult
   index: EasmIndex
+  loading?: boolean
   expanded?: boolean
   mobile?: boolean
   visible?: boolean
@@ -465,7 +466,11 @@ export function AssetGraph({ result, index, expanded = false, mobile = false, vi
               referrerPolicy="no-referrer" className="pointer-events-none absolute top-0 left-0 max-w-none rounded-sm bg-white"
               onLoad={() => graphRef.current?.nodeCanvasObject(graphRef.current.nodeCanvasObject())} /> : null}
           </div>
-          {!view.nodes.length ? <p className="pointer-events-none absolute inset-0 m-0 grid place-items-center text-sm text-muted-foreground">{text.waiting}</p> : null}
+          {!view.nodes.length ? loading ? (
+            <div role="progressbar" aria-label={text.graphLoading} className="pointer-events-none absolute inset-0 flex items-center justify-center text-muted-foreground">
+              <Loader2 className="size-5 motion-safe:animate-spin" aria-hidden />
+            </div>
+          ) : <p className="pointer-events-none absolute inset-0 m-0 grid place-items-center text-xs text-muted-foreground">{text.graphEmpty}</p> : null}
           <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-between gap-2">
             <div role="group" aria-label={text.graphActions} className="flex shrink-0 items-start gap-1.5 [&>button]:pointer-events-auto">
               {!mobile ? <>

@@ -11,8 +11,8 @@ import { SupplyTable } from "./supply-table"
 
 /** The EASM tab: relationship graph, heat trend and supply chain for one result,
  *  stacked in the side panel and side by side in the enlarged dialog. */
-export function EasmPanel({ result, heatLoading, componentsLoading, visible = true, sheet }: {
-  result: EasmResult; heatLoading?: boolean; componentsLoading?: boolean; visible?: boolean; sheet?: HTMLElement | null
+export function EasmPanel({ result, graphLoading, heatLoading, componentsLoading, visible = true, sheet }: {
+  result: EasmResult; graphLoading?: boolean; heatLoading?: boolean; componentsLoading?: boolean; visible?: boolean; sheet?: HTMLElement | null
 }) {
   const text = useEasmText()
   const index = useMemo(() => indexResult(result), [result])
@@ -26,7 +26,7 @@ export function EasmPanel({ result, heatLoading, componentsLoading, visible = tr
         {expand ? <Button size="icon" variant="ghost" aria-label={text.expand} title={text.expandGraph} onClick={expand}><Maximize2 className="size-4" /></Button> : null}
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2">
-        <AssetGraph result={result} index={index} visible={visible && !open} onExpand={expand} mobile={sheet !== undefined} />
+        <AssetGraph result={result} index={index} loading={graphLoading} visible={visible && !open} onExpand={expand} mobile={sheet !== undefined} />
         <HeatTrend heat={result.heat} loading={heatLoading} className="flex h-[260px] flex-col rounded-xl border bg-card p-3" />
         <SupplyTable components={result.components} loading={componentsLoading} className="h-[360px]" sheet={sheet} visible={visible && !open} />
       </div>
@@ -37,7 +37,7 @@ export function EasmPanel({ result, heatLoading, componentsLoading, visible = tr
             <DialogDescription className="sr-only">{text.graphDescription}</DialogDescription>
           </header>
           <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-4 md:grid-cols-[minmax(0,1.7fr)_minmax(300px,1fr)] md:overflow-hidden">
-            <AssetGraph result={result} index={index} visible={visible} expanded />
+            <AssetGraph result={result} index={index} loading={graphLoading} visible={visible} expanded />
             <div className="flex min-h-0 flex-col gap-3">
               <HeatTrend heat={result.heat} loading={heatLoading} className="flex h-[260px] flex-col rounded-xl border bg-card p-3 md:h-auto md:min-h-0 md:flex-1" />
               <SupplyTable components={result.components} loading={componentsLoading} className="h-[360px] md:h-auto md:flex-1" />

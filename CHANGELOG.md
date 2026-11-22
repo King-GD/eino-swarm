@@ -43,6 +43,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- EASM supply-chain collection again requests only FOFA `product1,product5`, excluding service and support products that were unintentionally added.
+
+- The EASM asset graph shows the same loading spinner as attention trend and supply chain while waiting for its first data, and stops spinning when an empty collection ends.
+
 - 手机打开子智能体列表或从子智能体日志返回时，从顶部显示正在运行的子智能体，不再跳到历史列表底部。 (`F-220`)
 
 - 手机轮次导航显示两行输入预览，兼容从旧版 PC 历史补齐文字。跟随时保持当前轮和上一轮可点，横滑浏览时保留位置。点选只加载了回复的轮次时，继续读取该轮的提问并定位到那里。 (`F-220`, `C-006`)
