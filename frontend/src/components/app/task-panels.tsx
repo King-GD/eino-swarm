@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useT } from "@/lib/use-t"
 import { useTaskPanels } from "@/store/task-panels"
 import { panelText } from "@/task-panels/messages"
+import { isNativeTaskPanel, NativeTaskPanel } from "./native-task-panels"
 import { TaskPanelFrame } from "./task-panel-frame"
 
 export function TaskPanels({ threadId, visible }: { threadId: string; visible: boolean }) {
@@ -15,7 +16,9 @@ export function TaskPanels({ threadId, visible }: { threadId: string; visible: b
     {!connected && panels.length ? <p role="status" className="border-b border-border px-3 py-1 text-xs text-muted-foreground">{panelText(t.locale, "disconnected")}</p> : null}
     {owner === threadId && error ? <p role="alert" className="p-2 text-xs text-destructive">{error}</p> : null}
     {panels.map((panel) => <div key={panel.id} className={panel.id === current?.id ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
-      <TaskPanelFrame panel={panel} change={changes[panel.id]} visible={visible && current?.id === panel.id} locale={t.locale} />
+      {isNativeTaskPanel(panel)
+        ? <NativeTaskPanel panel={panel} visible={visible && current?.id === panel.id} locale={t.locale} />
+        : <TaskPanelFrame panel={panel} change={changes[panel.id]} visible={visible && current?.id === panel.id} locale={t.locale} />}
     </div>)}
   </section>
 }

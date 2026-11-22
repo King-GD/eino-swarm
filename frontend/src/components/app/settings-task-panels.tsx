@@ -16,7 +16,10 @@ interface PanelSettings {
   flush_interval_ms: number
   max_state_bytes: number
   max_update_bytes: number
+  easm: EasmSettings
 }
+interface EasmSettings { server_id: string; tools: Record<string, string>; max_domains: number; max_components: number }
+const easmRoles = ["organizations", "relations", "branches", "filings", "asset_rules", "certificate_search", "asset_lookup", "stats", "heat", "product_rules"] as const
 const numbers = ["max_assets", "batch_size", "concurrency", "timeout_seconds", "flush_interval_ms", "max_state_bytes", "max_update_bytes"] as const
 
 export function TaskPanelSettings({ query }: { query: string }) {
@@ -59,6 +62,11 @@ export function TaskPanelSettings({ query }: { query: string }) {
       <Field query={query} label={panelText(t.locale, "enabled")}><Switch disabled={saving} aria-label={panelText(t.locale, "enabled")} checked={settings.enabled} onCheckedChange={(enabled) => update({ ...settings, enabled })} /></Field>
       <Field query={query} label={panelText(t.locale, "client")} wide><Input disabled={saving} value={settings.fofa_client} onChange={(event) => update({ ...settings, fofa_client: event.target.value })} /></Field>
       {numbers.map((key) => <Field key={key} query={query} label={panelText(t.locale, key)}><Input disabled={saving} type="number" min={1} value={settings[key]} onChange={(event) => update({ ...settings, [key]: Number(event.target.value) })} /></Field>)}
+      <h3 className="mt-4 mb-1 text-xs font-semibold">{panelText(t.locale, "easmSettings")}</h3>
+      <p className="mb-2 text-xs text-muted-foreground">{panelText(t.locale, "easmHint")}</p>
+      <Field query={query} label={panelText(t.locale, "easmServer")} wide><Input disabled={saving} aria-label={panelText(t.locale, "easmServer")} value={settings.easm.server_id} onChange={(event) => update({ ...settings, easm: { ...settings.easm, server_id: event.target.value } })} /></Field>
+      {(["max_domains", "max_components"] as const).map((key) => <Field key={key} query={query} label={panelText(t.locale, key === "max_domains" ? "easmMaxDomains" : "easmMaxComponents")}><Input disabled={saving} type="number" min={1} aria-label={panelText(t.locale, key === "max_domains" ? "easmMaxDomains" : "easmMaxComponents")} value={settings.easm[key]} onChange={(event) => update({ ...settings, easm: { ...settings.easm, [key]: Number(event.target.value) } })} /></Field>)}
+      {easmRoles.map((role) => <Field key={role} query={query} label={panelText(t.locale, `easm_${role}`)} wide><Input disabled={saving} aria-label={panelText(t.locale, `easm_${role}`)} value={settings.easm.tools[role] ?? ""} onChange={(event) => update({ ...settings, easm: { ...settings.easm, tools: { ...settings.easm.tools, [role]: event.target.value } } })} /></Field>)}
       <Button type="button" size="sm" disabled={saving || !Object.keys(edited).length} onClick={() => void save()}>{panelText(t.locale, "save")}</Button>
     </> : null}
     {saved ? <p role="status" className="mt-2 text-xs">{panelText(t.locale, "saved")}</p> : null}
