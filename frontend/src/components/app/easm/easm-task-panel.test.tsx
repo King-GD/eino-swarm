@@ -18,7 +18,12 @@ it("derives heat loading from the persisted collection steps", () => {
   }
   const panel = { id: "p", thread_id: "t", plugin_id: definition.id, plugin_version: definition.version, revision: 1, definition, state } as TaskPanel
   const view = render(<EasmTaskPanel panel={panel} visible locale="zh" />)
-  expect(seen).toHaveBeenLastCalledWith(expect.objectContaining({ heatLoading: true }))
+  expect(seen).toHaveBeenLastCalledWith(expect.objectContaining({ heatLoading: true, componentsLoading: false }))
+  // A first pass without a query skips metrics; while the task still runs the
+  // agent can supply one, so the sections keep spinning instead of "no data".
+  const skipped = { ...state, collection: { status: "done" as const, steps: [{ id: "heat" as const, status: "skipped" as const, code: "no_query" }] } }
+  view.rerender(<EasmTaskPanel panel={{ ...panel, state: skipped }} visible locale="zh" active />)
+  expect(seen).toHaveBeenLastCalledWith(expect.objectContaining({ heatLoading: true, componentsLoading: true }))
   const done = { ...state, collection: { status: "done" as const, steps: [{ id: "heat" as const, status: "done" as const }] } }
   view.rerender(<EasmTaskPanel panel={{ ...panel, state: done, revision: 2 }} visible locale="zh" />)
   expect(seen).toHaveBeenLastCalledWith(expect.objectContaining({ result: done, heatLoading: false }))

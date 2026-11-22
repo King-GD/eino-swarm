@@ -51,9 +51,12 @@ export function isEasmResult(value: unknown): value is EasmResult {
   return true
 }
 
-/** A step is loading while it runs, or while it waits in a running collection. */
-export function stepLoading(result: EasmResult, step: EasmStepId): boolean {
-  if (result.collection.status !== "running") return false
+/** A section without data waits while its step can still deliver: the
+ *  producer is running it, or the owning task is still working and the step
+ *  has no finished result yet (the agent may run the source again with a
+ *  query). "No data" is shown only once nothing more can arrive. */
+export function sectionLoading(result: EasmResult, step: EasmStepId, taskActive: boolean): boolean {
   const status = result.collection.steps.find((item) => item.id === step)?.status
-  return status === "running" || status === "pending"
+  if (result.collection.status === "running" && (status === "running" || status === "pending")) return true
+  return taskActive && status !== "done"
 }

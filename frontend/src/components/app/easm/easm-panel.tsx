@@ -11,8 +11,8 @@ import { SupplyTable } from "./supply-table"
 
 /** The EASM tab: relationship graph, heat trend and supply chain for one result,
  *  stacked in the side panel and side by side in the enlarged dialog. */
-export function EasmPanel({ result, heatLoading, visible = true, sheet }: {
-  result: EasmResult; heatLoading?: boolean; visible?: boolean; sheet?: HTMLElement | null
+export function EasmPanel({ result, heatLoading, componentsLoading, visible = true, sheet }: {
+  result: EasmResult; heatLoading?: boolean; componentsLoading?: boolean; visible?: boolean; sheet?: HTMLElement | null
 }) {
   const text = useEasmText()
   const index = useMemo(() => indexResult(result), [result])
@@ -28,7 +28,7 @@ export function EasmPanel({ result, heatLoading, visible = true, sheet }: {
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2">
         <AssetGraph result={result} index={index} visible={visible && !open} onExpand={expand} mobile={sheet !== undefined} />
         <HeatTrend heat={result.heat} loading={heatLoading} className="flex h-[260px] flex-col rounded-xl border bg-card p-3" />
-        <SupplyTable components={result.components} className="h-[360px]" sheet={sheet} visible={visible && !open} />
+        <SupplyTable components={result.components} loading={componentsLoading} className="h-[360px]" sheet={sheet} visible={visible && !open} />
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="flex h-[94dvh] w-[96vw] max-w-none flex-col gap-0 overflow-hidden p-0">
@@ -40,7 +40,7 @@ export function EasmPanel({ result, heatLoading, visible = true, sheet }: {
             <AssetGraph result={result} index={index} visible={visible} expanded />
             <div className="flex min-h-0 flex-col gap-3">
               <HeatTrend heat={result.heat} loading={heatLoading} className="flex h-[260px] flex-col rounded-xl border bg-card p-3 md:h-auto md:min-h-0 md:flex-1" />
-              <SupplyTable components={result.components} className="h-[360px] md:h-auto md:flex-1" />
+              <SupplyTable components={result.components} loading={componentsLoading} className="h-[360px] md:h-auto md:flex-1" />
             </div>
           </div>
         </DialogContent>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { isEasmResult, stepLoading } from "./data"
+import { isEasmResult, sectionLoading } from "./data"
 import type { EasmResult } from "./types"
 
 const fixture: EasmResult = {
@@ -25,13 +25,17 @@ describe("EASM snapshot relationships", () => {
     expect(isEasmResult({ ...fixture, collection: undefined })).toBe(false)
   })
 
-  // The heat card spins only while its step can still deliver data; a
-  // finished or interrupted collection must never leave a spinner behind.
-  it("reports a step loading only inside a running collection", () => {
+  // While the asset work continues a section spins instead of claiming "no
+  // data"; once nothing more can arrive it must never leave a spinner behind.
+  it("keeps a section loading until its step can no longer deliver", () => {
     const running = { status: "running" as const, steps: [{ id: "heat" as const, status: "pending" as const }, { id: "summary" as const, status: "done" as const }] }
-    expect(stepLoading({ ...fixture, collection: running }, "heat")).toBe(true)
-    expect(stepLoading({ ...fixture, collection: running }, "summary")).toBe(false)
-    expect(stepLoading({ ...fixture, collection: { ...running, status: "interrupted" } }, "heat")).toBe(false)
+    expect(sectionLoading({ ...fixture, collection: running }, "heat", false)).toBe(true)
+    expect(sectionLoading({ ...fixture, collection: running }, "summary", true)).toBe(false)
+    const skipped = { status: "done" as const, steps: [{ id: "heat" as const, status: "skipped" as const, code: "no_query" }] }
+    expect(sectionLoading({ ...fixture, collection: skipped }, "heat", true)).toBe(true)
+    expect(sectionLoading({ ...fixture, collection: skipped }, "heat", false)).toBe(false)
+    expect(sectionLoading({ ...fixture, collection: { status: "idle", steps: [] } }, "components", true)).toBe(true)
+    expect(sectionLoading({ ...fixture, collection: { ...running, status: "interrupted" } }, "heat", false)).toBe(false)
   })
 
   it("rejects duplicate IDs, invalid roots and dangling references", () => {

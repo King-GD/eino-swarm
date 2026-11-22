@@ -41,7 +41,7 @@ async function nodePoint(stage: Locator, id: string) {
 
 const portrait: EasmResult = {
   schema_version: 1, title: "Fixture Org", query: 'org="Fixture Org"',
-  collection: { status: "running", steps: [{ id: "organizations", status: "done" }, { id: "summary", status: "done" }, { id: "heat", status: "running" }] },
+  collection: { status: "running", steps: [{ id: "organizations", status: "done" }, { id: "summary", status: "done" }, { id: "heat", status: "running" }, { id: "components", status: "pending" }] },
   nodes: [
     { id: "root", kind: "root", label: "Fixture Org", detail: { organization_id: "41", description: "A sourced introduction" } },
     { id: "company:org:42", kind: "company", label: "Peer Org", detail: { basis: [{ source: "organizations" }] } },
@@ -71,6 +71,7 @@ test("EASM renders the producer state, words evidence and follows step status", 
   await expect(panel.getByText("120", { exact: true })).toBeVisible()
   await expect(panel.getByText("FOFA assets")).toBeVisible()
   await expect(panel.getByRole("progressbar", { name: "Loading asset attention trend" })).toBeVisible()
+  await expect(panel.getByRole("progressbar", { name: "Loading supply chain components" })).toBeVisible()
 
   const stage = panel.getByTestId("easm-graph")
   await expect(stage).toHaveAttribute("data-ready", "true")
@@ -88,12 +89,14 @@ test("EASM renders the producer state, words evidence and follows step status", 
     operations: [
       { op: "replace", path: "/collection/status", value: "done" },
       { op: "replace", path: "/collection/steps/2/status", value: "done" },
+      { op: "replace", path: "/collection/steps/3/status", value: "done" },
       { op: "replace", path: "/heat", value: [{ date: "2026-01-05", value: 3 }, { date: "2026-01-12", value: 8 }] },
     ],
   })
   await expect(panel).toHaveAttribute("data-revision", "2")
   await expect(panel.getByRole("progressbar")).toHaveCount(0)
   await expect(panel.getByTestId("easm-heat")).toBeVisible()
+  await expect(panel.getByText("No component data")).toBeVisible()
 })
 
 // An interrupted run (Stop, restart) must not leave a spinner after reload.

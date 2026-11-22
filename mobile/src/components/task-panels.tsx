@@ -13,7 +13,7 @@ import { useTaskPanels } from "@/lib/use-task-panels"
 const opened = new Set<string>()
 
 /** Closing only changes presentation; the paired PC retains task ownership. */
-export function usePhoneTaskPanelView(link: RemoteLink | undefined, threadId: string, ownerKey: string) {
+export function usePhoneTaskPanelView(link: RemoteLink | undefined, threadId: string, ownerKey: string, active = false) {
   const scope = `${ownerKey}\0${threadId}`
   const [view, setView] = useState({ scope, open: false, selected: "" })
   const open = view.scope === scope && view.open
@@ -30,7 +30,7 @@ export function usePhoneTaskPanelView(link: RemoteLink | undefined, threadId: st
     }
   }, [scope, panels, data.available, data.loading, view.scope])
   return {
-    ...data, available: Boolean(ownerKey && link && data.available), panels, current, scope, open, close,
+    ...data, available: Boolean(ownerKey && link && data.available), panels, current, scope, open, close, active,
     show: () => setView({ scope, open: true, selected: current?.id ?? "" }),
     select: (id: string) => setView({ scope, open: true, selected: id }),
   }
@@ -97,7 +97,7 @@ export function PhoneTaskPanelSheet({ view }: { view: PanelView }) {
     </label> : null}
     {view.panels.map((panel) => <div key={`${view.scope}:${panel.id}`} className={panel.id === view.current?.id ? "flex min-h-0 min-w-0 flex-1 flex-col" : "hidden"}>
       {isNativeTaskPanel(panel)
-        ? <NativeTaskPanel panel={panel} visible={view.open && panel.id === view.current?.id} locale={locale} sheet={dialog} />
+        ? <NativeTaskPanel panel={panel} visible={view.open && panel.id === view.current?.id} locale={locale} sheet={dialog} active={view.active} />
         : <TaskPanelFrame panel={panel} change={view.changes[panel.id]} visible={view.open && panel.id === view.current?.id} locale={locale} />}
     </div>)}
   </section>, document.body)

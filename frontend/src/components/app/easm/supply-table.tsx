@@ -1,3 +1,4 @@
+import { Loader2 } from "lucide-react"
 import { useEffect, useId, useMemo, useState } from "react"
 import { Badge } from "../../ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../ui/dialog"
@@ -43,8 +44,8 @@ function TagEvidence({ row }: { row: ComponentRow }) {
 }
 
 /** Third-party components with their aggregate counts; a row opens its tag evidence. */
-export function SupplyTable({ components, className, sheet, visible = true }: {
-  components: EasmResult["components"]; className?: string; sheet?: HTMLElement | null; visible?: boolean
+export function SupplyTable({ components, loading = false, className, sheet, visible = true }: {
+  components: EasmResult["components"]; loading?: boolean; className?: string; sheet?: HTMLElement | null; visible?: boolean
 }) {
   const text = useEasmText()
   const rows = useMemo(() => sortComponents(components), [components])
@@ -56,9 +57,15 @@ export function SupplyTable({ components, className, sheet, visible = true }: {
     <section aria-labelledby={titleId} className={cn("flex min-h-0 flex-col rounded-xl border bg-card p-3", className)}>
       <div className="mb-2 flex items-center justify-between gap-2">
         <h2 id={titleId} className="m-0 text-[13px] font-semibold whitespace-nowrap">{text.supplyTitle}</h2>
-        <span className="text-[11px] text-muted-foreground">{text.supplyCount(formatCount(rows.length, text))}</span>
+        {rows.length ? <span className="text-[11px] text-muted-foreground">{text.supplyCount(formatCount(rows.length, text))}</span> : null}
       </div>
-      <div tabIndex={0} role="region" aria-label={text.supplyRegion} className="min-h-0 flex-1 overflow-auto overscroll-contain">
+      {!rows.length ? (
+        loading ? (
+          <div role="progressbar" aria-label={text.supplyLoading} className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground">
+            <Loader2 className="size-5 motion-safe:animate-spin" aria-hidden />
+          </div>
+        ) : <p className="m-0 flex min-h-0 flex-1 items-center justify-center text-xs text-muted-foreground">{text.supplyEmpty}</p>
+      ) : <div tabIndex={0} role="region" aria-label={text.supplyRegion} className="min-h-0 flex-1 overflow-auto overscroll-contain">
         <table className="w-full table-fixed border-collapse text-xs" data-testid="easm-supply">
           <caption className="sr-only">{text.supplyCaption(rows.length)}</caption>
           <colgroup><col /><col className="w-[72px]" /><col className="w-[40%]" /></colgroup>
@@ -89,7 +96,7 @@ export function SupplyTable({ components, className, sheet, visible = true }: {
             })}
           </tbody>
         </table>
-      </div>
+      </div>}
       <Dialog open={visible && !!open} onOpenChange={(value) => { if (!value) setOpenName(null) }}>
         <DialogContent container={sheet} className="max-h-[80dvh] max-w-[min(92vw,32rem)] overflow-y-auto">
           <DialogTitle>{open ? open.display_name || open.name : ""}</DialogTitle>

@@ -102,7 +102,7 @@ Graph rules are enforced by one `Graph` type: a single root without incoming edg
 - Certificates come from search rows and, when configured, TLS asset lookup. Identity is the fingerprint, else issuer + serial, else an asset-local observation; subject organizations stay attributes. Per-service observations keep validity, matching and expiry flags; only a valid, matching, unexpired observation confirms the domain → certificate edge. A domain first seen in a certificate reply hangs under the root as a pending clue.
 - `summary` reads the exact asset total and distinct IPs; `clues` counts non-root nodes. `heat` requires strictly ascending `YYYY-MM-DD` points. `components` reads product buckets and, when the product-rule role is configured, resolves numeric rule IDs to names; a failed name lookup keeps the IDs.
 
-The renderer shows the graph, attention trend and component table, derives heat loading from the `heat` step, and keeps all copy in `frontend/src/lib/easm/messages.ts`. Component trending days and KEV/CVE tags have no configured source yet and stay empty.
+The renderer shows the graph, attention trend and component table and keeps all copy in `frontend/src/lib/easm/messages.ts`. A trend or component section with data always shows it. Without data it shows a spinner while its step is pending or running, or while the owning conversation is still running and the step has not finished (a first pass without a query may be followed by one with it); "no data" appears only once nothing more can arrive. Component trending days and KEV/CVE tags have no configured source yet and stay empty.
 
 ## Validation
 

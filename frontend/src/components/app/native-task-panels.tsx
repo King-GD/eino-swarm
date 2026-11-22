@@ -8,6 +8,9 @@ export interface NativeTaskPanelProps {
   locale: string
   /** Phone sheet that portals overlays; undefined on the desktop. */
   sheet?: HTMLElement | null
+  /** The conversation that owns the panel is still running a task, so data
+   *  that has not arrived yet may still come. */
+  active?: boolean
 }
 
 const EasmTaskPanel = lazy(() => import("./easm/easm-task-panel").then((module) => ({ default: module.EasmTaskPanel })))

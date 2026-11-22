@@ -116,7 +116,7 @@ export function ThreadScreen({
     { id: "stopped", label: t("thread.agent.stoppedGroup", { n: stoppedAgents.length }), agents: stoppedAgents },
   ]
   const [agentPage, setAgentPage] = useState("chat")
-  const taskPanels = usePhoneTaskPanelView(fileLink, detail.id, panelOwnerKey)
+  const taskPanels = usePhoneTaskPanelView(fileLink, detail.id, panelOwnerKey, Boolean(detail.running))
   useLayoutEffect(() => { onReadVisibility?.(agentPage === "chat" && !taskPanels.open) }, [agentPage, onReadVisibility, taskPanels.open])
   const selectedAgent = agents.find((agent) => agent.id === agentPage)
   const ask = pendingAsk(manager)

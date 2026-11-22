@@ -1,13 +1,15 @@
 import { useMemo } from "react"
-import { isEasmResult, stepLoading } from "../../../lib/easm/data"
+import { isEasmResult, sectionLoading } from "../../../lib/easm/data"
 import { easmText, EasmTextContext } from "../../../lib/easm/messages"
 import { panelDefinitionCompatible } from "../../../task-panels/definition"
 import { panelText } from "../../../task-panels/messages"
 import type { TaskPanel } from "../../../task-panels/types"
 import { EasmPanel } from "./easm-panel"
 
-export function EasmTaskPanel({ panel, visible, locale, sheet }: {
+export function EasmTaskPanel({ panel, visible, locale, sheet, active = false }: {
   panel: TaskPanel; visible: boolean; locale: string; sheet?: HTMLElement | null
+  /** The owning conversation's task is still running. */
+  active?: boolean
 }) {
   const compatible = useMemo(
     () => panelDefinitionCompatible(panel),
@@ -18,7 +20,7 @@ export function EasmTaskPanel({ panel, visible, locale, sheet }: {
   if (!result) return <p role="alert" className="p-3 text-sm">{panelText(locale, "invalidEasm")} {panelText(locale, "regenerateEasm")}</p>
   return <div className="min-h-0 flex-1" data-testid="easm-task-panel" data-revision={panel.revision}>
     <EasmTextContext value={easmText(locale)}>
-      <EasmPanel result={result} heatLoading={stepLoading(result, "heat")} visible={visible} sheet={sheet} />
+      <EasmPanel result={result} heatLoading={sectionLoading(result, "heat", active)} componentsLoading={sectionLoading(result, "components", active)} visible={visible} sheet={sheet} />
     </EasmTextContext>
   </div>
 }
