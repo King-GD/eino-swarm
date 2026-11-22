@@ -22,7 +22,7 @@ const (
 )
 
 const (
-	scheduleWakeDesc = "Arm or replace a wait on this conversation. Call this when progress is gated on time or a condition that is not worth polling inside this turn, then end the turn. When remaining time is an estimate, bias delay_s/every_s to about a third of it; extra checks are fine. Do not schedule work that can finish now. Do not use a wait instead of asking the human. A human prohibition on parking this conversation overrides this guidance; only later direct human permission can lift it."
+	scheduleWakeDesc = "Arm or replace a wait on this conversation. Call this when progress is gated on time or a condition that is not worth polling inside this turn. End the turn after the wait is armed. When remaining time is an estimate, bias delay_s/every_s to about a third of it; extra checks are fine. Do not schedule work that can finish now. Do not use a wait instead of asking the human. A human prohibition on parking this conversation overrides this guidance; only later direct human permission can lift it."
 	scheduleTaskDesc = "Arm an independent job that mints its own conversation when it fires. Only from a human-originated turn — never from a continuation, a scheduled check, or an accepted-plan execute turn."
 	cancelSchedDesc  = "Cancel a wait by id so it stops firing."
 	reportSchedDesc  = "Report the result of a scheduled check. Empty findings mean nothing to surface. Call this only on a scheduled turn. next_in_s arms a repeating every_s interval; omitting it accepts the report without arming another check. If this wait is on an estimated remaining time and still open, recadence shorter, never stretch. Human prohibitions on parking this conversation forbid next_in_s; reporting without it and ending the wait remain available."

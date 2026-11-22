@@ -6,6 +6,7 @@ import { api } from "@/lib/api"
 import type { MCPServerInput, MCPServerView } from "@/lib/mcp-settings"
 import type { Settings, ToolDescriptor } from "@/lib/types"
 import { useApp } from "@/store/app"
+import { useSettingsSheet } from "@/store/settings-sheet"
 
 import { ComposerTools } from "./composer-tools"
 
@@ -39,6 +40,7 @@ function toolSettings(patch: Partial<Settings["tools"]> = {}): Settings["tools"]
 describe("Composer tool switches", () => {
   beforeEach(() => {
     useApp.setState({ locale: "en" })
+    useSettingsSheet.setState({ open: false, section: "general", focus: "" })
     vi.mocked(api.tools).mockReset().mockResolvedValue({ catalog, enabled: ["read", "web_search"] })
     vi.mocked(api.mcpServers).mockReset().mockResolvedValue([server, hidden])
     vi.mocked(api.settings).mockReset().mockResolvedValue({ tools: toolSettings() } as Settings)
@@ -102,6 +104,15 @@ describe("Composer tool switches", () => {
     })))
     expect(api.saveMCPServer).toHaveBeenCalledWith(expect.not.objectContaining({ env: expect.anything(), headers: expect.anything() }))
     expect(lookup).toHaveAttribute("aria-checked", "false")
+  })
+
+  it("opens tool settings from the menu", async () => {
+    const user = userEvent.setup()
+    render(<ComposerTools />)
+    await user.click(screen.getByRole("button", { name: "Tools" }))
+    await user.click(await screen.findByRole("button", { name: "Tool settings" }))
+    expect(useSettingsSheet.getState()).toMatchObject({ open: true, section: "tools", focus: "" })
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Tool settings" })).toBeNull())
   })
 
   it("filters the built-in group and one group per connection", async () => {

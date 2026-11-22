@@ -86,30 +86,31 @@ func (p *Pool) accountSourceByID(id string, includeHidden bool) *AccountSource {
 	return nil
 }
 
-// switchableAccountSources is what the LOCAL composer can pick. A catalog
-// that has no conversation row is skipped. With none published, the retained
-// signed-in projection stays selectable so the login is not presented as gone.
-func (p *Pool) switchableAccountSources() []*AccountSource {
-	var listed []*AccountSource
-	for _, src := range p.localAccountSources() {
-		if src != nil && len(src.rows(false, "")) > 0 {
-			listed = append(listed, src)
+func (p *Pool) effectiveLocalAccountSources() []*AccountSource {
+	local := p.localAccountSources()
+	sources := make([]*AccountSource, 0, len(local)+1)
+	seen := make(map[string]bool, len(local)+1)
+	add := func(src *AccountSource) {
+		if src == nil || src.id == "" || seen[src.id] {
+			return
 		}
+		seen[src.id] = true
+		sources = append(sources, src)
 	}
-	if len(listed) > 0 {
-		return listed
+	for _, src := range local {
+		add(src)
 	}
-	if src := p.account.Load(); src != nil && len(src.rows(false, "")) > 0 {
-		return []*AccountSource{src}
-	}
-	return nil
+	add(p.account.Load())
+	return sources
 }
 
 func (p *Pool) listLocalModels() []Info {
 	personal := listModels(p.cfg.Snapshot(), p.mock)
 	var accountRows []Info
-	for _, src := range p.switchableAccountSources() {
-		accountRows = append(accountRows, src.rows(false, "")...)
+	for _, src := range p.effectiveLocalAccountSources() {
+		if !src.unavailable {
+			accountRows = append(accountRows, src.rows(false, "")...)
+		}
 	}
 	return append(accountRows, personal...)
 }

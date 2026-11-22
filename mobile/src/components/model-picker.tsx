@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 import { Check, RefreshCw, X } from "lucide-react"
 
@@ -11,6 +11,7 @@ export function ModelPicker({
   models,
   providerId,
   model,
+  readOnlyLabel,
   onSelect,
   onClose,
   onRefresh,
@@ -20,11 +21,108 @@ export function ModelPicker({
   models: ModelChoice[]
   providerId: string
   model: string
+  readOnlyLabel?: string
   onSelect: (providerId: string, model: string) => void
   onClose: () => void
   onRefresh?: () => void | Promise<void>
   refreshBusy?: boolean
   refreshError?: string
+}) {
+  const groups: { id: string; label: string; rows: ModelChoice[] }[] = []
+  for (const row of models) {
+    if (!row.model) continue
+    const name = row.provider_label || row.provider_id
+    const label = row.catalog_group === "original" ? t("account.originalInterface", { name }) : name
+    const group = groups.find((item) => item.id === row.provider_id)
+    if (group) group.rows.push(row)
+    else groups.push({ id: row.provider_id, label, rows: [row] })
+  }
+
+  const label = t("composer.model")
+  return (
+    <PickerSheet label={label} onClose={onClose} action={onRefresh ? (
+      <button
+        type="button"
+        aria-label={t("composer.refreshModels")}
+        aria-busy={refreshBusy || undefined}
+        disabled={refreshBusy}
+        className="flex min-h-10 shrink-0 items-center gap-1 rounded-full px-3 text-xs text-foreground active:bg-accent disabled:opacity-40"
+        onClick={() => void onRefresh()}
+      >
+        <RefreshCw className={refreshBusy ? "size-4 animate-spin motion-reduce:animate-none" : "size-4"} aria-hidden />
+        {t("composer.refreshModels")}
+      </button>
+    ) : null}>
+      {readOnlyLabel ? (
+        <p className="px-4 py-3 text-sm wrap-anywhere">{readOnlyLabel}</p>
+      ) : <>
+          {refreshError ? <p role="alert" className="px-3 py-2 text-sm text-destructive">{refreshError}</p> : null}
+          {models.length === 0 ? <p className="px-3 py-3 text-sm text-muted-foreground">{t("composer.noModels")}</p> : null}
+          <div role="radiogroup" aria-label={t("composer.model")} className="min-h-0 overflow-y-auto overscroll-contain px-2 py-2">
+            {groups.map((group) => (
+              <div key={group.id} role="group" aria-label={group.label}>
+                <h3 className="px-3 py-2 text-xs font-semibold text-muted-foreground">{group.label}</h3>
+                {group.rows.map((row) => {
+                  const selected = row.provider_id === providerId && row.model === model
+                  return (
+                    <button
+                      key={row.provider_id + "\t" + row.model}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      title={row.ready === false ? t("composer.modelUnavailable") : undefined}
+                      className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm active:bg-accent ${row.ready === false ? "text-muted-foreground" : "text-foreground"}`}
+                      onClick={() => onSelect(row.provider_id, row.model)}
+                    >
+                      <span className="min-w-0 flex-1 break-all">{row.label || row.model}</span>
+                      {selected ? <Check className="size-4 shrink-0 text-primary" aria-hidden /> : null}
+                    </button>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+      </>}
+    </PickerSheet>
+  )
+}
+
+export function ThinkingPicker({ levels, value, onSelect, onClose }: {
+  levels: string[]
+  value: string
+  onSelect: (level: string) => void
+  onClose: () => void
+}) {
+  const label = t("composer.thinking")
+  return (
+    <PickerSheet label={label} onClose={onClose}>
+      <div role="radiogroup" aria-label={label} className="min-h-0 overflow-y-auto overscroll-contain p-2">
+        {["", ...levels].map((level) => (
+          <button key={level} type="button" role="radio" aria-checked={level === value}
+            className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm active:bg-accent"
+            onClick={() => onSelect(level)}>
+            {thinkingLabel(level)}
+            {level === value ? <Check className="size-4 shrink-0 text-primary" aria-hidden /> : null}
+          </button>
+        ))}
+      </div>
+    </PickerSheet>
+  )
+}
+
+export function thinkingLabel(level: string) {
+  if (level === "") return t("composer.thinkingDefault")
+  if (level === "low") return t("reason.low")
+  if (level === "medium") return t("reason.medium")
+  if (level === "high") return t("reason.high")
+  return level
+}
+
+function PickerSheet({ label, action, onClose, children }: {
+  label: string
+  action?: ReactNode
+  onClose: () => void
+  children: ReactNode
 }) {
   const closeRef = useRef(onClose)
   const closeButton = useRef<HTMLButtonElement>(null)
@@ -53,81 +151,20 @@ export function ModelPicker({
     }
   }, [])
 
-  const groups: { id: string; label: string; rows: ModelChoice[] }[] = []
-  for (const row of models) {
-    if (!row.model) continue
-    const name = row.provider_label || row.provider_id
-    const label = row.catalog_group === "original" ? t("account.originalInterface", { name }) : name
-    const group = groups.find((item) => item.id === row.provider_id)
-    if (group) group.rows.push(row)
-    else groups.push({ id: row.provider_id, label, rows: [row] })
-  }
-
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <button
-        type="button"
-        className="absolute inset-0 bg-foreground/40"
-        aria-label={t("home.close")}
-        onClick={onClose}
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("composer.model")}
-        className="relative z-10 flex max-h-[80vh] w-full flex-col rounded-t-2xl border border-border bg-background pb-[env(safe-area-inset-bottom)]"
-      >
+      <button type="button" className="absolute inset-0 bg-foreground/40" aria-hidden tabIndex={-1} onClick={onClose} />
+      <div role="dialog" aria-modal="true" aria-label={label}
+        className="relative z-10 flex max-h-[80vh] w-full max-w-lg flex-col rounded-t-2xl border border-border bg-background pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-center justify-between border-b border-border px-4 py-2">
-          <h2 className="text-base font-semibold">{t("composer.model")}</h2>
-          {onRefresh ? (
-            <button
-              type="button"
-              aria-label={t("composer.refreshModels")}
-              aria-busy={refreshBusy || undefined}
-              disabled={refreshBusy}
-              className="flex min-h-10 shrink-0 items-center gap-1 rounded-full px-3 text-xs text-foreground active:bg-accent disabled:opacity-40"
-              onClick={() => void onRefresh()}
-            >
-              <RefreshCw className={refreshBusy ? "size-4 animate-spin motion-reduce:animate-none" : "size-4"} aria-hidden />
-              {t("composer.refreshModels")}
-            </button>
-          ) : null}
-          <button
-            ref={closeButton}
-            type="button"
-            aria-label={t("home.close")}
-            className="flex size-10 items-center justify-center rounded-full text-muted-foreground active:bg-accent"
-            onClick={onClose}
-          >
+          <h2 className="flex-1 text-base font-semibold">{label}</h2>
+          {action}
+          <button ref={closeButton} type="button" aria-label={t("home.close")} onClick={onClose}
+            className="flex size-10 items-center justify-center rounded-full text-muted-foreground active:bg-accent">
             <X className="size-5" aria-hidden />
           </button>
         </div>
-        {refreshError ? <p role="alert" className="px-3 py-2 text-sm text-destructive">{refreshError}</p> : null}
-        {models.length === 0 ? <p className="px-3 py-3 text-sm text-muted-foreground">{t("composer.noModels")}</p> : null}
-        <div role="radiogroup" aria-label={t("composer.model")} className="min-h-0 overflow-y-auto overscroll-contain px-2 py-2">
-          {groups.map((group) => (
-            <div key={group.id} role="group" aria-label={group.label}>
-              <h3 className="px-3 py-2 text-xs font-semibold text-muted-foreground">{group.label}</h3>
-              {group.rows.map((row) => {
-                const selected = row.provider_id === providerId && row.model === model
-                return (
-                  <button
-                    key={row.provider_id + "\t" + row.model}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    title={row.ready === false ? t("composer.modelUnavailable") : undefined}
-                    className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm active:bg-accent ${row.ready === false ? "text-muted-foreground" : "text-foreground"}`}
-                    onClick={() => onSelect(row.provider_id, row.model)}
-                  >
-                    <span className="min-w-0 flex-1 break-all">{row.label || row.model}</span>
-                    {selected ? <Check className="size-4 shrink-0 text-primary" aria-hidden /> : null}
-                  </button>
-                )
-              })}
-            </div>
-          ))}
-        </div>
+        {children}
       </div>
     </div>,
     document.body,

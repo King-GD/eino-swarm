@@ -1,10 +1,9 @@
 import type { ReactNode } from "react"
-import { Bot, CalendarClock, FolderKanban, MessageSquare, Settings } from "lucide-react"
+import { CalendarClock, FolderKanban, MessageSquare, Settings } from "lucide-react"
 
 import { ChromeMenu } from "@/components/app/chrome-menu"
 import { DesktopAccountMenu } from "@/components/app/desktop-account-menu"
 import { Button } from "@/components/ui/button"
-import { closeClient } from "@/lib/client-open"
 import {
   scheduledReturnDest,
   setDeskDest,
@@ -12,7 +11,6 @@ import {
   visibleDest,
   type DeskDest,
 } from "@/lib/desk-nav"
-import { useClientCatalog } from "@/components/app/local-clients"
 import { useT } from "@/lib/use-t"
 import { cn } from "@/lib/utils"
 import { useApp } from "@/store/app"
@@ -24,17 +22,10 @@ export function pickDest(next: DeskDest) {
   if (next === "scheduled") {
     if (!useApp.getState().scheduleInboxOpen) useScheduleInboxUI.getState().reset()
     setDeskDest("scheduled")
-    closeClient()
     useApp.getState().openScheduleInbox()
     return
   }
-  if (next === "clients") {
-    setDeskDest("clients")
-    useApp.getState().closeScheduleInbox()
-    return
-  }
   setDeskDest(next)
-  closeClient()
   useApp.getState().closeScheduleInbox()
 }
 
@@ -86,8 +77,7 @@ function RailButton({
   )
 }
 
-/** Leftmost destination rail. Projects, conversations, waits, and local
- *  clients are lists, not sections inside the open task. The rail stays
+/** Leftmost destination rail for projects, conversations and waits. The rail stays
  *  when the list column is hidden; `edge` is the hairline against that
  *  column, and the aside draws the outer one when the column is gone.
  *  Unread waits stay on the list rows. A count on the icon covered the
@@ -105,7 +95,6 @@ export function DestRail({
 }) {
   const t = useT()
   const pane = useVisibleDest()
-  const catalog = useClientCatalog()
 
   return (
     <nav
@@ -144,16 +133,6 @@ export function DestRail({
       >
         <CalendarClock />
       </RailButton>
-      {catalog.enabled ? (
-        <RailButton
-          current={pane === "clients"}
-          label={t("sidebar.clients")}
-          testId="dest-clients"
-          onClick={() => pickDest("clients")}
-        >
-          <Bot />
-        </RailButton>
-      ) : null}
       <div className="mt-auto flex flex-col items-center gap-1 pb-1">
         <ChromeMenu onToggleTheme={onToggleTheme} onToggleLocale={onToggleLocale} />
         <RailButton

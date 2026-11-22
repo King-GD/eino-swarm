@@ -42,7 +42,7 @@ test("speech settings explain disabled tests and record and play after enabling"
   if (!address || typeof address === "string") throw new Error("Speech fixture did not listen")
   try {
     expect((await request.put("/api/settings", { data: { speech: {
-      input: { enabled: false, source: "custom", base_url: `http://127.0.0.1:${address.port}/v1`, model: "fixture-asr", recording_format: "wav" },
+      input: { enabled: false, source: "custom", base_url: `http://127.0.0.1:${address.port}/v1`, model: "fixture-asr", recording_format: "wav", device_id: "removed-input" },
       output: { enabled: false, source: "custom", base_url: `http://127.0.0.1:${address.port}/v1`, model: "fixture-tts", format: "wav" },
     } } })).ok()).toBe(true)
     await page.addInitScript(() => {
@@ -63,6 +63,12 @@ test("speech settings explain disabled tests and record and play after enabling"
     await page.getByRole("button", { name: "Settings", exact: true }).click()
     const settings = page.getByRole("dialog")
     await settings.getByRole("tab", { name: "Models", exact: true }).click()
+    const microphone = settings.getByRole("combobox", { name: "Microphone", exact: true })
+    await expect(microphone).toHaveText("System default")
+    await microphone.click()
+    await expect(page.getByRole("option", { name: "System default", exact: true })).toBeVisible()
+    await expect(page.getByRole("option", { name: "Unavailable", exact: true })).toHaveCount(0)
+    await page.keyboard.press("Escape")
     const record = settings.getByRole("button", { name: "Test voice input", exact: true })
     const play = settings.getByRole("button", { name: "Test reading", exact: true })
     await expect(record).toBeDisabled()
@@ -80,6 +86,10 @@ test("speech settings explain disabled tests and record and play after enabling"
     await settings.getByRole("button", { name: "Finish and transcribe", exact: true }).click()
     await expect(settings.getByLabel("Recognized text")).toHaveValue("fixture transcription")
     expect(recordedBytes).toBeGreaterThan(44)
+    expect((await (await request.get("/api/settings")).json()).settings.speech.input.device_id).toBe("removed-input")
+    await microphone.click()
+    await page.getByRole("option", { name: "System default", exact: true }).click()
+    await expect.poll(async () => (await (await request.get("/api/settings")).json()).settings.speech.input.device_id ?? "").toBe("")
     await settings.getByLabel("Enabled", { exact: true }).nth(1).click()
     await expect(play).toBeEnabled()
     await play.click()
@@ -125,7 +135,7 @@ test(`speech ${recordingFormat} settings gate real recording, preserve edits and
   const baseURL = `http://127.0.0.1:${address.port}/v1`
   try {
     const configured = await request.put("/api/settings", { data: { speech: {
-      input: { enabled: false, source: "custom", base_url: baseURL, model: "fixture-asr", recording_format: recordingFormat },
+      input: { enabled: false, source: "custom", base_url: baseURL, model: "fixture-asr", recording_format: recordingFormat, device_id: recordingFormat === "auto" ? "removed-input" : "" },
       output: { enabled: true, source: "custom", base_url: baseURL, model: "fixture-tts", format: "wav" },
       limits: { chunk_chars: 64 },
     } } })

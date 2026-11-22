@@ -102,7 +102,7 @@ func (rt *runtime) runManager(ctx context.Context, turn *store.Turn, reg *swarm.
 		if paused.CapDecision != nil {
 			proceed = *paused.CapDecision
 		} else {
-			proceed = rt.waitToExtend(ctx, turn, paused.CapUsed, paused.CapExtend)
+			proceed = rt.waitToExtendReason(ctx, turn, paused.CapUsed, paused.CapExtend, pauseReason(paused.CapReason))
 			// A new human continuation is later work, outside the startup
 			// snapshot. Read its durable allowance receipt from the live log.
 			snapshots = nil
@@ -145,7 +145,7 @@ func (rt *runtime) runManager(ctx context.Context, turn *store.Turn, reg *swarm.
 	managedExecIndex := rt.managedExecToolIndex(turn, th, toolset, resumed)
 	tail := applyAccountInstruction(managerExtra(e.cfg, th, pc, e.scheduleLines(rt.threadID), turn.NuwaEnabled), e.pool.AccountInstruction(turn.ProviderID))
 	instruction := managerPrompt(toolset, JoinPromptSections(historyPrompt(toolset, audience), taskCoordinationPrompt, executionGuidance,
-		tail, humanReply, rt.finalGoalWorkerSection(th), e.taskPanelInstruction()), turn.NuwaEnabled, managedExecIndex >= 0)
+		tail, humanReply, rt.finalGoalWorkerSection(th), e.taskPanelInstruction(), toolset.TaskFileInstruction), turn.NuwaEnabled, managedExecIndex >= 0)
 	// Fresh slice: pc.managerTools may return the workspace toolset's
 	// backing array, and appending complete_goal / block_goal in place
 	// would hand them to every sub-agent.
@@ -291,12 +291,15 @@ func (rt *runtime) runManager(ctx context.Context, turn *store.Turn, reg *swarm.
 				ManagerForkContextFilter: withoutPendingManagerProse, OrderManagerCommentary: true,
 			}
 			if recoveryModel == nil {
-				if builder := reg.WorkerConfiguration().ModelBuilder; turn.NuwaEnabled && builder != nil {
-					// Hosted provider tools execute upstream, outside ManagerTools.
-					// Restrict only this planner instance; workers retain the factory.
-					runConfig.Model = provider.WithoutBuiltinTools(builder(swarm.DefaultManagerID, swarm.DefaultManagerID))
+				if builder := reg.WorkerConfiguration().ModelBuilder; builder != nil {
+					runConfig.Model = builder(swarm.DefaultManagerID, swarm.DefaultManagerID)
+					if turn.NuwaEnabled {
+						// Hosted tools execute upstream. Restrict only this planner.
+						runConfig.Model = provider.WithoutBuiltinTools(runConfig.Model)
+					}
 				}
 			}
+			runConfig.Model = provider.WithResponsesContinuation(runConfig.Model, &rt.responses)
 			res, runErr = reg.RunWith(answerCtx, runConfig, swarm.Callback(func(n swarm.Notification) {
 				if n.Kind == swarm.NotifyGenerationStarted && isManagerAgent(n.AgentID) {
 					modelRounds.Add(1)
@@ -631,11 +634,24 @@ func (rt *runtime) runManager(ctx context.Context, turn *store.Turn, reg *swarm.
 	}
 }
 
+// pauseReason keeps a deferred answer check from being replayed as the
+// manager round cap. Anything else stays the real cap.
+func pauseReason(reason string) string {
+	if reason == "classification_deferred" {
+		return reason
+	}
+	return "iterations"
+}
+
 // waitToExtend pauses the turn at the tool-round cap until the human
 // extends it, declines, or interrupts. The channel is installed before the
 // event is recorded so a client that reacts to the event cannot land on
 // ContinueTurn before anyone is listening.
 func (rt *runtime) waitToExtend(ctx context.Context, turn *store.Turn, used, extend int, steered ...*swarm.Registry) bool {
+	return rt.waitToExtendReason(ctx, turn, used, extend, "iterations", steered...)
+}
+
+func (rt *runtime) waitToExtendReason(ctx context.Context, turn *store.Turn, used, extend int, reason string, steered ...*swarm.Registry) bool {
 	ch := make(chan bool, 1)
 	rt.mu.Lock()
 	rt.continueCh = ch
@@ -654,7 +670,7 @@ func (rt *runtime) waitToExtend(ctx context.Context, turn *store.Turn, used, ext
 
 	// Two ints: fmt keeps this branch-free. encoding/json cannot fail here
 	// and a failure would stall the turn with no event for the UI to answer.
-	body := fmt.Sprintf(`{"limit":%d,"extend_by":%d,"reason":"iterations"}`, used, extend)
+	body := fmt.Sprintf(`{"limit":%d,"extend_by":%d,"reason":"%s"}`, used, extend, pauseReason(reason))
 	rt.engine.record(store.Event{
 		ThreadID: rt.threadID, TurnID: turn.ID,
 		Kind: KindMaxIterations, AgentID: swarm.DefaultManagerID,

@@ -5,7 +5,7 @@ import type { AgentState, TranscriptState } from "./transcript"
 export interface ManagerPause {
   limit: number
   extendBy: number
-  reason?: "workers_uncollected"
+  reason?: "workers_uncollected" | "classification_deferred"
   automaticResume?: boolean
   waitId?: string
   sourceSeq?: number
@@ -93,7 +93,7 @@ export function parseIterationLimit(
       reason: "workers_uncollected" as const, automaticResume: body.automatic_resume === true,
       sourceSeq: ev.seq,
       ...(typeof body.wait_id === "string" ? { waitId: body.wait_id } : {}),
-    } : {}),
+    } : body.reason === "classification_deferred" ? { reason: "classification_deferred" as const } : {}),
   }
 }
 

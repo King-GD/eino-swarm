@@ -1,5 +1,10 @@
 import { resolve } from "node:path"
-import { expect, test } from "@playwright/test"
+import { expect, test, type Locator } from "@playwright/test"
+
+async function openToolsMCP(dialog: Locator) {
+  await dialog.getByRole("tab", { name: "Tools", exact: true }).click()
+  await dialog.getByRole("tab", { name: "MCP", exact: true }).click()
+}
 
 test("MCP connection configuration persists and discovers the real server's tool catalog", async ({ page, request }, info) => {
   const name = `remote.example ${Date.now()}`
@@ -8,7 +13,7 @@ test("MCP connection configuration persists and discovers the real server's tool
     await page.goto("/")
     await page.getByRole("button", { name: "Settings", exact: true }).click()
     let dialog = page.getByRole("dialog")
-    await dialog.getByRole("tab", { name: "Tools", exact: true }).click()
+    await openToolsMCP(dialog)
     await dialog.getByRole("button", { name: "Add server" }).click()
     await expect(dialog.getByLabel("Server ID")).toHaveCount(0)
     const displayName = dialog.getByLabel("Display name", { exact: true })
@@ -46,7 +51,7 @@ test("MCP connection configuration persists and discovers the real server's tool
     await page.reload()
     await page.getByRole("button", { name: "Settings", exact: true }).click()
     dialog = page.getByRole("dialog")
-    await dialog.getByRole("tab", { name: "Tools", exact: true }).click()
+    await openToolsMCP(dialog)
     await dialog.getByRole("button", { name: `Edit ${name}`, exact: true }).click()
     await expect(dialog.getByLabel("Server ID")).toHaveCount(0)
     await expect(dialog.getByLabel("Command", { exact: true })).toHaveValue("python3")
@@ -86,7 +91,7 @@ test("MCP JSON text adds a one-line command and keeps its credential hidden", as
     await page.goto("/")
     await page.getByRole("button", { name: "Settings", exact: true }).click()
     const dialog = page.getByRole("dialog")
-    await dialog.getByRole("tab", { name: "Tools", exact: true }).click()
+    await openToolsMCP(dialog)
     await dialog.getByRole("button", { name: "Edit JSON", exact: true }).click()
     const editor = dialog.getByLabel("MCP JSON")
     await expect(editor).toHaveAttribute("spellcheck", "false")

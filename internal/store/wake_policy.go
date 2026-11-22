@@ -52,12 +52,13 @@ type WakePolicyInput struct {
 }
 
 type ThreadWakePolicy struct {
-	Denied     bool   `json:"denied"`
-	SourceSeq  int64  `json:"source_seq,omitempty"`
-	SourceKind string `json:"source_kind,omitempty"`
-	SourceText string `json:"source_text,omitempty"`
-	Quote      string `json:"quote,omitempty"`
-	PendingSeq int64  `json:"pending_seq,omitempty"`
+	Denied       bool   `json:"denied"`
+	SourceSeq    int64  `json:"source_seq,omitempty"`
+	SourceKind   string `json:"source_kind,omitempty"`
+	SourceText   string `json:"source_text,omitempty"`
+	Quote        string `json:"quote,omitempty"`
+	PendingSeq   int64  `json:"pending_seq,omitempty"`
+	PendingCount int    `json:"pending_count,omitempty"`
 }
 
 type ThreadWakeDeniedError struct{ Policy ThreadWakePolicy }
@@ -67,7 +68,11 @@ func (e *ThreadWakeDeniedError) Error() string {
 }
 func (e *ThreadWakeDeniedError) Unwrap() error { return ErrThreadWakeDenied }
 
-type WakePolicyPendingError struct{ Seq int64 }
+type WakePolicyPendingError struct {
+	Seq           int64
+	Count         int
+	RetrySameTurn bool
+}
 
 func (e *WakePolicyPendingError) Error() string {
 	return fmt.Sprintf("%s (human event %d)", ErrWakePolicyPending, e.Seq)
@@ -178,6 +183,7 @@ func readThreadWakePolicy(tx *gorm.DB, threadID string) (ThreadWakePolicy, []Wak
 			if policy.PendingSeq == 0 {
 				policy.PendingSeq = input.Seq
 			}
+			policy.PendingCount++
 			continue
 		}
 		inputs[i].Decision, inputs[i].Quote = decision.Decision, decision.Quote
@@ -260,7 +266,7 @@ func checkThreadWakePolicy(tx *gorm.DB, threadID string) error {
 		return err
 	}
 	if policy.PendingSeq != 0 {
-		return &WakePolicyPendingError{Seq: policy.PendingSeq}
+		return &WakePolicyPendingError{Seq: policy.PendingSeq, Count: policy.PendingCount, RetrySameTurn: true}
 	}
 	if policy.Denied {
 		return &ThreadWakeDeniedError{Policy: policy}

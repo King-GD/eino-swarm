@@ -44,7 +44,11 @@ func (e *Engine) conversationTools(ctx context.Context, th *store.Thread) (*tool
 }
 
 func (e *Engine) conversationToolsForExecution(ctx context.Context, th *store.Thread, execution string, readOnly bool) (*tools.Set, error) {
-	set, err := tools.BuildForWebExecution(ctx, e.cfg, e.WorkspaceDir(th.ID), execution)
+	workdir, err := e.executionWorkspace(th)
+	if err != nil {
+		return nil, err
+	}
+	set, err := tools.BuildForWebExecution(ctx, e.cfg, workdir, execution)
 	if err != nil {
 		return nil, err
 	}
@@ -52,6 +56,7 @@ func (e *Engine) conversationToolsForExecution(ctx context.Context, th *store.Th
 	if restrict {
 		set = tools.AllowWorkspace(set, allow)
 	}
+	set.TaskFileInstruction = e.taskWorkspaceInstruction(th)
 	if e.mcp != nil && !th.PlanMode && !readOnly && !restrict {
 		cfg := e.cfg.Snapshot()
 		external, err := e.mcp.Tools(ctx, cfg.MCP.Servers, set.WorkspaceDir, cfg.Tools.ToolResultLimit())

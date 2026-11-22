@@ -69,12 +69,10 @@ type Thread struct {
 	// TitleAuto is true while the engine still owns the title: empty or the
 	// first-message placeholder. A user rename or a landed generated name
 	// clears it so a later namer cannot overwrite the sidebar.
-	TitleAuto bool `json:"title_auto"`
-	// ProjectID is empty for a conversation that belongs to no project. Those
-	// keep their own workspace directory; a project's conversations share the
-	// project's.
-	ProjectID  string `gorm:"index;size:64" json:"project_id"`
-	ProviderID string `gorm:"size:64" json:"provider_id"`
+	TitleAuto     bool   `json:"title_auto"`
+	ProjectID     string `gorm:"index;size:64" json:"project_id"`
+	TaskWorkspace string `gorm:"not null;default:''" json:"-"`
+	ProviderID    string `gorm:"size:64" json:"provider_id"`
 	// Model is the name this conversation sends. Empty follows a user-configured
 	// default (the account model, or the provider's own model field), so a
 	// Settings change still applies. An account catalog's first name is not a

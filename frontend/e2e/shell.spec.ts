@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import { mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { basename, join } from "node:path"
+import { join } from "node:path"
 
 import { readComposerPlate } from "./composer-plate"
 import { freshConversation, send, waitForIdle } from "./session"
@@ -119,11 +119,10 @@ test("the terminal button opens a shell in the conversation workspace", async ({
   await expect(panel).toBeVisible()
 })
 
-test("a terminal in a project conversation starts in that project's directory", async ({
-  page,
+test("a terminal in a new project conversation starts in its task working directory", async ({
+  page, request,
 }) => {
   const dir = mkdtempSync(join(tmpdir(), "zwai-term-"))
-  const label = basename(dir)
   await page.goto("/")
   await page.getByRole("button", { name: "New project" }).click()
   const name = `Term ${Date.now()}`
@@ -131,10 +130,15 @@ test("a terminal in a project conversation starts in that project's directory", 
   await page.getByLabel("Working directory").fill(dir)
   await page.getByRole("button", { name: "Create project" }).click()
   await page.getByRole("button", { name: `New conversation in ${name}` }).click()
+  const threadID = await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id")
+  const files = await request.get(`/api/threads/${threadID}/files`)
+  expect(files.ok()).toBe(true)
+  const { workspace } = await files.json()
+  expect(workspace).not.toBe(dir)
   await page.getByRole("banner").getByRole("button", { name: "Open terminal" }).click()
   const panel = page.getByTestId("terminal-panel")
   await expect(panel).toBeVisible()
-  await expect(panel.getByText(label, { exact: true })).toBeVisible({
+  await expect(panel.getByRole("button", { name: "work", exact: true })).toHaveAttribute("title", join(workspace, "work"), {
     timeout: 10_000,
   })
 })

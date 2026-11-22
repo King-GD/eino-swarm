@@ -1,3 +1,4 @@
+import { activateComposer } from "./composer-controls"
 import { fixtureCapabilities } from "../src/test/capabilities"
 import { test, expect, type Page } from "@playwright/test"
 
@@ -218,6 +219,7 @@ test("three avatar taps switch the selected PC and expose both interface groups 
   await hiddenGateway(page, true)
   await page.goto("/?mock=1&tick=0&pc-models=managed")
   await expect(page.getByLabel("消息", { exact: true })).toBeVisible()
+  await activateComposer(page)
   await expect(page.getByRole("button", { name: "模型", exact: true })).toHaveCount(0)
   const selected = await page.evaluate(() => localStorage.getItem("zwai.remote.active"))
   const toggle = async () => {
@@ -228,11 +230,13 @@ test("three avatar taps switch the selected PC and expose both interface groups 
   await toggle()
   await expect.poll(() => page.evaluate(() => localStorage.getItem("zwai.phone.mode"))).toBe("local")
   await page.getByRole("dialog", { name: "用户中心", exact: true }).getByRole("button", { name: "关闭", exact: true }).click()
+  await activateComposer(page)
   await page.getByRole("button", { name: "模型", exact: true }).click()
   const picker = page.getByRole("dialog", { name: "模型", exact: true })
   for (const name of ["Partner", "原始接口 · Main"]) await expect(picker.getByRole("group", { name, exact: true }).getByRole("radio", { name: "shared-model", exact: true })).toBeVisible()
   await page.screenshot({ path: info.outputPath("pc-local-interface-groups.png") })
   await picker.getByRole("group", { name: "原始接口 · Main", exact: true }).getByRole("radio", { name: "shared-model", exact: true }).click()
+  await activateComposer(page)
   await page.getByRole("button", { name: "模型", exact: true }).click()
   await expect(picker.getByRole("group", { name: "原始接口 · Main", exact: true }).getByRole("radio", { name: "shared-model", exact: true })).toHaveAttribute("aria-checked", "true")
   await picker.getByRole("button", { name: "刷新模型", exact: true }).click()
@@ -241,6 +245,7 @@ test("three avatar taps switch the selected PC and expose both interface groups 
   await toggle()
   await expect.poll(() => page.evaluate(() => localStorage.getItem("zwai.phone.mode"))).toBe("account")
   await page.getByRole("dialog", { name: "用户中心", exact: true }).getByRole("button", { name: "关闭", exact: true }).click()
+  await activateComposer(page)
   await expect(page.getByRole("button", { name: "模型", exact: true })).toHaveCount(0)
   expect(await page.evaluate(() => localStorage.getItem("zwai.remote.active"))).toBe(selected)
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("zwai.phone.gateway.session") || "null")?.user.id)).toBe(user.id)
@@ -259,6 +264,7 @@ test("a PC mode refusal retains Account and offers an explicit retry without los
   await portrait.tap(); await portrait.tap(); await portrait.tap()
   await expect.poll(() => page.evaluate(() => localStorage.getItem("zwai.phone.mode"))).toBe("local")
   await page.getByRole("dialog", { name: "用户中心", exact: true }).getByRole("button", { name: "关闭", exact: true }).click()
+  await activateComposer(page)
   await expect(page.getByRole("button", { name: "模型", exact: true })).toBeVisible()
   await page.screenshot({ path: info.outputPath("pc-mode-retry.png") })
 })

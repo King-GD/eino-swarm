@@ -7,8 +7,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
+	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 )
 
@@ -19,8 +21,8 @@ var errNotDirectory = errors.New("not a directory")
 // workspace root and is otherwise an OS path relative to it. Dot-directories,
 // node_modules and vendor are omitted; every other direct child is returned.
 // A symlink is not followed.
-func listDirectory(workspace, rel string) ([]FileEntry, error) {
-	root, err := os.OpenRoot(workspace)
+func listDirectory(workspace WorkspaceView, rel string) ([]FileEntry, error) {
+	root, err := workspace.openRoot()
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +71,7 @@ func listDirectory(workspace, rel string) ([]FileEntry, error) {
 }
 
 func skipListedDir(name string) bool {
-	if strings.HasPrefix(name, ".") {
+	if strings.HasPrefix(name, ".") && name != config.TaskDirectory {
 		return true
 	}
 	switch name {
@@ -84,7 +86,15 @@ func skipListedDir(name string) bool {
 // dir is the workspace root. The result is that directory's complete direct
 // listing, not a sample of the tree.
 func (e *Engine) ListFiles(threadID, dir string) ([]FileEntry, error) {
-	root := e.WorkspaceDir(threadID)
+	view, err := e.FileWorkspace(threadID, "", "")
+	if err != nil {
+		return nil, err
+	}
+	return e.ListWorkspace(view, dir)
+}
+
+func (e *Engine) ListWorkspace(view WorkspaceView, dir string) ([]FileEntry, error) {
+	root := view.Path
 	rel := ""
 	if strings.TrimSpace(dir) != "" {
 		name, err := workspaceRelName(dir)
@@ -92,10 +102,8 @@ func (e *Engine) ListFiles(threadID, dir string) ([]FileEntry, error) {
 			return nil, err
 		}
 		rel = name
-	} else if err := os.MkdirAll(root, 0o700); err != nil {
-		return nil, fmt.Errorf("engine: workspace: %w", err)
 	}
-	entries, err := listDirectory(root, rel)
+	entries, err := listDirectory(view, rel)
 	if err != nil {
 		if errors.Is(err, errNotDirectory) {
 			return nil, fmt.Errorf("engine: %q is not a directory", dir)
@@ -111,13 +119,21 @@ func (e *Engine) ListFiles(threadID, dir string) ([]FileEntry, error) {
 		// wait for it instead of walking a second time.
 		e.invalidateFileScan(root)
 	}
-	return entries, nil
+	return visibleFileScope(view, entries), nil
 }
 
 // SearchFiles returns every listed workspace entry whose path contains query.
 // It answers from the newest completed scan and waits when that scan is still
 // running. Failure, including cancellation, yields no rows.
 func (e *Engine) SearchFiles(ctx context.Context, threadID, query string) ([]FileEntry, error) {
+	view, err := e.FileWorkspace(threadID, "", "")
+	if err != nil {
+		return nil, err
+	}
+	return e.SearchWorkspace(ctx, view, query)
+}
+
+func (e *Engine) SearchWorkspace(ctx context.Context, view WorkspaceView, query string) ([]FileEntry, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return nil, fmt.Errorf("engine: empty file search")
@@ -125,10 +141,7 @@ func (e *Engine) SearchFiles(ctx context.Context, threadID, query string) ([]Fil
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	root := e.WorkspaceDir(threadID)
-	if err := os.MkdirAll(root, 0o700); err != nil {
-		return nil, fmt.Errorf("engine: workspace: %w", err)
-	}
+	root := view.Path
 	listed, err := e.fileScans.paths(ctx, root, e.scanListed)
 	if err != nil {
 		return nil, fmt.Errorf("engine: search workspace: %w", err)
@@ -137,5 +150,19 @@ func (e *Engine) SearchFiles(ctx context.Context, threadID, query string) ([]Fil
 	if err != nil {
 		return nil, fmt.Errorf("engine: search workspace: %w", err)
 	}
-	return entries, nil
+	current, err := view.openRoot()
+	if err != nil {
+		return nil, err
+	}
+	current.Close()
+	return visibleFileScope(view, entries), nil
+}
+
+func visibleFileScope(view WorkspaceView, entries []FileEntry) []FileEntry {
+	if view.project {
+		return entries
+	}
+	return slices.DeleteFunc(entries, func(entry FileEntry) bool {
+		return entry.Path == config.TaskDirectory || strings.HasPrefix(entry.Path, config.TaskDirectory+"/")
+	})
 }

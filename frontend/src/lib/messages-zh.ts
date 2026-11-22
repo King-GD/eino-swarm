@@ -72,7 +72,8 @@ export const zh: { [K in keyof typeof en]: string } = {
     "与应用的事件流断开。会自行重试并补上漏掉的事件。",
   "header.lostStreamWeb":
     "与服务器的事件流断开。会自行重试并补上漏掉的事件。",
-  "header.workingIn": "工作目录 {path}",
+  "header.projectFolder": "项目目录：{path}",
+  "header.managedProjectFolder": "应用托管的项目目录",
   "header.shared": "同时开着 {where}",
 
   "surface.desktop": "桌面",
@@ -117,7 +118,7 @@ export const zh: { [K in keyof typeof en]: string } = {
   "projects.title": "项目",
   "projects.new": "新建项目",
   "projects.empty":
-    "项目给会话一个工作目录、一条指令，以及共享记忆。",
+    "项目提供共享目录、指令和记忆。新会话有各自的任务工作区。",
   "projects.more": "更多",
   "projects.edit": "编辑",
   "projects.delete": "删除",
@@ -196,6 +197,7 @@ export const zh: { [K in keyof typeof en]: string } = {
   "composer.toolsLoading": "正在加载工具…",
   "composer.toolsLoadFailed": "工具列表加载失败",
   "composer.toolsSaveFailed": "工具开关没有保存",
+  "composer.toolsConfigure": "工具设置",
   "composer.fullAccess": "完整权限",
   "composer.fullAccessHint":
     "代理可以读写这个会话工作区里的文件，并运行命令。",
@@ -372,6 +374,14 @@ export const zh: { [K in keyof typeof en]: string } = {
   "files.filterPlaceholder": "筛选文件…",
   "files.searching": "正在查找…",
   "files.tree": "工作区文件",
+  "files.taskScope": "任务文件",
+  "files.projectScope": "项目目录",
+  "files.legacyShared": "旧版共享目录",
+  "files.resultsFolder": "成果",
+  "files.workFolder": "过程",
+  "files.uploadsFolder": "上传",
+  "files.tasksFolder": "任务工作区",
+  "files.noResults": "暂无成果",
   "files.empty": "这里还是空的。上传文件给代理处理，或等它们自己写出一些。",
   "files.noMatch": "没有匹配的文件。",
   "files.download": "下载",
@@ -428,6 +438,14 @@ export const zh: { [K in keyof typeof en]: string } = {
     "已到主管工具回合上限（{limit}）。再继续 {extendBy} 轮？",
   "transcript.limitContinued": "再继续 {extendBy} 轮工具回合。",
   "transcript.limitStopped": "在 {limit} 轮工具回合后停下。",
+  "transcript.deferredAsk":
+    "答复核对已暂缓，先停下来。主管工具回合上限仍是 {extendBy}，这一轮已用 {limit} 轮。要继续工作吗？",
+  "transcript.deferredContinued": "继续工作。下一片段最多 {extendBy} 轮。",
+  "transcript.deferredStopped": "已停止。这一轮已用 {limit} 轮，主管工具回合上限仍是 {extendBy}。",
+  "transcript.deferredContinueAria": "核对暂缓后继续这一轮",
+  "transcript.deferredStopAria": "核对暂缓后停止这一轮",
+  "transcript.limitSettingsHint": "这次继续仍加上面的轮数。之后的上限在这里改：",
+  "transcript.limitSettingsStopped": "下次暂停前可在这里改：",
   "transcript.collectionWaiting": "正在等待委派工作结束。主管会自动继续一次，收取结果。",
   "transcript.collectionPaused": "委派结果尚未收齐。可继续收取，或停止。",
   "transcript.collectionContinued": "正在继续收取委派结果。",
@@ -788,6 +806,8 @@ export const zh: { [K in keyof typeof en]: string } = {
   "settings.swarm.policyThinkingHigh": "高",
 
   "settings.tools.title": "工具",
+  "settings.tools.builtin": "内置工具",
+  "settings.tools.mcp": "MCP",
   "settings.tools.execution": "联网工具执行位置",
   "settings.tools.executionLocation": "联网工具运行于",
   "settings.tools.executionHint": "自动模式登录服务器后使用云端，未登录时使用本机。适用于 web_search 和 web_fetch，从下一回合生效。",
@@ -855,7 +875,7 @@ export const zh: { [K in keyof typeof en]: string } = {
 
   "project.edit": "编辑项目",
   "project.new": "新建项目",
-  "project.desc": "同一项目里的会话共享工作目录、一条指令，以及先前会话学到的东西。",
+  "project.desc": "项目提供共享目录、指令和记忆，新会话的文件各自保存在独立任务目录。",
   "project.name": "名称",
   "project.instruction": "指令",
   "project.instructionHint":
@@ -952,7 +972,7 @@ export const zh: { [K in keyof typeof en]: string } = {
 
   "confirm.cancel": "取消",
   "thread.deleteTitle": "删除 {name}？",
-  "thread.deleteDesc": "会话记录和这个会话的工作目录会一起删掉。",
+  "thread.deleteDesc": "删除会话记录和应用托管的任务文件。自选项目目录里的文件保留。",
   "thread.deleteConfirm": "删除会话",
   "provider.deleteTitle": "移除 {name}？",
   "provider.deleteDesc": "会话记录还在。下一回合需要换一个端点。",

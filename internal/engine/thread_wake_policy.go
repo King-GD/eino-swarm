@@ -18,7 +18,7 @@ import (
 )
 
 const wakePolicyAgentID = "thread-wake-policy"
-const wakePolicyMaxInputsPerTurn = 16
+const wakePolicyMaxInputsPerCall = 16
 const wakePolicyStatePrefix = "## Thread wake authorization\n"
 
 const wakePolicyClassificationPrompt = `## Thread wake authorization classification
@@ -32,8 +32,6 @@ For deny or allow, quote must be an exact, nonempty quotation of the human's ope
 type wakePolicyCheck struct {
 	once        sync.Once
 	gate        chan struct{}
-	turnID      string
-	calls       int
 	failedTurn  string
 	failedInput store.WakePolicyInput
 }
@@ -41,8 +39,8 @@ type wakePolicyCheck struct {
 // verifyThreadWakePolicy reads the uncompressed human timeline. The manager
 // never supplies a source, a decision, or an unlock. Failed interpretation
 // leaves its input pending rather than granting implicit permission.
-func (e *Engine) verifyThreadWakePolicy(ctx context.Context, threadID, turnID string) error {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+func (e *Engine) verifyThreadWakePolicy(callCtx context.Context, threadID, turnID string) error {
+	ctx, cancel := context.WithTimeout(callCtx, 30*time.Second)
 	defer cancel()
 	rt := e.runtimeFor(threadID)
 	check := &rt.wakePolicyCheck
@@ -53,35 +51,50 @@ func (e *Engine) verifyThreadWakePolicy(ctx context.Context, threadID, turnID st
 	case <-ctx.Done():
 		return &store.WakePolicyPendingError{}
 	}
-	if check.turnID != turnID {
-		check.turnID, check.calls = turnID, 0
+	if ctx.Err() != nil {
+		return &store.WakePolicyPendingError{}
 	}
 	policy, inputs, err := e.store.ReadThreadWakePolicy(threadID)
 	if err != nil {
 		return fmt.Errorf("read thread wake authorization: %w", err)
 	}
+	classified := 0
 	for _, input := range inputs {
 		if input.Decision != "" {
 			continue
 		}
+		if classified == wakePolicyMaxInputsPerCall {
+			break
+		}
+		pending := store.WakePolicyPendingError{Seq: input.Seq, Count: policy.PendingCount - classified}
 		if check.failedTurn == turnID && check.failedInput == input {
-			return &store.WakePolicyPendingError{Seq: input.Seq}
+			return &pending
 		}
-		if check.calls >= wakePolicyMaxInputsPerTurn {
-			return &store.WakePolicyPendingError{Seq: input.Seq}
+		err := ctx.Err()
+		if err == nil {
+			err = e.classifyThreadWakeInput(ctx, threadID, turnID, input)
 		}
-		check.calls++
-		if err := e.classifyThreadWakeInput(ctx, threadID, turnID, input); err != nil {
-			check.failedTurn, check.failedInput = turnID, input
-			return &store.WakePolicyPendingError{Seq: input.Seq}
+		if err != nil {
+			if ctx.Err() == nil {
+				check.failedTurn, check.failedInput = turnID, input
+			} else {
+				// A deadline does not invalidate the next input. Offer a
+				// retry after progress and while the tool caller is live.
+				pending.RetrySameTurn = classified > 0 && callCtx.Err() == nil
+			}
+			return &pending
 		}
+		classified++
 	}
 	policy, _, err = e.store.ReadThreadWakePolicy(threadID)
 	if err != nil {
 		return err
 	}
 	if policy.PendingSeq != 0 {
-		return &store.WakePolicyPendingError{Seq: policy.PendingSeq}
+		return &store.WakePolicyPendingError{Seq: policy.PendingSeq, Count: policy.PendingCount, RetrySameTurn: callCtx.Err() == nil}
+	}
+	if ctx.Err() != nil {
+		return &store.WakePolicyPendingError{}
 	}
 	if policy.Denied {
 		return &store.ThreadWakeDeniedError{Policy: policy}
@@ -90,8 +103,6 @@ func (e *Engine) verifyThreadWakePolicy(ctx context.Context, threadID, turnID st
 }
 
 func (e *Engine) classifyThreadWakeInput(ctx context.Context, threadID, turnID string, input store.WakePolicyInput) error {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
 	th, err := e.store.GetThread(threadID)
 	if err != nil {
 		return err
@@ -137,7 +148,8 @@ func decodeThreadWakeDecision(out *schema.Message) (string, string, error) {
 }
 
 func threadWakeFailure(err error) string {
-	body := map[string]any{"ok": false, "code": "thread_wake_policy_pending", "error": "Thread wake authorization could not be verified. Continue work in this turn; a pending check is not permission to park."}
+	const incomplete = "Classification of the conversation's human instructions is incomplete. This call made no change to the wait."
+	body := map[string]any{"ok": false, "code": "thread_wake_policy_pending", "error": incomplete + " Continue working in this turn."}
 	var denied *store.ThreadWakeDeniedError
 	var pending *store.WakePolicyPendingError
 	if errors.As(err, &denied) {
@@ -149,6 +161,13 @@ func threadWakeFailure(err error) string {
 		}
 	} else if errors.As(err, &pending) {
 		body["pending_seq"] = pending.Seq
+		if pending.Count > 0 {
+			body["pending_count"] = pending.Count
+		}
+		if pending.RetrySameTurn {
+			body["retry_same_turn"] = true
+			body["error"] = incomplete + " Retry the same tool call in this turn to continue classification."
+		}
 	}
 	out, _ := json.Marshal(body)
 	return string(out)

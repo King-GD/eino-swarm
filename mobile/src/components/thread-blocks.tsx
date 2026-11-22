@@ -388,7 +388,7 @@ function WorkFold({ blocks, live }: { blocks: CompactBlock[]; live: boolean }) {
   const failed = blocks.some((b) => b.failed)
   const label = frame ? formatPhoneTicker(frame) : foldLabel(blocks)
   return (
-    <div className="min-w-0 max-w-full">
+    <div className="min-w-0 max-w-full" data-phone-turn={blocks[0]?.turnId}>
       {hasTools ? <button
         type="button"
         data-testid="work-fold"

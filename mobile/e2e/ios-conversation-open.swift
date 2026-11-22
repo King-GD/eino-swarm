@@ -40,6 +40,84 @@ final class BindFlowTests: XCTestCase {
     }
   }
 
+  func testLegacyTurnPreviewsStayBrowsableBeforeJumping() throws {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launch()
+    XCTAssertTrue(app.buttons["Back"].firstMatch.waitForExistence(timeout: 15))
+    reopenFromPlatform(app)
+    let newest = app.buttons["Jump to turn 3: Third prompt"].firstMatch
+    let first = app.buttons["Jump to turn 1: First prompt"].firstMatch
+    let second = app.buttons["Jump to turn 2: Second prompt"].firstMatch
+    XCTAssertTrue(newest.waitForExistence(timeout: 15))
+    XCTAssertTrue(first.waitForExistence(timeout: 10), "the legacy snapshot must recover the input label")
+    XCTAssertTrue(second.exists)
+    let railY = (newest.frame.midY - app.frame.minY) / app.frame.height
+    let left = app.coordinate(withNormalizedOffset: CGVector(dx: 0.36, dy: railY))
+    let right = app.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: railY))
+    left.press(forDuration: 0.06, thenDragTo: right)
+    let olderX = second.frame.minX
+    right.press(forDuration: 0.06, thenDragTo: left)
+    let reachedNewer = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+      second.frame.minX < olderX - 15
+    }, object: nil)
+    XCTAssertEqual(XCTWaiter.wait(for: [reachedNewer], timeout: 5), .completed,
+      "a native swipe must move the navigation strip")
+    let newerX = second.frame.minX
+    left.press(forDuration: 0.06, thenDragTo: right)
+    let reachedOlder = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+      first.isHittable && second.frame.minX > newerX + 15
+    }, object: nil)
+    XCTAssertEqual(XCTWaiter.wait(for: [reachedOlder], timeout: 5), .completed,
+      "a swipe ending at the right edge must scroll the rail, not navigate back")
+    XCTAssertTrue(app.buttons["Back"].firstMatch.isHittable)
+    XCTAssertFalse(app.staticTexts["Response 1"].firstMatch.exists, "browsing labels must not load the transcript")
+    record(app, "legacy-turn-previews-before-jump")
+    first.tap()
+    XCTAssertTrue(app.staticTexts["Response 1"].firstMatch.waitForExistence(timeout: 8))
+    XCTAssertTrue(app.staticTexts["First prompt"].firstMatch.isHittable)
+    record(app, "legacy-turn-previews-after-jump")
+  }
+
+  func testPreviousTurnRemainsFullyTappable() throws {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launch()
+    XCTAssertTrue(app.buttons["Back"].firstMatch.waitForExistence(timeout: 15))
+    reopenFromPlatform(app)
+    let rail = app.otherElements.matching(NSPredicate(format: "label BEGINSWITH %@", "Conversation turns")).firstMatch
+    let latest = app.buttons["Jump to turn 7: Seventh prompt"].firstMatch
+    let sixth = app.buttons["Jump to turn 6: Sixth prompt"].firstMatch
+    let fifth = app.buttons["Jump to turn 5: Fifth prompt"].firstMatch
+    XCTAssertTrue(latest.waitForExistence(timeout: 10))
+
+    func tapVisible(_ button: XCUIElement) {
+      let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+        let rect = button.frame
+        let bounds = rail.frame
+        return button.isHittable && rect.width > 0 && rect.minX >= bounds.minX - 1 && rect.maxX <= bounds.maxX + 1
+      }, object: nil)
+      XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 5), .completed,
+        "the whole turn button must fit before tapping")
+      let rect = button.frame
+      let appBounds = app.frame
+      // A coordinate tap prevents XCTest from scrolling the element into view first.
+      app.coordinate(withNormalizedOffset: CGVector(
+        dx: (rect.midX - appBounds.minX) / appBounds.width,
+        dy: (rect.midY - appBounds.minY) / appBounds.height
+      )).tap()
+    }
+
+    tapVisible(sixth)
+    XCTAssertTrue(app.staticTexts["Sixth prompt"].firstMatch.waitForExistence(timeout: 8))
+    XCTAssertFalse(app.staticTexts["Fifth prompt"].firstMatch.exists)
+    record(app, "turn-six-before-tapping-five")
+    tapVisible(fifth)
+    XCTAssertTrue(app.staticTexts["Fifth prompt"].firstMatch.waitForExistence(timeout: 8))
+    XCTAssertTrue(app.staticTexts["Fifth prompt"].firstMatch.isHittable)
+    record(app, "turn-five-after-coordinate-tap")
+  }
+
   private func reopenFromPlatform(_ app: XCUIApplication) {
     let back = app.buttons["Back"]
     XCTAssertTrue(back.isHittable)

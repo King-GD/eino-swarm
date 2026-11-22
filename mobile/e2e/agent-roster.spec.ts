@@ -1,5 +1,33 @@
 import { expect, test } from "@playwright/test"
 
+test("a long roster opens on running workers, including after reading a finished worker", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("zwai.phone.locale", "en"))
+  await page.goto("/?mock=1&tick=0&history=long-agent-roster")
+  const transcript = page.getByTestId("transcript")
+  const roster = page.getByTestId("agent-roster")
+  const openRoster = page.getByRole("button", { name: "Agents (2)", exact: true })
+  const back = page.getByRole("button", { name: "Back", exact: true })
+  const checkRunningWorkers = async () => {
+    await expect(roster.getByRole("button")).toHaveCount(42)
+    await expect(roster.getByRole("heading", { name: "Active (2)" })).toBeInViewport()
+    await expect(roster.getByRole("button", { name: /running-1/ })).toBeInViewport()
+    await expect(roster.getByRole("button", { name: /completed-40/ })).not.toBeInViewport()
+  }
+
+  await openRoster.click()
+  await checkRunningWorkers()
+  await transcript.evaluate((element) => { element.scrollTop = 300 })
+  await expect.poll(() => transcript.evaluate((element) => element.scrollTop)).toBe(300)
+  await expect(page.getByTestId("to-latest")).toHaveCount(0)
+  await roster.getByRole("button", { name: /completed-40/ }).click()
+  await expect(transcript).toContainText("Review result")
+  await back.click()
+  await checkRunningWorkers()
+  await back.click()
+  await openRoster.click()
+  await checkRunningWorkers()
+})
+
 test("live manager paragraphs leave the roster after paging and worker navigation", async ({ page }, info) => {
   await page.addInitScript(() => localStorage.setItem("zwai.phone.locale", "en"))
   await page.goto("/?mock=1&tick=0&history=streamed-agents")

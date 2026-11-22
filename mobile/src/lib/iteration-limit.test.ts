@@ -67,6 +67,16 @@ it("settles the old limit at a terminal or new turn and ignores other turn recei
   }
 })
 
+it("keeps a deferred answer check visible without calling the used rounds the cap", () => {
+  setLocale("zh")
+  const blocks = applyEvent([], event(2, "max_iterations", '{"reason":"classification_deferred","limit":80,"extend_by":2000}'))
+  expect(blocks[0].text).toContain("答复核对已暂缓")
+  expect(blocks[0].text).toContain("2000")
+  expect(blocks[0].text).toContain("80")
+  expect(blocks[0].text).not.toContain("已到主管工具回合上限")
+  expect(blocks[0].confirm).toMatchObject({ reason: "classification_deferred", limit: 80, extendBy: 2000, pending: true })
+})
+
 it("accepts a legacy limit but keeps malformed metadata out of the transcript", () => {
   expect(applyEvent([], event(1, "max_iterations", '{"limit":400}'))[0].confirm).toMatchObject({ limit: 400, pending: true })
   for (const text of ['{"reason":"other","limit":8}', '{"limit":"8"}', '{"limit":-1}', '{"limit":8,"extend_by":0}', '[]', '{']) {

@@ -14,6 +14,17 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
+func TestDeferredVerificationPauseIsNotTheRoundCap(t *testing.T) {
+	if pauseReason("classification_deferred") != "classification_deferred" {
+		t.Fatal("a deferred answer check must keep its own pause reason")
+	}
+	for _, reason := range []string{"", "iterations", "workers_uncollected", "other"} {
+		if pauseReason(reason) != "iterations" {
+			t.Fatalf("%q became a verification pause", reason)
+		}
+	}
+}
+
 func TestIsMaxIterationsUnwrapsTheGraphError(t *testing.T) {
 	if isMaxIterations(nil) {
 		t.Fatal("nil is not a cap")

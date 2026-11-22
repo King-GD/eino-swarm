@@ -1,3 +1,4 @@
+import { activateComposer } from "./composer-controls"
 import { readFile } from "node:fs/promises"
 import { expect, test, type Page } from "@playwright/test"
 
@@ -230,6 +231,7 @@ test("reloading a pending call shows unknown without a second paid request", asy
 
 test("Account Chat uses its fixed image role when no PC is connected", async ({ page }) => {
   const calls = await signedImageFixture(page, { fixedAccount: true })
+  await activateComposer(page)
   await expect(page.getByRole("button", { name: "模型", exact: true })).toHaveCount(0)
   await page.getByRole("button", { name: "添加", exact: true }).click()
   await page.getByTestId("composer-command-image").click()

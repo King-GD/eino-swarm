@@ -1,6 +1,6 @@
 import { parseSlashSubmit } from "../../../frontend/src/lib/slash-core"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { ArrowDown, ChevronLeft, ChevronRight, FileText, Loader2 } from "lucide-react"
+import { ArrowDown, ChevronLeft, ChevronRight, FileText, Loader2, UsersRound } from "lucide-react"
 
 import type { ComposerPrediction } from "../../../frontend/src/lib/composer-prediction"
 import type { InsertMode } from "../../../frontend/src/lib/delivery-mode"
@@ -24,7 +24,8 @@ import { pendingIterationLimit } from "@/lib/iteration-limit"
 import { normalizeSelectedText } from "@/lib/quote"
 import type { CompactBlock } from "@/lib/transcript"
 import { managerBlocks, pendingAsk, phoneAgents } from "@/lib/transcript"
-import { hasPhoneHistoryContent } from "@/lib/phone-history"
+import { hasPhoneHistoryContent, hasPhoneTurnStart } from "@/lib/phone-history"
+import { useOlderTurnPreviews } from "@/lib/turn-previews"
 import type { FollowupView, HistoryWork, ModelChoice, ThreadDetail } from "@/lib/rpc"
 import { cn } from "@/lib/cn"
 import type { RemoteLink } from "@/lib/link"
@@ -37,6 +38,7 @@ export function ThreadScreen({
   panelOwnerKey = "",
   blocks,
   historyWork,
+  historyBefore,
   hasMore,
   loadingOlder,
   caughtUp = true,
@@ -73,6 +75,7 @@ export function ThreadScreen({
   panelOwnerKey?: string
   blocks: CompactBlock[]
   historyWork?: HistoryWork[]
+  historyBefore?: number
   hasMore?: boolean
   loadingOlder?: boolean
   caughtUp?: boolean
@@ -116,14 +119,21 @@ export function ThreadScreen({
     { id: "stopped", label: t("thread.agent.stoppedGroup", { n: stoppedAgents.length }), agents: stoppedAgents },
   ]
   const [agentPage, setAgentPage] = useState("chat")
+  const showingRoster = agentPage === "agents"
   const taskPanels = usePhoneTaskPanelView(fileLink, detail.id, panelOwnerKey, Boolean(detail.running))
+  const turnId = detail.running?.turn_id
+  const destinations = pairedTurnDestinations(detail.turns ?? [], manager, turnId)
+  const suppliedPreviews = new Set(detail.turns?.filter((turn) => turn.user_text).map((turn) => turn.id))
+  const olderPreviews = useOlderTurnPreviews(
+    caughtUp && hasMore && destinations.length >= 3 ? fileLink : undefined,
+    detail.id, historyBefore, destinations.filter((turn) => !suppliedPreviews.has(turn.id)),
+  )
   useLayoutEffect(() => { onReadVisibility?.(agentPage === "chat" && !taskPanels.open) }, [agentPage, onReadVisibility, taskPanels.open])
   const selectedAgent = agents.find((agent) => agent.id === agentPage)
   const ask = pendingAsk(manager)
   const opening = !caughtUp && blocks.length === 0
   const asking = Boolean(detail.running?.ask_user || ask?.pending)
   const running = Boolean(detail.running)
-  const turnId = detail.running?.turn_id
   const iterationLimit = pendingIterationLimit(manager, detail.running?.turn_id)
   const waiting = Boolean(detail.waiting && !running)
   const scroller = useRef<HTMLDivElement>(null)
@@ -149,6 +159,7 @@ export function ThreadScreen({
     setSelectedText("")
     setQuoteActionPosition(null)
     setQuoteActionDocked(false)
+    pinHeight.current = null
     stick.current = true
     setBehind(false)
     setAgentPage(page)
@@ -241,8 +252,10 @@ export function ThreadScreen({
     if (!onOlder || loadingOlder || !hasMore || !caughtUp) return
     // The reader is already at the top, asking for what is above. Pinning
     // the old offset hides that page and leaves the last turn on screen.
-    pinHeight.current = 0
-    stick.current = false
+    if (!showingRoster) {
+      pinHeight.current = 0
+      stick.current = false
+    }
     void Promise.resolve(onOlder()).then((seq) => {
       if (seq) setHistoryJump({ thread: detail.id, seq })
     })
@@ -252,7 +265,7 @@ export function ThreadScreen({
 
   useLayoutEffect(() => {
     const el = scroller.current
-    if (!el || !caughtUp) return
+    if (showingRoster || !el || !caughtUp) return
     el.style.overflowAnchor = "none"
     if (loadingOlder) return
     if (pinHeight.current != null) {
@@ -267,7 +280,7 @@ export function ThreadScreen({
       if (behind) setBehind(false)
     }
     if (!atTail) setAtTail(true)
-  }, [caughtUp, blocks, loadingOlder, hasMore, atTail, behind, agentPage])
+  }, [caughtUp, blocks, loadingOlder, hasMore, atTail, behind, agentPage, showingRoster])
 
   useLayoutEffect(() => {
     if (!historyJump || loadingOlder) return
@@ -282,7 +295,7 @@ export function ThreadScreen({
   const jumpToTurn = (id: string) => {
     const el = scroller.current
     stick.current = false
-    if (el && scrollToTranscriptRow(el, turnRow(el, id))) return
+    if ((!hasMore || hasPhoneTurnStart(manager, id, true)) && el && scrollToTranscriptRow(el, turnRow(el, id))) return
     if (onOlder && hasMore && !loadingOlder) {
       void Promise.resolve(onOlder(id)).then(() => setHistoryJump({ thread: detail.id, turnId: id }))
     }
@@ -311,7 +324,7 @@ export function ThreadScreen({
 
   if (agentPage === "files" && fileLink) {
     return <><div className="flex min-h-0 flex-1 flex-col" inert={taskPanels.open} aria-hidden={taskPanels.open}>
-      <FileBrowser link={fileLink} threadId={detail.id} onClose={() => changePage("chat")}
+      <FileBrowser key={`${detail.id}:${panelOwnerKey ?? ""}`} link={fileLink} threadId={detail.id} running={running} onClose={() => changePage("chat")}
         status={<GoalBanner detail={detail} running={running} />} />
     </div><PhoneTaskPanelSheet view={taskPanels} /></>
   }
@@ -347,25 +360,6 @@ export function ThreadScreen({
           ) : null}
         </div>
         <PhoneTaskPanelButton view={taskPanels} />
-        {agentPage === "chat" && fileLink ? (
-          <Button variant="ghost" className="h-8 shrink-0 px-2 text-xs" onClick={() => changePage("files")}>
-            <FileText className="mr-1 size-4" />{t("thread.files")}
-          </Button>
-        ) : null}
-        {agentPage === "chat" && agents.length > 0 ? (
-          <Button variant="ghost" className="h-8 shrink-0 px-2 text-xs" onClick={() => changePage("agents")}>
-            {t("thread.agents")} ({activeAgents.length})
-          </Button>
-        ) : null}
-        {agentPage === "chat" && (running || restoring) ? (
-          <Button
-            variant="ghost"
-            className="h-8 shrink-0 px-2 text-destructive"
-            onClick={onStop}
-          >
-            {t("thread.stop")}
-          </Button>
-        ) : null}
         {agentPage === "chat" && onOpenAccount ? <AccountButton onClick={onOpenAccount} /> : null}
       </header>
       <GoalBanner
@@ -387,8 +381,10 @@ export function ThreadScreen({
       ) : null}
 
       {agentPage === "chat" && caughtUp ? (
-        <TurnNavigation turns={pairedTurnDestinations(detail.turns ?? [], manager)}
-          pending={loadingOlder} onJump={jumpToTurn} />
+        <TurnNavigation turns={destinations.map((turn) => ({
+          ...turn, label: turn.label || olderPreviews?.get(turn.id) || "",
+        }))}
+          scroller={scroller} runningTurnId={turnId} pending={loadingOlder} onJump={jumpToTurn} />
       ) : null}
 
       {hasMore ? (
@@ -428,13 +424,15 @@ export function ThreadScreen({
         {/* Android WebView will not scroll a flex-column <ol>. Bounded
             overflow box; Earlier sits above so paging is not a dead drag. */}
         <div
+          key={showingRoster ? "roster" : "log"}
           ref={scroller}
           data-testid="transcript"
           className={cn(
             "min-h-0 min-w-0 w-full flex-1 overflow-x-hidden overflow-y-scroll overscroll-y-contain touch-pan-y px-3 py-2 [-webkit-overflow-scrolling:touch]",
-            !atTail && "invisible",
+            !showingRoster && !atTail && "invisible",
           )}
           onScroll={(e) => {
+            if (showingRoster) return
             const el = e.currentTarget
             const gap = el.scrollHeight - el.scrollTop - el.clientHeight
             stick.current = gap < 48
@@ -452,14 +450,14 @@ export function ThreadScreen({
           {/* Bottom-aligned: a short conversation sits above the composer
               instead of floating under a screen of blank. */}
           <div className={cn("flex min-h-full min-w-0 w-full flex-col gap-1.5",
-            agentPage === "agents" ? "justify-start" : "justify-end")}>
+            showingRoster ? "justify-start" : "justify-end")}>
             <div ref={quoteSource} data-quote-source="">
               {agentPage === "chat" && caughtUp && hasMore && !hasPhoneHistoryContent(manager) ? (
                 <p role="status" className="px-3 py-4 text-center text-sm text-muted-foreground">
                   {t("thread.hiddenHistory")}
                 </p>
               ) : null}
-              {agentPage === "agents" ? (
+              {showingRoster ? (
                 <div className="flex flex-col gap-1" data-testid="agent-roster">
                   {agentGroups.filter((group) => group.agents.length > 0).map((group) => (
                     <section key={group.id} className="flex flex-col gap-1">
@@ -527,7 +525,7 @@ export function ThreadScreen({
               }} />
           </div>
         ) : null}
-        {behind && atTail ? (
+        {!showingRoster && behind && atTail ? (
           <button
             type="button"
             data-testid="to-latest"
@@ -555,6 +553,20 @@ export function ThreadScreen({
         />
       ) : null}
       {agentPage === "chat" ? <Composer
+        above={fileLink || agents.length > 0 ? (
+          <div data-testid="thread-composer-links" className="mb-1.5 flex min-w-0 flex-wrap justify-center gap-2">
+            {agents.length > 0 ? (
+              <button type="button" className={composerLinkClass} onClick={() => changePage("agents")}>
+                <UsersRound className="size-3.5" aria-hidden />{t("thread.agents")} ({activeAgents.length})
+              </button>
+            ) : null}
+            {fileLink ? (
+              <button type="button" className={composerLinkClass} onClick={() => changePage("files")}>
+                <FileText className="size-3.5" aria-hidden />{t("thread.files")}
+              </button>
+            ) : null}
+          </div>
+        ) : undefined}
         prediction={!running && !asking && !waiting && caughtUp ? prediction : undefined}
         quotes={asking ? [] : quotes}
         onQuotesChange={setQuotes}
@@ -564,7 +576,7 @@ export function ThreadScreen({
         sendLabel={asking ? t("thread.answer") : running ? t("thread.followUp") : t("thread.send")}
         onInsert={turnId && !asking && onInsert ? (mode, text, extra) => onInsert(mode, turnId, text, extra) : undefined}
         stopLabel={t("thread.stop")}
-        onStop={running && !asking ? onStop : undefined}
+        onStop={running || restoring ? onStop : undefined}
         disabled={restoring}
         pending={composerPending}
         models={models}
@@ -587,6 +599,8 @@ export function ThreadScreen({
     </main><PhoneTaskPanelSheet view={taskPanels} /></>
   )
 }
+
+const composerLinkClass = "flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs text-muted-foreground active:bg-accent"
 
 function turnRow(scroller: HTMLElement, turnId: string): HTMLElement | null {
   const rows = Array.from(scroller.querySelectorAll<HTMLElement>("[data-phone-turn]"))

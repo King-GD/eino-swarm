@@ -305,6 +305,10 @@ func (s *Server) rejectForeignOrigin() gin.HandlerFunc {
 // a missing conversation is not a bad request.
 func (s *Server) fail(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, engine.ErrFileScope):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "file_scope"})
+	case errors.Is(err, engine.ErrFileRoot):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "file_root_changed"})
 	case errors.Is(err, engine.ErrRestoring):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "restoring"})
 	case errors.Is(err, store.ErrDraftConflict):

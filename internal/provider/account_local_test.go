@@ -132,6 +132,33 @@ func TestAbsentCatalogOwnersAndOfflinePoolsDoNotPublishAccountSources(t *testing
 	}
 }
 
+func TestLocalCatalogDoesNotFallBackToPrimaryWhenTheSameSourceDeniesConversation(t *testing.T) {
+	cfg := configFor(t, true)
+	cfg.Product.Mode = config.ProductModeLocal
+	pool := New(cfg)
+	primary := accountSourceFor(t, "https://source.invalid/v1", "session", "primary-chat")
+	primary.SetCapabilities(&SourceCapabilities{Authorized: true, Available: true, Capabilities: map[string]RoleCapability{
+		"conversation": {Supported: true, Available: true},
+	}})
+	pool.SetAccountSource(primary)
+	local := accountSourceFor(t, "https://source.invalid/local", "session", "local-chat")
+	local.SetCapabilities(&SourceCapabilities{Authorized: true, Available: true})
+	for _, sources := range [][]*AccountSource{{nil, local}, {local, primary}} {
+		pool.SetLocalAccountSources(sources)
+		if err := pool.ValidateConversationSelection(primary.ID(), "primary-chat"); !errors.Is(err, ErrModelPolicy) {
+			t.Fatalf("the primary grant replaced its LOCAL projection: %v", err)
+		}
+		for _, row := range pool.List() {
+			if row.ProviderID == primary.ID() {
+				t.Fatalf("catalog advertised a source that denies conversation: %+v", row)
+			}
+		}
+		if policy := pool.ModelPolicy().AccountSources[primary.ID()]; policy == nil || policy.Allows("conversation") {
+			t.Fatalf("catalog policy did not retain the source's LOCAL denial: %+v", policy)
+		}
+	}
+}
+
 func TestLocalCatalogRetentionRequiresExactConnectionAndClearingRevokesIt(t *testing.T) {
 	cfg := configFor(t, true)
 	cfg.Product.Mode = config.ProductModeLocal

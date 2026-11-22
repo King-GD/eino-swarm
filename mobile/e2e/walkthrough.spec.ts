@@ -1,3 +1,4 @@
+import { activateComposer } from "./composer-controls"
 import { expect, test, type Page } from "@playwright/test"
 
 /** The inbox and a conversation against the scripted host. `tick=0` plays a
@@ -132,29 +133,6 @@ test("switching PCs stays on the selected inbox instead of opening its latest co
   await expect(page.getByTestId("transcript")).toHaveCount(0)
 })
 
-test("Android Back closes a Clients task before the inbox can exit", async ({ page }) => {
-  await page.goto(WALKTHROUGH)
-  await page.getByRole("button", { name: "返回" }).click()
-  await page.getByRole("button", { name: "open session" }).click()
-  await expect(page.getByTestId("client-transcript")).toBeVisible()
-  expect(await page.evaluate(() => (window as Window & { __zwaiAndroidBack?: () => boolean }).__zwaiAndroidBack?.())).toBe(true)
-  await expect(page.getByTestId("client-transcript")).toHaveCount(0)
-  await expect(page.getByRole("button", { name: "open session" })).toBeVisible()
-  expect(await page.evaluate(() => (window as Window & { __zwaiAndroidBack?: () => boolean }).__zwaiAndroidBack?.())).toBe(false)
-})
-
-test("Clients More shows progress during a slow page and then reveals the older task", async ({ page }) => {
-  await page.goto("/?mock=1&tick=0&pause=clients")
-  await page.getByRole("button", { name: "返回" }).click()
-  const more = page.getByTestId("client-more-claude")
-  await more.click()
-  await expect(more).toHaveAttribute("aria-busy", "true")
-  await expect(more).toContainText("正在加载更多")
-  await expect(more).toBeDisabled()
-  await expect(page.getByRole("button", { name: "older session" })).toBeVisible()
-  await expect(more).toHaveCount(0)
-})
-
 test("phone model chooser uses the app type scale and keeps long names on screen", async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem("zwai.phone.providers", JSON.stringify([{
@@ -165,7 +143,8 @@ test("phone model chooser uses the app type scale and keeps long names on screen
     }]))
   })
   await page.goto("/")
-  await page.getByRole("button", { name: "模型" }).click()
+  await activateComposer(page)
+  await page.getByRole("button", { name: "模型" }).tap()
   const picker = page.getByRole("dialog", { name: "模型" })
   await expect(picker).toBeVisible()
   const longName = picker.getByRole("radio", { name: "a-very-long-model-name-that-must-wrap-inside-the-phone" })
@@ -173,7 +152,8 @@ test("phone model chooser uses the app type scale and keeps long names on screen
   await expect(longName).toBeInViewport()
   await longName.click()
   await expect(picker).toHaveCount(0)
-  await expect(page.getByRole("button", { name: "模型" })).toContainText("a-very-long-model-name")
+  await activateComposer(page)
+  await expect(page.getByRole("button", { name: "模型" })).toHaveAccessibleDescription(/a-very-long-model-name/)
 })
 
 test("worker activity opens in its own phone view without becoming a manager answer", async ({ page }) => {
@@ -381,7 +361,7 @@ test("a turn plays into the transcript and folds its work behind the answer", as
   await transcript.getByTestId("work-fold").last().click()
   await expect(transcript.getByText("exec").first()).toBeVisible()
 
-  // The turn is over, so the header stops offering to stop it.
+  // The turn is over, so the composer returns to Send.
   await expect(page.getByRole("button", { name: "停止" })).toHaveCount(0)
   await expect(page.getByRole("button", { name: "发送" })).toBeVisible()
 })
@@ -415,6 +395,7 @@ test("new chat keeps the project row and the message box inside a narrow screen"
     Promise.all(el.getAnimations().map((a) => a.finished)),
   )
 
+  await activateComposer(page)
   const width = page.viewportSize()?.width ?? 0
   // The column used to size itself to the chips and the model row, so both
   // ran past a narrow phone.
@@ -541,13 +522,14 @@ test("opening a conversation shows loading before the transcript", async ({ page
 
 test("the composer can pick a model, a thinking level, and a file", async ({ page }) => {
   await page.goto(WALKTHROUGH)
-  await expect(page.getByLabel("模型")).toBeVisible()
-  await expect(page.getByLabel("思考强度")).toBeVisible()
   await page.getByRole("button", { name: "添加", exact: true }).click()
   await expect(page.getByRole("menuitem", { name: "添加文件" })).toBeVisible()
   await page.keyboard.press("Escape")
-  await page.getByRole("button", { name: "模型" }).click()
+  await activateComposer(page)
+  await page.getByRole("button", { name: "模型" }).tap()
   await expect(page.getByRole("dialog", { name: "模型" }).getByRole("radio", { name: "scripted" })).toHaveCount(1)
   await page.keyboard.press("Escape")
-  await expect(page.getByRole("option", { name: "低思考" })).toHaveCount(1)
+  await activateComposer(page)
+  await page.getByRole("button", { name: "思考强度", exact: true }).tap()
+  await expect(page.getByRole("dialog", { name: "思考强度" }).getByRole("radio", { name: "低思考" })).toBeVisible()
 })

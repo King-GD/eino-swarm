@@ -2,15 +2,15 @@ import { useSyncExternalStore } from "react"
 
 /** Which list the leftmost rail is showing. The task column is never one
  *  of these lists. Projects is the list people live in; conversations
- *  with no project, waits, and local clients each have their own. */
-export type DeskDest = "projects" | "chats" | "scheduled" | "clients"
+ *  with no project and waits each have their own. */
+export type DeskDest = "projects" | "chats" | "scheduled"
 
 const DEST_KEY = "zwai.desk.dest"
 
 function readDest(): DeskDest {
   try {
     const raw = localStorage.getItem(DEST_KEY)
-    if (raw === "projects" || raw === "chats" || raw === "scheduled" || raw === "clients") {
+    if (raw === "projects" || raw === "chats" || raw === "scheduled") {
       return raw
     }
   } catch {
@@ -20,8 +20,7 @@ function readDest(): DeskDest {
 }
 
 let dest: DeskDest = readDest()
-/** Where Escape from Scheduled returns. Clients and the wait page are
- *  not a home; the last project or conversation list is. */
+/** The last project or conversation list that Escape from Scheduled restores. */
 let back: DeskDest = dest === "chats" ? "chats" : "projects"
 const listeners = new Set<() => void>()
 
@@ -69,6 +68,6 @@ export function useDeskDest(): DeskDest {
  *  projects: the rail and the column have to agree after Escape. */
 export function visibleDest(inboxOpen: boolean, dest: DeskDest): DeskDest {
   if (inboxOpen) return "scheduled"
-  if (dest === "clients" || dest === "chats") return dest
+  if (dest === "chats") return dest
   return "projects"
 }

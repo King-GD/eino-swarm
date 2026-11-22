@@ -24,8 +24,8 @@ import model_check as mc  # noqa: E402
 
 
 def declared_constants(model: mc.Model) -> set[str]:
-    block = re.search(r"^CONSTANTS\n(.*?)\n\n", model.spec.read_text(), re.S | re.M).group(1)
-    return set(re.findall(r"^\s+(\w+)", block, re.M))
+    block = re.search(r"^CONSTANTS?\b([^\n]*(?:\n[ \t]+[^\n]*)*)", model.spec.read_text(), re.M).group(1)
+    return set(re.findall(r"\b\w+\b", re.sub(r"\\\*[^\n]*", "", block)))
 
 
 def defined_operators(model: mc.Model) -> set[str]:

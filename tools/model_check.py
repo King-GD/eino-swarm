@@ -15,6 +15,8 @@ models/generation/AskPublicationBoundary.tla checks clean-EOF publication across
 late owner cancellation and the actual Ask tool context identity.
 models/scheduling/WakeConsentTimeline.tla checks multiple original human
 decisions, asynchronous classification and exact-ID cancellation deduplication.
+models/scheduling/WakePolicyBackfill.tla checks bounded calls, same-turn
+classification progress and the atomic schedule-write recheck (C-009 / C-012).
 models/stream/ManagerCommentary.tla checks the order and privacy of admitted
 manager commentary before it enters the event stream.
 models/account/DeviceLogin.tla checks validated public-link publication, manual
@@ -148,9 +150,11 @@ MODELS = {
               ("SampleThenCommit", "DropBoundCatalog", "RewriteRecoveredModel", "RecoverBeforeDiscovery", "IgnoreRevocation"),
               ("TypeOK", "SwitchIsIdle", "BoundCatalogSurvives", "RecoveryKeepsBinding", "RecoveryWaitsForDiscovery", "RevocationClosesSource"), ()),
         Model("mcp-call-recovery", ROOT / "models" / "mcp" / "MCPCallRecovery.tla",
-              ("RetryUncertain", "IgnoreBlock", "RenewAgain", "LeaveManagerRunning", "BlockDeadline"),
+              ("RetryUncertain", "IgnoreBlock", "RenewAgain", "LeaveManagerRunning", "BlockDeadline",
+               "BlockMissing", "DispatchMissing", "AllowToolError"),
               ("TypeOK", "VerifiedBeforeRetry", "OneReplacement", "NoWorkAfterBlock",
-               "ManagerCancellationRequested", "DeadlineKeepsAdmission"), ()),
+               "ManagerCancellationRequested", "DeadlineKeepsAdmission", "MissingKeepsAdmission",
+               "MissingNeverDispatches", "RemoteErrorBlocks"), ()),
         Model(
             "concurrency-cap", ROOT / "models" / "swarm" / "ConcurrencyCap.tla",
             ("ShrinkKeepsHolders", "NormalizeInvalidSave"),
@@ -319,6 +323,13 @@ MODELS = {
             ("TypeOK", "EveryArmAuthorized", "SettledPolicyMatchesLatestIntent", "ExactIDReceiptUniqueness",
              "LaterAllowanceSurvivesDuplicate"),
             (("MaxHumanEvents", 5),),
+        ),
+        Model(
+            "wake-backfill", ROOT / "models" / "scheduling" / "WakePolicyBackfill.tla",
+            ("PerTurnBudget", "SkipWritePolicyRecheck"),
+            ("TypeOK", "EveryArmAuthorized", "PendingBackfillAdvances"),
+            (("BatchSize", 16), ("InitialInputs", 20)),
+            ("EventuallySettled",),
         ),
     )
 }
@@ -564,7 +575,15 @@ CASES: tuple[Case, ...] = (
           ("LeaveManagerRunning",), "ManagerCancellationRequested", model="mcp-call-recovery"),
     _case("mcp-call-recovery-blocks-deadline", "historical 9b799b2: a per-call deadline blocks the task",
           ("BlockDeadline",), "DeadlineKeepsAdmission", model="mcp-call-recovery"),
-    _case("mcp-call-recovery-continues-after-deadline", "witness", witness="NoWorkAfterDeadline",
+    _case("mcp-call-recovery-continues-after-deadline", "witness", witness="NeverNextWorkAfterDeadline",
+          model="mcp-call-recovery"),
+    _case("mcp-call-recovery-blocks-missing-argument", "historical 9b799b2: missing input dispatches and blocks work",
+          ("DispatchMissing", "BlockMissing"), "MissingKeepsAdmission", model="mcp-call-recovery"),
+    _case("mcp-call-recovery-dispatches-missing-argument", "seeded: sends the invalid request before reporting it",
+          ("DispatchMissing",), "MissingNeverDispatches", model="mcp-call-recovery"),
+    _case("mcp-call-recovery-allows-remote-tool-error", "seeded: gives a remote error the same admission as a local rejection",
+          ("AllowToolError",), "RemoteErrorBlocks", model="mcp-call-recovery"),
+    _case("mcp-call-recovery-continues-after-missing-argument", "witness", witness="NeverAdmitsWorkAfterMissing",
           model="mcp-call-recovery"),
     _case("mcp-call-recovery-reach-success", "witness", witness="NeverRecovered", model="mcp-call-recovery"),
     _case("mcp-call-recovery-reach-block", "witness", witness="NeverBlocked", model="mcp-call-recovery"),
@@ -1034,6 +1053,18 @@ CASES: tuple[Case, ...] = (
         ("consent-reach-continue-retains-deny", "NeverOrdinaryContinuePreservesDenial"),
         ("consent-reach-second-allow-survives-late-result", "NeverSecondAllowSurvivesEarlierResult"),
     )),
+    _case("wake-backfill-current", "per-call budget and a fresh write-time policy check", model="wake-backfill"),
+    _case("wake-backfill-pre-fix", "observed same-turn retry makes no progress after its first batch",
+          ("PerTurnBudget",), "PendingBackfillAdvances", model="wake-backfill"),
+    _case("wake-backfill-stale-write", "seeded write ignores a new human instruction after verification",
+          ("SkipWritePolicyRecheck",), "EveryArmAuthorized", model="wake-backfill"),
+    *(_case("wake-backfill-reach-" + name, "same-turn backfill reachability", witness=witness, model="wake-backfill")
+      for name, witness in (
+          ("pending", "NeverBatchPending"),
+          ("arm", "NeverSameTurnArm"),
+          ("late-input", "NeverWritePending"),
+          ("denial", "NeverDenialSettles"),
+      )),
 )
 
 

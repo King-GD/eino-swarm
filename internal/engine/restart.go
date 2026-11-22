@@ -56,6 +56,7 @@ type restartCheckpoint struct {
 	AskCallID       string                   `json:"ask_call_id,omitempty"`
 	CapUsed         int                      `json:"cap_used,omitempty"`
 	CapExtend       int                      `json:"cap_extend,omitempty"`
+	CapReason       string                   `json:"cap_reason,omitempty"`
 	CapDecision     *bool                    `json:"cap_decision,omitempty"`
 	CollectionPause *workerCollectionPause   `json:"worker_collection,omitempty"`
 	Answer          *restartAskAnswer        `json:"answer,omitempty"`
@@ -350,11 +351,19 @@ func (e *Engine) restartTargets(ctx context.Context) ([]*restartTarget, error) {
 				for _, ev := range events {
 					if ev.Kind == KindMaxIterations {
 						var cap struct {
-							Limit  int `json:"limit"`
-							Extend int `json:"extend_by"`
+							Limit  int    `json:"limit"`
+							Extend int    `json:"extend_by"`
+							Reason string `json:"reason"`
 						}
 						if json.Unmarshal([]byte(ev.Text), &cap) == nil {
 							target.checkpoint.CapUsed, target.checkpoint.CapExtend = cap.Limit, cap.Extend
+							// The latest pause owns the label. An earlier deferred
+							// check must not survive a later real round cap.
+							if pauseReason(cap.Reason) == "classification_deferred" {
+								target.checkpoint.CapReason = "classification_deferred"
+							} else {
+								target.checkpoint.CapReason = ""
+							}
 						}
 					}
 				}

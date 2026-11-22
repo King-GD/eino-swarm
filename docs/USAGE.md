@@ -24,10 +24,11 @@ The encrypted PC-local phone route downloads a completed segment, including PCM;
 it does not provide live synthesis streaming.
 
 The microphone appears beside Send only when recognition is enabled and ready.
-Settings → Voice chooses the input device. System default follows the operating
-system's current input, which is the right choice when a laptop lid is closed
-and an external microphone should take over. A named device is used exactly;
-if it disappears, recording stops instead of silently switching microphones.
+Choose an input device in the Voice input section of Settings. **System default**
+follows the operating system's current input. When a saved microphone is missing,
+Settings shows **System default** and new recordings fall back to that input.
+The saved microphone can be used again when it returns. Choose **System default**
+in the menu to clear that preference.
 
 On PC, click to record, click again to finish, or press Escape to cancel.
 On the phone, tap to open the recording panel and choose Finish or Cancel.
@@ -46,8 +47,8 @@ LOCAL direct Chat has independent voice settings in its personal model services.
 
 ## The window
 
-The left rail switches **Projects** (the default), **Conversations**,
-**Scheduled**, and **Clients**. Projects holds pinned topics and project
+The left rail switches between **Projects** (the default), **Conversations**
+and **Scheduled**. Projects holds pinned topics and project
 folders. Conversations is the list of threads that belong to no project.
 Launch and reload show the home page and select no conversation. Restart
 leaves the rail where you left it.
@@ -188,6 +189,8 @@ on the next request. A built-in tool or server that was off when the turn
 started is added when the next turn builds its tools. A call that still
 arrives after the switch returns `tool_switched_off` and does not run.
 
+**Tool settings** at the bottom of that menu opens **Settings → Tools**.
+
 After a visible reply, one likely next message can appear as the placeholder.
 Tab inserts it; Enter sends it. **Settings → Swarm → Suggest a next step**
 turns the extra call off. It is on by default.
@@ -283,9 +286,18 @@ The same turn continues. Retry stays disabled while Settings is open or the
 conversation is busy.
 
 If the manager hits its tool-round limit, the transcript asks whether to add
-another slice. A paired phone shows the same prompt with **Continue** and
-**Stop**. Reopening restores the paused controls. A refused action keeps the
-prompt and its error. Update both the phone and the PC to use these controls.
+another slice. **Manager tool rounds** opens Settings → Swarm on that field.
+The continuation already offered keeps its size; the next pause uses the
+saved limit. A paired phone shows the same prompt with **Continue** and
+**Stop**, and names that computer setting. Reopening restores the paused
+controls. A refused action keeps the prompt and its error. Update both the
+phone and the PC to use these controls.
+
+A pause that says answer verification was deferred is a different stop. The
+smaller number is how many manager rounds this turn has already used. The
+larger number is still the configured limit. Continue resumes the same turn;
+it does not mean the round limit was reached, and that card does not open
+the round setting.
 
 ### Asking you, and side chat
 
@@ -576,6 +588,10 @@ human turn, an independent job (`schedule_task`). `schedule_wake` does not
 take an id. It arms or replaces the open wait. The host assigns the id.
 Cancel copies an id from the open-wait list.
 
+When the history needs several batches of policy classification, the manager
+can continue in the current turn and arm the wait once those checks finish.
+An explicit prohibition on parking this conversation still blocks the wait.
+
 A successful check with another wake scheduled keeps its unfinished sub-agents
 running for that next check. Pausing or cancelling the last wake stops workers
 that have no continuing goal. A failed check also keeps workers that still
@@ -672,9 +688,17 @@ phone does not send the optional read acknowledgement to those hosts. See
 
 ## Files and the workspace
 
-Every standalone conversation has its own directory
-(`~/.zwai-swarm/workspaces/<thread-id>/`). Uploads land in `uploads/`. Agent
-output lands next to it. The **Files** tab is a collapsible tree: filter at
+New conversations have a directory of their own. In a project it is
+`<project workdir>/.zwai-tasks/<thread-id>/`; standalone tasks use
+`~/.zwai-swarm/workspaces/<thread-id>/`. **Files** starts in **Task files** with
+**Results** (`results/`) expanded. **Working files** (`work/`) and **Uploads**
+(`uploads/`) start collapsed. **Project folder** browses the current project's
+shared files and task directories without upload or delete controls. Results
+are files the agents explicitly save there; a text answer does not create one.
+Existing project conversations use their original shared folder and links.
+Renaming or moving a new task, or editing its project's workdir, does not move
+its files. Deletion only cleans up app-managed task files; external workdirs
+and their tasks stay on disk. The **Files** tab is a collapsible tree: filter at
 the top, directories expand, download on hover. In the desktop app the toolbar
 opens the workspace in the file manager. The selected directory keeps a button
 to open that folder. Click a file or press Enter to preview it. HTML opens in
@@ -688,8 +712,9 @@ completed scan of that workspace. Refresh, upload, and delete start a new scan;
 a search waits for the scan instead of showing a partial result.
 
 The title-bar terminal (⌘J, and every click on the icon) starts a real shell
-in that same directory — a project's working directory when the conversation
-is in one. The integrated terminal follows the app's light, dark, and color
+in the task's `work/` directory, matching the agents. The project terminal
+still opens the project root. Changing the Files view does not change either
+working directory. The integrated terminal follows the app's light, dark, and color
 theme, including a hidden tab. Appearance **System** follows the system while
 it is running. Explicit Light or Dark stays fixed.
 
@@ -713,9 +738,10 @@ progress mark in that column even if you are looking at another one.
 - **an instruction**, added to the system prompt of every conversation in the
   project. It is the business context. Settings → Personality is how you like
   to be worked with. When the two conflict, this project wins;
-- **a working directory**, an absolute path that already exists. Every
-  conversation in the project reads and writes it directly, with your
-  permissions. Leave it empty and zwai keeps one for you;
+- **a working directory**, an absolute path that already exists and must be
+  writable to create new tasks. Agents can explicitly use it for shared
+  project work with your existing permissions. Leave it empty and zwai
+  keeps one for you. It does not modify your repository's ignore rules;
 - **memory**, on by default.
 
 When a durable project instruction changes, ask the manager in a conversation
@@ -1067,14 +1093,11 @@ relying on file division or execution order. It does not lock resources, wake
 idle tasks, interrupt work, answer a human pause, or grant new permissions.
 See [F-135](FEATURES.md#f-135-independent-task-coordination).
 
-`clients.enabled` lists Claude, Codex, and Cursor sessions already on this
-machine. Settings does not show that page. The behavior of the list is in
-[clients](CONFIG.md#clients).
-
 ## External MCP tools
 
-Open **Settings → Tools** on Desktop or Web. MCP connections are on that
-page, under the built-in tools. Add a local stdio command or a
+Open **Settings → Tools** on Desktop or Web, then the **MCP** tab.
+Built-in tools stay on the other tab, so the two lists are not one long
+page. Add a local stdio command or a
 remote Streamable HTTP/SSE server. Enter a display name and the connection.
 The app assigns the id and leaves the name, command, arguments and URL as
 typed. Save the connection, then choose **Test connection and list tools**. You can inspect a disabled server before enabling
@@ -1111,10 +1134,17 @@ that server's remote tools and can switch each one off without disabling the
 server. A tool switched off during a turn leaves the next request. Plan and
 Nuwa read-only toolsets do not mount MCP tools. Other Nuwa turns make the
 mounted names available to workers and keep the planner's toolset separate.
+When the tool schema declares a required top-level field without a default, the call
+is checked before sending it. The tool record names missing fields so the
+model can supply them in a new call in the same turn. Other calls in the
+same batch can finish.
+
 A confirmed expired session is renewed once with the current saved credentials
-for the same MCP connection. If it cannot be renewed, or the tool fails for
-another reason, the task stops. Repair the connection in Settings and retry
-the task. Check for an external effect before retrying a call that timed out.
+for the same MCP connection. The task stops if renewal fails or the server
+returns a tool execution error. Repair the connection in Settings and retry
+the task. A Streamable HTTP call deadline keeps the turn available for later
+independent calls. Check for an external effect before repeating the timed-out
+call.
 Keep secrets
 in the write-only environment and header fields. Blank preserves the saved
 map. `{}` clears it. Local commands run with the conversation workspace as

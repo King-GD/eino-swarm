@@ -124,6 +124,7 @@ func TestMCPDiagnosticsClassifyActualCallOutcomesAndKeepCatalogFailureQuiet(t *t
 		remoteError    = "private-remote-tool-failure"
 		httpFailure    = "private-http-failure"
 		unverifiedTool = "private-unverified-tool-name"
+		inputValue     = "private-input-value"
 	)
 	server := mcp.NewServer(&mcp.Implementation{Name: "diagnostics", Version: "test"}, nil)
 	for name, body := range map[string]string{"lookup": resultBody, "refuse": remoteError} {
@@ -131,6 +132,11 @@ func TestMCPDiagnosticsClassifyActualCallOutcomesAndKeepCatalogFailureQuiet(t *t
 			return &mcp.CallToolResult{IsError: name == "refuse", Content: []mcp.Content{&mcp.TextContent{Text: body}}}, nil
 		})
 	}
+	server.AddTool(&mcp.Tool{Name: "update", InputSchema: map[string]any{"type": "object", "required": []string{"record_id"}}},
+		func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			t.Error("missing required arguments reached remote execution")
+			return &mcp.CallToolResult{}, nil
+		})
 	httpServer := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil))
 	t.Cleanup(httpServer.Close)
 	deniedServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -159,6 +165,7 @@ func TestMCPDiagnosticsClassifyActualCallOutcomesAndKeepCatalogFailureQuiet(t *t
 		id, server, proxy, arguments, want string
 	}{
 		{"ok-call", "healthy", "call_tool", `{"name":"lookup","arguments":{}}`, resultBody},
+		{"missing-argument", "healthy", "call_tool", `{"name":"update","arguments":{"value":"` + inputValue + `"}}`, "record_id"},
 		{"remote-error", "healthy", "call_tool", `{"name":"refuse","arguments":{}}`, `"isError":true`},
 		{"bad-connection", "denied", "call_tool", `{"name":"` + unverifiedTool + `","arguments":{}}`, `"code":"connection_failed"`},
 		{"catalog-check", "catalog", "list_tools", `{}`, `"code":"connection_failed"`},
@@ -168,12 +175,13 @@ func TestMCPDiagnosticsClassifyActualCallOutcomesAndKeepCatalogFailureQuiet(t *t
 			t.Errorf("%s got %q, want %q", tc.id, body, tc.want)
 		}
 	}
-	outcomes := readDiagnosticOutcomes(t, output.String(), resultBody, remoteError, httpFailure, unverifiedTool, httpServer.URL, deniedServer.URL)
-	if len(outcomes) != 3 {
+	outcomes := readDiagnosticOutcomes(t, output.String(), resultBody, remoteError, httpFailure, unverifiedTool, inputValue, "record_id", httpServer.URL, deniedServer.URL)
+	if len(outcomes) != 4 {
 		t.Errorf("only tool invocations should be logged, got %+v", outcomes)
 	}
 	for _, want := range []diagnosticOutcome{
 		{CallID: "ok-call", ServerID: "healthy", Phase: "call", Code: "ok", Tool: "lookup", Level: "INFO"},
+		{CallID: "missing-argument", ServerID: "healthy", Phase: "validate", Code: "missing_required_arguments", Tool: "update", Level: "WARN"},
 		{CallID: "remote-error", ServerID: "healthy", Phase: "call", Code: "tool_error", Tool: "refuse", Level: "WARN"},
 		{CallID: "bad-connection", ServerID: "denied", Phase: "connect", Code: "connection_failed", Level: "WARN"},
 	} {

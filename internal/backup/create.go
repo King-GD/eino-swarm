@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
@@ -172,13 +173,27 @@ func buildProject(ctx context.Context, conn *sql.Conn, dataDir, projectID string
 	if err != nil {
 		return fail(err)
 	}
+	taskRoots, err := projectTaskRoots(ctx, conn, "dst", projectID)
+	if err != nil {
+		return fail(err)
+	}
+	taskAllow := make(map[string]struct{}, len(taskRoots))
+	for _, rel := range taskRoots {
+		taskAllow[rel] = struct{}{}
+		if !strings.HasPrefix(rel, rels[0]+"/") {
+			if err := checkBackupParents(dataDir, rel); err != nil {
+				return fail(err)
+			}
+			rels = append(rels, rel)
+		}
+	}
 	items := []zipItem{{name: databaseName, path: db}}
 	skip := skipSet(skipped)
 	var seen int64
 	var links int
 	reportProgress(ctx, Progress{Phase: PhaseFiles})
 	for _, rel := range rels {
-		part, err := collectTree(ctx, dataDir, rel, skip, &seen, &links)
+		part, err := collectTree(ctx, dataDir, rel, skip, &seen, &links, taskAllow)
 		if err != nil {
 			return fail(err)
 		}

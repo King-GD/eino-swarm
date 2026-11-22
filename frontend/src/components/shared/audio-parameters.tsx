@@ -1,5 +1,5 @@
 import { useId, type ReactNode } from "react"
-import { playableAudio, resolveAudioParameters, type AudioOverrides, type AudioParameterView, type AudioRole } from "../../lib/audio-parameters"
+import { audioOverridesWithoutControl, playableAudio, resolveAudioParameters, type AudioOverrides, type AudioParameterView, type AudioRole } from "../../lib/audio-parameters"
 
 export function AudioParameterControls({ title, view, role, value, onChange, labels }: {
   title: string
@@ -8,14 +8,20 @@ export function AudioParameterControls({ title, view, role, value, onChange, lab
 }) {
   const id = useId()
   const p = view?.version === 1 && view.status === "configured" ? view.parameters : undefined
-  const hasOverrides = Object.keys(value).length > 0
+  const stuck = audioOverridesWithoutControl(p, value)
+  const clearStuck = () => {
+    const next: AudioOverrides = { ...value }
+    for (const key of Object.keys(stuck) as (keyof AudioOverrides)[]) delete next[key]
+    onChange(next)
+  }
   const details = (children: ReactNode) => <details><summary className="text-xs">{title}</summary>{children}</details>
-  if (!p) return hasOverrides ? details(<div className="flex flex-col gap-2">
+  if (!p) return Object.keys(stuck).length > 0 ? details(<div className="flex flex-col gap-2">
     <p role="status" className="text-xs text-muted-foreground">{labels.unavailable}</p>
-    <p className="text-xs">{labels.invalid}</p><p className="text-xs">{Object.entries(value).map(([key,v]) => `${labels[key] ?? key}: ${String(v).slice(0,128)}`).join(" · ")}</p><button type="button" className="self-start text-xs underline" onClick={() => onChange({})}>{labels.follow}</button>
+    <p className="text-xs">{labels.invalid}</p><p className="text-xs">{Object.entries(value).map(([key,v]) => `${labels[key] ?? key}: ${String(v).slice(0,128)}`).join(" · ")}</p><button type="button" className="self-start text-xs underline" onClick={clearStuck}>{labels.follow}</button>
   </div>) : null
   let valid = true
   try { valid = playableAudio(resolveAudioParameters(view!, value).effective, role) } catch { valid = false }
+  const hasOverrides = Object.keys(value).length > 0
   if (valid && !hasOverrides && !Object.values(p).some(option => typeof option === "object" && option.configurable)) return null
   const change = (key: keyof AudioOverrides, v: string | number | undefined) => {
     const next = { ...value, [key]: v }; if (v === undefined) delete next[key]; onChange(next)
@@ -44,6 +50,6 @@ export function AudioParameterControls({ title, view, role, value, onChange, lab
         {value[key] !== undefined ? <button type="button" className="text-left text-xs underline" onClick={() => change(key, undefined)}>{labels.follow}</button> : null}
       </label>
     })}
-    {hasOverrides ? <button type="button" className="self-start text-xs underline" onClick={() => onChange({})}>{labels.follow}</button> : null}
+    {Object.keys(stuck).length > 0 ? <button type="button" className="self-start text-xs underline" onClick={clearStuck}>{labels.follow}</button> : null}
   </div>)
 }

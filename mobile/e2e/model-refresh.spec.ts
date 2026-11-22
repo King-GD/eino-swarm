@@ -1,21 +1,26 @@
 import { expect, test, type Page } from "@playwright/test"
+import { activateComposer } from "./composer-controls"
 
 const modelButton = (page: Page) => page.getByRole("button", { name: "模型", exact: true })
 const picker = (page: Page) => page.getByRole("dialog", { name: "模型", exact: true })
 const refresh = (page: Page) => picker(page).getByRole("button", { name: "刷新模型", exact: true })
 
 test("refresh replaces removed names without silently tuning an existing conversation", async ({ page }, info) => {
-  await page.goto("/?mock=1&tick=0")
-  await modelButton(page).click()
+  await page.goto("/?mock=1&tick=0&catalog=named-default")
+  await activateComposer(page)
+  await modelButton(page).tap()
   await picker(page).getByRole("radio", { name: "scripted", exact: true }).click()
-  await expect(modelButton(page)).toHaveText("scripted")
-  await modelButton(page).click()
+  await activateComposer(page)
+  await expect(modelButton(page)).toHaveAccessibleDescription("scripted")
+  await modelButton(page).tap()
   await refresh(page).click()
-  await expect(picker(page).getByRole("radio", { name: "scripted-next", exact: true })).toBeVisible()
+  await expect(picker(page).getByRole("radio", { name: "New PC default", exact: true })).toBeVisible()
   await expect(picker(page).getByRole("radio", { name: "scripted", exact: true })).toHaveCount(0)
   await page.screenshot({ path: info.outputPath("fresh-models-existing-selection.png") })
   await page.keyboard.press("Escape")
-  await expect(modelButton(page)).toHaveText("scripted")
+  await activateComposer(page)
+  await expect(modelButton(page)).toHaveAccessibleDescription("scripted")
+  await expect(modelButton(page)).toHaveAttribute("data-unavailable", "true")
   await page.getByLabel("消息", { exact: true }).fill("continue with selected model")
   await expect(page.locator("form button[type=submit]")).toBeEnabled()
 })
@@ -24,7 +29,8 @@ test("a failed refresh keeps its list and offers a local successful retry on the
   await page.goto("/?mock=1&tick=0&catalog=retry")
   await page.getByRole("button", { name: "返回", exact: true }).click()
   await page.getByTestId("new-chat").click()
-  await modelButton(page).click()
+  await activateComposer(page)
+  await modelButton(page).tap()
   await refresh(page).click()
   await expect(picker(page).getByRole("alert")).toHaveText("无法刷新模型列表，请重试。")
   await expect(picker(page).getByRole("radio", { name: "scripted", exact: true })).toBeVisible()
@@ -36,7 +42,8 @@ test("a failed refresh keeps its list and offers a local successful retry on the
 
 test("legacy host feedback stays in the picker and the conversation remains usable", async ({ page }, info) => {
   await page.goto("/?mock=1&tick=0&catalog=legacy")
-  await modelButton(page).click()
+  await activateComposer(page)
+  await modelButton(page).tap()
   await refresh(page).click()
   await expect(picker(page).getByRole("alert")).toHaveText("请更新电脑端以刷新模型列表。")
   await expect(picker(page).getByRole("radio", { name: "scripted", exact: true })).toBeVisible()
@@ -49,12 +56,14 @@ test("legacy host feedback stays in the picker and the conversation remains usab
 
 test("busy refresh can close with Android Back and late results fit a narrow iPhone picker", async ({ page }, info) => {
   await page.goto("/?mock=1&tick=0&catalog=slow")
-  await modelButton(page).click()
+  await activateComposer(page)
+  await modelButton(page).tap()
   await refresh(page).click()
   await expect(refresh(page)).toBeDisabled()
   expect(await page.evaluate(() => (window as Window & { __zwaiAndroidBack?: () => boolean }).__zwaiAndroidBack?.())).toBe(true)
   await expect(picker(page)).toHaveCount(0)
-  await modelButton(page).click()
+  await activateComposer(page)
+  await modelButton(page).tap()
   await expect(picker(page).getByRole("radio", { name: "scripted-next", exact: true })).toBeVisible()
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 })
@@ -69,11 +78,13 @@ test("busy refresh can close with Android Back and late results fit a narrow iPh
 
 test("an empty successful catalog still exposes refresh and its empty state", async ({ page }) => {
   await page.goto("/?mock=1&tick=0&catalog=empty")
-  await modelButton(page).click()
+  await activateComposer(page)
+  await modelButton(page).tap()
   await refresh(page).click()
   await expect(picker(page).getByText("没有可用模型。", { exact: true })).toBeVisible()
   await expect(picker(page).getByRole("radio")).toHaveCount(0)
   await page.keyboard.press("Escape")
-  await modelButton(page).click()
+  await activateComposer(page)
+  await modelButton(page).tap()
   await expect(refresh(page)).toBeEnabled()
 })

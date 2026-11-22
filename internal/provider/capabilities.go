@@ -14,12 +14,14 @@ import (
 
 // RoleCapability contains public protocol identifiers, never model credentials.
 type RoleCapability struct {
-	AudioParametersVersion int      `json:"audio_parameters_version,omitempty"`
-	Supported              bool     `json:"supported"`
-	Available              bool     `json:"available"`
-	Configurable           bool     `json:"configurable"`
-	Endpoints              []string `json:"endpoints"`
-	Reason                 string   `json:"reason,omitempty"`
+	AudioParametersVersion    int      `json:"audio_parameters_version,omitempty"`
+	Supported                 bool     `json:"supported"`
+	Available                 bool     `json:"available"`
+	Configurable              bool     `json:"configurable"`
+	Endpoints                 []string `json:"endpoints"`
+	ResponsesModes            []string `json:"responses_modes,omitempty"`
+	ResponsesDeveloperHistory int      `json:"responses_developer_history,omitempty"`
+	Reason                    string   `json:"reason,omitempty"`
 }
 
 type SourceCapabilities struct {
@@ -51,7 +53,7 @@ func ParseCapabilities(raw []byte) (*ClientCapabilities, error) {
 			return nil, errors.New("provider: invalid capability source")
 		}
 		for role, capability := range source.Capabilities {
-			if !config.KnownModelRole(role) || len(capability.Endpoints) > 16 || len(capability.Reason) > 256 {
+			if !config.KnownModelRole(role) || len(capability.Endpoints) > 16 || len(capability.ResponsesModes) > 16 || len(capability.Reason) > 256 {
 				return nil, errors.New("provider: invalid role capability")
 			}
 			for _, endpoint := range capability.Endpoints {
@@ -108,6 +110,7 @@ func cloneCapabilities(source *SourceCapabilities) *SourceCapabilities {
 	copy.Capabilities = maps.Clone(source.Capabilities)
 	for role, capability := range copy.Capabilities {
 		capability.Endpoints = slices.Clone(capability.Endpoints)
+		capability.ResponsesModes = slices.Clone(capability.ResponsesModes)
 		copy.Capabilities[role] = capability
 	}
 	return &copy
@@ -125,8 +128,8 @@ func (s *AccountSource) allowsRole(role string) bool {
 }
 
 func (s *AccountSource) chatAPI(role string) string {
-	if s.capabilities != nil && !slices.Contains(s.capabilities.Capabilities[role].Endpoints, "chat_completions") && slices.Contains(s.capabilities.Capabilities[role].Endpoints, "responses") {
-		return "responses"
+	if s.capabilities != nil && slices.Contains(s.capabilities.Capabilities[role].Endpoints, config.APIModeResponses) {
+		return config.APIModeResponses
 	}
 	return config.APIModeChatCompletions
 }

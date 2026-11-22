@@ -12,9 +12,7 @@ describe("visibleDest", () => {
   it("keeps the wait list up only while the inbox is open", () => {
     expect(visibleDest(true, "projects")).toBe("scheduled")
     expect(visibleDest(true, "chats")).toBe("scheduled")
-    expect(visibleDest(true, "clients")).toBe("scheduled")
     expect(visibleDest(false, "scheduled")).toBe("projects")
-    expect(visibleDest(false, "clients")).toBe("clients")
     expect(visibleDest(false, "chats")).toBe("chats")
     expect(visibleDest(false, "projects")).toBe("projects")
   })
@@ -31,10 +29,10 @@ describe("listDestForThread", () => {
 describe("setDeskDest", () => {
   it("remembers the rail choice and ignores a repeat", () => {
     setDeskDest("projects")
-    setDeskDest("clients")
-    expect(deskDest()).toBe("clients")
-    setDeskDest("clients")
-    expect(deskDest()).toBe("clients")
+    setDeskDest("chats")
+    expect(deskDest()).toBe("chats")
+    setDeskDest("chats")
+    expect(deskDest()).toBe("chats")
     setDeskDest("projects")
   })
 

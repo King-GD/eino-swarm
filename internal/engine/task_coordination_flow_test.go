@@ -66,7 +66,7 @@ func TestIndependentManagersDiscoverAndNegotiate(t *testing.T) {
 		},
 		func(msgs []*schema.Message) *schema.Message {
 			out := msgs[len(msgs)-1].Content
-			if !strings.Contains(out, b.ID) || !strings.Contains(out, p.Workdir) {
+			if !strings.Contains(out, b.ID) || !strings.Contains(out, e.WorkspaceDir(b.ID)) {
 				t.Errorf("active peer/workspace missing: %s", out)
 			}
 			args, _ := json.Marshal(map[string]string{"thread_id": b.ID, "text": "I can wait for your acknowledgement before changing shared resources."})

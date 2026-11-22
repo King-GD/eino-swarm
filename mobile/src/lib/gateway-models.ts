@@ -11,7 +11,7 @@ export function gatewayProvider(session: GatewaySession | null, bootstrap: Gatew
     id: bootstrap.models.source_id, sourceKind: "gateway", capabilities: capability,
     label: t("account.serverSource", { name: bootstrap.models.label }),
     baseURL: bootstrap.models.api_base_url, apiKey: session.token,
-    api: capability?.capabilities.conversation?.endpoints.includes("chat_completions") ? "chat" : "responses",
+    api: capability?.capabilities.conversation?.endpoints.includes("responses") ? "responses" : "chat",
     model: bootstrap.models.defaults?.conversation ?? "", catalog: [],
     locked: !capabilityConfigurable(capability, "conversation"),
     timeoutSeconds: defaultTimeoutSeconds, enabled: true,
@@ -55,7 +55,7 @@ export function gatewayModelSources(session: GatewaySession, bootstrap: GatewayB
       id: global.source_id, sourceKind: "gateway", gatewayScope: "gateway", capabilities: capability,
       label: t("account.gatewayGroup", { name: global.label }),
       baseURL: global.api_base_url, catalogURL: global.catalog_url, apiKey: session.token,
-      api: capability?.capabilities.conversation?.endpoints.includes("chat_completions") ? "chat" : "responses",
+      api: capability?.capabilities.conversation?.endpoints.includes("responses") ? "responses" : "chat",
       model: global.defaults?.conversation ?? "", catalog: [], locked: !capabilityConfigurable(capability, "conversation"),
       timeoutSeconds: defaultTimeoutSeconds, enabled: true,
     } })

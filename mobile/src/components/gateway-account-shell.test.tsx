@@ -49,7 +49,7 @@ describe("gateway account shell", () => {
     })
     const page = render(<App />)
     try {
-      await screen.findByRole("textbox", { name: /^Message$/ })
+      fireEvent.focus(await screen.findByRole("textbox", { name: /^Message$/ }))
       fireEvent.click(screen.getByRole("button", { name: "User center" }))
       const portrait = screen.getByTestId("account-portrait")
       fireEvent.click(portrait); fireEvent.click(portrait); fireEvent.click(portrait)
@@ -108,6 +108,7 @@ describe("gateway account shell", () => {
       await waitFor(() => expect(localStorage.getItem("zwai.phone.mode")).toBe("local"))
       const center = screen.getByRole("dialog", { name: "User center" })
       fireEvent.click(within(center).getByRole("button", { name: "Close" }))
+      fireEvent.focus(await screen.findByRole("textbox", { name: "Message" }))
       fireEvent.click(await screen.findByRole("button", { name: "Model" }))
       const picker = screen.getByRole("dialog", { name: "Model" })
       expect(within(picker).getByRole("group", { name: "Partner" })).toBeVisible()
@@ -441,6 +442,7 @@ describe("gateway account shell", () => {
     saveProviders([{ id: "private", label: "Personal", baseURL: "https://private.invalid/v1", apiKey: "private-secret", api: "chat", model: "shared-model", catalog: ["shared-model"], timeoutSeconds: 300 }])
     mocks.account = { ...mocks.account, status: "authorized", session, bootstrap }
     render(<App />)
+    fireEvent.focus(await screen.findByRole("textbox", { name: "Message" }))
     fireEvent.click(await screen.findByRole("button", { name: /^Model$/ }))
     expect(await screen.findByRole("heading", { name: "Team" })).toBeVisible()
     expect(screen.getByRole("heading", { name: "Personal" })).toBeVisible()
@@ -453,6 +455,7 @@ describe("gateway account shell", () => {
     saveGatewaySession(session)
     mocks.account={...mocks.account,status:"authorized",session,bootstrap:{...bootstrap,models:{...bootstrap.models,profile:{label:"Partner model",tools:["read"]}}}}
     render(<App />)
+    fireEvent.focus(await screen.findByRole("textbox", { name: "Message" }))
     fireEvent.click(await screen.findByRole("button",{name:/^Model$/}))
     expect(await screen.findByRole("heading",{name:"Partner model"})).toBeVisible()
     expect(screen.getByRole("radio",{name:"Partner model"})).toBeVisible()

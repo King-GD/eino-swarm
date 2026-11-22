@@ -84,12 +84,14 @@ final class BindFlowTests: XCTestCase {
   func testModelRefreshReplacesNamesAndKeepsExplicitSelection() throws {
     let app = XCUIApplication()
     app.launch()
-    let model = app.buttons["Model"].firstMatch
+    focusMessage(app)
+    let model = composerPickerControl(app, label: "Model")
     XCTAssertTrue(model.waitForExistence(timeout: 15), "requires the default offline catalog fixture")
     model.tap()
     let oldChoice = app.otherElements["scripted"].firstMatch
     XCTAssertTrue(oldChoice.waitForExistence(timeout: 5))
     oldChoice.tap()
+    focusMessage(app)
     model.tap()
     let refresh = app.buttons["Refresh models"].firstMatch
     XCTAssertTrue(refresh.waitForExistence(timeout: 5))
@@ -102,6 +104,7 @@ final class BindFlowTests: XCTestCase {
     XCTAssertEqual(freshChoice.value as? String, "0", "the new name must remain unselected rather than silently tuning this conversation")
     recordAgentPage(app, name: "model-refresh-fresh-catalog")
     app.buttons["Close"].firstMatch.tap()
+    focusMessage(app)
     XCTAssertTrue(model.exists)
     XCTAssertTrue(app.textViews["Message"].exists)
     let selectedModel = XCTAttachment(string: model.debugDescription + "\nlabel=" + model.label + "\nvalue=" + String(describing: model.value))
@@ -114,7 +117,8 @@ final class BindFlowTests: XCTestCase {
   func testModelRefreshFailureKeepsChoicesAndCanRetryLocally() throws {
     let app = XCUIApplication()
     app.launch()
-    let model = app.buttons["Model"].firstMatch
+    focusMessage(app)
+    let model = composerPickerControl(app, label: "Model")
     XCTAssertTrue(model.waitForExistence(timeout: 15), "requires catalog=retry")
     model.tap()
     let refresh = app.buttons["Refresh models"].firstMatch
@@ -134,7 +138,8 @@ final class BindFlowTests: XCTestCase {
   func testModelRefreshLegacyHostFeedbackDoesNotBlockConversation() throws {
     let app = XCUIApplication()
     app.launch()
-    let model = app.buttons["Model"].firstMatch
+    focusMessage(app)
+    let model = composerPickerControl(app, label: "Model")
     XCTAssertTrue(model.waitForExistence(timeout: 15), "requires catalog=legacy")
     model.tap()
     let refresh = app.buttons["Refresh models"].firstMatch
@@ -216,7 +221,7 @@ final class BindFlowTests: XCTestCase {
     return XCTWaiter.wait(for: [reached], timeout: 8) == .completed
   }
 
-  func testLeftEdgeSwipeReturnsThroughAgentPages() throws {
+  func testRightSwipeReturnsThroughAgentPages() throws {
     let app = XCUIApplication()
     app.launch()
     let agents = app.buttons["Agents (3)"]
@@ -230,15 +235,15 @@ final class BindFlowTests: XCTestCase {
     XCTAssertTrue(app.staticTexts["Worker evidence"].waitForExistence(timeout: 8))
     recordAgentPage(app, name: "edge-back-worker-before")
 
-    nearEdgeBack(app)
+    centerBack(app)
     let workerReturned = group.waitForExistence(timeout: 5)
     recordAgentPage(app, name: "edge-back-worker-to-roster")
-    XCTAssertTrue(workerReturned, "one native left-edge swipe must return from worker to the Agents list")
+    XCTAssertTrue(workerReturned, "one swipe from the center to the right edge must return from worker to the Agents list")
     guard workerReturned else { return }
     XCTAssertFalse(app.staticTexts["Worker evidence"].exists)
     assertNoManagerHistory(app)
 
-    leftEdgeBack(app)
+    nearEdgeBack(app)
     XCTAssertTrue(agents.waitForExistence(timeout: 5), "one swipe from Agents must return to the manager, not skip to the inbox")
     XCTAssertTrue(app.textViews["Message"].exists)
     recordAgentPage(app, name: "edge-back-roster-to-manager")
@@ -248,24 +253,25 @@ final class BindFlowTests: XCTestCase {
     XCTAssertTrue(inboxThread.waitForExistence(timeout: 5), "the next swipe must return to the inbox")
     XCTAssertFalse(app.buttons["Back"].exists)
     recordAgentPage(app, name: "edge-back-manager-to-inbox")
-    leftEdgeBack(app)
-    XCTAssertTrue(inboxThread.exists, "a root swipe must leave the inbox open")
+    centerBack(app)
+    XCTAssertTrue(inboxThread.isHittable, "a root swipe must leave the inbox open")
     XCTAssertFalse(app.buttons["Back"].exists)
     recordAgentPage(app, name: "edge-back-inbox-root-unchanged")
   }
 
-  func testLeftEdgeSwipeDismissesModelPickerBeforeThread() throws {
+  func testCenterSwipeDismissesModelPickerBeforeThread() throws {
     let app = XCUIApplication()
     app.launch()
     let agents = app.buttons["Agents (3)"]
     XCTAssertTrue(agents.waitForExistence(timeout: 20))
-    let model = app.buttons["Model"].firstMatch
+    focusMessage(app)
+    let model = composerPickerControl(app, label: "Model")
     XCTAssertTrue(model.waitForExistence(timeout: 8))
     model.tap()
     let close = app.buttons["Close"].firstMatch
     XCTAssertTrue(close.waitForExistence(timeout: 5))
     recordAgentPage(app, name: "edge-back-model-picker-before")
-    leftEdgeBack(app, y: 0.8)
+    centerBack(app, y: 0.8)
     XCTAssertTrue(close.waitForNonExistence(timeout: 5), "the dynamically installed model-picker hook must own the first swipe")
     XCTAssertTrue(agents.exists, "dismissing the model picker must preserve the conversation")
     XCTAssertTrue(app.textViews["Message"].exists)
@@ -276,7 +282,7 @@ final class BindFlowTests: XCTestCase {
     recordAgentPage(app, name: "edge-back-after-model-picker-to-inbox")
   }
 
-  func testEdgeSwipeIgnoresShortVerticalAndNonEdgeMotion() throws {
+  func testRightSwipeIgnoresShortVerticalAndUncommittedMotion() throws {
     let app = XCUIApplication()
     app.launch()
     let agents = app.buttons["Agents (3)"]
@@ -287,7 +293,8 @@ final class BindFlowTests: XCTestCase {
     for (name, start, end) in [
       ("short", CGVector(dx: 0.01, dy: 0.45), CGVector(dx: 0.09, dy: 0.45)),
       ("vertical", CGVector(dx: 0.01, dy: 0.4), CGVector(dx: 0.01, dy: 0.7)),
-      ("center-right", CGVector(dx: 0.4, dy: 0.6), CGVector(dx: 0.85, dy: 0.6)),
+      ("center-stops-early", CGVector(dx: 0.4, dy: 0.6), CGVector(dx: 0.8, dy: 0.6)),
+      ("center-diagonal", CGVector(dx: 0.5, dy: 0.35), CGVector(dx: 0.97, dy: 0.7)),
       ("right-edge-left", CGVector(dx: 0.99, dy: 0.6), CGVector(dx: 0.2, dy: 0.6)),
     ] {
       app.coordinate(withNormalizedOffset: start).press(forDuration: 0.05,
@@ -301,9 +308,15 @@ final class BindFlowTests: XCTestCase {
     recordAgentPage(app, name: "edge-back-valid-after-ignored-motion")
   }
 
-  private func leftEdgeBack(_ app: XCUIApplication, y: CGFloat = 0.45) {
-    let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: y))
-    let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: y))
+  private func centerBack(_ app: XCUIApplication, y: CGFloat = 0.45) {
+    let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: y))
+    let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: y))
+    start.press(forDuration: 0.05, thenDragTo: end)
+  }
+
+  private func leftEdgeBack(_ app: XCUIApplication) {
+    let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.45))
+    let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.45))
     start.press(forDuration: 0.05, thenDragTo: end)
   }
 
@@ -811,32 +824,19 @@ final class BindFlowTests: XCTestCase {
     _ = try remaining()
   }
 
-  func testClientTaskHeaderStaysVisibleAfterPull() throws {
+  func testOlderPCClientTasksStayHidden() {
     let app = XCUIApplication()
     app.launch()
     let back = app.buttons["Back"].firstMatch
     XCTAssertTrue(back.waitForExistence(timeout: 12))
     back.tap()
-    let task = app.buttons["open session"]
-    XCTAssertTrue(task.waitForExistence(timeout: 8))
-    // The task starts near the inbox footer on this fixture. Bring it clear of
-    // the bottom action bar so XCTest taps the row rather than the overlay.
-    app.swipeUp()
-    XCTAssertTrue(task.isHittable)
-    task.tap()
+    let conversation = app.buttons["Open Trim the layout pass"].firstMatch
+    XCTAssertTrue(conversation.waitForExistence(timeout: 8))
+    XCTAssertFalse(app.staticTexts["Clients"].exists)
+    XCTAssertFalse(app.buttons["open session"].exists)
+    recordAgentPage(app, name: "inbox-without-local-client-tasks")
+    conversation.tap()
     XCTAssertTrue(back.waitForExistence(timeout: 8))
-    let headerY = back.frame.minY
-    let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
-    let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65))
-    start.press(forDuration: 0.15, thenDragTo: end)
-    let shot = XCTAttachment(screenshot: app.screenshot())
-    shot.name = "client-task-header-after-pull"
-    shot.lifetime = .keepAlways
-    add(shot)
-    XCTAssertTrue(back.isHittable, "client task Back must remain above the inbox")
-    XCTAssertEqual(back.frame.minY, headerY, accuracy: 2, "inbox pull moved the client task header")
-    back.tap()
-    XCTAssertTrue(task.waitForExistence(timeout: 5), "Back must return to the inbox")
   }
 
   func testQuoteActionBesideNativeSelectionMenu() throws {
@@ -863,6 +863,74 @@ final class BindFlowTests: XCTestCase {
                   "tapping Add to chat must create a quote")
   }
 
+  // iOS can expose a button that opens a dialog as a pop-up control.
+  private func composerPickerControl(_ app: XCUIApplication, label: String) -> XCUIElement {
+    app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch
+  }
+
+  private func focusMessage(_ app: XCUIApplication) {
+    let message = app.textViews["Message"].firstMatch
+    XCTAssertTrue(message.waitForExistence(timeout: 10))
+    message.tap()
+  }
+
+  func testComposerFocusRevealsSettingsAndMovesThreadLinks() throws {
+    let app = XCUIApplication()
+    app.launch()
+    let message = app.textViews["Message"].firstMatch
+    let agents = app.buttons["Agents (3)"].firstMatch
+    let outputs = app.buttons["Outputs"].firstMatch
+    let model = composerPickerControl(app, label: "Model")
+    let thinking = composerPickerControl(app, label: "Thinking level")
+    let stop = app.buttons["Stop"].firstMatch
+    let mic = app.buttons["Start voice input"].firstMatch
+    XCTAssertTrue(agents.waitForExistence(timeout: 15))
+    XCTAssertTrue(mic.waitForExistence(timeout: 8))
+    XCTAssertFalse(model.exists)
+    XCTAssertFalse(thinking.exists)
+    XCTAssertGreaterThan(agents.frame.midY, app.frame.midY)
+    XCTAssertGreaterThan(outputs.frame.midY, app.frame.midY)
+    XCTAssertGreaterThanOrEqual(stop.frame.minX - mic.frame.maxX, 11)
+    XCTAssertEqual(app.buttons.matching(identifier: "Stop").count, 1)
+    recordAgentPage(app, name: "composer-compact")
+
+    focusMessage(app)
+    XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+    XCTAssertTrue(thinking.waitForExistence(timeout: 5))
+    XCTAssertGreaterThan(thinking.frame.midY, message.frame.midY)
+    XCTAssertTrue(model.isHittable)
+    recordAgentPage(app, name: "composer-focused")
+
+    thinking.tap()
+    let high = app.otherElements["High thinking"].firstMatch
+    XCTAssertTrue(high.waitForExistence(timeout: 5))
+    high.tap()
+    focusMessage(app)
+    XCTAssertTrue(model.waitForExistence(timeout: 5))
+    model.tap()
+    XCTAssertTrue(app.otherElements["scripted"].firstMatch.waitForExistence(timeout: 5))
+    recordAgentPage(app, name: "composer-model-picker")
+    app.buttons["Close"].firstMatch.tap()
+    XCTAssertTrue(model.waitForNonExistence(timeout: 5))
+
+    agents.tap()
+    XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS 'worker-1'")).firstMatch.waitForExistence(timeout: 5))
+    app.buttons["Back"].firstMatch.tap()
+    XCTAssertTrue(outputs.waitForExistence(timeout: 5))
+    outputs.tap()
+    XCTAssertTrue(app.staticTexts["Outputs"].firstMatch.waitForExistence(timeout: 5))
+    app.buttons["Back"].firstMatch.tap()
+
+    focusMessage(app)
+    message.typeText("Keep this draft")
+    XCTAssertTrue(app.buttons["Follow-up"].firstMatch.isHittable)
+    stop.tap()
+    XCTAssertTrue(stop.waitForNonExistence(timeout: 8))
+    XCTAssertEqual(message.value as? String, "Keep this draft")
+    XCTAssertTrue(app.buttons["Send"].firstMatch.isEnabled)
+    recordAgentPage(app, name: "composer-stop-retains-draft")
+  }
+
   func testComposerStopsLiveTurn() throws {
     let app = XCUIApplication()
     app.launch()
@@ -877,8 +945,8 @@ final class BindFlowTests: XCTestCase {
     let stops = app.buttons.matching(NSPredicate(format: "label == 'Stop'"))
     XCTAssertTrue(stops.firstMatch.waitForExistence(timeout: 5))
     let controls = stops.allElementsBoundByIndex
-    XCTAssertEqual(controls.count, 2, "the header Stop alone does not accept the composer control")
-    let stop = try XCTUnwrap(controls.max { $0.frame.midY < $1.frame.midY })
+    XCTAssertEqual(controls.count, 1, "the conversation has a single Stop control")
+    let stop = try XCTUnwrap(controls.first)
     XCTAssertGreaterThan(stop.frame.minY, app.frame.midY, "Stop must be the bottom composer control")
     XCTAssertEqual(stop.frame.width, stop.frame.height, accuracy: 1, "the primary control must remain an icon button")
     XCTAssertTrue(stop.isEnabled)
@@ -888,7 +956,7 @@ final class BindFlowTests: XCTestCase {
     before.lifetime = .keepAlways
     add(before)
     stop.tap()
-    XCTAssertTrue(stops.firstMatch.waitForNonExistence(timeout: 8), "stopping must clear both running controls")
+    XCTAssertTrue(stops.firstMatch.waitForNonExistence(timeout: 8), "stopping must clear the running control")
     let send = app.buttons["Send"]
     XCTAssertTrue(send.waitForExistence(timeout: 5), "the idle composer must return to Send")
     XCTAssertFalse(send.isEnabled, "stopping an empty draft must not send a message")

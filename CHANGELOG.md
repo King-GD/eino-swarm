@@ -6,17 +6,35 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ## Unreleased
 
+### Removed
+
+- PC and Web no longer scan or show local Claude, Codex or Cursor tasks, even with old enabled settings. Paired phones receive no local task data and hide the entry when connected to older hosts. This retires `F-223`, `C-014` and `C-018`. (`F-220`, `C-006`)
+
 ### Added
 
 - Task panels can show an enterprise asset portrait (EASM). After the subject is confirmed, the panel collects organizations, investment relations, branches, ICP filings, certificates, asset totals, attention trend and components through the configured MCP tools, shows each step's progress, and keeps working when one lookup fails. The panel follows the app language on PC, Web and paired phones.
 
+- New tasks keep work, results and uploads in independent directories. PC and paired phone Files open to task results and can switch to a read-only project folder. Existing conversations and external files stay in place. (`F-140`, `F-224`, `C-052`)
+
 - The phone composer's Add menu and slash suggestions list `/goal`, `/plan` and `/image` in PC chats, including after draft text. Direct chat offers `/image` when the selected Gateway source has authorized image generation. Choosing a leading command keeps the draft as its argument. (`F-150`, `F-182`, `F-220`, `C-009`, `C-051`)
 
-- PC and Web voice settings can choose the microphone. System default follows the operating-system input; a named device is used exactly, and an unplugged device asks for another choice instead of switching microphones silently. Phones keep the phone microphone. (`F-148`, `C-048`)
+- PC and Web voice settings can choose a preferred microphone or follow the operating-system input. Phones use their own microphone. (`F-148`, `C-048`)
 
 ### Changed
 
 - Settings → Tools → Task panels shows the common panel options. EASM lookup bindings and limits are managed through `task_panels.easm` in the configuration file.
+
+- iOS 支持从内容区中间横滑到右侧逐层返回；左缘返回和轮次导航条的横向滚动保持不变。 (`F-220`, `C-015`)
+
+- 手机输入框默认收为单行，点开后用图标选择模型和思考强度。子 Agent 和产出物移到输入框上方，停止按钮留在输入区，麦克风和停止按钮之间留出更多间距。停止时保留未发草稿。 (`F-220`, `F-222`, `F-224`, `F-230`, `C-002`, `C-017`)
+
+- Authorized Gateway chat roles prefer Responses when the source publishes it. Chat-only sources continue using Chat Completions. (`F-171`, `C-040`)
+
+- The manager tool-round pause on desktop and web opens Settings → Swarm → Manager tool rounds. A paired phone names that computer setting. The continuation already offered keeps its size. (`F-130`, `F-170`, `F-220`, `C-009`)
+
+- PC 主管与网关协商原生 Responses 固定指令继承后，用 `previous_response_id` 仅上传相同模型的增量。固定指令变化、历史改写或续接失效时，用本地完整历史重建。(`F-175`, `C-030`)
+
+- Settings → Tools shows built-in tools and MCP connections on separate tabs. The composer Tools menu opens that page. (`F-130`, `F-176`)
 
 - PC and paired phones queue ordinary follow-ups by default. Send options and each queue row offer insertion on the next model call or immediate insertion by interrupting the current manager step. (`C-002`)
 
@@ -24,6 +42,24 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - 网关模式下，普通网关和第三方接入会根据可用的识别、朗读模型分别默认开启语音。语音设置仅显示网关允许编辑的参数，录音格式和超时等设置默认折叠。(`F-148`, `C-048`)
 
 ### Fixed
+
+- 手机打开子智能体列表或从子智能体日志返回时，从顶部显示正在运行的子智能体，不再跳到历史列表底部。 (`F-220`)
+
+- 手机轮次导航显示两行输入预览，兼容从旧版 PC 历史补齐文字。跟随时保持当前轮和上一轮可点，横滑浏览时保留位置。点选只加载了回复的轮次时，继续读取该轮的提问并定位到那里。 (`F-220`, `C-006`)
+
+- Conversation waits can finish classifying long human histories across tool calls in the same turn. Pending classification reports the remaining inputs separately from an explicit prohibition. (`F-160`, `C-009`, `C-012`)
+
+- PC and Web voice input shows and uses System default when the saved microphone is missing. The preferred microphone can be used again when it reconnects. (`F-148`, `C-048`)
+
+- A deferred answer check no longer pauses with the manager tool-round cap
+  wording. The card shows rounds already used and the configured limit, and
+  it does not open that setting. (`F-130`, `F-150`, `F-220`, `C-009`)
+
+- 移动端轮次导航随聊天滚动高亮当前项，且只显示用户输入预览，不再用助手回复作标题。(`F-220`, `C-006`)
+
+- PC 切到本地模式后，额外目录不再漏掉独立且仍获准对话的已登录网关来源；手机任务页也不再把唯一候选的标签套到其他已选模型上。会话选路不变。(`C-013`)
+
+- Speech settings no longer add a second “follow gateway default” row after choosing a voice, format, speed, or instruction. That control already returns to the gateway default. A saved value with no control keeps one reset action. (`F-148`, `C-048`)
 
 - Swarm settings show the valid range for the sub-agent cap. Invalid entries
   do not save or reset the cap to its default. (`F-330`, `C-009`, #175)
@@ -35,6 +71,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - A Streamable HTTP MCP call deadline now records an unknown remote outcome
   without replaying the call. The same turn can make a later independent call
   on the session. (`F-176`, `C-041`, #177)
+
+- MCP tools report missing required arguments before sending the call. The
+  model can supply the named fields in the same turn while other calls in
+  the batch finish. (`F-176`, `C-041`, #178)
 
 - The queue HTTP regression now exercises bodyless steering for missing rows
   and checks that malformed JSON returns `400` with the queue intact.

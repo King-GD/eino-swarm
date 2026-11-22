@@ -87,15 +87,15 @@ func TestExplicitWorkerRecoveryReachesHTTPWithOriginalIdentityAndPermissions(t *
 				Model: "planner/current", Catalog: []string{"planner/original", "planner/current", "executor/original", "executor/replacement"}}}
 			e.pool = provider.New(e.cfg)
 			workspace := t.TempDir()
-			if err := os.WriteFile(filepath.Join(workspace, "source.txt"), []byte("Original source retained.\n"), 0o600); err != nil {
-				t.Fatal(err)
-			}
 			project, err := e.CreateProject("Original project", "Use the supplied evidence.", workspace, false, true)
 			if err != nil {
 				t.Fatal(err)
 			}
 			thread, err := e.CreateThread("Explicit recovery fixture", "", project.ID)
 			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(e.WorkspaceDir(thread.ID), "source.txt"), []byte("Original source retained.\n"), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			turn := &store.Turn{ThreadID: thread.ID, ProjectID: project.ID, ProviderID: "removed-provider", Model: "planner/original", NuwaEnabled: true, NuwaReadOnly: readOnly, NuwaExecutorProviderID: "removed-provider", NuwaExecutorModel: "executor/original"}

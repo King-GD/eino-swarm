@@ -126,15 +126,15 @@ func TestNuwaRetainedWorkerCitesEvidenceObservedByNextWake(t *testing.T) {
 	}}
 	e.pool = provider.New(e.cfg)
 	workspace := t.TempDir()
-	if err := os.WriteFile(filepath.Join(workspace, "source.txt"), []byte(source+"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	project, err := e.CreateProject("Evidence continuity", "", workspace, false, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	thread, err := e.CreateThread("Recurring source inspection", "", project.ID)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(e.WorkspaceDir(thread.ID), "source.txt"), []byte(source+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	wake, err := e.CreateSchedule(ScheduleInput{Kind: store.ScheduleThread, ThreadID: thread.ID, Title: "Inspection wake",

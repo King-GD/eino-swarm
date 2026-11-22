@@ -187,7 +187,7 @@ func TestFullTurnRunsTheWholeSwarm(t *testing.T) {
 	}
 
 	// the workers really wrote into this conversation's workspace
-	files, err := e.ListFiles(th.ID, "notes")
+	files, err := e.ListFiles(th.ID, "work/notes")
 	if err != nil {
 		t.Fatalf("ListFiles: %v", err)
 	}

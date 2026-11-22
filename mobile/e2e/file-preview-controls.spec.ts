@@ -10,6 +10,23 @@ async function openOutput(page: Page, name: string, url = "/?mock=1&tick=0") {
   return page.getByTestId("phone-file-preview")
 }
 
+test("paired Files opens task results first and switches to the read-only project root", async ({ page }) => {
+  await page.goto("/?mock=1&tick=0&file-preview=task-workspaces")
+  await page.getByRole("button", { name: "产出物", exact: true }).click()
+  await expect(page.getByRole("button", { name: "任务文件", exact: true })).toHaveAttribute("aria-pressed", "true")
+  await expect(page.getByRole("button", { name: "draft.txt", exact: true })).toHaveCount(0)
+  await page.getByRole("button", { name: "report.txt", exact: true }).click()
+  const preview = page.getByTestId("phone-file-preview")
+  await expect(preview.getByText("Current task deliverable")).toBeVisible()
+  await page.getByRole("button", { name: "返回列表" }).click()
+  await page.getByRole("button", { name: "项目目录", exact: true }).click()
+  await expect(page.getByRole("button", { name: "任务工作区", exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "report.txt", exact: true }).click()
+  await expect(preview.getByText("Shared project file")).toBeVisible()
+  const { bytes } = await downloadBytes(page)
+  expect(bytes.toString()).toBe("Shared project file")
+})
+
 async function downloadBytes(page: Page) {
   const downloading = page.waitForEvent("download")
   await page.getByRole("link", { name: "下载", exact: true }).click()

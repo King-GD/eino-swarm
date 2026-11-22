@@ -50,7 +50,7 @@ overrides that direction. A personal binding, provider, or custom endpoint
 remains the request target. Without that login or role, the direction stays
 not ready.
 
-`speech.input.device_id` selects the PC or Web microphone. Empty follows the operating-system default. A saved id is the browser's audio input id, not a device name. If that device is unplugged, recording fails and the saved id stays until another choice is made. Phones ignore this field and use the phone microphone.
+`speech.input.device_id` is the preferred PC or Web microphone's browser audio input ID. Empty follows the operating-system default. When capture cannot find the saved device, it tries the system default once and keeps the preference for when that device returns. Selecting **System default** clears the saved ID. Phones use their own microphone.
 
 Under **Advanced settings**, `speech.input.recording_format` accepts `auto`
 and `wav`. Automatic recording
@@ -399,6 +399,9 @@ computer control, shell execution, hosted MCP approvals or arbitrary tool types.
 Gateway catalogs, profiles and credentials remain in memory; they are never
 saved as `models.providers`. Provider IDs beginning with `gateway:` are reserved.
 LOCAL lists personal providers and separately authorized signed-in account catalogs.
+An additional catalog does not hide a distinct source's selectable conversation models.
+For the same source ID, the LOCAL projection controls both selection and execution;
+an explicit denial there is not bypassed with the signed-in projection.
 Each account catalog refreshes independently: a temporary outage retains only
 that same connection's previously authorized catalog. Fresh bootstrap revocations,
 denied responses and empty catalogs remove their own source even during a sibling outage.
@@ -469,7 +472,7 @@ Runtime limits and model-call defaults for the swarm.
 | `max_concurrent` | `6` | sub-agents running at the same time for one task. Settings accepts whole numbers of at least 1. Missing or non-positive values in legacy YAML use the default. The manager prompt and the `spawn_agent` / `resume_agent` descriptions state this number as a hard limit. Those tools refuse past it and do not park the extra worker; the manager waits, then resumes a finished id or spawns the next piece. Saving Settings applies it to the live and parked swarm immediately. Workers already queued by a programmatic `Spawn` start as soon as a slot opens under a higher cap. Lowering it stops the workers that took a slot last until the task is back within the number; the earlier ones keep running. A stopped worker needs a free slot before `resume_agent` can continue it. Raise it for wide fan-out; every one of them is a model call in flight. |
 | `agent_timeout_seconds` | `3600` | watchdog per sub-agent lifetime, including time queued for a slot. Existing positive saved values, including an old `600` or `1800`, remain unchanged. Saving updates later spawn/resume/restore lifetimes without extending an already created deadline or clearing failure counts. A failed worker's View failure reason opens its recorded error; an exact watchdog error for that worker links to Settings → Swarm → Sub-agent timeout and focuses this field. Provider idle errors, generic deadlines and cancellation do not identify this watchdog and do not offer that link. Saving does not resume the stopped worker. Three consecutive watchdog failures of the same worker stop automatic resume, error the manager and pause its recurring schedule. Provider idle errors and cancellation do not count. Success or explicit human retry resets the budget; increasing this lifetime alone is not a recovery strategy. |
 | `max_turns` | `200` | ReAct iterations per sub-agent. A model stuck in a loop ends here instead of spinning. A failed worker's recorded iteration-limit error links from its failure details to Settings → Swarm → Sub-agent tool rounds and focuses this field. Changing it does not resume that worker. |
-| `manager_max_iterations` | `200` | iterations for the manager. Lower it and complex plans get truncated mid-way; the manager also spends turns waiting for workers. Reaching the cap **pauses** the turn and asks whether to add another slice of this size, rather than failing with eino's iteration error. |
+| `manager_max_iterations` | `200` | iterations for the manager. Lower it and complex plans get truncated mid-way; the manager also spends turns waiting for workers. Reaching the cap **pauses** the turn and asks whether to add another slice of this size, rather than failing with eino's iteration error. On desktop and web, that pause and a later stop open Settings → Swarm → Manager tool rounds and focus this field. The continuation already offered keeps the size recorded on the pause; the next pause reads the saved value. A paired phone names this PC setting and does not edit it. A pause whose reason is `classification_deferred` is an answer-verification deferral: its `limit` is rounds already used, and that card does not open this field. |
 | `progress_interval_seconds` | `5` | how often a running turn emits a progress pulse. It is the only thing that moves while every agent sits in a slow tool call, so a higher value makes a busy run look stuck for longer. Zero or negative falls back to the default; pulses cannot be switched off. Settings does not show it. |
 | `delta_coalesce_ms` | `50` | how long streamed tokens wait to be sent as one event. A token every few milliseconds would redraw the whole UI; one pulse per interval keeps the screen moving without a frame per token. Zero or negative falls back to the default. Settings does not show it. |
 | `auto_title` | `true` | on the first user message, ask the model for a short sidebar name instead of leaving the truncated first message. The same namer labels an untitled scheduled wait from its prompt. Off keeps the placeholder. A title the user typed is never overwritten. An older config file without the key stays on. |
@@ -667,8 +670,8 @@ See the "Full access" note in the [README](../README.md).
 
 ## External MCP servers
 
-Desktop and Web **Settings → Tools** manage external tool servers on the same
-page as built-in tools, separately from provider cloud tools. No MCP server is configured by default.
+Desktop and Web **Settings → Tools** keeps built-in tools and MCP connections
+on separate tabs, apart from provider cloud tools. No MCP server is configured by default.
 Opening Settings reads configuration; **Test connection and list tools** explicitly opens a short
 connection, lists the server's tools and closes it. Inspection does not execute a
 tool and is available even while that server is disabled.
@@ -934,7 +937,7 @@ or edit the hub URL, authentication mode, computer name or pairing limits.
 | `auth_mode` | `account` | `account` requires browser sign-in, administrator account approval and explicit device authorization before registration. `independent` keeps independent pairlink registration. A blank value uses `account`. A value this version does not understand is removed, the default is written back, and the desktop explains that before opening the window. Settings does not show this control; change this file or `PUT /api/settings`. A save still rejects an unknown value |
 | `display_name` | this machine's hostname | name a bound phone paints on its host chip. Blank seeds `os.Hostname()` (or stays empty if that fails). Settings does not show this field. Clipped to 40 runes. Not a compiled label |
 | `thread_limit` | `5` | how many idle recents the phone lists below In progress before More. Live rows (`list.running`) are a separate roster and do not count |
-| `summary_chars` | `280` | truncate assistant/summary text on the phone. Inbox `action` / `summary` are human one-liners (findings, a command, prose), not raw `tool_call` JSON |
+| `summary_chars` | `280` | truncate assistant/summary text and user-input turn previews on the phone. Inbox `action` / `summary` are human one-liners (findings, a command, prose), not raw `tool_call` JSON |
 | `open_turns` | `6` | completed turns included when a thread is opened |
 | `event_chars` | `4000` | max characters of each watched event body on the phone. `tool_delta` is clipped to `summary_chars`. `spawned` text is always empty. Generation interruption/recovery preserves valid JSON and its `reason`/`recovery` fields; only `detail` is shortened (also capped at 512 characters), so a small display budget cannot erase lifecycle meaning |
 | `watch_events` | `80` | page size for `log` when the phone pulls up for older rows (`before` 0 pages older than the first snapshot). A reconnect with `since` > 0 still replays the gap on that same `ready` snapshot. First `watch` (`since` 0) paints at most 24 stored events from the live edge (`DefaultRemoteWatchOpen`) even when this is higher, so a long `/goal` turn is not a multi-second freeze |
@@ -1011,30 +1014,10 @@ convert or restore private credential files automatically.
 
 ## `clients`
 
-Read-only list of local agent transcripts. Off by default. Settings does not
-show this page; set the keys here or with `PUT /api/settings`. The left navigation and a paired phone show one group per tool. Tasks
-from the last `recent_days` are the first page, five per tool. Each tool
-group folds. More loads the next five. Opening a row reads the session
-and does not send or resume. The opening request stays pinned at the top.
-The column follows the latest lines. **Earlier** loads the page above.
-Adjacent thinking and tool calls start collapsed, and the composer cannot
-be used. A breathing light means that task is still running. The background
-refresh reuses parsed rows for unchanged files and publishes one sorted
-snapshot. Changed and deleted sessions appear on the next finished refresh.
-A paired phone opens the same read-only chat. On iOS, the detail keeps its
-title and Back button above the task log when the inbox is pulled down. On
-the phone, More shows a loading spinner while the next page arrives; a failed
-page keeps the existing rows and More can be retried. In a Clients task,
-Android Back returns to the list. Back from the root inbox exits the app.
-
-| key | default | meaning |
-|---|---|---|
-| `enabled` | `false` | scan and show the groups. Off returns an empty list and hides the Clients entry in the left navigation. |
-| `claude_dir` | `~/.claude` | Claude Code config directory. Blank is filled with that default. |
-| `codex_dir` | `~/.codex` | Codex home. Blank is filled with that default. |
-| `cursor_dir` | `~/.cursor` | Cursor home. Blank is filled with that default. |
-| `recent_days` | `3` | first page window. Zero or negative is repaired to 3. |
-| `running_stale_seconds` | `90` | a Claude or Cursor file with no finish marker counts as running only while it was written within this many seconds. An open Codex task stays running past it. Zero or negative is repaired to 90. |
+Local agent task integration is disabled. Old configuration files and Settings
+requests may still contain this section. The app normalizes `enabled` to
+`false` on load and save. Directory and pagination values remain readable
+for compatibility. The app performs no local agent task scans.
 
 ## `search`
 

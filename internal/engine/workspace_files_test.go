@@ -89,7 +89,7 @@ func newSymlinkWorkspace(t testing.TB, e *Engine) (threadID, root, outside strin
 	if err := e.store.CreateThread(th); err != nil {
 		t.Fatal(err)
 	}
-	root = e.WorkspaceDir(th.ID)
+	root = e.TaskFileDir(th.ID)
 	outside = filepath.Join(filepath.Dir(filepath.Dir(root)), "outside")
 	for _, dir := range []string{filepath.Join(root, "inside"), filepath.Join(outside, "sub")} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {

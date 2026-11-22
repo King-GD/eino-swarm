@@ -19,7 +19,10 @@ it("keeps the signed-in chat clear and distinguishes same-named models in the pi
   expect(screen.queryByTestId("direct-model-source")).not.toBeInTheDocument()
   expect(screen.queryByRole("button", { name: "Web settings" })).not.toBeInTheDocument()
 
-  const openPicker = () => fireEvent.click(screen.getByRole("button", { name: "Model" }))
+  const openPicker = () => {
+    fireEvent.focus(screen.getByRole("textbox", { name: "Message" }))
+    fireEvent.click(screen.getByRole("button", { name: "Model" }))
+  }
   const modelFrom = (source: string) => {
     const heading = screen.getByRole("heading", { name: source })
     return within(heading.parentElement!).getByRole("radio", { name: "shared-model" })

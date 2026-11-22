@@ -71,7 +71,8 @@ export const en = {
     "Lost the event stream to the app. It retries on its own and replays anything missed.",
   "header.lostStreamWeb":
     "Lost the event stream to the server. It retries on its own and replays anything missed.",
-  "header.workingIn": "Working in {path}",
+  "header.projectFolder": "Project folder: {path}",
+  "header.managedProjectFolder": "App-managed project folder",
   "header.shared": "Also open in {where}",
 
   "surface.desktop": "Desktop",
@@ -116,7 +117,7 @@ export const en = {
   "projects.title": "Projects",
   "projects.new": "New project",
   "projects.empty":
-    "A project gives its conversations one working directory, one instruction and a shared memory.",
+    "A project shares a folder, an instruction and memory. New conversations have separate task workspaces.",
   "projects.more": "More",
   "projects.edit": "Edit",
   "projects.delete": "Delete",
@@ -199,6 +200,7 @@ export const en = {
   "composer.toolsLoading": "Loading tools…",
   "composer.toolsLoadFailed": "Could not load tools",
   "composer.toolsSaveFailed": "Could not update tools",
+  "composer.toolsConfigure": "Tool settings",
   "composer.fullAccess": "Full access",
   "composer.fullAccessHint":
     "Agents can read and write files in this conversation's workspace and run commands.",
@@ -379,6 +381,14 @@ export const en = {
   "files.filterPlaceholder": "Filter files...",
   "files.searching": "Searching…",
   "files.tree": "Workspace files",
+  "files.taskScope": "Task files",
+  "files.projectScope": "Project folder",
+  "files.legacyShared": "Legacy shared folder",
+  "files.resultsFolder": "Results",
+  "files.workFolder": "Working files",
+  "files.uploadsFolder": "Uploads",
+  "files.tasksFolder": "Task workspaces",
+  "files.noResults": "No deliverables yet",
   "files.empty":
     "Nothing here yet. Upload files for the agents to work on, or wait for them to produce some.",
   "files.noMatch": "No matching files.",
@@ -438,6 +448,15 @@ export const en = {
   "transcript.limitContinued":
     "Continuing for another {extendBy} tool rounds.",
   "transcript.limitStopped": "Stopped after {limit} tool rounds.",
+  "transcript.deferredAsk":
+    "Answer verification was deferred, so this turn is paused. The manager round limit is still {extendBy}; this turn has used {limit} rounds. Continue the work?",
+  "transcript.deferredContinued": "Continuing. The next slice allows up to {extendBy} rounds.",
+  "transcript.deferredStopped": "Stopped. This turn used {limit} rounds. The manager round limit is still {extendBy}.",
+  "transcript.deferredContinueAria": "Continue after deferred answer verification",
+  "transcript.deferredStopAria": "Stop after deferred answer verification",
+  "transcript.limitSettingsHint":
+    "This continuation still adds the rounds above. Change the limit for later:",
+  "transcript.limitSettingsStopped": "Change the limit for the next pause:",
   "transcript.collectionWaiting": "Waiting for delegated work to finish. The manager will resume once to collect the results.",
   "transcript.collectionPaused": "Delegated results have not been collected. Continue to collect them, or Stop.",
   "transcript.collectionContinued": "Continuing to collect delegated results.",
@@ -823,6 +842,8 @@ export const en = {
   "settings.swarm.policyThinkingHigh": "High",
 
   "settings.tools.title": "Tools",
+  "settings.tools.builtin": "Built-in",
+  "settings.tools.mcp": "MCP",
   "settings.tools.execution": "Web tool execution",
   "settings.tools.executionLocation": "Web tools run on",
   "settings.tools.executionHint": "Cloud after server sign-in; this device while signed out. Applies to web_search and web_fetch from the next turn.",
@@ -893,7 +914,7 @@ export const en = {
   "project.edit": "Edit project",
   "project.new": "New project",
   "project.desc":
-    "Conversations in a project share a working directory, an instruction, and what earlier conversations learned.",
+    "Conversations share the project folder, instructions and memory. New conversations keep their files in separate task folders.",
   "project.name": "Name",
   "project.instruction": "Instruction",
   "project.instructionHint":
@@ -994,7 +1015,7 @@ export const en = {
   "confirm.cancel": "Cancel",
   "thread.deleteTitle": "Delete {name}?",
   "thread.deleteDesc":
-    "The transcript and this conversation's workspace are removed.",
+    "The transcript and app-managed task files are removed. Files under a user-selected project folder stay on disk.",
   "thread.deleteConfirm": "Delete conversation",
   "provider.deleteTitle": "Remove {name}?",
   "provider.deleteDesc":

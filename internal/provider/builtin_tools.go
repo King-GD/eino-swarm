@@ -20,7 +20,7 @@ func WithoutBuiltinTools(inner model.BaseChatModel) model.BaseChatModel {
 		m.mu.RUnlock()
 		configured := m.provider
 		configured.BuiltinTools = nil
-		return &responsesModel{provider: configured, client: m.client, tools: bound}
+		return &responsesModel{provider: configured, client: m.client, tools: bound, continuation: m.continuation}
 	default:
 		return inner
 	}

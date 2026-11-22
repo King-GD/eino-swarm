@@ -83,6 +83,11 @@ existing PC working directory (blank uses a managed directory), project memory,
 and Nuwa collaboration mode. Nuwa's planner and executor selectors use that PC's
 ready model catalog and save the pair together. Closing Nuwa retains the pair;
 settings apply to subsequent tasks, while running workers retain their model.
+
+In a paired conversation, **Files** opens the task's **Results** first. Its
+working files and uploads are separate. **Project folder** is a read-only
+view of the current project's files. Older PCs show their existing single
+file view.
 The phone sends only changed fields when editing, so changing a name does not
 overwrite an instruction changed on the PC. A failed save retains the draft for
 retry. Switching PCs or leaving the editor invalidates its pending UI responses.
@@ -196,7 +201,7 @@ selectors. After a connected-PC debug switch to LOCAL, the composer exposes
 **Original interface** groups, and third-party groups titled with the name the
 gateway returned, using that PC’s authorized catalogs. Identical model names retain their source IDs and routes.
 The paired PC also supplies the hosted conversation role’s display name. The
-composer shows that name while requests keep the role ID.
+composer’s Model sheet shows that name while requests keep the role ID.
 The phone has no second Official/All models switch. LOCAL Chat
 shows third-party presets and Gateway models only when the server authorizes
 those sources. A source returning 403 disappears without signing out or hiding
@@ -340,8 +345,20 @@ retry automatically. **Earlier** jumps to the preceding assistant reply.
 Current PCs send compact history for completed conversations and older pages.
 Expand **Thinking and tools** to request those steps, with further pages
 available inside the fold when needed. A running conversation retains its live
-activity. At three turns, the navigation strip jumps to the selected prompt,
-loading an older turn first when needed. Direct chat also has turn navigation.
+activity. From three turns onward, the navigation strip highlights the current
+prompt as you read. Each button shows up to two lines of the user input.
+While following the transcript, the strip keeps the current and previous
+buttons fully in view when both fit.
+Swipe the strip sideways to browse other prompts. It keeps that position
+through live updates until you scroll the transcript again or tap a turn.
+Opening a running paired conversation highlights its latest turn, even if
+the live page contains only tool activity. When a prompt is outside the live
+page and the PC has not supplied a preview, the phone reads a bounded number
+of history pages without moving the transcript. Entries with missing input
+show **No prompt preview**. Tap a turn to jump to its prompt. When the reply
+and prompt are on separate history pages, the phone keeps loading until it
+reaches the prompt or the start of the turn. Direct chat uses the same
+navigation.
 On the inbox, **Chat** and all PC tabs scroll in the same strip. User and
 assistant rows render markdown; a path link does not navigate the
 webview. Recognised language fences use the existing source syntax colours in
@@ -359,9 +376,11 @@ answer stays on screen and splits that row. The live tail is **Thinking**
 / **Planning next moves** / **Editing** / **Reading** / **Exec**; open
 the row for the pieces. A `progress` pulse is not a chat
 row. `wait_agents` is a status count, not the `elapsed_ms` roster.
-A conversation with sub-agents offers **Agents / 子 Agent** in its header. Its
-number counts running workers only; the list separates running workers from
-finished and failed history. Each row shows role, ID, status, and latest
+A conversation with sub-agents offers **Agents / 子 Agent** above the message
+box. Its number counts running workers. The list separates running workers
+from finished and failed history. Opening the list or returning from a worker
+log starts at the top, with running workers first. The list does not follow the
+chat tail while you browse it. Each row shows role, ID, status, and latest
 permitted activity; open a row
 for that agent's separate thought, tool, and answer log. **Earlier** loads
 older events into the same list and log. Worker answers do not appear as
@@ -371,11 +390,12 @@ The header Back button and Android system Back return from a worker log to
 the Agents list, then to the conversation, before leaving for the inbox.
 Loading Earlier history after several streamed replies keeps the Agents list free
 of manager paragraphs and work folds; those remain in the manager conversation.
-On iOS, swipe right from near the left edge to return through the same visible
-layers, including dismissing an open model picker first. One completed gesture
-returns one layer; root screens stay open. Cancelled, vertical, non-edge or
-below-threshold swipes leave the page open, and swiping left does not create forward
-navigation. The gesture does not use browser history.
+On iOS, swipe right from the left edge as before, or swipe from the middle
+of the content to near the right edge. One completed gesture returns one
+layer, dismissing an open model picker first; root screens stay open.
+The middle swipe leaves horizontally scrollable content and text editing alone.
+Cancelled, vertical, short or incomplete swipes do not return, and swiping
+left does not go forward. The gesture does not use browser history.
 The `schedule` event is still **A wait is armed.** in the transcript; the live
 wait is the banner (next check, **Run now**, **Cancel wait**).
 Each finished PC turn leaves a divider stamped with its host completion time,
@@ -403,10 +423,9 @@ anything to the PC. Remove the nonblank quotations, or change the request into
 an ordinary message, then submit again explicitly.
 Ordinary quoted requests, paths and literal command text keep their usual
 behavior. Pure-text commands still use the PC engine's existing semantics.
-**Outputs** in a paired conversation lists that
-PC conversation's workspace, including uploads and generated files. It opens
-at the workspace root. Tap a folder to load that folder's complete contents,
-or search to list every match. A search does not show a shorter list first. Open a
+**Outputs** above the message box lists the paired PC conversation’s files.
+Tasks with their own file root open to **Results**. Tap a folder to load its
+complete contents, or search to list every match. A search does not show a shorter list first. Open a
 file to preview Markdown (.md/.markdown/.mdx) as a document, known source
 suffixes with syntax colors, plain text, a common image, PDF, tables, or supported
 Office and EPUB documents. HTML artifacts render in an isolated frame. SVG stays
@@ -438,7 +457,11 @@ over the reading area, so the current page stays in place. Reopening a file
 resets its view. Preview adjustments preserve the original download bytes.
 Full Settings, PTY and Trace stay on the PC; paired phones also expose PC timeout controls.
 
-While a PC turn runs, the empty composer shows a square Stop button. Typing a message or adding an attachment or quote switches it to Follow-up; Steer stays available for that draft. The header Stop remains available while drafting. A parked wait has no live turn to stop. In direct model chat, the square Stop cancels the stream, keeps the text received so far, and restores Send.
+The square **Stop** button stays at the right edge of the composer during a
+PC turn. A draft also exposes **Follow-up** and, when available, send
+options for inserting it into the current turn. Stop keeps the unsent draft.
+A parked wait has no live turn to stop. In direct model chat, the square Stop
+cancels the stream, keeps the text received so far, and restores Send.
 
 When a PC turn asks a question, pick an option or type Other and tap Submit.
 The phone uses the PC's normalized question ID in the answer; a rejected RPC
@@ -450,7 +473,9 @@ a short thread is bottom-aligned, and scrolling away from the tail raises
 **Jump to latest**. Answering inside a conversation is one rounded box
 (`components/composer.tsx`) that grows with the text up to a cap, Enter
 sends (Shift+Enter is a newline, and an IME candidate list is never a
-send). The leftmost control is **Add**. It attaches files and lists `/goal`,
+send). Tap the message field to expand it and show the available **Model**
+and **Thinking level** icons below. Each icon opens its settings sheet.
+The leftmost control is **Add**. It attaches files and lists `/goal`,
 `/plan` and `/image` in a paired PC conversation or new chat. Direct chat
 offers `/image` when the selected Gateway source has an authorized image model.
 Typing `/` at the start or after draft text opens the same command list, including
@@ -506,25 +531,17 @@ header is one row: which PC this is, not the app's own name. Pulling the
 list down past the top reloads the roster; an empty inbox says so. Search
 filters the roster this phone already holds.
 
-When that PC has `clients.enabled` on, the
-inbox also lists Clients, then Claude, Codex, and Cursor. Each row is the
-task title and a light: breathing while it is still running, steady when
-it is finished. Each tool group folds. The first page is at most five
-tasks from the last three days; More loads the next five. The phone does
-not scan its own disk. Opening a row fills the chat. The opening request stays pinned at the top.
-The column follows the latest lines, and **Earlier** loads the page above that.
-Adjacent thinking and tool calls start collapsed, the same row as a conversation. The composer stays
-on screen and cannot send. On iOS the task title and Back button remain visible
-when the inbox is pulled down; Back returns to the task list. Thinking entries
-inside a client process row use the same separate, initially closed thought control.
+The inbox shows Zwai conversations. Local Claude, Codex and Cursor tasks are
+disabled and are omitted even when an older PC advertises them.
 
 ## A model on the phone
 
 Menu → Models saves an OpenAI-compatible endpoint: base URL, optional key,
 chat completions or responses, discover, timeout. After one is saved, a
 Chat tab sits on the top row, including when no PC is bound. That chat uses
-the same composer as a PC thread. Tap its model button to choose from an
-in-app, provider-grouped list; long names wrap, and Back closes the list.
+the same composer as a PC thread. Tap the message field, then the model
+icon to choose from an in-app, provider-grouped list. Long names wrap.
+Back closes the list.
 The reply streams. Its process row shows the latest activity while it is arriving.
 Open that row, then the thought's own **Thought / 思考** control to read the complete
 reasoning; merely opening the process row keeps that reasoning closed. Chat Completions accepts both legacy
@@ -544,9 +561,9 @@ the phone.
 ## Walking the screens without a PC
 
 `?mock=1` boots onto the inbox against a scripted host (`lib/mock-link.ts`):
-projects, a live turn, a parked wait, idle recents, and the read-only
-Clients groups (Claude, Codex, Cursor). It answers the same
-ops with the same shapes over no network and no model, so the inbox and a
+projects, a live turn, a parked wait and idle recents. The fixture also
+advertises a legacy local-task catalog for the inbox exclusion regression.
+The fixture needs no network or model, so the inbox and a
 conversation can be driven in a browser and in Playwright — the screens
 behind the scan form used to have no end-to-end coverage at all. Add
 `&tick=0` to play a turn as fast as the browser paints; the default paces it

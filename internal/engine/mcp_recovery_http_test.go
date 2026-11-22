@@ -55,7 +55,14 @@ func TestMCPToolReauthenticatesOnlyForAnExpiredSession(t *testing.T) {
 							return nil, context.Canceled
 						}
 					}
-					return &mcp.CallToolResult{IsError: tc.toolError, Content: []mcp.Content{&mcp.TextContent{Text: "lookup verified"}}}, nil
+					if tc.toolError {
+						// The remote operation ran. Validation-like prose cannot prove
+						// that it was rejected before execution.
+						return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{
+							&mcp.TextContent{Text: "Missing required parameter: lookup_key"},
+						}}, nil
+					}
+					return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "lookup verified"}}}, nil
 				})
 			server.AddTool(&mcp.Tool{Name: "verify", InputSchema: map[string]any{"type": "object"}},
 				func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {

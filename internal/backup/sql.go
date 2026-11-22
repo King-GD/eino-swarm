@@ -198,8 +198,12 @@ func sameColumns(a, b []column) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	for i := range a {
-		if a[i].name != b[i].name || a[i].integer != b[i].integer {
+	destination := make(map[string]bool, len(b))
+	for _, col := range b {
+		destination[col.name] = col.integer
+	}
+	for _, col := range a {
+		if integer, ok := destination[col.name]; !ok || integer != col.integer {
 			return false
 		}
 	}

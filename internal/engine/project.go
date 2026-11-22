@@ -67,6 +67,8 @@ func (e *Engine) CreateProject(name, systemPrompt, workdir string, memoryEnabled
 // clearing the working directory (back to the managed one) is a different
 // request from leaving it alone.
 func (e *Engine) UpdateProject(id string, name, systemPrompt, workdir *string, memoryEnabled *bool, nuwaEnabled ...*bool) (*store.Project, error) {
+	e.workspaceMu.Lock()
+	defer e.workspaceMu.Unlock()
 	if _, err := e.store.GetProject(id); err != nil {
 		return nil, err
 	}
@@ -107,9 +109,6 @@ func (e *Engine) UpdateProject(id string, name, systemPrompt, workdir *string, m
 	if err := e.prepareProjectDirs(updated); err != nil {
 		return nil, err
 	}
-	// The next turn resolves its workspace from the project, so a changed
-	// working directory takes effect without a restart. Nothing to invalidate
-	// beyond the memory store, which is keyed by project and not by path.
 	return updated, nil
 }
 
@@ -120,6 +119,8 @@ func (e *Engine) UpdateProject(id string, name, systemPrompt, workdir *string, m
 // feature that can delete it because a project was tidied up is a feature
 // nobody can risk using.
 func (e *Engine) DeleteProject(id string) error {
+	e.workspaceMu.Lock()
+	defer e.workspaceMu.Unlock()
 	p, err := e.store.GetProject(id)
 	if err != nil {
 		return err
@@ -128,7 +129,13 @@ func (e *Engine) DeleteProject(id string) error {
 	if err != nil {
 		return err
 	}
+	threads := make([]*store.Thread, 0, len(threadIDs))
 	for _, tid := range threadIDs {
+		th, err := e.store.GetThread(tid)
+		if err != nil {
+			return err
+		}
+		threads = append(threads, th)
 		if err := e.Interrupt(tid); err != nil && !errors.Is(err, ErrIdle) && !errors.Is(err, ErrNotFound) {
 			return err
 		}
@@ -139,17 +146,15 @@ func (e *Engine) DeleteProject(id string) error {
 		e.generations.Unlock()
 		return err
 	}
-	// Membership may change after the runtime snapshot. Every cached value
-	// derives from durable events, so discard the cache rather than miss a
-	// conversation that entered this project during deletion.
 	e.generations.threads = nil
 	e.generations.Unlock()
-	for _, tid := range threadIDs {
-		e.dropSubscribers(tid)
+	for _, th := range threads {
+		e.dropSubscribers(th.ID)
+		e.removeManagedTaskWorkspace(th)
 	}
 	e.forgetProjectMemory(id)
 	dir := e.cfg.ProjectDir(p.ID)
-	if err := os.RemoveAll(dir); err != nil {
+	if err := removeProjectFiles(dir, e.cfg.ProjectWorkspaceDir(p.ID)); err != nil {
 		e.log.Warn("could not remove a project directory", "project", p.ID, "path", dir, "err", err)
 	}
 	return nil
@@ -165,6 +170,8 @@ func (e *Engine) GetProject(id string) (*store.Project, error) { return e.store.
 // files do not move: the workspace it worked in is where its output already
 // is, and silently relocating that would lose it.
 func (e *Engine) MoveThread(threadID, projectID string) error {
+	e.workspaceMu.Lock()
+	defer e.workspaceMu.Unlock()
 	if _, err := e.store.GetThread(threadID); err != nil {
 		return err
 	}

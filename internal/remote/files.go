@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"mime"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -20,26 +20,28 @@ import (
 const FileChunkRaw = 36 << 10
 
 func handleFiles(eng *engine.Engine, req Request, path, sessionID string) Response {
-	if _, err := eng.Store().GetThread(req.ThreadID); err != nil {
+	view, err := eng.FileWorkspace(req.ThreadID, req.FileScope, req.FileRoot)
+	if err != nil {
 		return mapErr(req.ID, path, sessionID, err)
 	}
 	var entries []engine.FileEntry
-	var err error
 	if strings.TrimSpace(req.Text) != "" {
-		entries, err = eng.SearchFiles(context.Background(), req.ThreadID, req.Text)
+		entries, err = eng.SearchWorkspace(context.Background(), view, req.Text)
 	} else {
-		entries, err = eng.ListFiles(req.ThreadID, req.Directory)
+		entries, err = eng.ListWorkspace(view, req.Directory)
 	}
 	if err != nil {
 		return mapErr(req.ID, path, sessionID, err)
 	}
-	uploads, err := eng.Store().ListAttachments(req.ThreadID)
-	if err != nil {
-		return mapErr(req.ID, path, sessionID, err)
-	}
-	uploaded := make(map[string]bool, len(uploads))
-	for _, item := range uploads {
-		uploaded[item.RelPath] = true
+	uploaded := map[string]bool{}
+	if req.FileScope != engine.FileScopeProject {
+		uploads, err := eng.Store().ListAttachments(req.ThreadID)
+		if err != nil {
+			return mapErr(req.ID, path, sessionID, err)
+		}
+		for _, item := range uploads {
+			uploaded[item.RelPath] = true
+		}
 	}
 	start := 0
 	if req.Cursor != "" {
@@ -49,6 +51,7 @@ func handleFiles(eng *engine.Engine, req Request, path, sessionID string) Respon
 		}
 	}
 	resp := okBase(req.ID, path, sessionID)
+	resp.FileView = &view
 	for i := start; i < len(entries); i++ {
 		entry := entries[i]
 		resp.Files = append(resp.Files, FileView{
@@ -69,24 +72,19 @@ func handleFiles(eng *engine.Engine, req Request, path, sessionID string) Respon
 }
 
 func handleFileChunk(eng *engine.Engine, req Request, path, sessionID string) Response {
-	if _, err := eng.Store().GetThread(req.ThreadID); err != nil {
+	view, err := eng.FileWorkspace(req.ThreadID, req.FileScope, req.FileRoot)
+	if err != nil {
 		return mapErr(req.ID, path, sessionID, err)
 	}
 	if req.Before < 0 {
 		return fail(req.ID, path, sessionID, "bad_request", "file offset is negative")
 	}
-	if _, err := eng.ResolveWorkspacePath(req.ThreadID, req.FilePath); err != nil {
-		return fail(req.ID, path, sessionID, "bad_request", "file path is outside this conversation")
+	if strings.HasPrefix(filepath.ToSlash(req.FilePath), "/") || filepath.VolumeName(req.FilePath) != "" {
+		return fail(req.ID, path, sessionID, "bad_request", "file path must be relative to the selected directory")
 	}
-	// Root.Open resolves symlinks beneath the workspace root and refuses escapes.
-	root, err := os.OpenRoot(eng.WorkspaceDir(req.ThreadID))
+	f, err := view.OpenFile(req.FilePath)
 	if err != nil {
-		return mapErr(req.ID, path, sessionID, err)
-	}
-	defer root.Close()
-	f, err := root.Open(req.FilePath)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return fail(req.ID, path, sessionID, "not_found", "file is not in this conversation")
 		}
 		return fail(req.ID, path, sessionID, "bad_request", "file path cannot be opened inside this conversation")
@@ -117,6 +115,7 @@ func handleFileChunk(eng *engine.Engine, req Request, path, sessionID string) Re
 	}
 	next := req.Before + int64(n)
 	resp := okBase(req.ID, path, sessionID)
+	resp.FileView = &view
 	resp.FileChunk = &FileChunkView{
 		Path: req.FilePath, Name: name, Size: info.Size(), MIME: contentType,
 		Offset: req.Before, NextOffset: next, Data: base64.StdEncoding.EncodeToString(data),

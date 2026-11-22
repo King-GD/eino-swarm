@@ -42,6 +42,7 @@ func runDreamHTTPScenario(t *testing.T, expected, explicitEffort string) {
 	t.Helper()
 	var e *Engine
 	var seedThread, auditThread, projectID string
+	var sharedDir string
 	var reviewCalls, auditCalls atomic.Int32
 	dreamEndpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var sdk struct {
@@ -236,7 +237,7 @@ func runDreamHTTPScenario(t *testing.T, expected, explicitEffort string) {
 		switch user {
 		case dreamHTTPSeed:
 			if results["original-receipt"] == "" {
-				writeDreamHTTPTool(w, req, "original-receipt", "exec", map[string]string{"command": "printf '%s' 'transfer complete'"})
+				writeDreamHTTPTool(w, req, "original-receipt", "exec", map[string]string{"command": "printf '%s' 'transfer complete'", "cwd": sharedDir})
 				return
 			}
 		case dreamHTTPAudit:
@@ -252,7 +253,7 @@ func runDreamHTTPScenario(t *testing.T, expected, explicitEffort string) {
 				if expected == "uncertain" {
 					command = "printf '%s' 'preview: short receipt'"
 				}
-				writeDreamHTTPTool(w, req, "later-receipt", "exec", map[string]string{"command": command})
+				writeDreamHTTPTool(w, req, "later-receipt", "exec", map[string]string{"command": command, "cwd": sharedDir})
 				return
 			case results["later-byte-count"] == "":
 				command := "printf '%s' 'short byte count'"
@@ -264,7 +265,7 @@ func runDreamHTTPScenario(t *testing.T, expected, explicitEffort string) {
 				case "uncertain":
 					command = "printf '%s' 'preview: short byte count'"
 				}
-				writeDreamHTTPTool(w, req, "later-byte-count", "exec", map[string]string{"command": command})
+				writeDreamHTTPTool(w, req, "later-byte-count", "exec", map[string]string{"command": command, "cwd": sharedDir})
 				return
 			}
 		case dreamHTTPNext:
@@ -293,6 +294,7 @@ func runDreamHTTPScenario(t *testing.T, expected, explicitEffort string) {
 	e.pool = provider.New(e.cfg)
 	project, source := projectThread(t, e)
 	seedThread, projectID = source.ID, project.ID
+	sharedDir = e.ProjectWorkdir(project)
 	mem := e.ProjectMemory(project.ID)
 	if _, err := mem.WriteSkill(dreamHTTPSkill, "Check whether an observed transfer is complete.", dreamHTTPGood); err != nil {
 		t.Fatal(err)

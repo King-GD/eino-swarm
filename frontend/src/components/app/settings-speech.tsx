@@ -191,16 +191,18 @@ function MicrophoneChoice({ value, onChange, query }: { value: string; onChange:
     media?.addEventListener?.("devicechange", onDeviceChange)
     return () => { live.current = false; media?.removeEventListener?.("devicechange", onDeviceChange) }
   }, [refresh])
-  const missing = value !== "" && !devices.some((device) => device.id === value)
-  return <SettingsChoice label={t("speech.microphone")} hint={t("speech.microphoneHint")} query={query} value={value || "system"} onValueChange={(id) => onChange(id === "system" ? "" : id)} onOpenChange={(open) => {
+  const missing = Boolean(value) && !devices.some((device) => device.id === value)
+  const hasDeviceLabels = devices.some((device) => device.label)
+  // An empty select value keeps the default option actionable while the saved
+  // preference is temporarily unavailable in this browser.
+  return <SettingsChoice label={t("speech.microphone")} hint={t(missing && hasDeviceLabels ? "speech.microphoneFallback" : "speech.microphoneHint")} query={query} value={missing ? "" : value || "system"} placeholder={t("speech.systemDefault")} onValueChange={(id) => onChange(id === "system" ? "" : id)} onOpenChange={(open) => {
     if (!open) return
     const media = navigator.mediaDevices
-    const permission = pending.current || devices.some((device) => device.label) ? undefined : media?.getUserMedia?.({ audio: true, video: false })
+    const permission = pending.current || hasDeviceLabels ? undefined : media?.getUserMedia?.({ audio: true, video: false })
     void refresh(permission)
   }}>
     <SelectItem value="system">{t("speech.systemDefault")}</SelectItem>
     {devices.map((device) => <SelectItem key={device.id} value={device.id}>{device.label || t("speech.microphone")}</SelectItem>)}
-    {missing ? <SelectItem value={value}>{t("speech.deviceMissing")}</SelectItem> : null}
   </SettingsChoice>
 }
 

@@ -231,7 +231,7 @@ func TestHistoryToolsSurvivePlanningAndMemorySwitchesWithoutMutatingFiles(t *tes
 	if !toolNames(t, reg.SubAgentTools)[ToolQueryHistory] || !strings.Contains(reg.WorkerPreamble, project.ID) || !strings.Contains(reg.WorkerPreamble, project.Name) {
 		t.Fatal("worker lost current project/query context")
 	}
-	if files, err := os.ReadDir(e.ProjectWorkdir(project)); err != nil || len(files) != 0 {
+	if files, err := os.ReadDir(e.ProjectWorkdir(project)); err != nil || len(files) != 1 || files[0].Name() != config.TaskDirectory {
 		t.Fatalf("history added workspace files: %v %v", files, err)
 	}
 }

@@ -6,6 +6,8 @@ import type { DeliveryMode, InsertMode } from "./delivery-mode"
 import type {
   Attachment,
   FileEntry,
+  FileLocation,
+  FileView,
   ExternalSkill,
   ExternalSkillInfo,
   MemoryEntries,
@@ -390,6 +392,13 @@ export function dismissDesktopVersion(version: string) {
   } catch {
     // private mode
   }
+}
+
+function fileQuery(location?: FileLocation, params = new URLSearchParams()): string {
+  if (location?.scope === "project") params.set("scope", location.scope)
+  if (location?.root) params.set("file_root", location.root)
+  const query = params.toString()
+  return query ? `?${query}` : ""
 }
 
 export const api = {
@@ -825,18 +834,17 @@ export const api = {
       `/api/threads/${id}/agents/${encodeURIComponent(agentId)}/log`,
     ),
 
-  files: (id: string, dir?: string) => {
+  files: (id: string, dir?: string, location?: FileLocation) => {
     const params = new URLSearchParams()
     if (dir) params.set("dir", dir)
-    const query = params.toString()
-    return request<{ workspace: string; files: FileEntry[] }>(
-      `/api/threads/${id}/files${query ? `?${query}` : ""}`,
+    return request<{ workspace: string; files: FileEntry[]; file_view?: FileView }>(
+      `/api/threads/${id}/files${fileQuery(location, params)}`,
     )
   },
   /** Every listed path that contains query. Not a capped sample. */
-  searchFiles: (id: string, query: string) =>
-    request<{ workspace: string; files: FileEntry[] }>(
-      `/api/threads/${id}/files?q=${encodeURIComponent(query)}`,
+  searchFiles: (id: string, query: string, location?: FileLocation) =>
+    request<{ workspace: string; files: FileEntry[]; file_view?: FileView }>(
+      `/api/threads/${id}/files${fileQuery(location, new URLSearchParams({ q: query }))}`,
     ),
   upload: (id: string, files: File[]) => {
     const form = new FormData()
@@ -846,20 +854,20 @@ export const api = {
       body: form,
     }).then((r) => r.files)
   },
-  downloadURL: (id: string, path: string) =>
-    `/api/threads/${id}/download/${path.split("/").map(encodeURIComponent).join("/")}`,
+  downloadURL: (id: string, path: string, location?: FileLocation) =>
+    `/api/threads/${id}/download/${path.split("/").map(encodeURIComponent).join("/")}${fileQuery(location)}`,
   generatedImageURL: (id: string, imageId: string) =>
     `/api/threads/${encodeURIComponent(id)}/generated-images/${encodeURIComponent(imageId)}`,
 
   inputImageURL: (id: string, imageId: string) =>
     `/api/threads/${id}/input-images/${encodeURIComponent(imageId)}`,
-  deleteFile: (id: string, path: string) =>
+  deleteFile: (id: string, path: string, location?: FileLocation) =>
     request<void>(
-      `/api/threads/${id}/download/${path.split("/").map(encodeURIComponent).join("/")}`,
+      `/api/threads/${id}/download/${path.split("/").map(encodeURIComponent).join("/")}${fileQuery(location)}`,
       { method: "DELETE" },
     ),
-  reveal: (id: string, path?: string) =>
-    request<{ revealed: string }>(`/api/threads/${id}/reveal`, {
+  reveal: (id: string, path?: string, location?: FileLocation) =>
+    request<{ revealed: string }>(`/api/threads/${id}/reveal${fileQuery(location)}`, {
       method: "POST",
       body: JSON.stringify({ path: path ?? "" }),
     }),

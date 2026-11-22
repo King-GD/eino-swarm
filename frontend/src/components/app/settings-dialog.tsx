@@ -25,8 +25,8 @@ import { PersonalityTab } from "@/components/app/settings-personality"
 import { BackupTab } from "@/components/app/settings-backup"
 import { RemoteTab } from "@/components/app/settings-remote"
 import { SwarmTab } from "@/components/app/settings-swarm"
-import { ToolsTab } from "@/components/app/settings-tools"
-import { MCPTab, mcpSettingsSearch } from "@/components/app/settings-mcp"
+import { ToolsSettings } from "@/components/app/settings-tools"
+import { mcpSettingsSearch } from "@/components/app/settings-mcp"
 import { SettingsPage, SettingsSection, settingsMatch } from "@/components/app/settings-field"
 import { Button } from "@/components/ui/button"
 import {
@@ -585,16 +585,11 @@ export function SettingsDialog({
                     />
                   ) : null}
                   {page === "tools" ? (
-                    <MCPTab
+                    <ToolsSettings
+                      settings={settings}
+                      catalog={catalog}
+                      onChange={apply}
                       query={query}
-                      leading={
-                        <ToolsTab
-                          settings={settings}
-                          catalog={catalog}
-                          onChange={apply}
-                          query={query}
-                        />
-                      }
                     />
                   ) : null}
                   {page === "memory" ? (

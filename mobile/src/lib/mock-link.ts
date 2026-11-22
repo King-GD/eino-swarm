@@ -1,16 +1,17 @@
 import { mockGeneratedImageChunk, mockGeneratedImageTurn } from "./mock-generated-image"
-import { compactHistoryFixture, compactHistorySteps, compactTurns, mockCompactPage } from "./mock-compact-history"
+import { compactHistoryFixture, compactHistoryRunning, compactHistorySteps, compactTurnSummaries, mockCompactPage } from "./mock-compact-history"
 import { MockProjects } from "./mock-projects"
 import { MockProductMode } from "./mock-product-mode"
 import { MockSpeech } from "./mock-speech"
 import { MOCK_FLAG, mockTickMs, mockPauseOpenMs, mockPauseClientsMs } from "./mock-link-timing"
 import { mockTaskPanelRPC, releaseMockTaskPanels, resetMockTaskPanels } from "./mock-task-panels"
 export { wantsMock, mockTickMs, mockPauseOpenMs } from "./mock-link-timing"
-import { mockFileChunk, mockListedFiles, mockOutputFiles } from "./mock-files"
+import { mockFileChunk, mockListedFiles, mockOutputFiles, mockScopedFiles } from "./mock-files"
 import { iterationLimitHistory, iterationSnapshotOnly, mockAwaitingContinue, mockContinueIteration } from "./mock-iteration-limit"
 import { restartAskHistory } from "./mock-ask-restart"
 import { generationHistory } from "./mock-generation"
 import { backoffHistory } from "./mock-backoff"
+import { longAgentRosterHistory } from "./mock-agent-roster"
 import { workerCollectionHistory, workerCollectionStopHistory, workerCollectionPaged } from "./mock-worker-collection"
 import { predictionTurn, reasoningOnlyTurn, scriptedTurn, type Step } from "./mock-turn"
 import { mockGoalDetail, mockGoalFixture, resumeMockGoal, type MockGoalFields } from "./mock-goal"
@@ -225,7 +226,7 @@ export class MockHost {
     if (live) {
       const goalFixture = mockGoalFixture(new URLSearchParams(location.search).get("history"))
       if (compactHistoryFixture(live.id)) {
-        this.seed(live, compactHistorySteps(), false)
+        this.seed(live, compactHistorySteps(), compactHistoryRunning())
         live.readSeq = live.completedSeq
       } else if (new URLSearchParams(location.search).get("history") === "reasoning-only") {
         this.seed(live, reasoningOnlyTurn(true), true)
@@ -246,6 +247,8 @@ export class MockHost {
       } else if (new URLSearchParams(location.search).get("history") === "worker-collection") {
         const state = new URLSearchParams(location.search).get("collection")
         this.seed(live, workerCollectionHistory(state, new URLSearchParams(location.search).get("stop_order")), state !== "done" && state !== "stopped")
+      } else if (new URLSearchParams(location.search).get("history") === "long-agent-roster") {
+        this.seed(live, longAgentRosterHistory(), true)
       } else if (new URLSearchParams(location.search).get("history") === "streamed-agents") {
         this.seed(live, [
           { kind: "agent_message", agentID: "manager", text: "Older manager answer" },
@@ -557,7 +560,7 @@ export class MockHost {
 
   detail(th: MockThread): ThreadDetail {
     return {
-      ...(compactHistoryFixture(th.id) ? { turns: compactTurns } : {}),
+      ...(compactHistoryFixture(th.id) ? { turns: compactTurnSummaries() } : {}),
       ...(new URLSearchParams(location.search).get("history") === "restore-pending" && !th.running ? { turns: [{ id: "stored-before-restart", status: "running" }] } : {}),
       id: th.id,
       title: th.title,
@@ -884,6 +887,11 @@ export class MockLink {
         return this.ok({ id, threads: [this.host.older()], more: false, next: "" })
       case OpFiles: {
         if (!thread()) return this.missing(id)
+        if (new URLSearchParams(location.search).get("file-preview") === "task-workspaces") {
+          const { files, folders, view } = mockScopedFiles(req.file_scope === "project")
+          if (req.file_root && req.file_root !== view.root) return this.ok({ id, ok: false, code: "file_root_changed" })
+          return this.ok({ id, files: mockListedFiles(files, req.directory, req.text, folders), file_view: view, more: false })
+        }
         return this.ok({ id, files: mockListedFiles(this.outputFiles, req.directory, req.text), more: false })
       }
       case OpGeneratedImageChunk: {
@@ -893,6 +901,12 @@ export class MockLink {
       }
       case OpFileChunk: {
         if (!thread()) return this.missing(id)
+        if (new URLSearchParams(location.search).get("file-preview") === "task-workspaces") {
+          const { files, view } = mockScopedFiles(req.file_scope === "project")
+          if (req.file_root !== view.root) return this.ok({ id, ok: false, code: "file_root_changed" })
+          const file_chunk = await mockFileChunk(files, req.file_path ?? "", req.before ?? 0)
+          return file_chunk ? this.ok({ id, file_chunk, file_view: view }) : this.missing(id)
+        }
         const file_chunk = await mockFileChunk(this.outputFiles, req.file_path ?? "", req.before ?? 0)
         return file_chunk ? this.ok({ id, file_chunk }) : this.missing(id)
       }
@@ -901,7 +915,7 @@ export class MockLink {
         if (scenario === "legacy") return this.ok({ id, ok: false, code: "unknown_op" })
         if (scenario === "slow") await new Promise((resolve) => setTimeout(resolve, 1200))
         if (this.host.takeCatalogFailure()) return this.ok({ id, ok: false, code: "refresh_failed" })
-        return this.ok({ id, model_policy: { mode: "local", configurable: true, ready: true, scope: "local" }, models: scenario === "empty" ? [] : [{ provider_id: "walkthrough", provider_label: "Walkthrough", model: "scripted-next", default: true }], reasoning_levels: ["low", "medium", "high"], web_execution_status: { preference: "auto", execution: "local", cloud_account: "sign_in_required" } })
+        return this.ok({ id, model_policy: { mode: "local", configurable: true, ready: true, scope: "local" }, models: scenario === "empty" ? [] : [{ provider_id: "walkthrough", provider_label: "Walkthrough", model: "scripted-next", default: true, label: scenario === "named-default" ? "New PC default" : undefined }], reasoning_levels: ["low", "medium", "high"], web_execution_status: { preference: "auto", execution: "local", cloud_account: "sign_in_required" } })
       }
       case OpGetTimeouts:
       case OpSetTimeouts: {

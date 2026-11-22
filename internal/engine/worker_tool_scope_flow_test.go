@@ -464,15 +464,16 @@ func runToolScopeFlow(t *testing.T, names *[]string, writeProbe, failReadReceipt
 	}}
 	e.pool = provider.New(e.cfg)
 	workspace := t.TempDir()
-	if err := os.WriteFile(filepath.Join(workspace, fileName), []byte(value+"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	project, err := e.CreateProject("Scoped worker", "", workspace, false, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	thread, err := e.CreateThread("Worker evidence", "", project.ID)
 	if err != nil {
+		t.Fatal(err)
+	}
+	workdir := e.WorkspaceDir(thread.ID)
+	if err := os.WriteFile(filepath.Join(workdir, fileName), []byte(value+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	turn, err := e.StartTurn(thread.ID, "Delegate the inspection and collect its evidence.")
@@ -493,7 +494,7 @@ func runToolScopeFlow(t *testing.T, names *[]string, writeProbe, failReadReceipt
 		t.Fatalf("selected worker binding was lost: %+v", worker)
 	}
 	if writeProbe {
-		body, err := os.ReadFile(filepath.Join(workspace, probePath))
+		body, err := os.ReadFile(filepath.Join(workdir, probePath))
 		if refusedWrite {
 			if !os.IsNotExist(err) || worker.Status != "done" {
 				t.Fatalf("out-of-scope write changed the workspace or interrupted refusal recovery: err=%v status=%s", err, worker.Status)

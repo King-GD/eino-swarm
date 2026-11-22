@@ -14,12 +14,23 @@ it("coalesces clicks until the PC confirms continuation", async () => {
   let finish!: () => void
   const onContinue = vi.fn(() => new Promise<void>((resolve) => { finish = resolve }))
   render(<IterationLimitCard pause={block.confirm} onContinue={onContinue} />)
+  expect(screen.getByTestId("iteration-limit")).toHaveTextContent("Settings → Swarm → Manager tool rounds")
   fireEvent.click(screen.getByRole("button", { name: "Continue for more tool rounds" }))
   fireEvent.click(screen.getByRole("button", { name: "Stop at the tool-round limit" }))
   expect(onContinue.mock.calls).toEqual([[true]])
   expect(screen.getByRole("button", { name: "Continue for more tool rounds" })).toBeDisabled()
   await act(async () => finish())
   expect(screen.getByRole("button", { name: "Continue for more tool rounds" })).toBeDisabled()
+})
+
+it("does not send a deferred answer check to the manager round setting", () => {
+  setLocale("zh")
+  render(<IterationLimitCard pause={{ limit: 80, extendBy: 2000, pending: true, reason: "classification_deferred" }} onContinue={vi.fn()} />)
+  const card = screen.getByTestId("iteration-limit")
+  expect(card).toHaveTextContent("答复核对已暂缓")
+  expect(card).toHaveTextContent("主管工具回合上限仍是 2000")
+  expect(card).not.toHaveTextContent("已到主管工具回合上限")
+  expect(card).not.toHaveTextContent("主管工具回合即可修改")
 })
 
 it("retains a refused pause with a visible error and permits another decision", async () => {
@@ -51,6 +62,7 @@ it("offers a snapshot-only pause even before its historical cap is loaded", asyn
   } }} blocks={[]} onBack={vi.fn()} onSend={vi.fn()} onInsert={vi.fn()} onStop={vi.fn()}
     onAnswer={vi.fn()} onAnswerStructured={vi.fn()} onContinue={onContinue} />)
   expect(screen.getByTestId("iteration-limit")).toHaveTextContent("The manager is paused")
+  expect(screen.getByTestId("iteration-limit")).not.toHaveTextContent("Manager tool rounds")
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Continue this turn" })))
   expect(onContinue).toHaveBeenCalledWith(true)
 })

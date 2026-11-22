@@ -1,4 +1,5 @@
 import { api, ApiError } from "@/lib/api"
+import type { FileLocation } from "@/lib/types"
 import { documentFormat, type DocumentFormat } from "@/lib/documents/kind"
 
 export const MAX_FILE_PREVIEW_BYTES = 8 * 1024 * 1024
@@ -24,9 +25,10 @@ export async function readFilePreview(
   threadId: string,
   path: string,
   signal: AbortSignal,
+  location?: FileLocation,
 ): Promise<FilePreview> {
   signal.throwIfAborted()
-  const response = await fetch(api.downloadURL(threadId, path), {
+  const response = await fetch(api.downloadURL(threadId, path, location), {
     signal,
     credentials: "same-origin",
     mode: "same-origin",

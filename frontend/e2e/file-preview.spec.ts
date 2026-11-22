@@ -25,6 +25,7 @@ async function workspace(page: Page, title: string, name: string, bytes: Buffer,
   await page.getByRole("button", { name: title, exact: true }).click()
   await page.getByRole("tab", { name: "Files", exact: true }).click()
   const tree = page.getByTestId("file-tree")
+  await tree.getByRole("treeitem", { name: "Uploads", exact: true }).click()
   await expect(tree.getByRole("treeitem", { name, exact: true })).toBeVisible()
   return { threadId: thread.id as string, path, tree }
 }
@@ -213,6 +214,7 @@ test("zooms a decoded workspace image, restores its fit and downloads unchanged 
   await page.getByTestId("dest-chats").click()
   await page.getByRole("button", { name: info.title, exact: true }).click()
   await page.getByRole("tab", { name: "Files", exact: true }).click()
+  await tree.getByRole("treeitem", { name: "Uploads", exact: true }).click()
   await tree.getByRole("treeitem", { name: "landscape.png", exact: true }).click()
   await expect.poll(() => image.evaluate((element: HTMLImageElement) => [element.naturalWidth, element.naturalHeight]))
     .toEqual([1200, 800])

@@ -17,12 +17,22 @@ it("permits parameter selection independently of a fixed model and preserves an 
  expect(change).toHaveBeenLastCalledWith({voice:"bright"})
  fireEvent.change(screen.getByLabelText("Speed (0.1–10)"),{target:{value:"8"}})
  expect(change).toHaveBeenLastCalledWith({voice:"gone",speed:8})
- fireEvent.click(screen.getByRole("button",{name:"Follow gateway"}))
+ expect(screen.queryByRole("button",{name:"Follow gateway"})).toBeNull()
+ fireEvent.change(screen.getByLabelText("Voice"),{target:{value:"default:"}})
  expect(change).toHaveBeenLastCalledWith({})
  rerender(<AudioParameterControls title="Reading" view={{...view,status:"incompatible",parameters:undefined}} role="speech" value={{voice:"gone"}} labels={labels} onChange={change} />)
  container.querySelector("details")!.open = true
  expect(screen.queryByLabelText("Voice")).toBeNull()
  expect(screen.getByRole("status")).toHaveTextContent("Unavailable")
+})
+
+it("keeps a phone reset only for a saved value its control cannot clear", () => {
+ const change = vi.fn()
+ const parameters = { voice: { values: ["calm", "bright"], default: "calm", configurable: true }, speed: { min: 1, max: 1, default: 1, configurable: false } }
+ const { container } = render(<AudioParameterControls title="Reading" view={{ ...view, parameters }} role="speech" value={{ voice: "bright", speed: 4 }} labels={labels} onChange={change} />)
+ container.querySelector("details")!.open = true
+ fireEvent.click(screen.getByRole("button", { name: "Follow gateway" }))
+ expect(change).toHaveBeenCalledWith({ voice: "bright" })
 })
 
 it("omits the phone disclosure when the model only exposes fixed settings", () => {

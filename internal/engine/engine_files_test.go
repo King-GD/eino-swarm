@@ -15,7 +15,7 @@ import (
 func TestResolveWorkspacePathRejectsEscapes(t *testing.T) {
 	e := newTestEngine(t)
 	th, _ := e.CreateThread("", "", "")
-	root := e.WorkspaceDir(th.ID)
+	root := e.TaskFileDir(th.ID)
 
 	ok, err := e.ResolveWorkspacePath(th.ID, "notes/report.md")
 	if err != nil {
@@ -75,7 +75,7 @@ func TestUploadAndDeleteFiles(t *testing.T) {
 	if second.RelPath == att.RelPath {
 		t.Fatalf("the second upload overwrote the first: %q", second.RelPath)
 	}
-	first, err := os.ReadFile(filepath.Join(e.WorkspaceDir(th.ID), filepath.FromSlash(att.RelPath)))
+	first, err := os.ReadFile(filepath.Join(e.TaskFileDir(th.ID), filepath.FromSlash(att.RelPath)))
 	if err != nil || string(first) != "a,b\n1,2\n" {
 		t.Fatalf("the first upload was clobbered: %q %v", first, err)
 	}
@@ -107,7 +107,7 @@ func TestUploadAndDeleteFiles(t *testing.T) {
 	if err := e.DeleteFile(th.ID, att.RelPath); err != nil {
 		t.Fatalf("DeleteFile: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(e.WorkspaceDir(th.ID), filepath.FromSlash(att.RelPath))); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(e.TaskFileDir(th.ID), filepath.FromSlash(att.RelPath))); !os.IsNotExist(err) {
 		t.Fatalf("the file survived the delete: %v", err)
 	}
 	list, _ = e.Store().ListAttachments(th.ID)
@@ -122,7 +122,7 @@ func TestUploadAndDeleteFiles(t *testing.T) {
 func TestListFilesReportsDirsAndSizes(t *testing.T) {
 	e := newTestEngine(t)
 	th, _ := e.CreateThread("", "", "")
-	root := e.WorkspaceDir(th.ID)
+	root := e.TaskFileDir(th.ID)
 	if err := os.MkdirAll(filepath.Join(root, "notes", "deep"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,11 @@ func TestListFilesReportsDirsAndSizes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListFiles: %v", err)
 	}
-	if len(rootEntries) != 1 || rootEntries[0].Path != "notes" || !rootEntries[0].Dir {
+	byName := map[string]bool{}
+	for _, entry := range rootEntries {
+		byName[entry.Path] = entry.Dir
+	}
+	if len(rootEntries) != 4 || !byName["notes"] || !byName["work"] || !byName["results"] || !byName["uploads"] {
 		t.Fatalf("root listing = %+v", rootEntries)
 	}
 	notes, err := e.ListFiles(th.ID, "notes")
@@ -155,9 +159,8 @@ func TestListFilesReportsDirsAndSizes(t *testing.T) {
 		t.Fatalf("paths must be slash-separated for the UI: %q", deep[0].Path)
 	}
 
-	// listing a conversation with no workspace yet must not fail
-	if _, err := e.ListFiles("never-existed", ""); err != nil {
-		t.Fatalf("ListFiles on a fresh conversation: %v", err)
+	if _, err := e.ListFiles("never-existed", ""); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("listing an unknown conversation: %v", err)
 	}
 }
 
@@ -166,7 +169,7 @@ func TestListFilesSkipsDependencyTrees(t *testing.T) {
 	// Agents can still read those paths.
 	e := newTestEngine(t)
 	th, _ := e.CreateThread("", "", "")
-	root := e.WorkspaceDir(th.ID)
+	root := e.TaskFileDir(th.ID)
 	hidden := []string{
 		filepath.Join(root, ".git", "objects", "pack"),
 		filepath.Join(root, "node_modules", "left-pad"),
@@ -303,7 +306,7 @@ func TestAFileAloneStillStartsATurn(t *testing.T) {
 func TestAttachedFileMustBeAHumanUpload(t *testing.T) {
 	e := newTestEngine(t)
 	th, _ := e.CreateThread("", "", "")
-	ghost := filepath.Join(e.WorkspaceDir(th.ID), "uploads", "ghost.csv")
+	ghost := filepath.Join(e.TaskFileDir(th.ID), "uploads", "ghost.csv")
 	if err := os.MkdirAll(filepath.Dir(ghost), 0o700); err != nil {
 		t.Fatal(err)
 	}

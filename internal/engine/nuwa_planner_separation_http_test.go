@@ -196,15 +196,15 @@ func TestNuwaPlannerDelegatesExecutionToolsAtModelHTTP(t *testing.T) {
 	e.cfg.MCP.Servers = []config.MCPServer{server}
 	e.pool = provider.New(e.cfg)
 	workspace := t.TempDir()
-	if err := os.WriteFile(filepath.Join(workspace, input), []byte(value), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	project, err := e.CreateProject("Separated planning and execution", "", workspace, false, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	thread, err := e.CreateThread("Delegated execution", "", project.ID)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(e.WorkspaceDir(thread.ID), input), []byte(value), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	turn, err := e.StartTurn(thread.ID, "Delegate the work and review the resulting evidence.")
@@ -216,7 +216,7 @@ func TestNuwaPlannerDelegatesExecutionToolsAtModelHTTP(t *testing.T) {
 	if finished.Status != store.TurnDone || managerCalls.Load() != 6 || workerCalls.Load() != 6 || remoteCalls.Load() != 1 {
 		t.Fatalf("delegated execution: turn=%+v manager=%d worker=%d remote=%d", finished, managerCalls.Load(), workerCalls.Load(), remoteCalls.Load())
 	}
-	bytes, err := os.ReadFile(filepath.Join(workspace, artifact))
+	bytes, err := os.ReadFile(filepath.Join(e.WorkspaceDir(thread.ID), artifact))
 	if err != nil || string(bytes) != value {
 		t.Fatalf("selected worker did not create the actual artifact: bytes=%q err=%v", bytes, err)
 	}
@@ -225,7 +225,7 @@ func TestNuwaPlannerDelegatesExecutionToolsAtModelHTTP(t *testing.T) {
 		t.Fatalf("missing durable worker result: %+v err=%v", view, err)
 	}
 	worker, node := view.Workers[0], view.Nodes[0]
-	if worker.Status != "done" || worker.ModelBinding == nil || worker.ModelBinding.Ref != provider.ChoiceID(account, executor) || node.AgentID != worker.AgentID || node.Generation != worker.Generation || node.ArtifactPath != artifact {
+	if worker.Status != "done" || worker.ModelBinding == nil || worker.ModelBinding.Ref != provider.ChoiceID(account, executor) || node.AgentID != worker.AgentID || node.Generation != worker.Generation || node.ArtifactPath != "work/"+artifact {
 		t.Fatalf("artifact lost worker execution identity: worker=%+v node=%+v", worker, node)
 	}
 }
@@ -311,7 +311,7 @@ func TestNuwaPlannerCannotExecuteModelAuthoredWorkAtHTTP(t *testing.T) {
 				}
 				finished := waitForTurn(t, e, turn.ID)
 				waitSettled(t, e, thread.ID)
-				body, readErr := os.ReadFile(filepath.Join(workspace, "manager-write.txt"))
+				body, readErr := os.ReadFile(filepath.Join(e.WorkspaceDir(thread.ID), "manager-write.txt"))
 				if nuwa {
 					if finished.Status != store.TurnDone || requests.Load() != 2 || !os.IsNotExist(readErr) || remoteCalls.Load() != 0 {
 						t.Fatalf("planner executed or silently accepted a forbidden call: turn=%+v requests=%d file=%q file_error=%v remote=%d", finished, requests.Load(), body, readErr, remoteCalls.Load())

@@ -621,3 +621,85 @@ func TestCheckpointManagerMessagesMergeOnlyTheirOwnConfirmedEvents(t *testing.T)
 		t.Fatalf("missing late evidence: %+v", msgs)
 	}
 }
+
+// A deferred answer check shares the cap pause, but a restart must not relabel
+// the rounds already used as the manager round limit. A later real cap wins.
+func TestRestartKeepsDeferredVerificationDistinctFromTheRoundCap(t *testing.T) {
+	for _, laterCap := range []bool{false, true} {
+		t.Run(fmt.Sprint(laterCap), func(t *testing.T) {
+			e := newTestEngine(t)
+			th, _ := e.CreateThread("", "", "")
+			turn := plantUnfinishedTurn(t, e, th.ID, "continue")
+			rt := e.runtimeFor(th.ID)
+			reg := swarm.NewRegistry()
+			reg.SetHistory([]*schema.Message{schema.UserMessage("continue")})
+			ctx, stop := context.WithCancel(context.Background())
+			defer stop()
+			idle := make(chan struct{})
+			if !rt.occupy(reg, stop, turn.ID, idle) {
+				t.Fatal("occupy failed")
+			}
+			go func() {
+				rt.waitToExtendReason(ctx, turn, 80, 2000, "classification_deferred")
+				<-ctx.Done()
+				rt.release(stop, idle, turn.ID)
+			}()
+			waitRestartState(t, func() bool { return e.Status(th.ID).AwaitingContinue })
+			if laterCap {
+				ev := store.Event{ThreadID: th.ID, TurnID: turn.ID, Kind: KindMaxIterations, AgentID: swarm.DefaultManagerID, Text: `{"limit":90,"extend_by":2000,"reason":"iterations"}`}
+				if err := e.store.AppendEvent(&ev); err != nil {
+					t.Fatal(err)
+				}
+			}
+			deadline, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if got, err := e.PrepareRestart(deadline); err != nil || !got.Ready {
+				t.Fatalf("prepare=%+v %v", got, err)
+			}
+			checkpoint := e.checkpointForTurn(turn.ID)
+			if checkpoint == nil {
+				t.Fatal("missing checkpoint")
+			}
+			want := "classification_deferred"
+			if laterCap {
+				want = ""
+			}
+			if checkpoint.Pause != "cap" || checkpoint.CapReason != want {
+				t.Fatalf("checkpoint reason=%q pause=%q want %q", checkpoint.CapReason, checkpoint.Pause, want)
+			}
+			if !laterCap && (checkpoint.CapUsed != 80 || checkpoint.CapExtend != 2000) {
+				t.Fatalf("deferred pause lost its numbers: %+v", checkpoint)
+			}
+			if laterCap && checkpoint.CapUsed != 90 {
+				t.Fatalf("later cap did not replace the deferred pause: %+v", checkpoint)
+			}
+			if laterCap {
+				return
+			}
+			stop()
+			next := restartedTestEngine(t, e)
+			if n, err := next.ResumeOrphanedTurns(); n != 1 || err != nil {
+				t.Fatalf("resume=%d %v", n, err)
+			}
+			waitRestartState(t, func() bool { return next.Status(th.ID).AwaitingContinue })
+			events, err := next.Store().ListTurnEvents(turn.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var body struct {
+				Limit  int    `json:"limit"`
+				Extend int    `json:"extend_by"`
+				Reason string `json:"reason"`
+			}
+			var latest string
+			for _, event := range events {
+				if event.Kind == KindMaxIterations {
+					latest = event.Text
+				}
+			}
+			if json.Unmarshal([]byte(latest), &body) != nil || body.Reason != "classification_deferred" || body.Limit != 80 || body.Extend != 2000 {
+				t.Fatalf("restart relabeled the deferred pause as the round cap: %s", latest)
+			}
+		})
+	}
+}

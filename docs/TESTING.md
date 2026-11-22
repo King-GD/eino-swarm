@@ -5,9 +5,9 @@ in Chromium and iPhone WebKit. The compact fixture exercises three turns,
 one-tap Earlier, deferred work expansion and shared Chat/PC scrolling.
 `internal/remote/log_compact_test.go` checks the encrypted watch and expansion,
 hundreds of work events between answers, ask receipts, and the frame budget.
-For native back, `testLeftEdgeSwipeReturnsThroughAgentPages` in
-`mobile/e2e/ios-wait-layout.swift` also starts a fast swipe 30 points from the
-left edge, within the content viewport.
+For native back, `testRightSwipeReturnsThroughAgentPages` in
+`mobile/e2e/ios-wait-layout.swift` checks both a swipe from the center to
+near the right edge and a fast swipe starting 30 points from the left edge.
 
 The inbox search regression in `mobile/e2e/composer-layout.spec.ts` checks the
 search font and visual viewport layout on both phone browser profiles.
@@ -56,9 +56,12 @@ and explicit refusal through the real HTTP route and a loopback Gateway.
 The settings trial in `frontend/e2e/speech.spec.ts` asserts disabled reasons,
 enables each speech direction, captures actual fake-device microphone chunks,
 checks the WAV upload and transcription field, then decodes and schedules the
-loopback provider's playback samples. Unit tests also keep Stop available when
-settings change during playback. This is browser/loopback validation, not native
-microphone or online gateway acceptance.
+loopback provider's playback samples. A saved, absent microphone exercises
+system-default capture in both Settings and the composer. The Settings case
+checks the displayed default, preserved preference and explicit clearing.
+Unit tests cover device reconnection, fallback errors, cancellation and keeping
+Stop available when settings change during playback. Browser tests use loopback
+services and fake audio devices.
 
 `internal/config/speech_test.go` and `internal/speech/service_test.go` cover
 independent switches, private settings, typed model discovery, Gateway role
@@ -295,6 +298,14 @@ requests a retry. A call deadline leaves one durable `timeout` receipt with
 an unknown outcome. The next independent call uses the original session in
 both mounting modes, and a subsequent confirmed expiry renews only that later
 call. Later authentication failures still block the task.
+`TestMCPMissingRequiredArgumentCanBeCorrectedInTheSameTurn` drives a direct
+tool and a proxy with a missing field and an independent sibling in one
+model response. It checks zero invalid wire calls, the field error bound to
+the first call, the sibling result, and a corrected call in the same turn.
+The remote-error regression runs an operation and then returns similar
+validation prose. It still blocks the task. The MCP progress Playwright
+fixture checks the field error in the expanded transcript and Trace while
+the corrected call runs.
 `TestMCPDiagnosticsCorrelateTimeoutAndLaterSuccessWithoutSecrets` checks both
 call IDs in the engine log and verifies that secrets stay out of diagnostics.
 `TestWorkerMCPFailureBlocksItsManagerAndKeepsTheOriginalCall`
@@ -303,13 +314,17 @@ and preserves the worker's original tool call.
 `TestExpiredBindingRefreshesSavedHeadersWithoutRedirecting`
 checks the new wire credentials and refuses a changed URL.
 `models/mcp/MCPCallRecovery.tla` limits a modeled call to one replacement
-after a verified rejection and admits independent work after a call deadline.
-Other failures block subsequent work. Its
-negative cases reintroduce uncertain replay, unlimited renewal, continued
-admission after a blocking failure, a missing cancellation request and the
-old deadline block. The model covers one logical
-call and its admission and cancellation decisions. Go tests cover the wire
-sessions and cancellation of the active model request.
+after verified session expiry. `RejectMissing` maps to the local check before
+`callTool`. It consumes no wire attempt and leaves admission open. A
+Streamable HTTP deadline also leaves admission open. A remote `tool_error`
+maps to the post-dispatch failure and blocks new work, including a
+cancellation request for the admitted manager. The historical and seeded
+variants reintroduce the missing-argument block, dispatch before local
+rejection, admission after a remote error, and other recovery faults. A
+reachability witness exercises independent work after local rejection. The
+model covers a single logical call, at most one replacement, and the
+admission decision for independent work. Go integration tests cover actual
+batch results, session reuse and in-flight cancellation.
 `internal/engine/tool_offer_http_test.go` drives a real manager turn through
 Registry, ADK and the offline model adapter: unchecking `web_search` and an MCP
 server removes them from the next request, checking them again restores them,
@@ -325,7 +340,8 @@ thinking-level menu when Tools opens and the reverse, groups
 built-in tools together and starts them open, starts each MCP connection
 folded, filters by name, shows an enabled connection as its own group rather
 than a server switch, leaves a Settings-disabled server out, clears Read file,
-reloads, and restores the original tool settings.
+reloads, and restores the original tool settings. Tool settings at the bottom
+of the menu opens Settings → Tools on the Built-in tab.
 
 The SDK HTTP progress regression holds the final response until the client
 observes the matched notification. It also checks that progress cannot cross
@@ -344,7 +360,7 @@ go test -race -timeout 25m ./...
 python3 -B -m unittest discover -s tools -p 'test_native_macos_mcp*.py'
 ```
 
-The browser suite drives create/edit, private-field preservation, validation,
+The browser suite opens the MCP tab, then drives create/edit, private-field preservation, validation,
 connection/catalog expansion, JSON text import, its syntax color, and removal. Run the default user-visible E2E suite
 as well, with its own port/data/output and no concurrent rebuild of its served
 `dist`. A transport or browser test does not accept a native desktop window.
@@ -844,8 +860,9 @@ Those source-selection cases use the existing scripted MockLink. The separate
 reaches PC RPC` case uses `mobile/e2e/account-fixture`: a real relay, Noise and
 PC/Eino RPC behind a synthetic local CAS. It binds an anonymous QR on the same
 Hub, logs in before the PC is visible, then refreshes discovery and verifies one
-saved record, one live binding, new ticket/session identity, retired sockets
-and a newly created PC conversation read over the replacement transport.
+saved record, one live binding, new ticket/session identity and retired sockets.
+Background discovery keeps the account center open until the user closes it;
+the same selected PC then reads a newly created conversation over the replacement transport.
 Repeated refresh must not rotate again; logout removes the managed connection
 and leaves the PC online. The fixture's
 `TestFixtureAnonymousUpgradeUsesSameIdentityAndRetiresOnlyThatPhone` also checks
@@ -1205,7 +1222,7 @@ Each concurrent run needs its own port, data/output directories and built dist.
 The fixtures use loopback HTTP without provider credentials and disposable test
 workspaces. They do not read or modify an active user's data directory.
 
-## Phone nested reasoning disclosure (Issue #118, `F-220` / `F-222` / `F-223` / `F-230`, `C-006`)
+## Phone nested reasoning disclosure (Issue #118, `F-220` / `F-222` / `F-230`, `C-006`)
 
 `mobile/src/components/thread-blocks-reasoning.test.tsx` first reproduces the missing
 second disclosure through the real log renderer. It checks live/replay and single
@@ -1410,7 +1427,13 @@ and non-paused targets refuse, and snapshots preserve explicit false status.
 `mobile/src/lib/iteration-limit.test.ts` covers live/history settlement and
 snapshot-only pauses. `mobile/e2e/iteration-limit.spec.ts` checks Android-sized
 Chromium and iPhone-sized WebKit for English/Chinese controls, reopening,
-Continue/Stop and a rejected action followed by retry. These browser fixtures
+Continue/Stop and a rejected action followed by retry. A cap event names the
+PC setting; continuing removes that sentence, stopping keeps it, and a
+snapshot-only pause does not show it. `classification_deferred` stays visible
+and actionable, states the rounds already used and the configured limit, and
+does not name that setting. `frontend/e2e/conversation.spec.ts`
+opens Settings → Swarm from the desktop pause and focuses Manager tool
+rounds before Stop. These browser fixtures
 do not accept an installed native phone package.
 
 Native phone acceptance uses `account-fixture`'s opt-in `/api/cap/start` input
@@ -4948,14 +4971,6 @@ iOS and Android trees ship with camera permission, no native override of the
 configurable Gateway or QR-selected Hub, and
 the zwai launcher (not Capacitor's default icon), and that Android release
 Gradle takes version/signing from the environment (no password in git).
-`mobile/src/app.test.tsx` and `mobile/src/components/client-groups.test.tsx`
-cover Clients More pending, duplicate tap, success, and failure. A Clients
-task's **Earlier** loads the page above the live tail and a later read keeps
-that page (`client-groups.test.tsx`, `frontend/src/lib/client-log.test.ts`). The mobile
-walkthrough holds a scripted Clients page briefly to verify the spinner.
-`mobile/src/lib/android-back.test.ts`, `mobile/src/app.test.tsx`, and the phone
-walkthrough prove that a Clients task consumes the first Android Back, root
-receives the next, and a delayed read cannot reopen a closed task.
 `mobile/src/components/thread-screen.test.tsx` and the phone walkthrough also
 verify that Android system Back and the header button return from a sub-agent
 log through its list and conversation, including a history refresh that omits
@@ -5608,6 +5623,35 @@ policy after any modeled prefix. Correct classification labels, original
 event identity and atomic storage actions remain assumptions. Quote/digest
 validation, source revision, Go locks, SQLite rollback and liveness still need
 their real implementation tests.
+
+## Same-turn wake classification model (`C-009` / `C-012`)
+
+`models/scheduling/WakePolicyBackfill.tla` models one turn with 20 uncached
+neutral inputs, a 16-input call budget and one optional prohibition that may
+arrive between verification and the schedule write. `StartCall` and
+`Classify` represent `verifyThreadWakePolicy` resuming from the durable
+classification prefix. `FinishCheck` returns a pending count or checks the
+settled policy. `Commit` represents the transactional `checkThreadWakePolicy`
+recheck before a write.
+
+With a live caller, continued retries and responsive classification, TLC
+checks that the request eventually settles. The safety checks require that
+every batch with pending inputs advances classification, the refused calls
+report the exact pending count, and a wait is written only when the effective
+inputs are fully classified and no denial applies. `PerTurnBudget` reproduces
+the observed second pending receipt with no progress. `SkipWritePolicyRecheck`
+admits a write after a new human instruction and fails authorization. Four
+witnesses reach a batch refusal, a same-turn arm, a write-time pending refusal
+and a settled denial.
+
+Run `python3 tools/model_check.py --fetch wake-backfill-current wake-backfill-pre-fix wake-backfill-stale-write wake-backfill-reach-pending wake-backfill-reach-arm wake-backfill-reach-late-input wake-backfill-reach-denial`.
+`TestScheduleWakeFinishesHumanBackfillAcrossCallsInTheSameTurn` and
+`TestHumanSteeringAtTheWriteBoundaryCannotBeBypassed` exercise those boundaries
+in the real Registry, classifier adapter and store. The finite model assumes
+correct classifier labels, atomic cache and write transitions, and a live
+caller that continues retrying. It excludes wall-clock limits, provider
+failures and SQLite locking. Cancellation and classifier failures have Go
+regressions.
 
 ## Fuzz and property tests
 
@@ -6367,9 +6411,15 @@ requests in that turn. `TestWakeClassificationCannotOutrunANewHumanInstruction`
 and `TestParallelWakeAttemptsShareOneHumanClassification` cover late human input
 and concurrent attempts. `TestHumanSteeringAtTheWriteBoundaryCannotBeBypassed`
 injects new human input at the first schedule query after verification, proving
-the write transaction must recheck authority. `TestWakeClassificationHasACancellableGateAndPerTurnBudget`
-covers cancellation while waiting for the classification gate, the 16-input
-turn budget, and continued backfill from persisted successes in a later turn.
+the write transaction must recheck authority.
+`TestScheduleWakeFinishesHumanBackfillAcrossCallsInTheSameTurn` drives two real
+manager tool calls in one turn. The first classifies 16 of 20 inputs, reports the
+remaining four and writes no wait or armed event. The second classifies the
+rest and arms exactly one wait. A subsequent explicit human prohibition keeps
+that row intact and retains the denial source. `TestWakeClassificationGateIsCancellable`
+covers cancellation while waiting for the classification gate.
+`TestCancelledWakeClassificationCanResumeInTheSameTurn` cancels a real policy
+request and verifies that a fresh call in the same turn can finish.
 `internal/store/wake_policy_test.go` covers effective human-only sources,
 exact quotes, immutable classification, unread-steer edits/retractions,
 compaction, restart and a later explicit human allowance.
@@ -7819,7 +7869,7 @@ long enough for Steer; unit tests leave it unset.
 | `e2e/agent-roster.spec.ts` | Agents opens on last update, newest first; Name flips between Z to A and A to Z and the rows follow the label; Created flips between oldest and newest |
 | `e2e/worker-roster-history.spec.ts` | opt-in loopback model adapter: a later turn queries an existing finished worker, emits no new spawn call/event, survives reload and exposes its Trace |
 | `e2e/work-fold.spec.ts` | user-mode work folded behind one live ticker (`work-fold` with the spinner, not every finished fold); click expands the thought box and click again collapses it |
-| `e2e/conversation.spec.ts` | a full swarm turn, user-mode work folded behind one live ticker (`work-fold` + `swap-line` + `MarqueeText` shimmer or left-to-right scroll), a live status line marked as sweeping while the turn runs, opening a sub-agent (back control beside the scroller, not sticky on it; system prompt from the chrome; log at the live edge; a collapsed `write` opens to the file body, not `Updated file`), a generated sidebar title from the opening message (not the raw request, not a transcript row), a chart in the scripted answer with Chart/Table tabs (reload returns to the home page with nothing selected; reopening the row replays the chart), scrolling up mid-stream leaving the viewport put and a jump-to-latest control returning to the live edge (developer view, so spawn rows exist to overflow), switching conversations landing at the latest turn rather than the top of the history (latest jump-rail tick current), context carried across turns, jumping to an earlier user message from the left rail (latest tick current while idle at the live edge), Enter while `wait_agents` is pending queuing a follow-up until the turn finishes, the corner button swapping from Stop to Send once that draft is typed and the click queueing without leaving Working, **Steer** on that queued row injecting and emptying the tray, **Steer** after Stop starting that leftover row as the next user turn, pulling a queued row into the composer and Enter queueing that edit at the back of the FIFO, a pencil on unread steering doing the same, **Steer** (⌘Enter while `wait_agents` is pending) pinning unread steering under the working line with Interrupt and Delete, retracting an unread steer so the turn stays Working, Interrupt aborting the current tool without cancelling the turn, **Stop** while a tool is in flight leaving no spinner next to the interrupted banner, hovering a user request or the last finished answer fading in the reserved event clock without a layout jump, copying or editing a sent message in place so Send restarts from that bubble and clears everything below, file upload appearing in the Files panel with the user bubble naming `uploads/brief.txt`, collapsing a workspace directory in Files and filtering to a nested file, dropping a file and an image onto the composer (overlay, then a workspace chip vs a vision thumb), the turn id on the Trace summary with the event log folded until Full log, an IME-confirming Enter leaving the draft in the box, the manager tool-round cap pausing for Continue/Stop instead of dumping eino's iteration error, and switching the catalog model from a grouped searchable picker (Refresh models / Edit providers) so a reload still sends that name, and the composer context ring plus Trace usage after a turn (reload keeps the ring; the snapshot never lands as a transcript row), `/` listing goal, plan and compact without a 0% hint on an empty chat, pinning a standing objective, starting it from the banner without a human message, editing it in place, compacting without rewriting user bubbles (a labelled disclosure expands the briefing inline), auto-compacting at a low token budget with a secondary compressed status and the same briefing control, a scripted run hiding its completed goal strip while preserving the completion notice, and a one-round ReAct slice leaving a standing objective running until completion instead of pausing it as two Worked-for sessions, `/plan` (`e2e/plan.spec.ts`) showing a Planning banner and an `ask_user` dialog that spans the conversation column (**Your answer needed**, still `border-ask`, no ring or ping on the card; **Your turn** on the title bar with a pinging `ask-mark`; a numbered choice then Submit continues the same turn), then Implement remounting work and leaving planning |
+| `e2e/conversation.spec.ts` | a full swarm turn, user-mode work folded behind one live ticker (`work-fold` + `swap-line` + `MarqueeText` shimmer or left-to-right scroll), a live status line marked as sweeping while the turn runs, opening a sub-agent (back control beside the scroller, not sticky on it; system prompt from the chrome; log at the live edge; a collapsed `write` opens to the file body, not `Updated file`), a generated sidebar title from the opening message (not the raw request, not a transcript row), a chart in the scripted answer with Chart/Table tabs (reload returns to the home page with nothing selected; reopening the row replays the chart), scrolling up mid-stream leaving the viewport put and a jump-to-latest control returning to the live edge (developer view, so spawn rows exist to overflow), switching conversations landing at the latest turn rather than the top of the history (latest jump-rail tick current), context carried across turns, jumping to an earlier user message from the left rail (latest tick current while idle at the live edge), Enter while `wait_agents` is pending queuing a follow-up until the turn finishes, the corner button swapping from Stop to Send once that draft is typed and the click queueing without leaving Working, **Steer** on that queued row injecting and emptying the tray, **Steer** after Stop starting that leftover row as the next user turn, pulling a queued row into the composer and Enter queueing that edit at the back of the FIFO, a pencil on unread steering doing the same, **Steer** (⌘Enter while `wait_agents` is pending) pinning unread steering under the working line with Interrupt and Delete, retracting an unread steer so the turn stays Working, Interrupt aborting the current tool without cancelling the turn, **Stop** while a tool is in flight leaving no spinner next to the interrupted banner, hovering a user request or the last finished answer fading in the reserved event clock without a layout jump, copying or editing a sent message in place so Send restarts from that bubble and clears everything below, file upload appearing in the Files panel with the user bubble naming `uploads/brief.txt`, collapsing a workspace directory in Files and filtering to a nested file, dropping a file and an image onto the composer (overlay, then a workspace chip vs a vision thumb), the turn id on the Trace summary with the event log folded until Full log, an IME-confirming Enter leaving the draft in the box, the manager tool-round cap pausing for Continue/Stop instead of dumping eino's iteration error, and that pause opening Settings → Swarm focused on Manager tool rounds, and switching the catalog model from a grouped searchable picker (Refresh models / Edit providers) so a reload still sends that name, and the composer context ring plus Trace usage after a turn (reload keeps the ring; the snapshot never lands as a transcript row), `/` listing goal, plan and compact without a 0% hint on an empty chat, pinning a standing objective, starting it from the banner without a human message, editing it in place, compacting without rewriting user bubbles (a labelled disclosure expands the briefing inline), auto-compacting at a low token budget with a secondary compressed status and the same briefing control, a scripted run hiding its completed goal strip while preserving the completion notice, and a one-round ReAct slice leaving a standing objective running until completion instead of pausing it as two Worked-for sessions, `/plan` (`e2e/plan.spec.ts`) showing a Planning banner and an `ask_user` dialog that spans the conversation column (**Your answer needed**, still `border-ask`, no ring or ping on the card; **Your turn** on the title bar with a pinging `ask-mark`; a numbered choice then Submit continues the same turn), then Implement remounting work and leaving planning |
 | `e2e/quotes.spec.ts` | quoting selected transcript text into the next send as an editable composer annotation (count chip at rest, hover for the snippet, not `<selected_text>` tags in the bubble), and Add to chat still landing while a turn is streaming (user-mode work fold, not the inner thought box) |
 | `e2e/terminal-quotes.spec.ts` | selecting real integrated-terminal text, using the shared Add to chat action, preserving its source context in the current composer draft across refresh, and submitting that reference separately from the user request |
 | `e2e/skill-copy.spec.ts` | a skill copied from one project into another stays on its own file: the copy names where it came from, **Update** brings a later source change across, **Cancel** keeps a local edit when both sides changed, **Replace with source** then takes the source text, and the source file does not gain the local edit |
@@ -7831,10 +7881,10 @@ long enough for Steer; unit tests leave it unset.
 | `e2e/remote.spec.ts` | Settings → Phone hides the configured server, self-hosted editor, Hub URL, Host Token, connection sign-in, computer name, config-path footer, pairing QR, and keep-awake while phone connection is off. An empty bound-phone list stays hidden then too. A stubbed binding paints the reported model and last-connected, not a bare fingerprint, and can still be revoked. |
 | `mobile/e2e/goal-completion.spec.ts` | English/Chinese phone path starts with a visible unfinished goal, sends a turn that completes it, hides the composer goal strip and shows one localized completion notice; leaving and reopening the conversation preserves both |
 | `mobile/e2e/scan.spec.ts` | Capacitor shell Scan QR opens a live viewfinder (four corners, a beam whose `scan-beam` animation is running, a fake-camera preview); junk paste errors; a syntactically valid URI uses the same bind path; a saved ticket shows host chips and Connecting, not the scan form; Add a PC is a sheet |
-| `e2e/clients.spec.ts` | a long local agent session opens on the live reply, **Earlier** loads the lines above it, and that reply stays on screen |
+| `e2e/clients.spec.ts` | a legacy enable request and saved Clients tab leave the app on Projects without surfacing local task data |
 | `e2e/output-budget.spec.ts` | an output-budget error links to Settings → Swarm and focuses Max completion tokens. Retry is visible on the failed turn, disabled while Settings is open, and posts that turn id to `/retry` when Settings closes. A refused retry leaves the error card |
 | `e2e/composer-paste.spec.ts` | a trusted paste into an empty composer lands once, and a second paste appends instead of doubling each insert |
-| `e2e/settings.spec.ts` | Settings sheet: tool catalogue on a never-saved config, round-trip through the config file, per-note memory cap, personality, pinning a title-generation model, discovering models into the default dropdown, a failed listing toasting over the open provider, switching a provider off so it leaves the composer list while the open conversation keeps that name (switching it back lists it again), **Back to app** on a short window when Swarm is long, the Add-a-provider outline inside the Models scrollport, semantic search off by default, no Clients tab or config-path footer, local agent tasks hidden until `clients.enabled` (empty directories, three tool groups, no task rows), Color theme / font / conversation width, directory rows tracking UI size not conversation size, chrome language switching (restored to English) |
+| `e2e/settings.spec.ts` | Settings sheet: tool catalogue on a never-saved config, round-trip through the config file, per-note memory cap, personality, pinning a title-generation model, discovering models into the default dropdown, a failed listing toasting over the open provider, switching a provider off so it leaves the composer list while the open conversation keeps that name (switching it back lists it again), **Back to app** on a short window when Swarm is long, the Add-a-provider outline inside the Models scrollport, semantic search off by default, no Clients tab or config-path footer, Color theme / font / conversation width, directory rows tracking UI size not conversation size, chrome language switching (restored to English) |
 | `e2e/shell.spec.ts` | launch with an existing conversation stays on the home page (no row selected, no transcript), keyboard shortcuts (including hiding the conversation list, `⌘F` find in the conversation, and `⌘J` / the title-bar terminal opening a PTY in the conversation workspace — and in a project's working directory when the conversation belongs to one), dragging the conversation list and the side panel without selecting transcript text (the list width is remembered across reload and the title-bar leading cluster tracks it), the composer sitting on the transcript with a fade instead of a dock hairline (pins and the box share one slab; the join sits on that plate), Projects and Conversations sharing one left gutter (conversation titles in the icon column), collapsing Conversations so its rows stay hidden across reload, the Conversations header icon starting a conversation outside a project, an external link opening a new window instead of replacing the app, ⌘K finding a conversation by words in its body, theme switching persisted, the app-menu width control filling the pane in wide mode and restoring the reading column (also persisted), renaming a conversation and deleting it after a confirm, and dragging a Conversations row pinning that order across reload |
 
 E2E tests run against `frontend/dist`. Playwright starts
@@ -8005,6 +8055,14 @@ checks the actual submit/steer bounds and sends long input from PC follow-up,
 New chat, and direct model chat with long model names. It runs on Chromium
 and iPhone WebKit; install both with `cd mobile && npx playwright install chromium webkit`
 before `npm run e2e`. JSDOM cannot prove WebKit focus zoom.
+The compact composer case verifies the Add-to-field and microphone-to-Stop
+gaps, the lower Agents and Outputs entrances, and the model and thinking
+sheets on a 320 CSS px viewport. The live-stop case verifies one Stop and
+retention of an unsent follow-up draft. The packaged XCTest
+`testComposerFocusRevealsSettingsAndMovesThreadLinks` uses
+`IOS_LAYOUT_QUERY='/?mock=1&tick=0&history=streamed-agents&speech=local'` and
+`IOS_LAYOUT_PHONE_MODE=local`. It drives the software keyboard, both settings
+sheets, lower links and Stop with a draft.
 `mobile/e2e/ask-answer.spec.ts` also checks the actual Other textarea font size
 before typing and retaining a rejected answer. The Issue #104 regression first
 observed 14 CSS px against the existing 16px focus boundary. Use
@@ -8021,14 +8079,10 @@ parked wait, type, dismiss the keyboard, then check that Back is hittable at
 its original vertical position and Run now remains inside the screen.
 A second test checks the submission button after typing and actually submits
 the draft without horizontal scrolling.
-The Clients task-detail test opens a read-only session, drags down while its
-underlying inbox is present, checks that the title/Back layer remains fixed
-and hittable, then returns to the task list. The matching Chromium/WebKit
-regression in `mobile/e2e/composer-layout.spec.ts` first failed with the detail
-64 CSS px above the viewport when the inbox scroller was transformed; it now
-checks full viewport bounds and Back navigation. This covers `C-018` and Issue
-#45 without changing the user's installed app. A component test also verifies
-that a touch inside the portaled detail does not bubble into inbox refresh.
+`testOlderPCClientTasksStayHidden` opens the packaged inbox against a host
+that supplies a legacy Clients catalog. It checks that the ordinary inbox
+conversation still opens and records the reached inbox screen. The matching
+`mobile/e2e/composer-layout.spec.ts` case runs on Chromium and WebKit.
 
 Use an isolated iPhone 17 / iOS 26 simulator; set `IOS_LAYOUT_SIMULATOR` to its
 UDID (`xcrun simctl list devices`). The fixture script copies the current
@@ -8040,18 +8094,19 @@ The formal `mobile/ios/App/AppUITests/BindFlowTests.swift`
 button and asserts that the keyboard disappears before opening the menu.
 iOS 26 exposes its checkmark as `selected`, so looking for a literal `Done`
 fails before the menu assertions; those version/update-entry assertions remain.
-For Issue #75, set `IOS_LAYOUT_QUERY='/?mock=1&tick=150&history=streamed-agents'`
+For phone Back, set `IOS_LAYOUT_QUERY='/?mock=1&tick=150&history=streamed-agents'`
 when creating the fixture and select these three native XCTests from
-`mobile/e2e/ios-wait-layout.swift`: `testLeftEdgeSwipeReturnsThroughAgentPages`,
-`testLeftEdgeSwipeDismissesModelPickerBeforeThread` and
-`testEdgeSwipeIgnoresShortVerticalAndNonEdgeMotion` (each with
+`mobile/e2e/ios-wait-layout.swift`: `testRightSwipeReturnsThroughAgentPages`,
+`testCenterSwipeDismissesModelPickerBeforeThread` and
+`testRightSwipeIgnoresShortVerticalAndUncommittedMotion` (each with
 `-only-testing:AppUITests/BindFlowTests/<test-name>`).
-Start at the left screen edge rather than
-using a centre-screen `swipeRight()`: the packaged app must return worker →
-Agents → conversation → inbox, keep the root open, dismiss the current model
-picker before its conversation and ignore short, vertical, centre and opposite
-edge gestures. Browser tests of the same return hook prove page-layer behavior;
-they do not prove recognition of the UIKit gesture.
+The packaged app must return worker → Agents → conversation → inbox using both
+swipe paths, keep the root open, and dismiss the model picker before its
+conversation. Short, vertical, diagonal, opposite-direction and center swipes
+ending early must not return. `testLegacyTurnPreviewsStayBrowsableBeforeJumping`
+uses the compact legacy fixture below and verifies that the same long right
+swipe moves the navigation strip instead of leaving the conversation. Browser
+tests of the return hook do not prove recognition of a real iOS touch sequence.
 For the hidden-history opening regression, use the dedicated
 `mobile/e2e/ios-conversation-open.swift` case and disposable fixture described
 under Phone conversation loading below. The opening must reach a visible
@@ -8074,7 +8129,7 @@ xcodebuild -project "$ios_layout_fixture/mobile/ios/App/App.xcodeproj" \
   -destination "platform=iOS Simulator,id=$IOS_LAYOUT_SIMULATOR" \
   -derivedDataPath "$ios_layout_fixture/DerivedData" CODE_SIGNING_ALLOWED=NO \
   -only-testing:AppUITests/BindFlowTests/testPhoneOutputPreview \
-  -only-testing:AppUITests/BindFlowTests/testClientTaskHeaderStaysVisibleAfterPull \
+  -only-testing:AppUITests/BindFlowTests/testOlderPCClientTasksStayHidden \
   -only-testing:AppUITests/BindFlowTests/testQuoteActionBesideNativeSelectionMenu \
   -only-testing:AppUITests/BindFlowTests/testComposerStopsLiveTurn \
   -only-testing:AppUITests/BindFlowTests/testComposerSubmissionAfterTyping \
@@ -8336,25 +8391,14 @@ public installer delivery remain separate gates; browser/launch is not proof.
 
 The timeout desktop path also verifies that the authoritative paused schedule clears Waiting. `frontend/src/store/app-schedule.test.ts` retains the armed-wake/stale-GET guard and another active wake while rejecting a paused-only wait.
 
-## Clients idle CPU and immutable snapshots (`F-223`, `C-014`)
+## Disabled local agent tasks
 
-`go test -race ./internal/clients ./internal/remote ./internal/server` covers
-unchanged transcript read counts, changed/empty/deleted/replaced files, root
-changes, status aging and Codex finish markers, concurrent readers and returned
-row isolation. The Issue #66 targeted race run measured 92.7% package coverage
-and 95.5–100% for the changed production functions. A 100,000-row chronological sort has a loose ten-second guard
-against the former quadratic algorithm. `frontend/e2e/clients.spec.ts` reads a
-600-session archive through the real HTTP/UI path, pages it, modifies one file
-and deletes it without stale rows remaining.
-
-`go test ./internal/clients -run '^$' -bench 'Benchmark(IdleTranscriptRefresh|CachedClientView|ChronologicalCatalogSort)$' -benchmem`
-compares isolated long-transcript refreshes and cached page reads. It uses
-temporary files and no model. The Issue #66 baseline on Apple M3 Max was
-1.43 s and 1.32 GB allocated per unchanged 1,000-file refresh; the parsed-row
-cache measured about 3 ms and 1.46 MB. Chronological 7,749-row sorting fell
-from about 152 ms to 1.4 ms. These are development measurements, not a promise
-for every filesystem or model-running CPU load. Inspect a real native Mac
-window separately before recording native acceptance.
+`internal/server/clients_test.go` exercises Settings and both legacy HTTP
+endpoints with a real session fixture. `internal/remote/clients_test.go`
+checks serialized inbox, pagination and legacy RPC replies, including an
+in-memory enabled value. `frontend/e2e/clients.spec.ts` covers a saved Clients
+tab and an enable attempt through Settings. `mobile/src/app.test.tsx` checks
+that a legacy catalog does not render or cause local-task RPCs.
 
 ## Native Mac acceptance recovery (`F-430`, `C-010`, `C-031`)
 
@@ -8447,6 +8491,11 @@ unique identities for manager/worker answers and thoughts, stable updates and
 completion, consecutive replies without tools, and retained identities after
 history rebuild. `session.test.ts` covers simultaneous live text during paging
 and stored catch-up on reconnect.
+
+`mobile/e2e/agent-roster.spec.ts` also opens a 42-worker roster and checks that
+the running group is in the viewport on entry, when returning from a finished
+worker's log, and when reopening from chat. Scrolling through the list must
+not surface the transcript's jump-to-latest control.
 
 The native and browser fixtures use generic streamed paragraphs, real
 sequence-zero deltas, stored completion events, tool boundaries and an earlier
@@ -8690,6 +8739,13 @@ Directory identity regressions in `internal/engine/project_workdir_identity_test
 
 ## PC workspace file preview (F-140 / C-005)
 
+Task-workspace acceptance (`C-052`): the loopback model test runs the real
+manager and write tool in two tasks with the same filenames. Backup tests
+exercise source paths retained after membership changes and exclusion of live
+tasks. `frontend/e2e/task-workspace.spec.ts` drives the production file API;
+the paired-phone scope case in `mobile/e2e/file-preview-controls.spec.ts`
+checks the UI's root-bound file requests and original download bytes.
+
 `frontend/src/lib/file-preview.test.ts` checks actual streamed-byte limits,
 UTF-8/binary classification, safe image MIME selection, cancellation and failed
 HTTP reads. The file-preview hook/component and Files-tab unit tests cover
@@ -8795,6 +8851,26 @@ and a successful probe response is consumed without another send.
 through Responses, origin aliases/cache invalidation, and isolated policy calls
 that neither wait nor mutate origin health. A refusal fully observed before
 Stop remains outage evidence for optional post-turn admission.
+
+`internal/engine/gateway_responses_continuation_test.go` drives the PC manager
+through the real Registry, ADK, and HTTP adapter with a Responses Gateway
+fixture. It checks request bytes and full-history rebuild after an expired ID,
+continuation after rebuild, and upstream cached-token usage in the call trace.
+`internal/provider/responses_continuation_test.go` covers opaque replay and
+paired tool results, changed model or tool policy, unavailable state storage,
+native-mode negotiation, reasoning-content terminal verification and SSE
+failures after admission. Production first-text latency and actual
+upstream KV hits require paired requests against the same live model with
+equivalent history and a measured `cached_tokens` response.
+On 2026-11-19, the local PC adapter and Gateway candidate were connected to
+`qwen3.8-27b` through native Responses. Three alternating paired requests
+measured median PC request sizes of 16,916 B for full replay and 263 B for
+continuation. The corresponding Gateway outbound request sizes were 16,869 B
+and 396 B. The first nonempty reasoning or text delta arrived at median 132 ms
+and 96 ms, and the first visible text at 633 ms and 557 ms. The Provider
+reported 9,696 cached input tokens in every follow-up and returned the expected
+value defined by the inherited fixed instruction. The latency measurements
+cover these three pairs on one model and route.
 `internal/engine/route_recovery_http_test.go` drives StartTurn, Registry, ADK and
 HTTP across more than two routing refusals, recovery, and Stop during cooldown
 or an active probe. It checks the original turn/generation identity, actual
@@ -8946,6 +9022,13 @@ cd frontend && npm run lint && npm test && npm run build
 ZWAI_E2E_BUILTIN_TOOLS=1 ZWAI_E2E_PORT=8819 npm run e2e -- builtin-tools.spec.ts
 ```
 
+`internal/provider/responses_continuation_test.go` covers capability negotiation,
+response acknowledgement and replay fallback. The PC engine test
+`internal/engine/gateway_responses_continuation_test.go` exercises actual
+manager turns through the Responses HTTP adapter. It checks the first
+`developer` message, incremental bytes and cached usage, stale-ID rebuild,
+and a fixed instruction edit that starts a new chain.
+
 `internal/config/provider_tools_test.go` and
 `internal/server/settings_provider_tools_test.go` verify old configuration,
 protocol/type errors, nested parameter round trips, omission/clearing, API key
@@ -9002,6 +9085,29 @@ force, saved reasons do not authorize later runs, and check-only runs do not
 write publication receipts.
 
 ### Phone conversation loading (F-220 / C-006)
+
+The running-tail case serves only live thinking and tools in the watch
+window, with the running turn omitted from the completed summaries.
+Opening or reopening must highlight the running turn, recover its prompt
+preview without inserting history into the transcript, and still let a reader
+jump to an earlier prompt. Both current and legacy summary shapes are tested.
+
+The legacy turn-navigation case strips the prompt previews from the PC
+snapshot. Its phone must populate earlier labels through compact history
+without loading those messages into the transcript. At 320 CSS px with
+seven turns, the preceding button must fit and accept a coordinate tap
+after jumping from turn seven to turn six. The corresponding packaged iOS
+case uses `history=compact&many-turns=1&split-history=1` with
+`testPreviousTurnRemainsFullyTappable`. The fifth turn's reply arrives on the
+first page and its prompt on the next. Browser coverage checks both tapping
+the turn directly and tapping after **Earlier** has already shown the reply.
+Another case moves
+the strip horizontally, changes composer settings while reading the same
+turn, and verifies that a subsequent transcript scroll resumes following.
+Use `IOS_LAYOUT_QUERY='/?mock=1&tick=0&history=compact&legacy-turn-previews=1'`
+with `ios-conversation-open.swift` for
+`testLegacyTurnPreviewsStayBrowsableBeforeJumping`. It swipes the actual
+navigation strip and taps an older preview in the packaged iOS app.
 
 Packaged native conversation-loading entry points are
 `mobile/e2e/ios-conversation-open.swift` and

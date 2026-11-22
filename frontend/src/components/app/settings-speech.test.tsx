@@ -10,10 +10,11 @@ import { gatewayVoicePolicy } from "@/test/gateway-policy"
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
-function setup(mode: "local" | "fofa", onChange = vi.fn(), onFlush = vi.fn(async () => {}), model_policy?: Settings["model_policy"]) {
+function setup(mode: "local" | "fofa", onChange = vi.fn(), onFlush = vi.fn(async () => {}), model_policy?: Settings["model_policy"], deviceId = "") {
   useApp.setState({ meta: { product_mode: mode, model_policy } as Meta })
   const speech = defaultSpeechSettings()
   speech.input.has_api_key = true
+  speech.input.device_id = deviceId
   function Host() {
     const [settings, setSettings] = useState({ speech, models: { default: "", providers: [] }, model_policy } as unknown as Settings)
     return <SpeechSettings settings={settings} onChange={(next) => { setSettings(next); onChange(next) }} onFlush={onFlush} />
@@ -127,10 +128,41 @@ describe("Speech settings", () => {
     ])
     vi.stubGlobal("navigator", { mediaDevices: { enumerateDevices, addEventListener: vi.fn(), removeEventListener: vi.fn() } })
     const { onChange } = setup("local")
-    fireEvent.click(await screen.findByRole("combobox", { name: "Microphone" }))
+    const microphone = screen.getByRole("combobox", { name: "Microphone" })
+    expect(microphone).toHaveTextContent("System default")
+    fireEvent.click(microphone)
     fireEvent.click(await screen.findByRole("option", { name: "Camera 100-Audio" }))
     expect(onChange.mock.lastCall![0].speech.input.device_id).toBe("camera")
     fireEvent.click(screen.getByRole("combobox", { name: "Microphone" }))
+    fireEvent.click(await screen.findByRole("option", { name: "System default" }))
+    expect(onChange.mock.lastCall![0].speech.input.device_id).toBe("")
+  })
+
+  it("shows the system default on disconnect and reuses the preference on reconnect", async () => {
+    const builtIn = { kind: "audioinput", deviceId: "built-in", label: "Built-in microphone" }
+    const external = { kind: "audioinput", deviceId: "external", label: "External microphone" }
+    const enumerateDevices = vi.fn(async () => [builtIn, external])
+    const mediaDevices = Object.assign(new EventTarget(), { enumerateDevices })
+    vi.stubGlobal("navigator", { mediaDevices })
+    const { onChange } = setup("local", undefined, undefined, undefined, external.deviceId)
+    const microphone = screen.getByRole("combobox", { name: "Microphone" })
+    await waitFor(() => expect(microphone).toHaveTextContent(external.label))
+
+    enumerateDevices.mockResolvedValue([builtIn])
+    mediaDevices.dispatchEvent(new Event("devicechange"))
+    await waitFor(() => expect(microphone).toHaveTextContent("System default"))
+    expect(onChange).not.toHaveBeenCalled()
+
+    enumerateDevices.mockResolvedValue([builtIn, external])
+    mediaDevices.dispatchEvent(new Event("devicechange"))
+    await waitFor(() => expect(microphone).toHaveTextContent(external.label))
+    expect(onChange).not.toHaveBeenCalled()
+
+    enumerateDevices.mockResolvedValue([builtIn])
+    mediaDevices.dispatchEvent(new Event("devicechange"))
+    await waitFor(() => expect(microphone).toHaveTextContent("System default"))
+    fireEvent.click(microphone)
+    expect(screen.queryByRole("option", { name: "Unavailable" })).toBeNull()
     fireEvent.click(await screen.findByRole("option", { name: "System default" }))
     expect(onChange.mock.lastCall![0].speech.input.device_id).toBe("")
   })

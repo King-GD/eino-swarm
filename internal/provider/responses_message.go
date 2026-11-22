@@ -273,6 +273,13 @@ func (r *responsesResponse) message() (*schema.Message, error) {
 			for _, part := range item.Summary {
 				out.ReasoningContent += part.Text
 			}
+			if len(item.Summary) == 0 {
+				for _, part := range item.Content {
+					if part.Type == "reasoning_text" {
+						out.ReasoningContent += part.Text
+					}
+				}
+			}
 		case "function_call":
 			index := len(out.ToolCalls)
 			out.ToolCalls = append(out.ToolCalls, schema.ToolCall{Index: &index, ID: item.CallID, Type: "function", Function: schema.FunctionCall{Name: item.Name, Arguments: item.Arguments}})

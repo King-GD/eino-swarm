@@ -274,7 +274,7 @@ func TestStartWithAFileAndAnImageUsesTheRightSlot(t *testing.T) {
 	if len(atts) != 1 || atts[0].Name != "side.txt" {
 		t.Fatalf("attachments %+v", atts)
 	}
-	body, err := os.ReadFile(filepath.Join(e.WorkspaceDir(tid), atts[0].RelPath))
+	body, err := os.ReadFile(filepath.Join(e.TaskFileDir(tid), atts[0].RelPath))
 	if err != nil || string(body) != "hello side" {
 		t.Fatalf("file %q %v", body, err)
 	}

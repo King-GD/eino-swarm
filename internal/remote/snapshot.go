@@ -233,6 +233,7 @@ func openDetail(eng *engine.Engine, threadID string, cfg config.RemoteConfig) (*
 			ID:           t.ID,
 			Status:       t.Status,
 			Text:         truncate(oneLine(text), cfg.SummaryChars),
+			UserText:     truncate(oneLine(t.UserText), cfg.SummaryChars),
 			WebExecution: t.WebExecution,
 		})
 	}

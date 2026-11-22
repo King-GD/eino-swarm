@@ -4,10 +4,16 @@ import { describe, expect, it, vi } from "vitest"
 import { setLocale } from "@/lib/i18n"
 import { Composer } from "./composer"
 
+function modelButton() {
+  fireEvent.focus(screen.getByRole("textbox", { name: "Message" }))
+  return screen.getByRole("button", { name: "Model" })
+}
+
 describe("Composer", () => {
   it("hides the model control when the paired PC is in the default product mode", () => {
     setLocale("en")
     render(<Composer label="Message" sendLabel="Send" onSubmit={vi.fn()} hideModel models={[{ provider_id: "p", model: "one", default: true }]} />)
+    fireEvent.focus(screen.getByRole("textbox", { name: "Message" }))
     expect(screen.queryByRole("button", { name: "Model" })).toBeNull()
   })
 
@@ -115,7 +121,7 @@ describe("Composer", () => {
     fireEvent.click(screen.getByRole("button", { name: "Follow-up" }))
     expect(onSubmit).toHaveBeenCalledWith("", expect.objectContaining({ files: [expect.objectContaining({ name: "draft.txt" })] }))
     view.rerender(<Composer label="Message" sendLabel="Follow-up" stopLabel="Stop" onStop={onStop} onSubmit={onSubmit} quotes={["quoted text"]} />)
-    expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled()
     fireEvent.click(screen.getByRole("button", { name: "Follow-up" }))
     expect(onSubmit).toHaveBeenLastCalledWith(expect.stringContaining("quoted text"))
     expect(onStop).not.toHaveBeenCalled()
@@ -160,32 +166,33 @@ describe("Composer", () => {
         onSubmit={onSubmit}
       />,
     )
-    // The phone's native select popup ignores app typography and made every
-    // model row huge. The app-owned list must keep long names readable.
-    expect(screen.getByLabelText("Model")).toHaveClass("min-w-0")
-    expect(screen.getByLabelText("Thinking level")).toHaveClass("min-w-0")
-    expect(screen.getByLabelText("Message")).toHaveClass("min-w-0")
-    fireEvent.click(screen.getByRole("button", { name: "Model" }))
+    expect(screen.queryByRole("button", { name: "Model" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Thinking level" })).not.toBeInTheDocument()
+    fireEvent.click(modelButton())
     const picker = screen.getByRole("dialog", { name: "Model" })
     expect(picker).toBeInTheDocument()
     expect(screen.getByRole("radio", { name: "one" })).toHaveClass("text-sm")
     expect(screen.getByRole("radio", { name: "two" })).toBeInTheDocument()
     fireEvent.click(screen.getByRole("radio", { name: "two" }))
     expect(screen.queryByRole("dialog", { name: "Model" })).not.toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Model" })).toHaveTextContent("two")
-    expect(screen.getByRole("button", { name: "Model" })).toHaveAccessibleDescription("two")
-    expect(screen.getByRole("option", { name: "Low thinking" })).toBeInTheDocument()
-    expect(screen.queryByRole("option", { name: "Medium thinking" })).not.toBeInTheDocument()
+    expect(modelButton()).toHaveTextContent("two")
+    expect(modelButton()).toHaveAccessibleDescription("two")
+    fireEvent.click(screen.getByRole("button", { name: "Thinking level" }))
+    const thinking = screen.getByRole("dialog", { name: "Thinking level" })
+    expect(screen.getByRole("radio", { name: "Default thinking" })).toHaveAttribute("aria-checked", "true")
+    expect(screen.queryByRole("radio", { name: "Medium thinking" })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole("radio", { name: "Low thinking" }))
+    expect(thinking).not.toBeInTheDocument()
     const file = new File(["x"], "notes.txt", { type: "text/plain" })
     fireEvent.change(screen.getByTestId("file-input"), { target: { files: [file] } })
     fireEvent.click(screen.getByRole("button", { name: "Send" }))
     expect(onSubmit).toHaveBeenCalledWith(
       "",
-      expect.objectContaining({ files: [file], images: [], model: "two", providerId: "b" }),
+      expect.objectContaining({ files: [file], images: [], model: "two", providerId: "b", reasoning: "low" }),
     )
   })
 
-  it("shows one official name and sends its alias without opening the list", () => {
+  it("shows the locked official name without offering model choices and sends its alias", () => {
     setLocale("en")
     const onSubmit = vi.fn()
     render(
@@ -198,11 +205,13 @@ describe("Composer", () => {
         onSubmit={onSubmit}
       />,
     )
-    const button = screen.getByRole("button", { name: "Model" })
+    const button = modelButton()
     expect(button).toHaveTextContent("Partner model")
     expect(button).not.toHaveTextContent("saved-model")
     fireEvent.click(button)
-    expect(screen.queryByRole("dialog", { name: "Model" })).not.toBeInTheDocument()
+    expect(screen.getByRole("dialog", { name: "Model" })).toHaveTextContent("Partner model")
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument()
+    fireEvent.keyDown(window, { key: "Escape" })
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "hi" } })
     fireEvent.click(screen.getByRole("button", { name: "Send" }))
     expect(onSubmit).toHaveBeenCalledWith("hi", expect.objectContaining({ providerId: "gateway:owner", model: "account" }))
@@ -221,8 +230,8 @@ describe("Composer", () => {
         onSubmit={onSubmit}
       />,
     )
-    expect(screen.getByRole("button", { name: "Model" })).toHaveTextContent("probe")
-    fireEvent.click(screen.getByRole("button", { name: "Model" }))
+    expect(modelButton()).toHaveTextContent("probe")
+    fireEvent.click(modelButton())
     expect(screen.queryByRole("radio", { name: "probe" })).not.toBeInTheDocument()
     expect(screen.getByRole("radio", { name: "one" })).toBeInTheDocument()
     fireEvent.keyDown(window, { key: "Escape" })
@@ -247,7 +256,7 @@ describe("Composer", () => {
         onSubmit={vi.fn()}
       />,
     )
-    fireEvent.click(screen.getByRole("button", { name: "Model" }))
+    fireEvent.click(modelButton())
     act(() => {
       expect(window.__zwaiAndroidBack?.()).toBe(true)
     })
@@ -313,7 +322,7 @@ describe("catalog changes preserve an explicit conversation model", () => {
     const props = { label: "Message", sendLabel: "Send", onSubmit: send, providerId: "a", model: "retained" }
     const { rerender } = render(<Composer {...props} models={[{ provider_id: "a", model: "retained", default: true }]} />)
     rerender(<Composer {...props} models={[{ provider_id: "a", model: "new-model", default: true }]} />)
-    expect(screen.getByRole("button", { name: "Model" })).toHaveTextContent("retained")
+    expect(modelButton()).toHaveTextContent("retained")
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "continue" } })
     fireEvent.click(screen.getByRole("button", { name: "Send" }))
     expect(send).toHaveBeenCalledWith("continue", expect.objectContaining({ providerId: "a", model: "retained" }))
@@ -327,12 +336,12 @@ it("keeps a shown catalog fallback when the list is reordered", () => {
     { provider_id: "a", model: "first", default: true },
     { provider_id: "a", model: "second" },
   ]} />)
-  expect(screen.getByRole("button", { name: "Model" })).toHaveTextContent("first")
+  expect(modelButton()).toHaveTextContent("first")
   rerender(<Composer {...props} models={[
     { provider_id: "a", model: "second", default: true },
     { provider_id: "a", model: "first" },
   ]} />)
-  expect(screen.getByRole("button", { name: "Model" })).toHaveTextContent("first")
+  expect(modelButton()).toHaveTextContent("first")
 })
 
 it("follows a changed settings default and marks a missing one unavailable", () => {
@@ -342,26 +351,26 @@ it("follows a changed settings default and marks a missing one unavailable", () 
     { provider_id: "a", model: "saved", default: true, default_follows_setting: true, ready: true },
     { provider_id: "a", model: "other", ready: true },
   ]} />)
-  expect(screen.getByRole("button", { name: "Model" })).toHaveTextContent("saved")
+  expect(modelButton()).toHaveTextContent("saved")
   rerender(<Composer {...props} models={[
     { provider_id: "a", model: "other", default: true, default_follows_setting: true, ready: true },
     { provider_id: "a", model: "saved", ready: true },
   ]} />)
-  expect(screen.getByRole("button", { name: "Model" })).toHaveTextContent("other")
+  expect(modelButton()).toHaveTextContent("other")
   rerender(<Composer {...props} models={[
     { provider_id: "a", model: "removed", default: true, default_follows_setting: true, ready: false },
     { provider_id: "a", model: "other", ready: true },
   ]} />)
-  expect(screen.getByRole("button", { name: "Model" })).toHaveAttribute("data-unavailable", "true")
-  expect(screen.getByRole("button", { name: "Model" })).toHaveTextContent("removed")
+  expect(modelButton()).toHaveAttribute("data-unavailable", "true")
+  expect(modelButton()).toHaveTextContent("removed")
 })
 
 it("keeps a user's local new-chat pick when refreshing the available models", () => {
   setLocale("en")
   const props = { label: "Message", sendLabel: "Send", onSubmit: vi.fn() }
   const { rerender } = render(<Composer {...props} models={[{ provider_id: "p", model: "picked", default: true }]} />)
-  fireEvent.click(screen.getByRole("button", { name: "Model" }))
+  fireEvent.click(modelButton())
   fireEvent.click(screen.getByRole("radio", { name: "picked" }))
   rerender(<Composer {...props} models={[{ provider_id: "p", model: "fresh", default: true }]} />)
-  expect(screen.getByRole("button", { name: "Model" })).toHaveTextContent("picked")
+  expect(modelButton()).toHaveTextContent("picked")
 })

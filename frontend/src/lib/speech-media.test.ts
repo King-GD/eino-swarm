@@ -36,6 +36,62 @@ describe("microphone selection", () => {
     standard.cancel()
   })
 
+  it.each([
+    { reason: "device removed", error: new DOMException("missing", "NotFoundError") },
+    { reason: "device ID mismatch", error: Object.assign(new Error("mismatch"), { name: "OverconstrainedError", constraint: "deviceId" }) },
+    { reason: "constraint hidden", error: Object.assign(new Error("hidden"), { name: "OverconstrainedError", constraint: "" }) },
+  ])("records from the system input when the preferred device is missing ($reason)", async ({ error }) => {
+    const stopTrack = vi.fn()
+    const stream = { getTracks: () => [{ stop: stopTrack }] }
+    const getUserMedia = vi.fn().mockRejectedValueOnce(error).mockResolvedValueOnce(stream)
+    const start = vi.fn()
+    vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } })
+    vi.stubGlobal("MediaRecorder", class { start = start })
+    const capture = await startSpeechRecording({
+      signal: new AbortController().signal, maxDurationSeconds: 5, maxBytes: 1000, format: "auto", deviceId: "missing",
+    })
+    expect(getUserMedia.mock.calls).toEqual([
+      [{ audio: { deviceId: { exact: "missing" } }, video: false }],
+      [{ audio: true, video: false }],
+    ])
+    expect(start).toHaveBeenCalledOnce()
+    capture.cancel()
+    expect(stopTrack).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    { reason: "permission denied", deviceId: "missing", errors: [new DOMException("denied", "NotAllowedError")] },
+    { reason: "device busy", deviceId: "missing", errors: [new DOMException("busy", "NotReadableError")] },
+    { reason: "other constraint", deviceId: "missing", errors: [Object.assign(new Error("sample rate"), { name: "OverconstrainedError", constraint: "sampleRate" })] },
+    { reason: "both devices missing", deviceId: "missing", errors: [new DOMException("removed", "NotFoundError"), new DOMException("no default", "NotFoundError")] },
+    { reason: "default device missing", deviceId: "", errors: [new DOMException("no default", "NotFoundError")] },
+  ])("surfaces the capture error after the allowed attempts ($reason)", async ({ deviceId, errors }) => {
+    const getUserMedia = vi.fn()
+    for (const error of errors) getUserMedia.mockRejectedValueOnce(error)
+    const recorder = vi.fn()
+    vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } })
+    vi.stubGlobal("MediaRecorder", recorder)
+    await expect(startSpeechRecording({
+      signal: new AbortController().signal, maxDurationSeconds: 5, maxBytes: 1000, format: "auto", deviceId,
+    })).rejects.toBe(errors.at(-1))
+    expect(getUserMedia).toHaveBeenCalledTimes(errors.length)
+    expect(recorder).not.toHaveBeenCalled()
+  })
+
+  it("does not request a fallback after the recording was cancelled", async () => {
+    const controller = new AbortController()
+    const getUserMedia = vi.fn(async () => {
+      controller.abort()
+      throw new DOMException("device removed", "NotFoundError")
+    })
+    vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } })
+    vi.stubGlobal("MediaRecorder", vi.fn())
+    await expect(startSpeechRecording({
+      signal: controller.signal, maxDurationSeconds: 5, maxBytes: 1000, format: "auto", deviceId: "missing",
+    })).rejects.toMatchObject({ name: "AbortError" })
+    expect(getUserMedia).toHaveBeenCalledOnce()
+  })
+
   it("unlocks blank device names once and keeps the list when permission is denied", async () => {
     const stop = vi.fn()
     const enumerateDevices = vi.fn()

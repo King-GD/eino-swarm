@@ -603,57 +603,13 @@ enabled and is omitted otherwise. A `PUT /api/settings` request that supplies
 `memory.auto_dream` defaults to `true`. An explicit `false` disables automatic
 skill verification. Omitting `auto_dream` from a `PUT` preserves the saved choice.
 
-### `GET /api/clients`
+### Legacy local agent task endpoints
 
-Read-only progress for local Claude, Codex, and Cursor transcripts. `enabled`
-is false until Settings turns it on; then `tools` is three groups
-(`claude`, `codex`, `cursor`). Each task has `id`, `title`, `cwd`,
-`updated_at`, and `status` (`running` or `done`). `title` is the opening
-request. Codex ignores client context inserted ahead of that request, and
-still reads a request that sits past the start of a long transcript. With
-no request and no stated objective, `title` is the directory name in `cwd`.
-The desktop list and the phone `clients` task show that directory name after
-the task for Claude, Codex, and Cursor when the two differ. Cursor has no
-working directory in the transcript; its project folder is the encoded
-absolute path. `cwd` is that directory when it still exists. A leading dot
-in a path component is omitted from the folder name. When the leaf is gone,
-`cwd` is the git repository that contains the remaining path. The phone
-task includes `cwd` for the label. The first page is at most five tasks from the last `clients.recent_days`
-(default 3). `more` and `next` mean another page exists, still inside that
-window or older than it. `GET /api/clients?before=<unix ms>` returns the
-next five per tool. `GET /api/clients/task?id=` returns the live tail of that
-session: title, status, and the latest lines (`user`, `assistant`, `thinking`,
-`tool`), with the opening request on every page. `older` means lines exist
-before this page. `before` is the byte offset of the first line in the page;
-`?before=` returns the previous page. Each entry's `at` (line offset) and `n`
-(index on that line) stay stable as the file grows, so a poll can merge the
-tail without dropping a page already on screen. `before` that is not a
-non-negative integer is 400. The desktop follows that tail and **Earlier**
-loads the previous page. The phone uses `client_read` with `task_id` and
-optional `before`, and reads `client_view` (`older`, `before`, the same
-entry fields). A missing id is 404. `client_read` with a negative `before`
-is `bad_request`. Consecutive thinking and tool lines stay behind one
-collapsed row, the same work fold as a conversation. It does not send,
-steer, or resume.
-
-Finished catalog snapshots are immutable and sorted newest first once per
-refresh, preserving file order for equal timestamps. Paging copies only the
-visible rows. Background refreshes reuse parsed metadata when file identity,
-size, modification time and mode are unchanged; deleted files and a changed
-root drop those cached rows. Running status still follows each tool's finish
-markers and configured stale interval. Session detail reads remain live.
-
-The disk walk does not run inside the request. A cold read is
-`pending: true` with empty `tools` and must not replace rows already
-painted; the next poll carries the snapshot. A paired phone does not
-wait for that walk on inbox `list`. It asks `clients` on its own. When a
-snapshot is already finished, the first `list` still carries `clients`,
-clipped to 30 tasks per tool, so an older phone paints the groups. A
-`list` sent while the walk is in flight omits `clients`. `clients` with
-`before` and optional `group` loads the next page from the snapshot.
-A `list` that pages one inbox section omits `clients`,
-so a poll of page one can refresh the lights without dropping rows already
-loaded with More.
+`GET /api/clients` and its legacy `before` query return
+`{"enabled":false,"tools":[]}`. `GET /api/clients/task?id=…` returns 404 for
+valid requests. Malformed parameters still return 400. These endpoints
+perform no filesystem scans or transcript reads. Settings reads report
+`clients.enabled: false`, and Settings writes normalize it to false.
 
 ### `PUT /api/settings`
 
@@ -992,7 +948,7 @@ Invalid input returns `400 invalid_mcp`; failed persistence returns
 ### `POST /api/mcp/import`
 
 Apply one JSON document in a single configuration update. The body is the
-document, up to 1 MiB, not a wrapper. Settings → Tools → Edit JSON posts the
+document, up to 1 MiB, not a wrapper. Settings → Tools → MCP → Edit JSON posts the
 textarea here. Either of these shapes is accepted, and `servers` may be an
 object with the same entry fields as `mcpServers`:
 
@@ -1361,8 +1317,11 @@ pages that section. `group` omitted keeps the global idle page for a phone
 that still has one More button. `more` pages that idle
 list. A later `list` is still the first page: the phone patches that page
 and keeps rows already loaded with `more`. A row that left the first page
-is not kept just because it was there last time. When `clients.enabled` is on, the phone polls `clients` beside the inbox. That reply is the last finished snapshot (`pending` while the first walk is still running) and does not hold the link open. A first `list` carries the same `clients` object only after a snapshot exists (three tool groups, 30 tasks each). `clients` `{before, group}` loads older tasks for one tool from that snapshot. A section `list` omits `clients` so that page does not reset the agent list. Replacing the window with
-the first page alone is how an expanded inbox collapsed on the next poll.
+is not kept just because it was there last time.
+The host omits `clients` from all inbox list and pagination responses.
+An explicit legacy `clients` RPC returns only `clients: {"enabled":false}`.
+A legacy `client_read` RPC returns `not_found`, or `bad_request` for a negative
+`before`. The phone ignores local agent tasks advertised by older hosts.
 `log` `{thread_id, before}` pages older transcript events (newest page older than
 `before`, size `watch_events`). `run_now` and `cancel_wait` target the soonest
 armed thread wake on `{thread_id}` (`409 idle` when none is parked;
@@ -1407,6 +1366,9 @@ thread wait is parked. Goal, schedule, `turn`, `done` and `error` event
 frames carry that `status` too so a parked `/goal` does not look idle after
 `done`.
 With `include_detail: true`, `ready` also carries the existing `open` `detail`.
+Each entry in `detail.turns` may include `user_text`, a single-line user-input
+preview clipped to `summary_chars`. It is independent of the existing `text`
+preview, which prefers the assistant reply and otherwise uses the user input.
 Worker-collection decline receipts retain their original kind and sequence
 in push and paged history; their wait ID and worker-generation payload follows
 the existing event-text and frame limits. They are
@@ -1663,7 +1625,7 @@ bytes land in the workspace. The PC decides what the turn is: text with no
 attachments while a turn runs is a follow-up; attachments while a turn
 runs steer; an idle conversation starts a turn. The phone uploads, then
 calls `send` or `steer`; it does not reimplement that policy.
-`files` `{thread_id, directory?, text?, cursor?}` lists one complete directory,
+`files` `{thread_id, directory?, text?, cursor?, file_scope?, file_root?}` lists one complete directory,
 or every listed match when `text` is set. An empty or omitted `directory` is
 the workspace root. `cursor` pages that same result and must repeat
 `directory` or `text`. `files[]` carries relative `path`, `name`, `size`,
@@ -1671,12 +1633,17 @@ the workspace root. `cursor` pages that same result and must repeat
 an error, not a shorter tree. Dot-directories, `node_modules` and `vendor`
 are omitted. An older phone that omits `directory` sees only the root until
 it is updated.
-`file_chunk` `{thread_id, file_path, before?}` returns base64 `data`, MIME,
+`file_chunk` `{thread_id, file_path, before?, file_scope?, file_root?}` returns base64 `data`, MIME,
 file `size`, `offset`, `next_offset`, and `more` in slices no larger than
 36 KiB. An older PC that returns `unknown_op` shows an update-PC message in
 the phone file browser. The PC checks the thread and opens only a regular file beneath its
 workspace root, including symlink resolution; traversal and escaped symlinks
-fail. The phone limits assembled reads to 32 MiB. PNG, JPEG, GIF and WebP can
+fail. New PCs include `file_view: {root, isolated, has_project}`; the phone
+repeats `file_root` and `file_scope` on pages, child lists and chunks.
+`file_scope=project` is read-only and resolves the current project on the PC.
+Omitting it uses the task (legacy shared folder for old conversations).
+No `file_view` means the PC does not expose a scope switch.
+The phone limits assembled reads to 32 MiB. PNG, JPEG, GIF and WebP can
 be previewed up to that limit. Text, PDF, HTML, CSV/TSV, DOCX, XLSX, PPTX and
 EPUB previews are limited to 8 MiB. HTML renders in a sandboxed artifact
 without same-origin access. CSV/TSV render as tables. DOCX, XLSX, PPTX and
@@ -2671,6 +2638,9 @@ Body `{"continue": true|false}`. Answers a pause at the manager's tool-round cap
 (`max_iterations` on the event stream). `true` extends the current turn by
 another `swarm.manager_max_iterations` rounds; `false` ends it as `cancelled`
 with a short "stopped after N tool rounds" rather than eino's graph error.
+The same endpoint also answers `reason:classification_deferred`: `limit` is
+rounds already used and `extend_by` is the configured next slice. That pause
+is an answer-verification deferral, not the round cap.
 Steering while paused also continues. `409 idle` when the turn is not waiting.
 
 普通回合因未收取 worker 而重复提前结束时，也使用同一 `max_iterations`
@@ -3431,6 +3401,7 @@ suggestion. The phone receives the event and does not show it.
 
 ```json
 {"workspace": "/Users/me/.zwai-swarm/workspaces/th_ab12…",
+ "file_view": {"root": "…", "isolated": true, "has_project": false},
  "files": [{"path": "uploads/notes.md", "name": "notes.md", "size": 812,
             "dir": false, "modified": "…", "uploaded": true}]}
 ```
@@ -3445,7 +3416,15 @@ the scan in progress. A failed or cancelled scan is an error with no partial
 human put there, as opposed to what agents produced. Dot-directories,
 `node_modules` and `vendor` are omitted (agents can still read those paths).
 The Files panel loads the next directory when it is opened and uses `q` for
-its filter. The payload stays a flat list of that one result.
+its filter. The payload stays a flat list of that one result. The reserved
+`.zwai-tasks` directory is visible in the project tree.
+
+File list, download and reveal accept `scope=task|project` (default `task`).
+The server derives the project scope from the conversation's current
+membership. A client can bind later operations to `file_view.root` with the
+`file_root` query parameter; a mismatch returns `409 file_root_changed`.
+An invalid scope or a project-scope upload/delete returns `400 file_scope`.
+The download path and upload `rel_path` remain relative to the scope root.
 
 ### `POST /api/threads/:id/files` → `201`
 
@@ -3584,8 +3563,12 @@ human source has not been classified or its extraction failed. Both the tool
 boundary and storage transaction enforce the policy. A refusal leaves the wait
 row unchanged and emits no armed `schedule` event, so the UI cannot render a
 new armed card from assistant prose. A classified denial's `tool_result` has
-`source_seq`, `source_text` and `source_quote`; pending classification has
-`pending_seq` when the source is known. Source sequences are `events.seq`, not
+`source_seq`, `source_text` and `source_quote`. Pending classification
+includes the first `pending_seq` and the number of unclassified inputs in
+`pending_count` when known. Each verification classifies at most 16 inputs
+within a 30-second context deadline. `retry_same_turn:true` asks the manager to
+retry the same tool call and continue from saved decisions in the current turn.
+Source sequences are `events.seq`, not
 `messages.seq`. These existing tool results remain in the same turn's Trace.
 A human-cancellation refusal also carries `source_kind: "schedule_cancelled"`;
 its `source_text` is the cancelled schedule ID and `source_quote` is empty.
@@ -3804,7 +3787,8 @@ One request, one turn, everything about it — the same data `zwai trace` prints
 Thread-wake tool refusals retain `thread_wake_prohibited` or
 `thread_wake_policy_pending` in the existing `tool_result` JSON. A classified
 denial retains `source_seq`, `source_text` and `source_quote`; pending
-classification retains `pending_seq` when known. Compaction may remove the
+classification retains the known `pending_seq` and `pending_count`, plus
+`retry_same_turn:true` when the tool advises a same-turn retry. Compaction may remove the
 original message from model replay but does not remove this event-based policy
 evidence.
 No armed `schedule` event is emitted by a refused arm or recadence.
@@ -3967,6 +3951,21 @@ mode, non-object entries, missing/non-string/duplicate/unsupported types or tool
 on Chat Completions return `400` before changing configuration. API key omission,
 clearing and masking retain their existing semantics. Supported types and cloud
 resource limits are described in [configuration](CONFIG.md#provider-cloud-tools).
+
+The PC manager can use native Responses continuation when the Gateway
+conversation capability advertises `responses_developer_history: 1`. The
+initial `store:true` request places the fixed instructions in leading
+`developer` messages in `input`. Top-level `instructions` apply to the
+current request. The PC accepts a continuation ID only when the response
+confirms `X-AIGateway-Responses-Mode: native` and
+`X-AIGateway-Responses-Developer-History: 1`.
+
+For append-only history on the same model with the same request settings,
+`previous_response_id` references the saved history and `input` carries only
+the new items. Changes to fixed instructions or history, or a rejected
+continuation ID, trigger a rebuild from the complete local input. Without the
+negotiated capability the PC sends complete input. The cursor is process-local.
+Cache use is reported by upstream `usage.input_tokens_details.cached_tokens`.
 
 `builtin_tool` is a durable event kind returned by `GET /api/trace/:turn` and the
 conversation event log/SSE. Its `text` is JSON with `provider_id`, `model`,
