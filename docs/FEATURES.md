@@ -430,6 +430,8 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-220 Read and control PC conversations
 
+- 手机打开「子 Agent」列表或从子智能体日志返回时从顶部开始，先显示运行中的分组；浏览列表不随聊天贴底。证据：`mobile/src/components/thread-screen.tsx`、`mobile/e2e/agent-roster.spec.ts`。
+
 - 收件箱忽略旧版 PC 随列表返回的本地客户端任务，也不发起目录或详情 RPC。证据：`mobile/src/app.test.tsx`、`mobile/e2e/composer-layout.spec.ts`。关联 `C-006`。
 
 - 配对及手机直连对话从三轮起显示可点击的轮次导航：以最多两行预览用户输入，随阅读位置高亮；宽度足够时让当前轮和上一轮完整可点，横滑浏览时保留导航位置，重新滚动正文或点选后恢复跟随。打开运行中的配对会话时，默认高亮正在执行的最后一轮；实时页没有该轮提问或旧 PC 缺少预览时，有限读取历史补齐。配对会话的跳转会按需跨页找到所选轮次的提问。「更早」定位到上一条主管正文，新版 PC 按需传输折叠的思考与工具。iOS 可右滑逐层返回，顶部「对话」与各 PC 标签共用横向滚动条。证据：`mobile/src/components/turn-navigation.tsx`、`mobile/src/components/host-chrome.tsx`、`mobile/e2e/conversation-open.spec.ts`、`internal/remote/log_compact_test.go`。关联 `C-006`、`C-015`。

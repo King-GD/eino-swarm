@@ -378,7 +378,9 @@ the row for the pieces. A `progress` pulse is not a chat
 row. `wait_agents` is a status count, not the `elapsed_ms` roster.
 A conversation with sub-agents offers **Agents / 子 Agent** above the message
 box. Its number counts running workers. The list separates running workers
-from finished and failed history. Each row shows role, ID, status, and latest
+from finished and failed history. Opening the list or returning from a worker
+log starts at the top, with running workers first. The list does not follow the
+chat tail while you browse it. Each row shows role, ID, status, and latest
 permitted activity; open a row
 for that agent's separate thought, tool, and answer log. **Earlier** loads
 older events into the same list and log. Worker answers do not appear as

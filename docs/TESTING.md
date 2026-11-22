@@ -8491,6 +8491,11 @@ completion, consecutive replies without tools, and retained identities after
 history rebuild. `session.test.ts` covers simultaneous live text during paging
 and stored catch-up on reconnect.
 
+`mobile/e2e/agent-roster.spec.ts` also opens a 42-worker roster and checks that
+the running group is in the viewport on entry, when returning from a finished
+worker's log, and when reopening from chat. Scrolling through the list must
+not surface the transcript's jump-to-latest control.
+
 The native and browser fixtures use generic streamed paragraphs, real
 sequence-zero deltas, stored completion events, tool boundaries and an earlier
 page; a static history fixture alone cannot reproduce this reconciliation bug.

@@ -119,6 +119,7 @@ export function ThreadScreen({
     { id: "stopped", label: t("thread.agent.stoppedGroup", { n: stoppedAgents.length }), agents: stoppedAgents },
   ]
   const [agentPage, setAgentPage] = useState("chat")
+  const showingRoster = agentPage === "agents"
   const taskPanels = usePhoneTaskPanelView(fileLink, detail.id, panelOwnerKey)
   const turnId = detail.running?.turn_id
   const destinations = pairedTurnDestinations(detail.turns ?? [], manager, turnId)
@@ -158,6 +159,7 @@ export function ThreadScreen({
     setSelectedText("")
     setQuoteActionPosition(null)
     setQuoteActionDocked(false)
+    pinHeight.current = null
     stick.current = true
     setBehind(false)
     setAgentPage(page)
@@ -250,8 +252,10 @@ export function ThreadScreen({
     if (!onOlder || loadingOlder || !hasMore || !caughtUp) return
     // The reader is already at the top, asking for what is above. Pinning
     // the old offset hides that page and leaves the last turn on screen.
-    pinHeight.current = 0
-    stick.current = false
+    if (!showingRoster) {
+      pinHeight.current = 0
+      stick.current = false
+    }
     void Promise.resolve(onOlder()).then((seq) => {
       if (seq) setHistoryJump({ thread: detail.id, seq })
     })
@@ -261,7 +265,7 @@ export function ThreadScreen({
 
   useLayoutEffect(() => {
     const el = scroller.current
-    if (!el || !caughtUp) return
+    if (showingRoster || !el || !caughtUp) return
     el.style.overflowAnchor = "none"
     if (loadingOlder) return
     if (pinHeight.current != null) {
@@ -276,7 +280,7 @@ export function ThreadScreen({
       if (behind) setBehind(false)
     }
     if (!atTail) setAtTail(true)
-  }, [caughtUp, blocks, loadingOlder, hasMore, atTail, behind, agentPage])
+  }, [caughtUp, blocks, loadingOlder, hasMore, atTail, behind, agentPage, showingRoster])
 
   useLayoutEffect(() => {
     if (!historyJump || loadingOlder) return
@@ -420,13 +424,15 @@ export function ThreadScreen({
         {/* Android WebView will not scroll a flex-column <ol>. Bounded
             overflow box; Earlier sits above so paging is not a dead drag. */}
         <div
+          key={showingRoster ? "roster" : "log"}
           ref={scroller}
           data-testid="transcript"
           className={cn(
             "min-h-0 min-w-0 w-full flex-1 overflow-x-hidden overflow-y-scroll overscroll-y-contain touch-pan-y px-3 py-2 [-webkit-overflow-scrolling:touch]",
-            !atTail && "invisible",
+            !showingRoster && !atTail && "invisible",
           )}
           onScroll={(e) => {
+            if (showingRoster) return
             const el = e.currentTarget
             const gap = el.scrollHeight - el.scrollTop - el.clientHeight
             stick.current = gap < 48
@@ -444,14 +450,14 @@ export function ThreadScreen({
           {/* Bottom-aligned: a short conversation sits above the composer
               instead of floating under a screen of blank. */}
           <div className={cn("flex min-h-full min-w-0 w-full flex-col gap-1.5",
-            agentPage === "agents" ? "justify-start" : "justify-end")}>
+            showingRoster ? "justify-start" : "justify-end")}>
             <div ref={quoteSource} data-quote-source="">
               {agentPage === "chat" && caughtUp && hasMore && !hasPhoneHistoryContent(manager) ? (
                 <p role="status" className="px-3 py-4 text-center text-sm text-muted-foreground">
                   {t("thread.hiddenHistory")}
                 </p>
               ) : null}
-              {agentPage === "agents" ? (
+              {showingRoster ? (
                 <div className="flex flex-col gap-1" data-testid="agent-roster">
                   {agentGroups.filter((group) => group.agents.length > 0).map((group) => (
                     <section key={group.id} className="flex flex-col gap-1">
@@ -519,7 +525,7 @@ export function ThreadScreen({
               }} />
           </div>
         ) : null}
-        {behind && atTail ? (
+        {!showingRoster && behind && atTail ? (
           <button
             type="button"
             data-testid="to-latest"

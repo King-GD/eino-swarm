@@ -11,6 +11,7 @@ import { iterationLimitHistory, iterationSnapshotOnly, mockAwaitingContinue, moc
 import { restartAskHistory } from "./mock-ask-restart"
 import { generationHistory } from "./mock-generation"
 import { backoffHistory } from "./mock-backoff"
+import { longAgentRosterHistory } from "./mock-agent-roster"
 import { workerCollectionHistory, workerCollectionStopHistory, workerCollectionPaged } from "./mock-worker-collection"
 import { predictionTurn, reasoningOnlyTurn, scriptedTurn, type Step } from "./mock-turn"
 import { mockGoalDetail, mockGoalFixture, resumeMockGoal, type MockGoalFields } from "./mock-goal"
@@ -246,6 +247,8 @@ export class MockHost {
       } else if (new URLSearchParams(location.search).get("history") === "worker-collection") {
         const state = new URLSearchParams(location.search).get("collection")
         this.seed(live, workerCollectionHistory(state, new URLSearchParams(location.search).get("stop_order")), state !== "done" && state !== "stopped")
+      } else if (new URLSearchParams(location.search).get("history") === "long-agent-roster") {
+        this.seed(live, longAgentRosterHistory(), true)
       } else if (new URLSearchParams(location.search).get("history") === "streamed-agents") {
         this.seed(live, [
           { kind: "agent_message", agentID: "manager", text: "Older manager answer" },
