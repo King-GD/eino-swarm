@@ -235,6 +235,20 @@ describe("EASM node details", () => {
     expect(saved.detail.basis).toEqual(basis)
   })
 
+  // The agent's tool reports the relationship it found; the card shows that
+  // value as reported, next to the evidence for the link.
+  it("shows the reported relation on a company card", () => {
+    const related: EasmNode = { ...company, detail: { relation: "subsidiary", basis: [{ source: "relation_tool", via: "R-1" }] } }
+    render(<Card graph={result([related], [{ source: "root", target: related.id, confirmed: true }])} start={related.id} />)
+    const judgment = within(screen.getByRole("heading", { name: "资产判断详情" }).parentElement!)
+    expect(judgment.getByText("关系：subsidiary")).toBeInTheDocument()
+    expect(judgment.getByText(basisText({ source: "relation_tool", via: "R-1" }, zhText))).toBeInTheDocument()
+    const plain: EasmNode = { ...company, id: "plain" }
+    cleanup()
+    render(<Card graph={result([plain], [{ source: "root", target: plain.id, confirmed: true }])} start={plain.id} />)
+    expect(screen.queryByText(/关系：/)).not.toBeInTheDocument()
+  })
+
   it("keeps root cards to the profile, organizations and effective features", () => {
     const certificateOrg: EasmNode = { id: "cert-org", kind: "feature", featureKind: "org", label: "Certificate Subject" }
     const root: EasmNode = {

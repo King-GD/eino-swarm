@@ -15,6 +15,8 @@ export interface EasmDetail {
   /** Structured evidence for why the node is on the graph; worded by the renderer. */
   basis?: EasmBasis[]
   status?: string
+  /** How the reporting tool related the company, as it worded it. */
+  relation?: string
   share?: string
   registry_id?: string
   registry_name?: string

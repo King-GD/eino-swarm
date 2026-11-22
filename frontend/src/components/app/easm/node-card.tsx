@@ -97,6 +97,7 @@ function AssetJudgment({ node, index }: { node: EasmNode; index: EasmIndex }) {
   return (
     <section className="space-y-1 rounded-r-md border-l-2 border-primary bg-muted/40 px-3 py-2">
       <h3 className="text-xs font-semibold">{text.judgment}</h3>
+      {node.detail?.relation ? <p className="m-0 break-words text-muted-foreground">{text.relation(node.detail.relation)}</p> : null}
       {basis.length ? <ul className="m-0 list-none space-y-0.5 p-0 text-muted-foreground">{basis.map((item, i) => <li key={i} className="break-words">{basisText(item, text)}</li>)}</ul> : null}
       {filingDomains.size ? <p className="m-0 break-words text-muted-foreground">{filingDescription(node, [...filingDomains], text)}</p> : null}
       {!hasJudgment && evidence.length ? (

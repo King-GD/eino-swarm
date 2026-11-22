@@ -60,3 +60,10 @@ export function sectionLoading(result: EasmResult, step: EasmStepId, taskActive:
   if (result.collection.status === "running" && (status === "running" || status === "pending")) return true
   return taskActive && status !== "done"
 }
+
+/** The graph is filled by whole batches the agent pushes, so no single step owns
+ *  it: it waits while a source call is collecting or the owning task can still
+ *  push another batch, and stops once neither can. */
+export function graphSectionLoading(result: EasmResult, taskActive: boolean): boolean {
+  return taskActive || result.collection.status === "running"
+}

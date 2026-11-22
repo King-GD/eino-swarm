@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { isEasmResult, sectionLoading } from "./data"
+import { graphSectionLoading, isEasmResult, sectionLoading } from "./data"
 import type { EasmResult } from "./types"
 
 const fixture: EasmResult = {
@@ -36,6 +36,26 @@ describe("EASM snapshot relationships", () => {
     expect(sectionLoading({ ...fixture, collection: skipped }, "heat", false)).toBe(false)
     expect(sectionLoading({ ...fixture, collection: { status: "idle", steps: [] } }, "components", true)).toBe(true)
     expect(sectionLoading({ ...fixture, collection: { ...running, status: "interrupted" } }, "heat", false)).toBe(false)
+  })
+
+  // A first batch without a query leaves the collection idle: the section must
+  // keep waiting while the task can still push data, and stop once it cannot.
+  it("keeps an idle collection waiting only while the task can still push data", () => {
+    const idle = { status: "idle" as const, steps: [{ id: "heat" as const, status: "pending" as const }, { id: "components" as const, status: "failed" as const, code: "tool_error" }] }
+    expect(sectionLoading({ ...fixture, collection: idle }, "heat", true)).toBe(true)
+    expect(sectionLoading({ ...fixture, collection: idle }, "heat", false)).toBe(false)
+    expect(sectionLoading({ ...fixture, collection: idle }, "components", false)).toBe(false)
+    const done = { status: "done" as const, steps: [{ id: "heat" as const, status: "done" as const }] }
+    expect(sectionLoading({ ...fixture, collection: done }, "heat", true)).toBe(false)
+  })
+
+  // The agent pushes the graph itself, so no step owns it: it waits while a
+  // call is collecting or the conversation can still push another batch.
+  it("keeps the graph loading for a running collection or an active task", () => {
+    expect(graphSectionLoading(fixture, false)).toBe(false)
+    expect(graphSectionLoading({ ...fixture, collection: { status: "running", steps: [] } }, false)).toBe(true)
+    expect(graphSectionLoading({ ...fixture, collection: { status: "idle", steps: [] } }, true)).toBe(true)
+    expect(graphSectionLoading({ ...fixture, collection: { status: "interrupted", steps: [] } }, false)).toBe(false)
   })
 
   it("rejects duplicate IDs, invalid roots and dangling references", () => {
