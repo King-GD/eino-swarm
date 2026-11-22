@@ -1,11 +1,8 @@
-import { clsx, type ClassValue } from "clsx"
-import { twMerge } from "tailwind-merge"
-
 import { t, type Locale } from "@/lib/i18n"
 
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
+// cn lives in its own module so shared UI components can use it without
+// pulling the i18n tables into every bundle that renders them.
+export { cn } from "@/lib/cn"
 
 /** Human-readable byte size for the Files panel. */
 export function formatBytes(bytes: number): string {
