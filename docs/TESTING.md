@@ -860,8 +860,9 @@ Those source-selection cases use the existing scripted MockLink. The separate
 reaches PC RPC` case uses `mobile/e2e/account-fixture`: a real relay, Noise and
 PC/Eino RPC behind a synthetic local CAS. It binds an anonymous QR on the same
 Hub, logs in before the PC is visible, then refreshes discovery and verifies one
-saved record, one live binding, new ticket/session identity, retired sockets
-and a newly created PC conversation read over the replacement transport.
+saved record, one live binding, new ticket/session identity and retired sockets.
+Background discovery keeps the account center open until the user closes it;
+the same selected PC then reads a newly created conversation over the replacement transport.
 Repeated refresh must not rotate again; logout removes the managed connection
 and leaves the PC online. The fixture's
 `TestFixtureAnonymousUpgradeUsesSameIdentityAndRetiresOnlyThatPhone` also checks
