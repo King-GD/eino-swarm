@@ -121,6 +121,8 @@ test("the tool catalogue renders on a config that was never saved", async ({
   // every group is reachable, including the one furthest down
   await expect(tools.getByText("web_search", { exact: true })).toBeVisible()
   await expect(dialog.getByLabel("Skip the proxy for")).toBeVisible()
+  await expect(tools.getByText("EASM portrait lookups", { exact: true })).toHaveCount(0)
+  await expect(tools.getByLabel("EASM MCP server", { exact: true })).toHaveCount(0)
   await dialog.getByRole("button", { name: "Back to app" }).click()
 
   expect(crashes).toEqual([])

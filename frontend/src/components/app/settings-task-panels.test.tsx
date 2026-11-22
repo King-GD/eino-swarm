@@ -12,6 +12,8 @@ it("saves only plugin settings and retains edits on failure", async () => {
   vi.stubGlobal("fetch", fetcher)
   render(<TaskPanelSettings query="" />)
   const field = await screen.findByLabelText("Concurrent HTTP checks")
+  expect(screen.queryByText("EASM portrait lookups")).not.toBeInTheDocument()
+  expect(screen.queryByLabelText("EASM MCP server")).not.toBeInTheDocument()
   fireEvent.change(field, { target: { value: "4" } })
   fireEvent.click(screen.getByRole("button", { name: "Save panel settings" }))
   expect(await screen.findByRole("alert")).toHaveTextContent("Invalid concurrency")
@@ -22,18 +24,4 @@ it("saves only plugin settings and retains edits on failure", async () => {
   expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({ concurrency: 4 })
   expect(JSON.parse(fetcher.mock.calls[2][1].body)).toEqual({ concurrency: 4 })
   expect(screen.getByLabelText("FOFA executable")).toHaveValue("other-client")
-})
-
-// Clearing one lookup's tool must save the whole EASM object, so the server
-// keeps the user's other role bindings instead of resetting them to defaults.
-it("saves EASM tool bindings as one object", async () => {
-  const fetcher = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(settings)))
-    .mockResolvedValueOnce(new Response(JSON.stringify(settings)))
-  vi.stubGlobal("fetch", fetcher)
-  render(<TaskPanelSettings query="" />)
-  const field = await screen.findByLabelText("Organization lookup tool")
-  fireEvent.change(field, { target: { value: "" } })
-  fireEvent.click(screen.getByRole("button", { name: "Save panel settings" }))
-  await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2))
-  expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({ easm: { ...settings.easm, tools: { organizations: "", heat: "" } } })
 })

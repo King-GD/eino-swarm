@@ -8,13 +8,15 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Added
 
-- Task panels can show an enterprise asset portrait (EASM). After the subject is confirmed, the panel collects organizations, investment relations, branches, ICP filings, certificates, asset totals, attention trend and components through the configured MCP tools, shows each step's progress, and keeps working when one lookup fails. Each lookup's tool and server can be changed in Settings → Tools → Task panels. The panel follows the app language on PC, Web and paired phones.
+- Task panels can show an enterprise asset portrait (EASM). After the subject is confirmed, the panel collects organizations, investment relations, branches, ICP filings, certificates, asset totals, attention trend and components through the configured MCP tools, shows each step's progress, and keeps working when one lookup fails. The panel follows the app language on PC, Web and paired phones.
 
 - The phone composer's Add menu and slash suggestions list `/goal`, `/plan` and `/image` in PC chats, including after draft text. Direct chat offers `/image` when the selected Gateway source has authorized image generation. Choosing a leading command keeps the draft as its argument. (`F-150`, `F-182`, `F-220`, `C-009`, `C-051`)
 
 - PC and Web voice settings can choose the microphone. System default follows the operating-system input; a named device is used exactly, and an unplugged device asks for another choice instead of switching microphones silently. Phones keep the phone microphone. (`F-148`, `C-048`)
 
 ### Changed
+
+- Settings → Tools → Task panels shows the common panel options. EASM lookup bindings and limits are managed through `task_panels.easm` in the configuration file.
 
 - PC and paired phones queue ordinary follow-ups by default. Send options and each queue row offer insertion on the next model call or immediate insertion by interrupting the current manager step. (`C-002`)
 
