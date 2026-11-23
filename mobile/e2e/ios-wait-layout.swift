@@ -903,7 +903,21 @@ final class BindFlowTests: XCTestCase {
     message.tap()
   }
 
+  private func assertComposerAboveKeyboard(_ app: XCUIApplication) {
+    let message = app.textViews["Message"].firstMatch
+    let stop = app.buttons["Stop"].firstMatch
+    let keyboard = app.keyboards.firstMatch
+    let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+      guard keyboard.exists, message.isHittable, stop.isHittable else { return false }
+      let keyboardTop = keyboard.frame.minY
+      return message.frame.maxY <= keyboardTop && stop.frame.maxY <= keyboardTop
+    }, object: nil)
+    XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 8), .completed,
+      "the editor and composer actions must fit above the software keyboard")
+  }
+
   func testComposerFocusRevealsSettingsAndMovesThreadLinks() throws {
+    continueAfterFailure = false
     let app = XCUIApplication()
     app.launch()
     let message = app.textViews["Message"].firstMatch
@@ -913,6 +927,22 @@ final class BindFlowTests: XCTestCase {
     let thinking = composerPickerControl(app, label: "Thinking level")
     let stop = app.buttons["Stop"].firstMatch
     let mic = app.buttons["Start voice input"].firstMatch
+    let keyboard = app.keyboards.firstMatch
+    func tapPickerAboveKeyboard(_ control: XCUIElement) {
+      var rect = CGRect.zero
+      let visiblyAboveKeyboard = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+        guard keyboard.exists, control.isHittable else { return false }
+        rect = control.frame
+        return rect.width > 0 && rect.maxY < keyboard.frame.minY
+      }, object: nil)
+      XCTAssertEqual(XCTWaiter.wait(for: [visiblyAboveKeyboard], timeout: 8), .completed)
+      let bounds = app.frame
+      // Accessibility taps can scroll the WebView to its pre-keyboard position.
+      app.coordinate(withNormalizedOffset: CGVector(
+        dx: (rect.midX - bounds.minX) / bounds.width,
+        dy: (rect.midY - bounds.minY) / bounds.height
+      )).tap()
+    }
     XCTAssertTrue(agents.waitForExistence(timeout: 15))
     XCTAssertTrue(mic.waitForExistence(timeout: 8))
     XCTAssertFalse(model.exists)
@@ -930,18 +960,20 @@ final class BindFlowTests: XCTestCase {
     XCTAssertTrue(model.isHittable)
     recordAgentPage(app, name: "composer-focused")
 
-    thinking.tap()
-    let high = app.otherElements["High thinking"].firstMatch
-    XCTAssertTrue(high.waitForExistence(timeout: 5))
-    high.tap()
-    focusMessage(app)
-    XCTAssertTrue(model.waitForExistence(timeout: 5))
-    model.tap()
+    tapPickerAboveKeyboard(model)
     XCTAssertTrue(app.otherElements["scripted"].firstMatch.waitForExistence(timeout: 5))
     recordAgentPage(app, name: "composer-model-picker")
-    app.buttons["Close"].firstMatch.tap()
-    XCTAssertTrue(model.waitForNonExistence(timeout: 5))
+    let closePicker = app.buttons["Close"].firstMatch
+    closePicker.tap()
+    XCTAssertTrue(closePicker.waitForNonExistence(timeout: 5))
+    XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+    XCTAssertTrue(model.isHittable)
+    assertComposerAboveKeyboard(app)
+    recordAgentPage(app, name: "composer-restored-after-model-picker")
 
+    app.terminate()
+    app.launch()
+    XCTAssertTrue(agents.waitForExistence(timeout: 15))
     agents.tap()
     XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS 'worker-1'")).firstMatch.waitForExistence(timeout: 5))
     app.buttons["Back"].firstMatch.tap()
@@ -958,6 +990,28 @@ final class BindFlowTests: XCTestCase {
     XCTAssertEqual(message.value as? String, "Keep this draft")
     XCTAssertTrue(app.buttons["Send"].firstMatch.isEnabled)
     recordAgentPage(app, name: "composer-stop-retains-draft")
+  }
+
+  func testThinkingPickerReturnsToEditing() throws {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launch()
+    focusMessage(app)
+    let thinking = composerPickerControl(app, label: "Thinking level")
+    let closePicker = app.buttons["Close"].firstMatch
+    let keyboard = app.keyboards.firstMatch
+    XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+    XCTAssertTrue(thinking.waitForExistence(timeout: 5))
+    thinking.tap()
+    XCTAssertTrue(app.otherElements["High thinking"].firstMatch.waitForExistence(timeout: 5))
+    closePicker.tap()
+    XCTAssertTrue(closePicker.waitForNonExistence(timeout: 5))
+    XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+    XCTAssertTrue(thinking.isHittable)
+    assertComposerAboveKeyboard(app)
+    app.typeText("Still editing")
+    XCTAssertEqual(app.textViews["Message"].firstMatch.value as? String, "Still editing")
+    recordAgentPage(app, name: "composer-restored-after-thinking-picker")
   }
 
   func testComposerStopsLiveTurn() throws {

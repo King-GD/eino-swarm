@@ -148,7 +148,7 @@ function PickerSheet({ label, action, onClose, children }: {
     return () => {
       window.removeEventListener("keydown", onKey)
       if (window.__zwaiAndroidBack === back) window.__zwaiAndroidBack = previousBack
-      previousFocus?.focus()
+      if (document.activeElement === document.body) previousFocus?.focus({ preventScroll: true })
     }
   }, [])
 

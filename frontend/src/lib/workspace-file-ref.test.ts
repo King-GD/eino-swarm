@@ -31,19 +31,30 @@ describe("chooseWorkspaceFile", () => {
     expect(chooseWorkspaceFile("report/list/out.md", [
       file("report/list/out.md"),
       file("work/report/list/out.md"),
-    ])).toBe("report/list/out.md")
+    ])).toEqual({ status: "one", path: "report/list/out.md" })
   })
 
   it("uses the task work directory when the answer omitted it", () => {
     expect(chooseWorkspaceFile("notes/a.md", [
       file("work/notes/a.md"),
       { path: "work/notes", dir: true },
-    ])).toBe("work/notes/a.md")
+    ])).toEqual({ status: "one", path: "work/notes/a.md" })
   })
 
   it("uses one deeper match and does not treat a similar name as the file", () => {
-    expect(chooseWorkspaceFile("a.md", [file("pkg/a.md")])).toBe("pkg/a.md")
-    expect(chooseWorkspaceFile("a.md", [file("data.md"), file("folder/data.md")])).toBe("a.md")
-    expect(chooseWorkspaceFile("a.md", [file("pkg/a.md"), file("other/a.md")])).toBe("a.md")
+    expect(chooseWorkspaceFile("a.md", [file("pkg/a.md")])).toEqual({ status: "one", path: "pkg/a.md" })
+    expect(chooseWorkspaceFile("a.md", [file("data.md"), file("folder/data.md")])).toEqual({ status: "one", path: "a.md" })
+  })
+
+  it("lists every file when the name exists in more than one place", () => {
+    expect(chooseWorkspaceFile("a.md", [
+      file("pkg/a.md"),
+      file("other/a.md"),
+      file("other/a.md"),
+    ])).toEqual({ status: "many", paths: ["other/a.md", "pkg/a.md"] })
+    expect(chooseWorkspaceFile("a.md", [
+      file("work/a.md"),
+      file("pkg/a.md"),
+    ])).toEqual({ status: "many", paths: ["pkg/a.md", "work/a.md"] })
   })
 })

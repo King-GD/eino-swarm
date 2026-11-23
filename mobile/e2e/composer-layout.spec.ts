@@ -147,27 +147,100 @@ test("composer reveals settings on focus and docks Agents and Outputs next to th
   await editor.tap()
   await expect(model).toBeVisible()
   await expect(thinking).toBeVisible()
+  const modelName = model.getByText("scripted", { exact: true })
+  const defaultLevel = thinking.getByText("默认思考", { exact: true })
+  for (const label of [modelName, defaultLevel]) {
+    await expect.poll(() => label.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(16)
+  }
   expect((await form.boundingBox())!.height - compact.height).toBeGreaterThanOrEqual(36)
   expect((await model.boundingBox())!.y).toBeGreaterThanOrEqual((await editor.boundingBox())!.y + (await editor.boundingBox())!.height)
   writeFileSync(info.outputPath("composer-expanded.png"), await page.screenshot(), { mode: 0o600 })
 
+  await editor.fill("Keep this draft")
+  await editor.evaluate((field: HTMLTextAreaElement) => field.setSelectionRange(4, 4))
   await thinking.tap()
   const thinkingSheet = page.getByRole("dialog", { name: "思考强度", exact: true })
+  await thinkingSheet.getByRole("button", { name: "关闭", exact: true }).tap()
+  await expect(editor).toBeFocused()
+  await expect(thinking).toBeVisible()
+  await thinking.tap()
   await thinkingSheet.getByRole("radio", { name: "高思考", exact: true }).tap()
   await expect(thinkingSheet).toHaveCount(0)
-  await editor.tap()
+  await expect(editor).toBeFocused()
   await expect(thinking).toHaveAccessibleDescription("高思考")
+  await expect.poll(() => thinking.getByText("高思考", { exact: true }).evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(16)
   await model.tap()
   const modelSheet = page.getByRole("dialog", { name: "模型", exact: true })
   await expect(modelSheet.getByRole("radio", { name: "scripted", exact: true })).toBeVisible()
   await modelSheet.getByRole("button", { name: "关闭", exact: true }).tap()
-  await expect(model).toHaveCount(0)
+  await expect(editor).toBeFocused()
+  await expect(model).toBeVisible()
+  await page.keyboard.insertText("!")
+  await expect(editor).toHaveValue("Keep! this draft")
+  const actions = await Promise.all([mic, form.getByRole("button", { name: "发送方式" }), form.getByRole("button", { name: "跟进" }), stop]
+    .map((control) => control.boundingBox()))
+  const actionLine = actions[0]!.y
+  const composerBounds = (await form.boundingBox())!
+  for (const action of actions) {
+    expect(action).not.toBeNull()
+    expect(action!.y).toBe(actionLine)
+    expect(action!.x + action!.width).toBeLessThanOrEqual(composerBounds.x + composerBounds.width)
+  }
 
   await agents.tap()
   await expect(page.getByTestId("agent-roster").getByRole("button")).toHaveCount(3)
   await page.getByRole("button", { name: "返回", exact: true }).tap()
   await outputs.tap()
   await expect(page.getByRole("heading", { name: "产出物", exact: true })).toBeVisible()
+})
+
+test("closing a picker keeps the whole composer above the software keyboard", async ({ page }) => {
+  await page.goto("/?mock=1&tick=0&history=streamed-agents")
+  const form = page.getByTestId("message-composer")
+  const editor = form.getByRole("textbox", { name: "消息", exact: true })
+  await editor.tap()
+  await form.getByRole("button", { name: "思考强度", exact: true }).tap()
+  await page.getByRole("dialog", { name: "思考强度", exact: true }).getByRole("button", { name: "关闭", exact: true }).tap()
+  await expect(editor).toBeFocused()
+
+  const setVisibleViewport = (top: number, height: number, event: "resize" | "scroll", nativePan = 0) => page.evaluate(({ top, height, event, nativePan }) => {
+    const viewport = window.visualViewport!
+    Object.defineProperty(viewport, "height", { configurable: true, value: height })
+    Object.defineProperty(viewport, "offsetTop", { configurable: true, value: top + nativePan })
+    Object.defineProperty(viewport, "pageTop", { configurable: true, value: top + nativePan })
+    Object.defineProperty(window, "scrollY", { configurable: true, value: nativePan })
+    viewport.dispatchEvent(new Event(event))
+  }, { top, height, event, nativePan })
+  const formBottom = () => form.evaluate((node) => node.getBoundingClientRect().bottom)
+  const withoutKeyboard = await formBottom()
+  const keyboardViewport = Math.round(withoutKeyboard * 0.55)
+  await setVisibleViewport(0, keyboardViewport, "resize")
+  await expect.poll(formBottom).toBeLessThanOrEqual(keyboardViewport)
+  await expect.poll(formBottom).toBeGreaterThan(keyboardViewport - 24)
+  await expect.poll(() => editor.evaluate((node) => node.getBoundingClientRect().top)).toBeGreaterThan(0)
+
+  await setVisibleViewport(80, keyboardViewport, "scroll")
+  await expect.poll(formBottom).toBeGreaterThan(keyboardViewport + 56)
+  await expect.poll(formBottom).toBeLessThanOrEqual(keyboardViewport + 80)
+
+  // WebKit can report the same native pan as both pageTop and window scroll.
+  await setVisibleViewport(0, keyboardViewport, "scroll", 80)
+  await expect.poll(formBottom).toBeLessThanOrEqual(keyboardViewport)
+
+  // With a short viewport, the header and task links can exhaust the flex space.
+  await setVisibleViewport(0, 180, "resize")
+  await expect.poll(formBottom).toBeGreaterThan(156)
+  await expect.poll(formBottom).toBeLessThanOrEqual(180)
+
+  await page.evaluate(() => {
+    const viewport = window.visualViewport!
+    Reflect.deleteProperty(viewport, "height")
+    Reflect.deleteProperty(viewport, "offsetTop")
+    Reflect.deleteProperty(viewport, "pageTop")
+    Reflect.deleteProperty(window, "scrollY")
+    viewport.dispatchEvent(new Event("resize"))
+  })
+  await expect.poll(formBottom).toBe(withoutKeyboard)
 })
 
 test("a live composer keeps its single Stop beside Follow-up and retains the unsent draft on stop", async ({ page }) => {

@@ -443,6 +443,8 @@ markdown URL opens in a new browser tab (`zwai web`) or the system browser
 (`zwai desktop`). A workspace-relative file path in a finished answer opens
 that file in the same preview as the Files tab. A path written from the task
 working directory is found under `work/` when that is where the file is.
+When more than one file has that name, the preview lists those paths and
+opens the one you choose.
 
 A `mermaid` fence renders a diagram in desktop and Web conversations, tool
 output, and Markdown file previews. Incomplete live fences, invalid diagrams,
@@ -1142,17 +1144,19 @@ that server's remote tools and can switch each one off without disabling the
 server. A tool switched off during a turn leaves the next request. Plan and
 Nuwa read-only toolsets do not mount MCP tools. Other Nuwa turns make the
 mounted names available to workers and keep the planner's toolset separate.
-When the tool schema declares a required top-level field without a default, the call
-is checked before sending it. The tool record names missing fields so the
-model can supply them in a new call in the same turn. Other calls in the
-same batch can finish.
+The call is checked against the connected tool's schema before dispatch.
+Missing required fields and clear type mismatches, including array elements,
+appear in the tool record. The model can issue a corrected call in the same
+turn, and other calls in the batch can finish.
+
+When an MCP tool reports HTTP 429, the original tool keeps its error in the
+transcript and Trace. The turn can continue with independent work. A Streamable
+HTTP call deadline also permits independent work. Verify the remote outcome
+before repeating a rate-limited or timed-out call.
 
 A confirmed expired session is renewed once with the current saved credentials
-for the same MCP connection. The task stops if renewal fails or the server
-returns a tool execution error. Repair the connection in Settings and retry
-the task. A Streamable HTTP call deadline keeps the turn available for later
-independent calls. Check for an external effect before repeating the timed-out
-call.
+for the same MCP connection. A failed renewal or another blocking MCP error
+stops the task and offers a retry after the connection is repaired.
 Keep secrets
 in the write-only environment and header fields. Blank preserves the saved
 map. `{}` clears it. Local commands run with the conversation workspace as

@@ -305,10 +305,18 @@ call. Later authentication failures still block the task.
 tool and a proxy with a missing field and an independent sibling in one
 model response. It checks zero invalid wire calls, the field error bound to
 the first call, the sibling result, and a corrected call in the same turn.
-The remote-error regression runs an operation and then returns similar
-validation prose. It still blocks the task. The MCP progress Playwright
-fixture checks the field error in the expanded transcript and Trace while
-the corrected call runs.
+The same HTTP/Registry/ADK fixture also sends a wrong array element type.
+The field path and types reach the model before any invalid tools/call POST,
+the independent sibling still completes, and the corrected call succeeds.
+The remote-error regression runs an operation and returns validation-like
+prose, which still blocks the task. A separate direct/proxy regression
+checks that a returned HTTP 429 stays attached to the original tool result,
+the next model request receives it, and an independent tool uses the same
+session without replay. The parallel-progress HTTP fixture also gives its
+handlers a test-owned shutdown signal so a cancelled request cannot leave the
+test server stuck in cleanup. The MCP progress Playwright fixture checks that the
+named tool and rate-limit text are visible in the transcript and that the
+original result is preserved in Trace while independent work proceeds.
 `TestMCPDiagnosticsCorrelateTimeoutAndLaterSuccessWithoutSecrets` checks both
 call IDs in the engine log and verifies that secrets stay out of diagnostics.
 `TestWorkerMCPFailureBlocksItsManagerAndKeepsTheOriginalCall`
@@ -317,17 +325,17 @@ and preserves the worker's original tool call.
 `TestExpiredBindingRefreshesSavedHeadersWithoutRedirecting`
 checks the new wire credentials and refuses a changed URL.
 `models/mcp/MCPCallRecovery.tla` limits a modeled call to one replacement
-after verified session expiry. `RejectMissing` maps to the local check before
-`callTool`. It consumes no wire attempt and leaves admission open. A
-Streamable HTTP deadline also leaves admission open. A remote `tool_error`
-maps to the post-dispatch failure and blocks new work, including a
-cancellation request for the admitted manager. The historical and seeded
-variants reintroduce the missing-argument block, dispatch before local
-rejection, admission after a remote error, and other recovery faults. A
-reachability witness exercises independent work after local rejection. The
-model covers a single logical call, at most one replacement, and the
-admission decision for independent work. Go integration tests cover actual
-batch results, session reuse and in-flight cancellation.
+after verified session expiry. `RejectArgument` maps to local catalog
+validation before `callTool`. A missing field or wrong type consumes no wire
+attempt and leaves admission open. A Streamable HTTP deadline or recognized
+429 MCP tool result also leaves admission open, and neither permits automatic
+replay. Other remote `tool_error` results block new work and request
+cancellation of an admitted manager. Historical switches reintroduce the
+429 block, dispatch of wrong types and the ensuing block. Reachability checks
+exercise admission of independent work after both errors. The model covers
+one logical call, at most one replacement, and the admission decision. The
+HTTP regressions exercise actual classification, wire dispatch, session reuse,
+durable receipts and cancellation.
 `internal/engine/tool_offer_http_test.go` drives a real manager turn through
 Registry, ADK and the offline model adapter: unchecking `web_search` and an MCP
 server removes them from the next request, checking them again restores them,
@@ -8074,7 +8082,15 @@ and iPhone WebKit; install both with `cd mobile && npx playwright install chromi
 before `npm run e2e`. JSDOM cannot prove WebKit focus zoom.
 The compact composer case verifies the Add-to-field and microphone-to-Stop
 gaps, the lower Agents and Outputs entrances, and the model and thinking
-sheets on a 320 CSS px viewport. The live-stop case verifies one Stop and
+sheets on a 320 CSS px viewport. The expanded composer shows the current
+model name and thinking level, keeps the actions together on a narrow
+screen, and restores focus, draft and caret after closing or choosing an
+option. `testComposerFocusRevealsSettingsAndMovesThreadLinks` and
+`testThinkingPickerReturnsToEditing` check that the software keyboard
+returns without tapping the editor again, with the editor and actions above
+it. Browser coverage also drives a viewport resize and pan so a keyboard
+that shrinks the visual viewport without resizing the layout viewport still
+keeps the composer visible. The live-stop case verifies one Stop and
 retention of an unsent follow-up draft. The packaged XCTest
 `testComposerFocusRevealsSettingsAndMovesThreadLinks` uses
 `IOS_LAYOUT_QUERY='/?mock=1&tick=0&history=streamed-agents&speech=local'` and
@@ -8784,6 +8800,9 @@ outside the workspace, and keeps a remote `https` image.
 `frontend/src/lib/documents/zip.test.ts` rejects stored and deflate entries
 whose output is larger than the declared uncompressed size, including a
 declared size of zero.
+`frontend/src/components/app/workspace-file-preview.test.tsx` lists every
+matching path when a finished answer names a file that exists in more than
+one place, and opens only the path you choose.
 `frontend/e2e/conversation.spec.ts` clicks a workspace path in a finished
 scripted answer and checks that the file preview shows that file.
 `frontend/e2e/file-preview.spec.ts` creates conversations and uploads fixture
