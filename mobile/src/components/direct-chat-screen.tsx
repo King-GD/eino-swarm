@@ -295,7 +295,7 @@ export function DirectChatScreen({
   }
 
   return (
-    <main className="mx-auto flex h-full max-w-lg flex-col overflow-hidden">
+    <main className="mx-auto flex h-full max-w-lg flex-col justify-end overflow-hidden">
       {open ? (
         <header className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-1">
           <Button

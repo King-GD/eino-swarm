@@ -10,11 +10,12 @@ function modelButton() {
 }
 
 describe("Composer", () => {
-  it("hides the model control when the paired PC is in the default product mode", () => {
+  it("shows the managed model name without offering a picker", () => {
     setLocale("en")
     render(<Composer label="Message" sendLabel="Send" onSubmit={vi.fn()} hideModel models={[{ provider_id: "p", model: "one", default: true }]} />)
     fireEvent.focus(screen.getByRole("textbox", { name: "Message" }))
     expect(screen.queryByRole("button", { name: "Model" })).toBeNull()
+    expect(screen.getByText("one", { exact: true })).toBeVisible()
   })
 
   it("sends the trimmed text and clears the box", () => {

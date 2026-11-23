@@ -474,8 +474,13 @@ a short thread is bottom-aligned, and scrolling away from the tail raises
 **Jump to latest**. Answering inside a conversation is one rounded box
 (`components/composer.tsx`) that grows with the text up to a cap, Enter
 sends (Shift+Enter is a newline, and an IME candidate list is never a
-send). Tap the message field to expand it and show the available **Model**
-and **Thinking level** icons below. Each icon opens its settings sheet.
+send). Tap the message field to expand it and see the selected model name
+and current thinking level. Tap a configurable setting to open its sheet.
+Managed selections appear as read-only labels. A long model name can be
+truncated to leave room for the thinking level and message actions.
+Closing a sheet or choosing an option returns focus to the message field,
+keeping the composer expanded and preserving the draft and caret. The composer
+and its actions stay above the software keyboard when it appears.
 **Thinking off** is saved with the conversation and applies to the next request
 in direct Chat or the next turn on the paired PC. If the model still reports
 reasoning after the request disables it, the conversation shows an error.

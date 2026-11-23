@@ -134,6 +134,7 @@ test("switching PCs stays on the selected inbox instead of opening its latest co
 })
 
 test("phone model chooser uses the app type scale and keeps long names on screen", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 812 })
   await page.addInitScript(() => {
     localStorage.setItem("zwai.phone.providers", JSON.stringify([{
       id: "p-test", label: "Demo", baseURL: "https://endpoint.invalid/v1",
@@ -153,7 +154,13 @@ test("phone model chooser uses the app type scale and keeps long names on screen
   await longName.click()
   await expect(picker).toHaveCount(0)
   await activateComposer(page)
-  await expect(page.getByRole("button", { name: "模型" })).toHaveAccessibleDescription(/a-very-long-model-name/)
+  const model = page.getByRole("button", { name: "模型" })
+  await expect(model).toHaveAccessibleDescription(/a-very-long-model-name/)
+  const label = model.getByText("a-very-long-model-name-that-must-wrap-inside-the-phone", { exact: true })
+  const size = await label.evaluate((node) => ({ full: node.scrollWidth, visible: node.clientWidth }))
+  expect(size.visible).toBeGreaterThan(32)
+  expect(size.visible).toBeLessThan(size.full)
+  await expect(page.getByTestId("message-composer").getByRole("button", { name: "发送", exact: true })).toBeInViewport()
 })
 
 test("worker activity opens in its own phone view without becoming a manager answer", async ({ page }) => {

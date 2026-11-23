@@ -28,7 +28,7 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 - iOS 支持从内容区中间横滑到右侧逐层返回；左缘返回和轮次导航条的横向滚动保持不变。 (`F-220`, `C-015`)
 
-- 手机输入框默认收为单行，点开后用图标选择模型和思考强度。子 Agent 和产出物移到输入框上方，停止按钮留在输入区，麦克风和停止按钮之间留出更多间距。停止时保留未发草稿。 (`F-220`, `F-222`, `F-224`, `F-230`, `C-002`, `C-017`)
+- 手机输入框默认收为单行，展开后显示当前模型名称和思考等级，点按可用的选项打开选择面板。子 Agent 和产出物移到输入框上方，停止按钮留在输入区，麦克风和停止按钮之间留出更多间距。停止时保留未发草稿。 (`F-220`, `F-222`, `F-224`, `F-230`, `C-002`, `C-017`)
 
 - Authorized Gateway chat roles prefer Responses when the source publishes it. Chat-only sources continue using Chat Completions. (`F-171`, `C-040`)
 
@@ -44,6 +44,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - 网关模式下，普通网关和第三方接入会根据可用的识别、朗读模型分别默认开启语音。语音设置仅显示网关允许编辑的参数，录音格式和超时等设置默认折叠。(`F-148`, `C-048`)
 
 ### Fixed
+
+- 手机关闭模型或思考强度面板后回到输入框，保持展开、草稿和光标位置。输入框和操作按钮随键盘上移，保持可见。 (`F-220`, `F-230`)
 
 - MCP tool results that report HTTP 429 remain visible on the original tool while the model continues the turn without an automatic replay. Clearly mismatched argument types, including array elements, report the field path before dispatch so the model can correct the call in the same turn. (`F-176`, `C-041`, #179, #180)
 

@@ -572,7 +572,7 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 
 ## C-017 Phone composer focus preserves the viewport
 
-- 消息输入框闲置时收为一行。聚焦扩展输入区，在下排用图标打开可用的模型或思考强度设置；关闭弹层或结束编辑后回到紧凑布局。产出物和子 Agent 入口位于输入区上方。证据 `mobile/e2e/composer-layout.spec.ts`、`mobile/e2e/ios-wait-layout.swift`。
+- 消息输入框闲置时收为一行。聚焦后展开，并显示当前模型名称和思考等级；可配置项打开选择面板，受管选择只读。关闭面板回到输入框，保持展开、草稿和光标，结束编辑后回到紧凑布局。键盘缩小可见区域时，输入框和操作留在可见区域上方。产出物和子 Agent 入口位于输入区上方。证据 `mobile/e2e/composer-layout.spec.ts`、`mobile/e2e/ios-wait-layout.swift`。
 
 - 收件箱搜索栏和「新建对话」位于列表底部，搜索输入使用 16 CSS px。键盘打开时，收件箱对齐可见视口，底栏留在结果下方、键盘上方，顶部 PC 导航仍可见。键盘收起后恢复收件箱高度并保留搜索词。证据 `mobile/src/components/home-bar.tsx`、`mobile/src/components/home-screen.tsx`、`mobile/e2e/composer-layout.spec.ts`、`mobile/e2e/ios-inbox-search.swift`。
 

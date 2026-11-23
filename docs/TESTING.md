@@ -8082,7 +8082,15 @@ and iPhone WebKit; install both with `cd mobile && npx playwright install chromi
 before `npm run e2e`. JSDOM cannot prove WebKit focus zoom.
 The compact composer case verifies the Add-to-field and microphone-to-Stop
 gaps, the lower Agents and Outputs entrances, and the model and thinking
-sheets on a 320 CSS px viewport. The live-stop case verifies one Stop and
+sheets on a 320 CSS px viewport. The expanded composer shows the current
+model name and thinking level, keeps the actions together on a narrow
+screen, and restores focus, draft and caret after closing or choosing an
+option. `testComposerFocusRevealsSettingsAndMovesThreadLinks` and
+`testThinkingPickerReturnsToEditing` check that the software keyboard
+returns without tapping the editor again, with the editor and actions above
+it. Browser coverage also drives a viewport resize and pan so a keyboard
+that shrinks the visual viewport without resizing the layout viewport still
+keeps the composer visible. The live-stop case verifies one Stop and
 retention of an unsent follow-up draft. The packaged XCTest
 `testComposerFocusRevealsSettingsAndMovesThreadLinks` uses
 `IOS_LAYOUT_QUERY='/?mock=1&tick=0&history=streamed-agents&speech=local'` and

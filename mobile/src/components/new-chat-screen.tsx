@@ -73,7 +73,7 @@ export function NewChatScreen({
     // mx-auto on a flex child does not stretch. Without a definite width the
     // chip row and the composer size themselves, and whatever passes the
     // edge cannot be scrolled back.
-    <main className="mx-auto flex h-full min-w-0 w-full max-w-lg flex-col overflow-hidden">
+    <main className="mx-auto flex h-full min-w-0 w-full max-w-lg flex-col justify-end overflow-hidden">
       <header className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-1.5">
         <Button
           type="button"

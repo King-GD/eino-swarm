@@ -30,6 +30,8 @@ import { insertSpeechText } from "../../../frontend/src/lib/speech-text"
 
 const noModels: ModelChoice[] = []
 const noLevels: string[] = []
+const settingClass = "flex h-9 min-w-0 max-w-36 items-center gap-1.5 rounded-full px-1.5 text-xs font-medium"
+const settingButton = "text-foreground/85 active:bg-accent disabled:opacity-40"
 
 export type ComposerExtra = {
   files: File[]
@@ -115,6 +117,7 @@ export function Composer({
   const [level, setLevel] = useState(reasoning)
   const [editing, setEditing] = useState(false)
   const [picker, setPicker] = useState<"model" | "thinking">()
+  const [keyboardInset, setKeyboardInset] = useState(0)
   const modelTextId = useId()
   const thinkingTextId = useId()
   const dock = useRef<HTMLDivElement>(null)
@@ -141,9 +144,21 @@ export function Composer({
   const showModel = !hideModel && (models.length > 0 || Boolean(onRefreshModels))
   const showThinking = reasoningLevels.length > 0
   const expanded = !capturingSpeech && (editing || Boolean(picker))
+  const followKeyboard = editing && !picker && !capturingSpeech
+  const groupActions = expanded && speechPhase === "idle"
   const modelUnavailableNow = modelUnavailable(models, pick)
   const lockedModel = models.length === 1 && Boolean(models[0]?.locked)
-  const modelText = choiceLabel(models, pick) || t("composer.model")
+  const modelName = choiceLabel(models, pick)
+  const modelText = modelName || t("composer.model")
+  const thinkingText = thinkingLabel(level)
+  const modelIndicator = <>
+    <Cpu className="size-3.5 shrink-0" aria-hidden />
+    <span id={modelTextId} className="truncate">{modelText}</span>
+  </>
+  const thinkingIndicator = <>
+    <Brain className="size-3.5 shrink-0" aria-hidden />
+    <span id={thinkingTextId} className="truncate">{thinkingText}</span>
+  </>
   const catalog = slashCommands?.map((command) => ({
     ...command,
     description: t(`slash.${command.id}`),
@@ -189,6 +204,28 @@ export function Composer({
       mouseDown.current = false
     }
   }, [editing])
+
+  useLayoutEffect(() => {
+    const viewport = window.visualViewport
+    const frame = dock.current?.parentElement
+    if (!followKeyboard || !viewport || !frame) return
+    // The iOS keyboard can shrink the visual viewport without resizing the layout.
+    const measure = () => {
+      const visibleBottom = viewport.pageTop - window.scrollY + viewport.height
+      setKeyboardInset(viewport.scale === 1 ? Math.max(0, frame.getBoundingClientRect().bottom - visibleBottom) : 0)
+    }
+    measure()
+    viewport.addEventListener("resize", measure)
+    viewport.addEventListener("scroll", measure)
+    window.addEventListener("resize", measure)
+    window.addEventListener("scroll", measure)
+    return () => {
+      viewport.removeEventListener("resize", measure)
+      viewport.removeEventListener("scroll", measure)
+      window.removeEventListener("resize", measure)
+      window.removeEventListener("scroll", measure)
+    }
+  }, [followKeyboard])
 
   // Grow with the text instead of scrolling a one-line slot, but stop before
   // the transcript loses its last answer.
@@ -288,10 +325,17 @@ export function Composer({
     onTune?.(next)
   }
 
+  const closePicker = () => {
+    setPicker(undefined)
+    // Keep focus restoration inside the tap so iOS can reopen the keyboard.
+    box.current?.focus({ preventScroll: true })
+  }
+
   return (
     <div
       ref={dock}
       className="min-w-0 shrink-0 bg-background px-3 pb-2 pt-1.5"
+      style={followKeyboard && keyboardInset > 0 ? { marginBottom: keyboardInset } : undefined}
       onBlur={(event) => {
         if (!mouseDown.current && !event.currentTarget.contains(event.relatedTarget)) setEditing(false)
       }}
@@ -475,77 +519,83 @@ export function Composer({
             expanded ? "order-first min-h-11 w-full flex-none px-2.5 pt-3" : "flex-1",
           )}
         />
-        {expanded ? <>
-          {catalogBusy && models.length === 0 && !hideModel ? (
-            <span role="status" className="flex size-9 items-center justify-center text-muted-foreground">
-              <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden />
-              <span className="sr-only">{t("composer.loading")}</span>
-            </span>
-          ) : null}
-          {showModel ? <button
-            type="button"
-            aria-label={t("composer.model")}
-            aria-haspopup="dialog"
-            aria-describedby={modelTextId}
-            title={modelUnavailableNow && !lockedModel ? t("composer.modelUnavailable") : modelText}
-            data-unavailable={modelUnavailableNow && !lockedModel ? "true" : undefined}
-            className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-accent disabled:opacity-40"
-            disabled={disabled || pending}
-            onClick={() => { setPicker("model"); box.current?.blur() }}
-          >
-            <Cpu className="size-4" aria-hidden />
-            <span id={modelTextId} className="sr-only">{modelText}</span>
-          </button> : null}
-          {showThinking ? <button
-            type="button"
-            aria-label={t("composer.thinking")}
-            aria-haspopup="dialog"
-            aria-describedby={thinkingTextId}
-            title={thinkingLabel(level)}
-            className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-accent disabled:opacity-40"
-            disabled={disabled || pending}
-            onClick={() => { setPicker("thinking"); box.current?.blur() }}
-          >
-            <Brain className="size-4" aria-hidden />
-            <span id={thinkingTextId} className="sr-only">{thinkingLabel(level)}</span>
-          </button> : null}
-          <span className="flex-1" aria-hidden />
-        </> : null}
-        <SpeechCapture disabled={disabled || pending}
-          onPhaseChange={setSpeechPhase}
-          onStart={() => {
-            setAddOpen(false)
-            speechAnchor.current = { text: textRef.current, caret: box.current?.selectionStart ?? textRef.current.length }
-            box.current?.blur()
-          }}
-          onText={(spoken) => {
-            const next = insertSpeechText(textRef.current, speechAnchor.current.text, speechAnchor.current.caret, spoken)
-            textRef.current = next.text
-            setText(next.text)
-            requestAnimationFrame(() => { box.current?.focus(); box.current?.setSelectionRange(next.caret, next.caret) })
-          }} />
-        {!capturingSpeech && onInsert && (!showStop || hasDraft) && !command ? (
-          <DeliveryMenu disabled={!ready} onSelect={(mode) => void fire((content, extra) => onInsert(mode, content, extra))} />
+        {expanded && (showModel || modelName || showThinking || level || catalogBusy && !hideModel) ? (
+          <div className="flex min-w-0 max-w-[calc(100%-2.25rem)] items-center gap-0.5">
+            {catalogBusy && models.length === 0 && !hideModel ? (
+              <span role="status" className="flex size-9 shrink-0 items-center justify-center text-muted-foreground">
+                <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden />
+                <span className="sr-only">{t("composer.loading")}</span>
+              </span>
+            ) : null}
+            {showModel ? <button
+              type="button"
+              aria-label={t("composer.model")}
+              aria-haspopup="dialog"
+              aria-describedby={modelTextId}
+              title={modelUnavailableNow && !lockedModel ? t("composer.modelUnavailable") : modelText}
+              data-unavailable={modelUnavailableNow && !lockedModel ? "true" : undefined}
+              className={cn(settingClass, settingButton)}
+              disabled={disabled || pending}
+              onClick={() => { setPicker("model"); box.current?.blur() }}
+            >
+              {modelIndicator}
+            </button> : modelName ? (
+              <span className={cn(settingClass, "text-muted-foreground")} title={modelName}>{modelIndicator}</span>
+            ) : null}
+            {showThinking ? <button
+              type="button"
+              aria-label={t("composer.thinking")}
+              aria-haspopup="dialog"
+              aria-describedby={thinkingTextId}
+              title={thinkingText}
+              className={cn(settingClass, settingButton, "shrink-0")}
+              disabled={disabled || pending}
+              onClick={() => { setPicker("thinking"); box.current?.blur() }}
+            >
+              {thinkingIndicator}
+            </button> : level ? (
+              <span className={cn(settingClass, "shrink-0 text-muted-foreground")} title={thinkingText}>{thinkingIndicator}</span>
+            ) : null}
+          </div>
         ) : null}
-        {showSubmit ? <button
-          type="submit"
-          aria-label={sendLabel}
-          title={sendLabel}
-          disabled={!ready}
-          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-30"
-        >
-          {pending ? <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden /> : <ArrowUp className="size-4" aria-hidden />}
-        </button> : null}
-        {showStop ? <button
-          type="button"
-          aria-label={stopLabel}
-          title={stopLabel}
-          onClick={() => void onStop?.()}
-          className={cn("flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground active:opacity-75",
-            capturingSpeech ? "ms-auto" : "ms-3")}
-        >
-          <Square className="size-3.5" fill="currentColor" aria-hidden />
-        </button> : null}
+        {expanded && !groupActions ? <span className="flex-1" aria-hidden /> : null}
+        <div className={groupActions ? "ms-auto flex shrink-0 items-end" : "contents"}>
+          <SpeechCapture disabled={disabled || pending}
+            onPhaseChange={setSpeechPhase}
+            onStart={() => {
+              setAddOpen(false)
+              speechAnchor.current = { text: textRef.current, caret: box.current?.selectionStart ?? textRef.current.length }
+              box.current?.blur()
+            }}
+            onText={(spoken) => {
+              const next = insertSpeechText(textRef.current, speechAnchor.current.text, speechAnchor.current.caret, spoken)
+              textRef.current = next.text
+              setText(next.text)
+              requestAnimationFrame(() => { box.current?.focus(); box.current?.setSelectionRange(next.caret, next.caret) })
+            }} />
+          {!capturingSpeech && onInsert && (!showStop || hasDraft) && !command ? (
+            <DeliveryMenu disabled={!ready} onSelect={(mode) => void fire((content, extra) => onInsert(mode, content, extra))} />
+          ) : null}
+          {showSubmit ? <button
+            type="submit"
+            aria-label={sendLabel}
+            title={sendLabel}
+            disabled={!ready}
+            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-30"
+          >
+            {pending ? <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden /> : <ArrowUp className="size-4" aria-hidden />}
+          </button> : null}
+          {showStop ? <button
+            type="button"
+            aria-label={stopLabel}
+            title={stopLabel}
+            onClick={() => void onStop?.()}
+            className={cn("flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground active:opacity-75",
+              capturingSpeech ? "ms-auto" : "ms-3")}
+          >
+            <Square className="size-3.5" fill="currentColor" aria-hidden />
+          </button> : null}
+        </div>
       </form>
       {picker === "model" && showModel ? (
         <ModelPicker
@@ -555,21 +605,21 @@ export function Composer({
           readOnlyLabel={lockedModel ? modelText : undefined}
           onSelect={(nextProviderId, nextModel) => {
             tune({ providerId: nextProviderId, model: nextModel, reasoning: level })
-            setPicker(undefined)
+            closePicker()
           }}
           onRefresh={lockedModel ? undefined : onRefreshModels}
           refreshBusy={refreshBusy}
           refreshError={refreshError}
-          onClose={() => setPicker(undefined)}
+          onClose={closePicker}
         />
       ) : null}
       {picker === "thinking" && showThinking ? (
         <ThinkingPicker levels={reasoningLevels} value={level}
           onSelect={(next) => {
             tune({ providerId: pick.providerId, model: pick.model, reasoning: next })
-            setPicker(undefined)
+            closePicker()
           }}
-          onClose={() => setPicker(undefined)} />
+          onClose={closePicker} />
       ) : null}
       {hint ? <p className="px-3 pt-1.5 text-[11px] text-muted-foreground">{hint}</p> : null}
     </div>
