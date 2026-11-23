@@ -46,6 +46,14 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- A restarted EASM source no longer leaves the panel spinning: loading follows the host's `source_status`, so an interrupted collection stops even though the steps it stored still say running.
+
+- The EASM receipt no longer claims the panel holds every number when an aggregation failed or was unavailable; it names the missing steps and still ends the turn instead of repeating them.
+
+- An EASM panel source reaches MCP only when the turn may mount MCP tools, so plan mode, a read-only turn or a restricted account gets `unavailable` steps instead of remote calls the account never allowed.
+
+- The phone app builds from a clean install: its TypeScript paths resolve the shared frontend packages from `mobile/node_modules` instead of requiring `frontend/node_modules`.
+
 - EASM supply-chain collection again requests only FOFA `product1,product5`, excluding service and support products that were unintentionally added.
 
 - The EASM asset graph shows the same loading spinner as attention trend and supply chain while waiting for its first data, and stops spinning when an empty collection ends.

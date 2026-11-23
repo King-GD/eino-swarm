@@ -2973,7 +2973,7 @@ agent lookups (its own MCP tools) → run_panel_source({subject, companies?, dom
 
 The producer performs no discovery lookup: which companies, domains and certificates belong to the portrait is the agent's finding, and every entry keeps the tool that reported it as its evidence. `easm.Graph` owns the tree invariants (one subject root, one parent per node, confirmation only ever upgrades), so a later batch can enrich the portrait but never re-parent or downgrade it, and a different subject starts a new portrait. Domain nodes are bounded by `max_domains`; entries over it are refused and counted in the receipt.
 
-The engine knows only the registry entry: no EASM fields enter the turn lifecycle, the task-panel protocol, the event stream or the phone transport. Step status lives in the panel state, so loading indicators survive reload and reach the phone through the ordinary revision. A failed aggregation marks its own step and runs outside the task's MCP execution admission, so it never blocks the agent's own tools.
+The engine knows only the registry entry: no EASM fields enter the turn lifecycle, the task-panel protocol, the event stream or the phone transport. Step status lives in the panel state, so loading indicators survive reload and reach the phone through the ordinary revision. A failed aggregation marks its own step. The producer's remote calls pass the same MCP admission as the agent's own tools, so a plan-mode, read-only or restricted-account turn gets `unavailable` steps instead of tools the agent was never given.
 
 The paired phone bundles the same plugin documents and `TaskPanelFrame` host.
 `mobile/src/lib/use-task-panels.ts` polls small manifests over the existing
