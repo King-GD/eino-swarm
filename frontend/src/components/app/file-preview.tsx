@@ -5,8 +5,9 @@ import { CopyButton } from "@/components/app/copy-button"
 import { HtmlFilePreview, PackageFilePreview, TableFilePreview } from "@/components/app/document-preview"
 import { MemoMarkdown } from "@/components/app/markdown"
 import { SOURCE_KIND_CLASS } from "@/components/app/source-code"
+import { WidePreviewDialog } from "@/components/app/wide-preview-dialog"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
+import { DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { api } from "@/lib/api"
 import type { FileLocation } from "@/lib/types"
 import { isHtmlPreviewPath, tableDelimiter } from "@/lib/documents/kind"
@@ -41,12 +42,7 @@ export function FilePreviewDialog({ threadId, path, location, canReveal, onRevea
   const name = path.slice(path.lastIndexOf("/") + 1)
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent
-        data-testid="file-preview"
-        className="flex h-[85dvh] w-[calc(100%-2rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0 data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-1/2"
-        onCloseAutoFocus={(event) => { event.preventDefault(); onReturnFocus() }}
-      >
+    <WidePreviewDialog testId="file-preview" onClose={onClose} onReturnFocus={onReturnFocus}>
         <header className="flex shrink-0 items-start gap-2 border-b px-5 py-4 pr-12">
           <FileText className="mt-0.5 size-4 shrink-0 text-file-doc" aria-hidden />
           <div className="min-w-0 flex-1">
@@ -92,8 +88,7 @@ export function FilePreviewDialog({ threadId, path, location, canReveal, onRevea
             ) : <FileSource path={path} text={file.text} />
           ) : null}
         </section>
-      </DialogContent>
-    </Dialog>
+    </WidePreviewDialog>
   )
 }
 

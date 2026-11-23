@@ -2,6 +2,15 @@
 
 Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user entry points and [CHANGELOG.md](../CHANGELOG.md) for history. Contract IDs are stable.
 
+## C-053 Project knowledge keeps stable pages and attributable sources
+
+- 范围：`F-138`，项目知识工具、PC／Web 浏览、备份与删除。一个项目一份 schema，文件为事实来源。启用幂等，普通状态读取不会创建 schema。
+- 文件身份：页面 ID 为项目内唯一稳定 slug。创建与更新校验规范化后的标题和别名；修改标题保留 ID。结构化关系按 schema 校验，缺少必填关系进入待处理。视图按路径截断环路，允许多父节点。正文 wikilink 与反链可从文件重建。
+- 写入：宿主从可信回合身份盖章。引擎内更新、删除和增量 schema 共用项目写入锁，以 revision 为前置条件，验证后原子发布文件。直接改文件不参与引擎锁。代理的知识工具只可新增 schema 定义。计划模式只读，Nuwa 与共享协作记录使用同样的写权限。知识工具按项目和回合绑定。
+- 证据：工具写入的历史引用必须是本项目中存在的可引用记录。时间、来源分类和持久身份由宿主确定。读时复核可用性，删除、倒带或项目归属变化后保留引用和页面，并拒绝将复用的 seq 当作原记录。可编辑的引导消息绑定保存时的正文指纹，改写同一消息后旧引用显示不可用。直接编辑的无盖章定位符按当前历史解析。可追溯引用仍需检查语义支持。外部 URI 不会触发宿主请求。
+- 客户端：右侧范围不改变标签值和现有激活行为。提炼选项只改变历史读取范围，两种提炼都提交项目内普通回合。HTTP 页面路径须是有效 slug。删除项目清除应用管理的知识目录，项目和完整备份包含 schema 与页面。
+- 实现 `internal/knowledge`、`internal/engine/knowledge.go`、`internal/server/project_knowledge.go`、`frontend/src/components/app/knowledge-panel.tsx`；验证：`internal/server/project_knowledge_test.go`、`internal/engine/knowledge_test.go`、`internal/backup/backup_test.go`、`frontend/e2e/project-knowledge.spec.ts`、`models/knowledge/ProjectKnowledge.tla`。
+
 ## C-048 Voice configuration follows the execution source
 
 - Without a version-1 audio declaration, automatic phone-owned Gateway playback selects PCM/SSE and segments prose at 200 Unicode characters; explicit PC and personal output formats and limits stay authoritative. This changes the automatic phone profile only, without changing the request deadline or global voice defaults. The service must deliver mono signed-16 LE 24 kHz PCM; a provider that ignores SSE or uses a different rate fails validation. Evidence: `mobile/src/lib/gateway-speech.ts`, `mobile/src/lib/gateway-speech.test.ts`, `mobile/src/lib/phone-gateway-voice.test.tsx`.
@@ -650,6 +659,7 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 ## C-025 Memory review evidence and commit
 
 - 状态：active；类型：lifecycle / consistency / data / compatibility；作用范围：自动复盘、notes 存储、skill 写入、复盘 Trace；关联功能：`F-420`、`F-160`；关联契约：`C-012`。
+- 新增、替换和技能降类的笔记内容归一化后须含至少一个 Unicode Letter 或 Number。拒绝时保留已存笔记和降类源技能。手工全量保存应用同一规则，可按归一化文本和已有次数保留历史条目，也可显式清空。读取与旧笔记的正常编辑不触发迁移。实现见 `internal/memory/store.go`、`internal/memory/reclassify.go`。回归见 `internal/memory/note_content_test.go`、`frontend/e2e/memory-boundary.spec.ts`。
 - 契约内容：memory 与 auto-review 开启时，成功回合完整复盘，不因 manager 曾写入任何一项记忆而跳过。失败项目回合只允许有效真实人类要求形成 notes，不读任务工具/助手/运行时续办/派生摘要作为新证据，不写技能或执行技能 fold；取消不自动复盘。手动 Review now 仍选择最近成功回合。
 - 输入边界：有效 steer 先应用修订与撤回；源事件优先人类、再近期按 agent/call ID 配对的工具交互、最后助手及派生文本，渲染保持时间顺序。单个事件源 2000、源总量 24000 rune 含完整生命周期前置块、framing、分隔与截断标记；成功回合先预留完整、有界的生命周期块，再从剩余预算选择人类/工具/claims，生成事实不伪造或截短真实身份；身份 framing 本身超出单源上限时省略整个来源组，工具配对不拆分，不截断身份字段或赋予被省略正文来源权限。当前 notes、技能目录和系统指令不在此源预算内，不承诺完整模型输入或费用的同一上限。取得项目复盘串行锁后、模型调用前读取当前 notes。
 - Worker 事实边界（`C-008`）：成功回合复盘先从完整持久化历史重建对应 turn 的生命周期事实，独立前置于选取的源转录与有界 briefing；历史恢复 ID、真实创建和拒绝调用不得混同。完整历史读取失败时跳过该成功回合的模型复盘并记录原因，仍保留成功回合确定性 skill fold，不从缺失数据宣称零创建。该事实前置块计入 24000 rune 源总预算，但不进入可引用源事件集合，不可据其内部文本伪造 seq 或写入依据；2000 rune 单项上限约束事件来源。失败回合 human-only 复盘不接收该前置块、briefing 或运行时/任务工具证据。

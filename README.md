@@ -108,7 +108,7 @@ a follow-up; ⌘Enter steers the current turn. **Stop** cancels it.
 What you get is a plan, workers in the Agents tab, a workspace in the Files tab,
 and a Trace tab with the turn id (`zwai trace <id>`). `/goal` keeps pursuing a
 standing objective. `/plan` explores and writes a plan before changing files.
-Composer, schedule, projects, memory and skills are in [Using zwai](docs/USAGE.md).
+Composer, schedule, projects, knowledge, memory and skills are in [Using zwai](docs/USAGE.md).
 
 ## Common commands
 
@@ -137,7 +137,7 @@ one engine per data directory. Closing a window does not stop a running turn.
 ├── remote/               Host Token and device identity; not in yaml
 ├── workspaces/<thread>/  standalone task files
 ├── library/skills/       procedures recorded from conversations in no project
-└── projects/<project>/   a managed working directory, and the project's memory
+└── projects/<project>/   managed working directory, memory and knowledge
 ```
 
 New project conversations have their own `.zwai-tasks/<thread>/` under the

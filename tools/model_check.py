@@ -36,6 +36,8 @@ healthy paint, an unknown capture does not become a blank frame, and the one
 reload precedes a bounded successor only in the foreground (C-034).
 models/skills/InstalledSkills.tla checks project-scoped skill publication,
 lookup, removal and separation from learned memory.
+models/knowledge/ProjectKnowledge.tla checks current write authority, revision
+comparison, indivisible refusal and retained history identity (C-053).
 models/sidechat/SideChat.tla checks that temporary replies stay within their
 request owner and never write to or take control of the main task.
 models/backup/DataBackup.tla checks that a restore waits until the data
@@ -213,6 +215,14 @@ MODELS = {
              "ReadIsProjectScoped", "LoadIsExternalOnly", "ListDisclosesMetadataOnly", "ReviewPreservesInstalled",
              "ProjectDeletionIsFinal"),
             (),
+        ),
+        Model(
+            "project-knowledge", ROOT / "models" / "knowledge" / "ProjectKnowledge.tla",
+            ("UseStaleOwner", "IgnoreReadOnly", "IgnoreRevision", "PublishPartial",
+             "AllowForeignSource", "ResolveByLocatorOnly", "IgnoreContentChange", "ReplaceSchema"),
+            ("TypeOK", "CurrentOwnerRequired", "RevisionRequired", "RefusalPreservesLibrary",
+             "SourceMustBeScoped", "OriginalIdentityRequired", "SchemaOnlyAppends"),
+            (("MaxRevision", 3),),
         ),
         Model(
             "ios-startup", ROOT / "models" / "mobile" / "IOSStartupPrompt.tla",
@@ -438,6 +448,36 @@ def _askpub(name: str, source: str, switches: tuple[str, ...] = (), violates: st
 
 
 CASES: tuple[Case, ...] = (
+    _case("knowledge-current", "project-bound revision writes, append-only schema and scoped evidence",
+          model="project-knowledge"),
+    *(_case("knowledge-fault-" + name, source, (switch,), invariant, model="project-knowledge")
+      for name, source, switch, invariant in (
+          ("stale-owner", "seeded: commit after its conversation leaves the project",
+           "UseStaleOwner", "CurrentOwnerRequired"),
+          ("readonly", "seeded: dispatch a write requested in planning mode",
+           "IgnoreReadOnly", "CurrentOwnerRequired"),
+          ("revision", "seeded: overwrite bytes published by a competing writer",
+           "IgnoreRevision", "RevisionRequired"),
+          ("partial", "seeded: publish partial bytes after an I/O failure",
+           "PublishPartial", "RefusalPreservesLibrary"),
+          ("foreign-source", "seeded: attribute history from another project",
+           "AllowForeignSource", "SourceMustBeScoped"),
+          ("reused-source", "seeded: old citation resolves to a new row at the same locator",
+           "ResolveByLocatorOnly", "OriginalIdentityRequired"),
+          ("edited-source", "readable user input changes without a new locator or timestamp",
+           "IgnoreContentChange", "OriginalIdentityRequired"),
+          ("schema-replace", "seeded: an append removes an existing schema definition",
+           "ReplaceSchema", "SchemaOnlyAppends"))),
+    *(_case("knowledge-reach-" + name, "C-053 behavior reachability", witness=witness,
+            model="project-knowledge")
+      for name, witness in (
+          ("write", "NeverAttributedWrite"),
+          ("read", "NeverOriginalRead"),
+          ("stale-refusal", "NeverStaleRefusal"),
+          ("readonly-refusal", "NeverReadOnlyRefusal"),
+          ("reused-unavailable", "NeverReusedLocatorUnavailable"),
+          ("edited-unavailable", "NeverEditedSourceUnavailable"),
+          ("append", "NeverSchemaAppend"))),
     _case("task-panel-cleanup-owner", "seeded: old producer cleanup changes successor metadata", ("CleanupOtherOwner",), "CleanupKeepsOwner", model="task-panel"),
     _case("task-panel-orphan", "seeded: startup leaves interrupted producer running", ("SkipRecovery",), "NoOrphanAfterRestore", model="task-panel"),
     _case("task-panel-connection-budget", "observed two-window draft PUT starvation when separate panel SSE occupies all six H1 slots", ("SeparatePanelConnection",), "SaveConnectionAvailable", model="task-panel"),

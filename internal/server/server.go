@@ -151,6 +151,7 @@ func New(opts Options) (*Server, error) {
 		api.GET("/projects/:id", s.getProject)
 		api.GET("/projects/:id/nuwa", s.getNuwa)
 		api.GET("/projects/:id/nuwa/events", s.streamNuwa)
+		s.registerProjectKnowledge(api)
 		api.PATCH("/projects/:id", s.patchProject)
 		api.DELETE("/projects/:id", s.deleteProject)
 		api.GET("/projects/:id/memory", s.getMemory)

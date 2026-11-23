@@ -335,11 +335,7 @@ type historyCanonicalRow struct {
 	Images      []ImageRef `gorm:"serializer:json"`
 }
 
-func readHistorySource(tx *gorm.DB, projectID string, ref HistoryReference, maxChars int) (HistorySource, error) {
-	table, body, origin, eventKind, observedError := "messages", "content", "s.source", "''", "''"
-	if ref.Kind == "event" {
-		table, body, origin, eventKind, observedError = "events", "text", "''", "s.kind", "s.err"
-	}
+func scopedHistorySourceQuery(tx *gorm.DB, table, projectID string, ref HistoryReference) *gorm.DB {
 	query := tx.Table(table+" AS s").Joins("JOIN threads AS th ON th.id=s.thread_id").Where("s.thread_id=? AND s.seq=?", ref.ThreadID, ref.Seq)
 	if projectID != "" {
 		query = query.Where("th.project_id=?", projectID)
@@ -347,6 +343,15 @@ func readHistorySource(tx *gorm.DB, projectID string, ref HistoryReference, maxC
 	if ref.Kind == "event" {
 		query = query.Where("s.kind IS NOT ?", "engine_restart_checkpoint")
 	}
+	return query
+}
+
+func readHistorySource(tx *gorm.DB, projectID string, ref HistoryReference, maxChars int) (HistorySource, error) {
+	table, body, origin, eventKind, observedError := "messages", "content", "s.source", "''", "''"
+	if ref.Kind == "event" {
+		table, body, origin, eventKind, observedError = "events", "text", "''", "s.kind", "s.err"
+	}
+	query := scopedHistorySourceQuery(tx, table, projectID, ref)
 	metadata := []string{"th.title", "th.project_id", "s.thread_id", "s.role", origin, "s.agent_id", eventKind, observedError, "s.created_at", "s.images"}
 	lengths := make([]string, len(metadata))
 	for i, column := range metadata {

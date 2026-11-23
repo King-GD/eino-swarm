@@ -12,6 +12,7 @@ This is the current user-facing capability map. The code and tests named below a
     - `F-135` Independent task coordination
     - `F-136` Nuwa project collaboration
     - `F-137` HTML/JS task panels
+    - `F-138` Project Markdown knowledge base
     - `F-140` Files and attachments
     - `F-145` Durable composer drafts
     - `F-146` Next-step composer suggestions
@@ -233,6 +234,15 @@ This is the current user-facing capability map. The code and tests named below a
 - 编辑重发移除来源事件后，已打开的 Collaboration 视图会将原引用标记为不可用。删除迁移过的会话会清理它在历史项目中创建的共享工作和版本，其他会话的引用保留。关联契约 `C-037`，验证见 `internal/server/nuwa_source_lifecycle_test.go`、`frontend/e2e/nuwa.spec.ts`。
 - Agent 可用已见的工具调用 ID 将自己的持久回执关联到共享记录。活跃 worker 跨轮保留时可引用当前执行的回执，冷恢复后可引用新执行产生的回执。事实保留原始作者，链接指向实际记录结果的轮次。持久化失败时写入会明确拒绝。验证见 `internal/engine/nuwa_adopted_evidence_test.go`、`internal/engine/nuwa_worker_restore_test.go` 和 `internal/store/nuwa_own_tool_evidence_test.go`。
 - 升级时回填旧 turn 未记录的项目归属，既有 worker 可跨重启恢复。已记录归属与当前项目不符时，显式继续目标返回冲突并保留 checkpoint，归属修复后可继续。见 [归属迁移](DATA_MODEL.md#turns--one-request-and-everything-done-to-answer-it)。
+
+### F-138 Project Markdown knowledge base
+
+- 目的：在一个项目内用可编辑的 Markdown 页面积累、查找和追溯跨对话的知识。
+- 入口：PC／Web 右侧 Knowledge 标签、提炼菜单、对话 wikilink、项目回合的 `read_knowledge`／`record_knowledge` 和项目知识库 HTTP 路由。Agents、Files、Trace、任务面板归任务组，Memory、Collaboration、Knowledge 归项目组。
+- 输入与输出：项目 schema、稳定页面 ID、Markdown、历史引用；提供类型或关系树、待处理项、单页、反链、来源、Trace 和宽幅预览。提炼当前任务／项目会在同项目创建带标题的普通对话。
+- 前置与失败：未启用时可显式启用或从提炼入口自动启用。无项目对话提示移动到项目。相同名称、旧 revision 和错误来源拒绝写入；已保存来源失效时给出提示。
+- 契约：`C-053`、`C-036`、`C-044`。
+- 实现证据：`internal/knowledge`、`internal/engine/knowledge.go`、`internal/server/project_knowledge.go`、`frontend/src/components/app/knowledge-panel.tsx`、`frontend/e2e/project-knowledge.spec.ts`。
 
 ### F-140 Files and attachments
 
@@ -566,6 +576,8 @@ This is the current user-facing capability map. The code and tests named below a
 - 技能查看统计：manager/worker 的成功 skill_view 累加 usage.json，列表、HTTP 查看及复制不计数；面板显示次数、最近查看与可编辑阈值的陈旧 Badge，以及每个技能的成本（索引行字数、正文字数）和索引总字数中未被查看技能所占部分；整理时陈旧候选附带相同成本，作为裁剪依据。merge 累加来源统计、delete 删除边车、copy 从零开始，正文修改时间和摘要不变。整理陈旧候选仅供模型判断，候选名单随结果／原 turn Trace 保留。入口：Memory、Settings → Memory、skill_view；关联契约：`C-025`、`C-012`；实现证据：`internal/memory/skill_usage.go`、`internal/engine/review_tidy.go`、`internal/server/projects.go`；测试证据：`internal/memory/skill_usage_test.go`、`internal/memory/prompt_stale_test.go`、`internal/server/skill_usage_copy_test.go`、`internal/server/memory_stale_test.go`、`internal/engine/review_stale_test.go`、`frontend/e2e/memory-boundary.spec.ts`。
 
 - 笔记以“不知道会走偏”为判据，常驻注入偏好、事实、硬约束及已有技能指针；技能以“不知道如何做成”为判据，按需加载适用条件、步骤、验证及失败分支。仅某流程相关的约束留在技能前置条件；description 写适用时机。指针仅在原样引用已有技能名且未复述正文时豁免重叠拒绝；纯文本中的不存在名称不能取得豁免。关联契约：`C-025`；实现证据：`internal/memory/prompt.go`、`internal/memory/library.go`、`internal/memory/tools.go`、`internal/memory/skills.go`；测试证据：`internal/memory/prompt_test.go`、`internal/memory/store_test.go`。
+
+- 项目笔记新增、替换、技能降类和面板保存均要求新条目至少包含一个 Unicode 字母或数字。面板可保留、纠正或删除历史条目。保存被拒时，用户可编辑原草稿后重试。关联 `C-025`。回归见 `internal/memory/note_content_test.go`、`frontend/e2e/memory-boundary.spec.ts`。
 
 - 目的：保留本机设置、项目说明和技能；使用者：PC 用户；入口：Settings、Memory、技能管理；输入：配置及项目文件；输出：后续运行可用的上下文；前置条件：本机数据目录；失败表现：保存或解析错误；关联契约：`C-009`、`C-012`、`C-025`；实现证据：`internal/config`, `internal/memory`, `docs/CONFIG.md`。
 - 会话摘要与成功回合记忆复核接收从完整历史重建、按 turn 归属的持久化 worker 生命周期事实；摘要预算与落库优先保留事实，复核先从源总 rune 预算预留完整事实块并独立前置，再选择事件来源，不把事实或派生摘要当作可引用写入来源。失败回合 human-only 不接收该前置块；旧摘要和模型自述只作待核对叙述，冲突创建量不能提升为执行证据。旧笔记／技能仍可在 Memory 中人工编辑，系统不按用户业务关键词清洗。关联契约：`C-008`、`C-012`；实现／测试证据：`internal/engine/worker_lifecycle_facts.go`、`internal/engine/worker_lifecycle_facts_test.go`、`internal/engine/session_memory.go`、`internal/engine/review_source.go`。

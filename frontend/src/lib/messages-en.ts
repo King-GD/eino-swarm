@@ -11,6 +11,7 @@ import { draftEN } from "./messages-draft"
 import { agentFailureEn } from "./messages-agent-failure-en"
 import { mcpEN } from "./messages-mcp"
 import { backupEn } from "./messages-backup"
+import { knowledgeEn } from "./messages-knowledge"
 
 /** English UI chrome. Keys are stable; Chinese lives in messages-zh.ts.
  *  Agent replies and protocol markers (quoted-send wrappers) stay English. */
@@ -22,6 +23,7 @@ export const en = {
   ...modelSettingsEn,
   ...speechEn,
   ...backupEn,
+  ...knowledgeEn,
   ...mcpEN,
   ...backoffEn,
   ...desktopAccountEn,

@@ -430,7 +430,7 @@ func (e *Engine) republishWorkerSurface(reg *swarm.Registry, toolset *tools.Set,
 	if e == nil || reg == nil {
 		return
 	}
-	e.wireWorkerSurface(reg, toolset, pc)
+	e.wireWorkerSurface(reg, toolset, pc, turn)
 	e.wireNuwaRegistry(reg, toolset, pc, turn)
 	e.wireTaskPanelRegistry(reg, toolset, turn)
 	config := reg.WorkerConfiguration()

@@ -30,6 +30,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -61,6 +62,8 @@ var (
 	// ErrConflict means the notes changed after the caller read them, so
 	// saving would erase whatever landed in between.
 	ErrConflict = errors.New("memory: these notes were changed after you loaded them")
+	// ErrNoteContent means a new note contains no letters or numbers.
+	ErrNoteContent = errors.New("memory: each new note must contain a letter or number")
 )
 
 // ConflictError reports an edit written against a revision that is no longer
@@ -247,8 +250,8 @@ func revisionOf(text string) string {
 // should not have to handle an error.
 func (s *Store) Add(content string) (Snapshot, bool, error) {
 	content = normalizeEntry(content)
-	if content == "" {
-		return Snapshot{Limit: s.limit}, false, fmt.Errorf("memory: an empty note has nothing to remember")
+	if !hasNoteContent(content) {
+		return Snapshot{Limit: s.limit}, false, ErrNoteContent
 	}
 	if err := tooLong(content, s.entryMax); err != nil {
 		return Snapshot{Limit: s.limit}, false, err
@@ -285,8 +288,11 @@ func (s *Store) Replace(oldText, content string) (Snapshot, error) {
 func (s *Store) replace(oldText, content string) (Snapshot, string, error) {
 	oldText = strings.TrimSpace(oldText)
 	content = normalizeEntry(content)
-	if oldText == "" || content == "" {
+	if oldText == "" {
 		return Snapshot{Limit: s.limit}, "", fmt.Errorf("memory: replace needs the text to find and the text to store")
+	}
+	if !hasNoteContent(content) {
+		return Snapshot{Limit: s.limit}, "", ErrNoteContent
 	}
 	if err := tooLong(content, s.entryMax); err != nil {
 		return Snapshot{Limit: s.limit}, "", err
@@ -399,16 +405,35 @@ func (s *Store) Overwrite(text string) (Snapshot, error) {
 func (s *Store) OverwriteIf(rev, text string) (Snapshot, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if rev != "" {
+	entries := splitEntries(text)
+	// A hand edit can retain each historical entry as many times as it
+	// already occurs. Validate additions without making old files uneditable.
+	legacy := make(map[string]int)
+	for _, entry := range entries {
+		if !hasNoteContent(entry) {
+			legacy[entry]++
+		}
+	}
+	if rev != "" || len(legacy) != 0 {
 		current, err := s.read()
 		if err != nil {
 			return current, err
 		}
-		if current.Rev != rev {
+		if rev != "" && current.Rev != rev {
 			return current, &ConflictError{Current: current}
 		}
+		for _, entry := range current.Entries {
+			if legacy[entry] > 1 {
+				legacy[entry]--
+			} else {
+				delete(legacy, entry)
+			}
+		}
+		if len(legacy) != 0 {
+			return current, ErrNoteContent
+		}
 	}
-	return s.write(splitEntries(text), 0)
+	return s.write(entries, 0)
 }
 
 // write persists entries, refusing a result that does not fit. adding is how
@@ -496,6 +521,12 @@ func normalizeEntry(s string) string {
 		}
 	}
 	return strings.TrimSpace(strings.Join(kept, "\n"))
+}
+
+func hasNoteContent(content string) bool {
+	return strings.ContainsFunc(content, func(r rune) bool {
+		return unicode.IsLetter(r) || unicode.IsNumber(r)
+	})
 }
 
 func writeAtomic(path, body string) error {

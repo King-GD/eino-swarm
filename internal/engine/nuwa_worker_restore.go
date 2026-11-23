@@ -95,11 +95,11 @@ func (e *Engine) workerConfigurationForTag(ctx context.Context, threadID, tag st
 	if err != nil {
 		return swarm.WorkerConfig{}, err
 	}
-	pc, err := e.projectContextFor(thread)
+	pc, err := e.projectContextFor(thread, turn)
 	if err != nil {
 		return swarm.WorkerConfig{}, err
 	}
-	set, err := e.conversationToolsForExecution(ctx, thread, e.turnWebExecution(thread, turn), turn.NuwaReadOnly)
+	set, err := e.conversationToolsForExecution(ctx, thread, e.turnWebExecution(thread, turn), turn.NuwaReadOnly, pc.hasKnowledge())
 	if err != nil {
 		return swarm.WorkerConfig{}, err
 	}

@@ -2,6 +2,54 @@ import { expect, test } from "@playwright/test"
 import fs from "node:fs/promises"
 import path from "node:path"
 
+test("a rejected notes draft remains editable and saves after correction", async ({ page, request }) => {
+  const { settings } = await (await request.get("/api/settings")).json()
+  const name = `Note editing ${Date.now()}`
+  const response = await request.post("/api/projects", { data: { name } })
+  expect(response.ok()).toBe(true)
+  const { project } = await response.json()
+  const memoryPath = `/api/projects/${project.id}/memory`
+  const savedText = "Retain author attribution."
+  const invalidDraft = `${savedText}\n\n——`
+  try {
+    const configured = await request.put("/api/settings", { data: { ui: { ...settings.ui, locale: "en" } } })
+    expect(configured.ok()).toBe(true)
+    const seed = await request.put(memoryPath, { data: { text: savedText } })
+    expect(seed.ok()).toBe(true)
+    const { memory: before } = await seed.json()
+
+    await page.goto("/")
+    await page.evaluate(() => localStorage.setItem("zwai.locale", "en"))
+    await page.reload()
+    await page.getByRole("button", { name: `Project options for ${name}` }).click()
+    await page.getByRole("menuitem", { name: "View skills" }).click()
+    const notes = page.getByRole("textbox", { name: "Project notes" })
+    const save = page.getByRole("button", { name: "Save notes" })
+    await expect(notes).toHaveValue(savedText)
+
+    await notes.fill(invalidDraft)
+    const rejected = page.waitForResponse(res => res.url().endsWith(memoryPath) && res.request().method() === "PUT")
+    await save.click()
+    const refusal = await rejected
+    expect(refusal.status()).toBe(400)
+    expect((await refusal.json()).error).toEqual(expect.any(String))
+    await expect(notes).toHaveValue(invalidDraft)
+    await expect(save).toBeEnabled()
+    const afterRefusal = await (await request.get(memoryPath)).json()
+    expect(afterRefusal.memory.memory).toMatchObject({ text: savedText, rev: before.rev })
+
+    const corrected = `${savedText}\n\n保持原顺序。`
+    await notes.fill(corrected)
+    await save.click()
+    await expect(save).toBeHidden()
+    const afterSave = await (await request.get(memoryPath)).json()
+    expect(afterSave.memory.memory.text).toBe(corrected)
+  } finally {
+    await request.put("/api/settings", { data: { ui: settings.ui } })
+    await request.delete(`/api/projects/${project.id}`)
+  }
+})
+
 // The distinction must be visible where users edit memory, in either language.
 test("the memory panel explains the different loading rules in both languages", async ({ page, request }, info) => {
   const { settings } = await (await request.get("/api/settings")).json()

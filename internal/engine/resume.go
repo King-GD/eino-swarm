@@ -171,11 +171,11 @@ func (e *Engine) resumeTurn(restoreCtx context.Context, turn *store.Turn, snapsh
 	if err != nil {
 		return err
 	}
-	pc, err := e.projectContextFor(th)
+	pc, err := e.projectContextFor(th, turn)
 	if err != nil {
 		return err
 	}
-	toolset, err := e.conversationToolsForExecution(restoreCtx, th, e.turnWebExecution(th, turn), turn.NuwaReadOnly)
+	toolset, err := e.conversationToolsForExecution(restoreCtx, th, e.turnWebExecution(th, turn), turn.NuwaReadOnly, pc.hasKnowledge())
 	if err != nil {
 		return err
 	}

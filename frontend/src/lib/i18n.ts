@@ -157,7 +157,7 @@ export function t(locale: Locale, key: MessageKey, vars?: Vars): string {
   let out = catalogs[locale][key] || en[key]
   if (!vars) return out
   for (const [name, value] of Object.entries(vars)) {
-    out = out.replaceAll(`{${name}}`, String(value))
+    out = out.replaceAll(`{${name}}`, () => String(value))
   }
   return out
 }

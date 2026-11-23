@@ -25,9 +25,10 @@ const (
 	plansDirName  = "plans"
 	planFileName  = "PLAN.md"
 	// A project's own subdirectories: the working directory zwai manages when
-	// the user did not name one, and the memory store.
+	// the user did not name one, the memory store, and the knowledge base.
 	projectWorkspaceName = "workspace"
 	projectMemoryName    = "memory"
+	projectKnowledgeName = "knowledge"
 	// Conversations that belong to no project still record procedures.
 	// They live here, not under a project, so a later copy is an explicit
 	// choice rather than every chat inheriting them.
@@ -98,6 +99,11 @@ func ManagedTaskPath(binding, threadID string) bool {
 // every `git status`.
 func (c *Config) ProjectMemoryDir(projectID string) string {
 	return filepath.Join(c.ProjectDir(projectID), projectMemoryName)
+}
+
+// ProjectKnowledgeDir contains the project's wiki schema and Markdown pages.
+func (c *Config) ProjectKnowledgeDir(projectID string) string {
+	return filepath.Join(c.ProjectDir(projectID), projectKnowledgeName)
 }
 
 // LibraryDir is the shared skill library: MEMORY.md is unused, skills live

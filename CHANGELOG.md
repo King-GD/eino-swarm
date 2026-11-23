@@ -14,6 +14,11 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 - Task panels can show an enterprise asset portrait (EASM). The agent confirms the subject, performs the discovery lookups itself, and pushes each finished batch of companies, domains and certificates into the panel, which merges the batches into one graph; on the batch that carries the final asset query the panel collects the asset totals, attention trend and components itself. Each aggregation shows its own progress and a failure never stops the others. The panel follows the app language on PC, Web and paired phones.
 
+- PC and Web projects can keep a Markdown knowledge base with linked pages,
+  sources, relationship views and a pending queue. The Knowledge panel can
+  start a normal conversation to distill the current task or project history.
+  (`F-138`, `C-053`, #185)
+
 - Desktop and Web answers turn a workspace file path into a preview button. Clicking it opens the same file preview as the Files tab. When several files share that name, the preview lists them and opens the one you choose. (`F-140`)
 
 - Desktop, web, terminal and phone can explicitly turn thinking off for a conversation. Models that continue to report reasoning surface a request error. (`F-130`, `F-220`, `F-230`, `C-009`)
@@ -30,6 +35,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - The EASM panel takes the agent's own findings instead of looking them up: the Go producer no longer queries the company, investment, branch, filing, asset-rule or certificate sources, and the certificates the agent reports never add domains on their own. `task_panels.easm` binds only `stats`, `heat` and `product_rules`; retired roles in an existing configuration are dropped when it loads, and `max_domains` now bounds the domain nodes of the whole portrait instead of the certificate lookups of one run.
 
 - Settings → Tools → Task panels shows the common panel options. EASM lookup bindings and limits are managed through `task_panels.easm` in the configuration file.
+
+- The right panel groups Agents, Files, Trace and agent-opened panels under
+  Task, and Memory, Collaboration and Knowledge under the project name.
+  Conversations outside projects show Shared library. (`F-138`)
 
 - Side chat answers from the current task's findings, project notes and recorded skills. It can search that task and open a skill, and it still cannot change the task. (`F-147`, `C-042`)
 
@@ -69,6 +78,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - EASM supply-chain collection again requests only FOFA `product1,product5`, excluding service and support products that were unintentionally added.
 
 - The EASM asset graph shows the same loading spinner as attention trend and supply chain while waiting for its first data, and stops spinning when an empty collection ends.
+
+- Project memory refuses new notes without letters or numbers. The Memory editor keeps a refused draft available for correction, and existing notes can still be edited or removed. (`F-420`, `C-025`, #187)
 
 - 手机关闭模型或思考强度面板后回到输入框，保持展开、草稿和光标位置。输入框和操作按钮随键盘上移，保持可见。 (`F-220`, `F-230`)
 

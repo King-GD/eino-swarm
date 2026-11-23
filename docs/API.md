@@ -1766,7 +1766,7 @@ schemas and their trust/CAS boundaries are described in [Nuwa](NUWA.md) and
 
 ### `DELETE /api/projects/:id` → `204`
 
-Deletes the project, **its conversations and everything it remembered**. A
+Deletes the project, **its conversations, memory and knowledge files**. A
 `workdir` the user supplied is never touched; a directory zwai created for the
 project is removed with it.
 
@@ -1775,6 +1775,59 @@ project is removed with it.
 Body `{"ids": ["pj_a", "pj_b"]}`. Pins that order in the sidebar. Unknown ids are
 `404`; a repeated id is `400`. An empty list is a no-op. Responds with the same
 `{"projects": […]}` as `GET /api/projects`.
+
+### `GET /api/projects/:id/knowledge` · `POST /api/projects/:id/knowledge`
+
+Both return a status object with `enabled`, `page_count` and
+`pending_count`. An enabled project also returns `schema` and its content
+`revision`. POST needs no body. It publishes a neutral starting schema
+only when absent. GET for an existing project with no schema returns
+`{"enabled":false,"page_count":0,"pending_count":0}`. An unknown project
+returns `404`.
+
+### `GET /api/projects/:id/knowledge/tree?view=type`
+
+Use `type` for the type tree (the default), `pending` for lint items, or a
+view ID defined in the project schema. The response contains `view`,
+`nodes` and, when present, `issues`. A node has `id`, `label`, `kind`
+(`type`, `relation`, `page`), and optional `type`, `aliases`, `children`
+and `cycle`. A bounded graph view can set `truncated`. Lint can report
+`broken_link`, `stale`, `missing_relation` and `invalid_page`. An unknown
+view is `400`; a disabled knowledge base is `404` with `knowledge_disabled`.
+
+### `GET /api/projects/:id/knowledge/pages/:page`
+
+The page ID uses lowercase ASCII letters, digits and single hyphens between
+components, up to 100 bytes. Windows device names, colon and path separators
+are refused. The response includes page metadata, `body` (Markdown),
+`revision`, `outgoing`, `incoming`, `mentions`, `unresolved` and
+`sources`. Relationship entries carry `relation`, `label`, `target`,
+`resolved` and a `page` reference when resolved. Historical sources carry
+`kind`, `thread_id`, `seq`, their original `timestamp` and
+`classification`, current `available` and, when available, `turn_id`.
+An external URI has classification `external`. `updated_thread` and
+`updated_turn` together link to the original update when it is still
+available in the project. Missing pages return `404` with
+`knowledge_page_not_found`. The HTTP surface reads pages and schema. The
+project's `record_knowledge` agent tool handles writes. An un-stamped locator
+inserted by direct file editing resolves against current history. Tool-created
+citations carry the original record identity across project backup and restore.
+An editable steer message includes its caption's content fingerprint in that
+identity, so changing its text makes a citation of the former text unavailable.
+
+The agent reads with `read_knowledge` actions `schema`, `search`, `page`
+and `lint`. `record_knowledge` accepts `write_page`, `delete_page` or
+`append_schema`. A page write supplies its ID, type, title, Markdown body
+and optional fields, aliases, links, as-of date and sources. Existing page or
+schema mutations require the revision returned by a read. Source arguments
+are either `{uri}` or `{kind, thread_id, seq}`; a full page update preserves
+source references when it omits `sources` and clears them with an empty array.
+
+### `POST /api/projects/:id/knowledge/reveal`
+
+On a desktop with the reveal capability, open the enabled knowledge folder
+in the file manager and return `{"revealed":"<directory>"}`. The route
+takes no body. Without the desktop capability it returns `501`.
 
 ### `GET /api/projects/:id/memory`
 
@@ -1845,9 +1898,10 @@ snapshot in `memory`, so the panel can show both without a second round trip
 that could itself be stale. Omit `rev` and the write is unconditional, which is
 what a client that never read has to do.
 
-Responds with the new snapshot `{"memory": {…}}`. The character limit still
-applies: notes that no longer fit in a prompt are the same problem whoever
-typed them (`400`).
+Responds with the new snapshot `{"memory": {…}}`. A save returns `400` if it
+exceeds the character budget or introduces a note without a Unicode letter
+or number. Existing entries without either may be kept up to their stored
+occurrence count. An empty editor clears the notes.
 
 ### `POST /api/projects/:id/memory/tidy-skills` → `200`
 

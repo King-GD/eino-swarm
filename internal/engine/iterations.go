@@ -143,9 +143,10 @@ func (rt *runtime) runManager(ctx context.Context, turn *store.Turn, reg *swarm.
 		executionGuidance = incrementalExecutionInstruction
 	}
 	managedExecIndex := rt.managedExecToolIndex(turn, th, toolset, resumed)
+	knowledgeReadOnly := turn.NuwaReadOnly || (th != nil && th.PlanMode)
 	tail := applyAccountInstruction(managerExtra(e.cfg, th, pc, e.scheduleLines(rt.threadID), turn.NuwaEnabled), e.pool.AccountInstruction(turn.ProviderID))
 	instruction := managerPrompt(toolset, JoinPromptSections(historyPrompt(toolset, audience), taskCoordinationPrompt, executionGuidance,
-		tail, humanReply, rt.finalGoalWorkerSection(th), e.taskPanelInstruction(), toolset.TaskFileInstruction), turn.NuwaEnabled, managedExecIndex >= 0)
+		tail, pc.knowledgePrompt(knowledgeReadOnly), humanReply, rt.finalGoalWorkerSection(th), e.taskPanelInstruction(), toolset.TaskFileInstruction), turn.NuwaEnabled, managedExecIndex >= 0)
 	// Fresh slice: pc.managerTools may return the workspace toolset's
 	// backing array, and appending complete_goal / block_goal in place
 	// would hand them to every sub-agent.
@@ -175,7 +176,8 @@ func (rt *runtime) runManager(ctx context.Context, turn *store.Turn, reg *swarm.
 			managerTools = append(managerTools, e.nuwaWorkTools(pc.project.ID, toolset.WorkspaceDir, turn, turn.NuwaReadOnly || (th != nil && th.PlanMode))...)
 		}
 	}
-	if turn.NuwaReadOnly || (th != nil && th.PlanMode) {
+	managerTools = append(managerTools, e.knowledgeTools(pc, turn, knowledgeReadOnly)...)
+	if knowledgeReadOnly {
 		managerTools = dropPlanMutatingManagerTools(managerTools)
 		tid := rt.threadID
 		managerTools = append(managerTools, ProposePlanTool(func(markdown string) (string, error) {

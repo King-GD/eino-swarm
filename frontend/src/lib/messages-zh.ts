@@ -11,6 +11,7 @@ import { draftZH } from "./messages-draft"
 import { agentFailureZh } from "./messages-agent-failure-zh"
 import { mcpZH } from "./messages-mcp"
 import { backupZh } from "./messages-backup-zh"
+import { knowledgeZh } from "./messages-knowledge"
 
 import type { en } from "./messages-en"
 
@@ -23,6 +24,7 @@ export const zh: { [K in keyof typeof en]: string } = {
   ...modelSettingsZh,
   ...speechZh,
   ...backupZh,
+  ...knowledgeZh,
   ...mcpZH,
   ...backoffZh,
   ...desktopAccountZh,

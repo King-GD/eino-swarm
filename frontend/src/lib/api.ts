@@ -43,6 +43,7 @@ import { defaultSpeechSettings } from "./speech-types"
 import type { ClientCatalog } from "./local-clients"
 import type { SendImage } from "./paste-image"
 import type { ThreadLog } from "./thread-log"
+import { knowledgePath, type KnowledgePage, type KnowledgeStatus, type KnowledgeTree } from "./knowledge"
 import type { ComposerDraftRecord } from "./composer-draft"
 import type { MCPServerInput, MCPServerView, MCPToolCatalog } from "./mcp-settings"
 
@@ -580,6 +581,17 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ ids }),
     }).then((r) => r.projects),
+
+  knowledgeStatus: (projectId: string, signal?: AbortSignal) =>
+    request<KnowledgeStatus>(knowledgePath(projectId), { signal, cache: "no-store" }),
+  enableKnowledge: (projectId: string) =>
+    request<KnowledgeStatus>(knowledgePath(projectId), { method: "POST" }),
+  knowledgeTree: (projectId: string, view: string, signal?: AbortSignal) =>
+    request<KnowledgeTree>(`${knowledgePath(projectId)}/tree?view=${encodeURIComponent(view)}`, { signal, cache: "no-store" }),
+  knowledgePage: (projectId: string, page: string, signal?: AbortSignal) =>
+    request<KnowledgePage>(`${knowledgePath(projectId)}/pages/${encodeURIComponent(page)}`, { signal, cache: "no-store" }),
+  revealKnowledge: (projectId: string) =>
+    request<void>(`${knowledgePath(projectId)}/reveal`, { method: "POST" }),
 
   memory: (projectId: string) =>
     request<{ memory: ProjectMemory }>(`/api/projects/${projectId}/memory`).then(

@@ -15,14 +15,18 @@ func (e *Engine) newTurnRegistry(builder swarm.ModelBuilder, toolset *tools.Set,
 	reg := swarm.NewRegistry()
 	reg.ModelBuilder = builder
 	e.bindSwarmLimits(reg)
-	e.wireWorkerSurface(reg, toolset, pc)
+	var turn *store.Turn
 	if len(turns) > 0 {
-		e.wireNuwaRegistry(reg, toolset, pc, turns[0])
-		e.wireTaskPanelRegistry(reg, toolset, turns[0])
+		turn = turns[0]
+	}
+	e.wireWorkerSurface(reg, toolset, pc, turn)
+	if turn != nil {
+		e.wireNuwaRegistry(reg, toolset, pc, turn)
+		e.wireTaskPanelRegistry(reg, toolset, turn)
 		config := reg.WorkerConfiguration()
-		config.Tag = turns[0].ID
-		config.RecoveredModels = turns[0].WorkerModelRecovery
-		ownerTurn := turns[0]
+		config.Tag = turn.ID
+		config.RecoveredModels = turn.WorkerModelRecovery
+		ownerTurn := turn
 		if handlers := e.nuwaContextHandlers(ownerTurn); len(handlers) > 0 {
 			config.WorkerMiddlewares = func(swarm.AgentIdentity) []adk.ChatModelAgentMiddleware {
 				return append([]adk.ChatModelAgentMiddleware(nil), handlers...)

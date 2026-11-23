@@ -111,8 +111,11 @@ func seed(t *testing.T) seeded {
 	writeText(t, filepath.Join(cfg.ProjectMemoryDir(project.ID), "MEMORY.md"), "memory-alpha")
 	writeText(t, filepath.Join(cfg.ProjectMemoryDir(project.ID), "skills", "local", "SKILL.md"), "project-skill")
 	writeText(t, filepath.Join(cfg.ProjectDir(project.ID), "installed-skills", "demo", "SKILL.md"), "installed-skill")
+	writeText(t, filepath.Join(cfg.ProjectDir(project.ID), "knowledge", "schema.yaml"), knowledgeSchemaFixture)
+	writeText(t, filepath.Join(cfg.ProjectDir(project.ID), "knowledge", "pages", "entries", "entry-one.md"), knowledgePageFixture)
 	writeText(t, filepath.Join(cfg.ProjectWorkspaceDir(project.ID), "note.txt"), "managed-note")
 	writeText(t, filepath.Join(cfg.ProjectMemoryDir(other.ID), "MEMORY.md"), "memory-beta")
+	writeText(t, filepath.Join(cfg.ProjectDir(other.ID), "knowledge", "schema.yaml"), knowledgeSchemaFixture+"# other project schema\n")
 	writeText(t, filepath.Join(cfg.ThreadInputsDir(thread.ID), "img1"), "image-bytes")
 	writeText(t, cfg.ThreadPlanFile(thread.ID), "plan-body")
 	writeText(t, filepath.Join(cfg.WorkspaceDir(thread.ID), "out.txt"), "workspace-out")
@@ -129,6 +132,9 @@ func seed(t *testing.T) seeded {
 	}
 	return seeded{dir: dir, cfg: cfg, st: st, project: project, other: other, thread: thread, standalone: standalone, external: external, db: sqlDB}
 }
+
+const knowledgeSchemaFixture = "version: 1\ntypes:\n  - id: entry\n    dir: entries\n"
+const knowledgePageFixture = "---\nid: entry-one\ntype: entry\ntitle: First entry\n---\nKnowledge page bytes.\n"
 
 func writeText(t *testing.T, path, body string) {
 	t.Helper()
@@ -320,6 +326,8 @@ func assertRestored(t *testing.T, dir string, src seeded, full bool) {
 		{filepath.Join(cfg.ProjectMemoryDir(src.project.ID), "MEMORY.md"), "memory-alpha"},
 		{filepath.Join(cfg.ProjectMemoryDir(src.project.ID), "skills", "local", "SKILL.md"), "project-skill"},
 		{filepath.Join(cfg.ProjectDir(src.project.ID), "installed-skills", "demo", "SKILL.md"), "installed-skill"},
+		{filepath.Join(cfg.ProjectDir(src.project.ID), "knowledge", "schema.yaml"), knowledgeSchemaFixture},
+		{filepath.Join(cfg.ProjectDir(src.project.ID), "knowledge", "pages", "entries", "entry-one.md"), knowledgePageFixture},
 		{filepath.Join(cfg.ProjectWorkspaceDir(src.project.ID), "note.txt"), "managed-note"},
 		{filepath.Join(cfg.ProjectMemoryDir(src.other.ID), "MEMORY.md"), "memory-beta"},
 		{filepath.Join(cfg.ThreadInputsDir(src.thread.ID), "img1"), "image-bytes"},
@@ -421,12 +429,13 @@ func TestProjectBackupAddsAndReplaceKeepsTheExternalDirectory(t *testing.T) {
 	if len(manifest.ExternalWorkdirs) != 1 || manifest.ExternalWorkdirs[0].Path != src.external {
 		t.Fatalf("external %+v", manifest.ExternalWorkdirs)
 	}
-	for _, absent := range []string{"memory-beta", "shared-skill", "sk-backup-secret-value", "source-remote", "standalone-body", "engine.lock", "outside-workdir.txt", "config.yaml"} {
+	for _, absent := range []string{"memory-beta", "other project schema", "shared-skill", "sk-backup-secret-value", "source-remote", "standalone-body", "engine.lock", "outside-workdir.txt", "config.yaml"} {
 		if archiveHas(t, out, absent) {
 			t.Fatalf("project archive contains %s", absent)
 		}
 	}
-	if !archiveHas(t, out, "memory-alpha") || !archiveHas(t, out, "installed-skill") || !archiveHas(t, out, "image-bytes") {
+	if !archiveHas(t, out, "memory-alpha") || !archiveHas(t, out, "installed-skill") || !archiveHas(t, out, "image-bytes") ||
+		!archiveHas(t, out, "Knowledge page bytes.") {
 		t.Fatal("project archive dropped the project's files")
 	}
 
@@ -460,6 +469,11 @@ func TestProjectBackupAddsAndReplaceKeepsTheExternalDirectory(t *testing.T) {
 	if readText(t, filepath.Join(destCfg.ProjectMemoryDir(src.project.ID), "MEMORY.md")) != "memory-alpha" {
 		t.Fatal("added project memory missing")
 	}
+	knowledgeDir := filepath.Join(destCfg.ProjectDir(src.project.ID), "knowledge")
+	knowledgePage := filepath.Join(knowledgeDir, "pages", "entries", "entry-one.md")
+	if readText(t, filepath.Join(knowledgeDir, "schema.yaml")) != knowledgeSchemaFixture || readText(t, knowledgePage) != knowledgePageFixture {
+		t.Fatal("added project knowledge is incomplete")
+	}
 	if readText(t, filepath.Join(destCfg.ProjectMemoryDir(beta.ID), "MEMORY.md")) != "dest-beta-memory" {
 		t.Fatal("adding a project changed the other project")
 	}
@@ -479,6 +493,7 @@ func TestProjectBackupAddsAndReplaceKeepsTheExternalDirectory(t *testing.T) {
 	}
 
 	writeText(t, filepath.Join(destCfg.ProjectMemoryDir(src.project.ID), "MEMORY.md"), "local-edit")
+	writeText(t, knowledgePage, "local knowledge edit")
 	replacePreview, err := Preview(context.Background(), destDir, destDB, out)
 	if err != nil || replacePreview.Action != ActionReplaceProject {
 		t.Fatalf("replace preview %+v err=%v", replacePreview, err)
@@ -489,11 +504,17 @@ func TestProjectBackupAddsAndReplaceKeepsTheExternalDirectory(t *testing.T) {
 	if readText(t, filepath.Join(destCfg.ProjectMemoryDir(src.project.ID), "MEMORY.md")) != "local-edit" {
 		t.Fatal("refused add changed the project")
 	}
+	if readText(t, knowledgePage) != "local knowledge edit" {
+		t.Fatal("refused add replaced project knowledge")
+	}
 	if _, err := Restore(context.Background(), RestoreOptions{DataDir: destDir, DB: destDB, Path: out, Confirm: true, ReplaceProject: true}); err != nil {
 		t.Fatal(err)
 	}
 	if readText(t, filepath.Join(destCfg.ProjectMemoryDir(src.project.ID), "MEMORY.md")) != "memory-alpha" {
 		t.Fatal("replace did not restore project memory")
+	}
+	if readText(t, knowledgePage) != knowledgePageFixture {
+		t.Fatal("replace did not restore project knowledge")
 	}
 	if readText(t, filepath.Join(src.external, "outside-workdir.txt")) != "outside-bytes" {
 		t.Fatal("replace deleted the external directory")

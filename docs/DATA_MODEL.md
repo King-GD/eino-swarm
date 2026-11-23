@@ -889,6 +889,9 @@ $ZWAI_HOME (default ~/.zwai-swarm)/
         ├── workspace/         only when the project has no workdir of its own
         ├── installed-skills/  external packages, by manifest name
         │   └── <skill-name>/  original SKILL.md and package resources
+        ├── knowledge/
+        │   ├── schema.yaml    presence enables the project wiki
+        │   └── pages/<type-dir>/<page-id>.md
         └── memory/
             ├── MEMORY.md      notes, one per blank-line-separated paragraph
             └── skills/
@@ -905,6 +908,13 @@ while conversations are still running can omit those conversations and their
 `omitted_threads`. The live rows and files stay. A symbolic link inside a
 copied tree is left out of the archive and is not followed; the manifest
 counts those links in `skipped_symlinks`. See `C-044`.
+
+The knowledge library has no SQLite tables or project flags. Each page's front
+matter contains a stable ID, type and title, plus optional aliases, typed fields,
+outgoing links, an as-of date and sources. Engine writes stamp the update time,
+conversation and turn. A historical source stores its kind, conversation,
+sequence, original time, classification and durable record identity when
+available. Backlinks, unresolved links, navigation trees and lint are derived.
 
 `engine.lock` is an `flock` held by the one process that may open
 `zwai.db`. `engine.json` is rewritten atomically when that process starts
@@ -1091,11 +1101,11 @@ not wipe `label`.
   whose `thread_id` is one of those conversations, and standalone schedules
   pinned to that `project_id`, are cancelled in the same transaction. Then the
   project row, then the directories zwai created for it — its managed workspace
-  and its memory. A `workdir` the user supplied is never touched.
+  and its memory and knowledge files. A `workdir` the user supplied is never touched.
 - **Nothing is pruned automatically.** Events are the only table that grows fast;
   if a database ever gets uncomfortable, delete old conversations.
 - **Backup** is copying `~/.zwai-swarm` while the app is not running. The
-  workspaces and the projects' memory are files, so a backup that skips them
+  workspaces and the projects' memory and knowledge are files, so a backup that skips them
   loses agent output and everything the projects learned.
 
 ## Reading it directly
