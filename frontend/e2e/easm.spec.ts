@@ -9,8 +9,8 @@ const definition = JSON.parse(readFileSync(new URL("../src/task-panels/catalog.j
 
 /** Route the panel list and let the test push patches over the real SSE
  *  listener, so the renderer is exercised exactly as the producer feeds it. */
-async function servePanel(page: Page, thread: string, state: EasmResult) {
-  const saved = { id: "easm-e2e", thread_id: thread, plugin_id: definition.id, plugin_version: definition.version, definition, revision: 1, state }
+async function servePanel(page: Page, thread: string, state: EasmResult, sourceStatus = "running") {
+  const saved = { id: "easm-e2e", thread_id: thread, plugin_id: definition.id, plugin_version: definition.version, definition, revision: 1, state, source_status: sourceStatus }
   await page.addInitScript(() => {
     const Native = window.EventSource
     const active = new Set<EventSource>()
@@ -82,7 +82,7 @@ test("EASM renders the producer state, words evidence and follows step status", 
   await page.keyboard.press("Escape")
   await expect(dialog).toBeHidden()
 
-  await emit(page, { cursor: 2, thread_id: thread, panel_id: "easm-e2e", revision: 2, base_revision: 1, kind: "snapshot", state: portrait })
+  await emit(page, { cursor: 2, thread_id: thread, panel_id: "easm-e2e", revision: 2, base_revision: 1, kind: "snapshot", state: portrait, source_status: "running" })
   await expect(panel).toHaveAttribute("data-revision", "2")
   await expect(panel.getByRole("progressbar", { name: "Loading asset data", exact: true })).toHaveCount(0)
   await expect(panel.getByText("120", { exact: true })).toBeVisible()
@@ -102,7 +102,7 @@ test("EASM renders the producer state, words evidence and follows step status", 
   await card.getByRole("button", { name: "Close node card" }).click()
 
   await emit(page, {
-    cursor: 3, thread_id: thread, panel_id: "easm-e2e", revision: 3, base_revision: 2, kind: "patch",
+    cursor: 3, thread_id: thread, panel_id: "easm-e2e", revision: 3, base_revision: 2, kind: "patch", source_status: "finished",
     operations: [
       { op: "replace", path: "/collection/status", value: "done" },
       { op: "replace", path: "/collection/steps/2/status", value: "done" },
@@ -124,12 +124,33 @@ test("EASM shows no loading spinners for an interrupted empty collection", async
   await servePanel(page, thread, {
     ...portrait, nodes: [], edges: [], summary: undefined,
     collection: { status: "interrupted", steps: portrait.collection.steps.map((step) => ({ ...step, status: "interrupted" })) },
-  })
+  }, "interrupted")
   await page.goto("/")
   await page.getByTestId("dest-chats").click()
   await page.getByRole("button", { name: title, exact: true }).click()
   const panel = page.getByTestId("easm-task-panel")
   await expect(panel.getByText("No asset data", { exact: true })).toBeVisible()
   await expect(panel.getByText("No attention trend data")).toBeVisible()
+  await expect(panel.getByRole("progressbar")).toHaveCount(0)
+})
+
+// An engine restart interrupts a source in the middle of a collection. The
+// state it published still says every step is running, so a reload that trusts
+// only that snapshot spins forever; the host's receipt must end the wait.
+test("EASM stops spinning when the host reports the source interrupted mid-collection", async ({ page }) => {
+  const title = `EASM restarted ${Date.now()}`
+  const created = await (await page.request.post("/api/threads", { data: { title } })).json()
+  const thread = created.thread.id as string
+  await servePanel(page, thread, {
+    ...portrait, nodes: [], edges: [], summary: undefined,
+    collection: { status: "running", steps: portrait.collection.steps.map((step) => ({ ...step, status: "running" })) },
+  }, "interrupted")
+  await page.goto("/")
+  await page.getByTestId("dest-chats").click()
+  await page.getByRole("button", { name: title, exact: true }).click()
+  const panel = page.getByTestId("easm-task-panel")
+  await expect(panel.getByText("No asset data", { exact: true })).toBeVisible()
+  await expect(panel.getByText("No attention trend data")).toBeVisible()
+  await expect(panel.getByText("No component data")).toBeVisible()
   await expect(panel.getByRole("progressbar")).toHaveCount(0)
 })

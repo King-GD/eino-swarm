@@ -51,19 +51,21 @@ export function isEasmResult(value: unknown): value is EasmResult {
   return true
 }
 
-/** A section without data waits while its step can still deliver: the
- *  producer is running it, or the owning task is still working and the step
- *  has no finished result yet (the agent may run the source again with a
- *  query). "No data" is shown only once nothing more can arrive. */
-export function sectionLoading(result: EasmResult, step: EasmStepId, taskActive: boolean): boolean {
+/** A section without data waits while its step can still deliver. The host's
+ *  source_status is the only proof a producer is collecting right now: the
+ *  snapshot's own "running" survives an engine restart that interrupted the
+ *  source, and trusting it alone left the panel spinning forever after reload.
+ *  While the owning task is active the agent may run the source again, so that
+ *  keeps the wait even before the next call starts. */
+export function sectionLoading(result: EasmResult, step: EasmStepId, taskActive: boolean, sourceStatus?: string): boolean {
   const status = result.collection.steps.find((item) => item.id === step)?.status
-  if (result.collection.status === "running" && (status === "running" || status === "pending")) return true
+  if (sourceStatus === "running" && (status === "running" || status === "pending")) return true
   return taskActive && status !== "done"
 }
 
 /** The graph is filled by whole batches the agent pushes, so no single step owns
  *  it: it waits while a source call is collecting or the owning task can still
  *  push another batch, and stops once neither can. */
-export function graphSectionLoading(result: EasmResult, taskActive: boolean): boolean {
-  return taskActive || result.collection.status === "running"
+export function graphSectionLoading(taskActive: boolean, sourceStatus?: string): boolean {
+  return taskActive || sourceStatus === "running"
 }

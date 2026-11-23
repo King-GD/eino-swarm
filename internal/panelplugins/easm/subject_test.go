@@ -72,8 +72,11 @@ func TestOnlyTheFinalAggregationTellsTheAgentToFinish(t *testing.T) {
 	if err != nil || early.Next != "" {
 		t.Fatalf("batch without query next=%q err=%v", early.Next, err)
 	}
+	// The final call is the only one that ends the turn. With no aggregation
+	// tools configured it names what the panel lacks instead of claiming it;
+	// the completed wording is covered in receipt_test.go.
 	_, final, err := push(t, nil, Input{Subject: "Subject Co", Query: `domain=="subject.test"`}, onlyRoles(), &fakeCaller{})
-	if err != nil || final.Next != finishedNext {
+	if err != nil || final.Next == "" || final.Next == finishedNext {
 		t.Fatalf("final next=%q err=%v", final.Next, err)
 	}
 }

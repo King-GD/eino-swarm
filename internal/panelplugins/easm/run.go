@@ -72,20 +72,42 @@ func Run(ctx context.Context, input Input, settings Settings, current json.RawMe
 		return r.result(), err
 	}
 	if !collect {
-		return r.result(), nil
+		result := r.result()
+		result.Next = r.next()
+		return result, nil
 	}
 	if err := r.collect(ctx); err != nil {
 		return r.result(), err
 	}
 	result := r.result()
-	result.Next = finishedNext
+	result.Next = r.next()
 	return result, nil
 }
 
-// finishedNext is the receipt's instruction once the panel holds the final
-// aggregations. Without it the agent keeps researching after the portrait is
-// complete, and the conversation outlives the panel by minutes.
+// finishedNext is the receipt's instruction once the panel holds every
+// aggregation for the query. Without it the agent keeps researching after the
+// portrait is complete, and the conversation outlives the panel by minutes.
 const finishedNext = "The panel now holds the totals, trend and components for this query. Reply with a short summary of the panel and end the turn without calling more tools."
+
+// next words the receipt from what the steps actually produced. A missing
+// aggregation is named instead of being implied by a completion claim, so the
+// agent cannot report numbers it never got; the turn still ends rather than
+// looping on the aggregations that just failed.
+func (r *run) next() string {
+	if r.input.Query == "" {
+		return ""
+	}
+	var missing []string
+	for _, step := range r.state.Collection.Steps {
+		if step.Status != statusDone {
+			missing = append(missing, fmt.Sprintf("%s (%s)", step.ID, step.Status))
+		}
+	}
+	if len(missing) == 0 {
+		return finishedNext
+	}
+	return "The panel is missing " + strings.Join(missing, ", ") + " for this query. Reply with a short summary of what the panel holds and end the turn without calling more tools."
+}
 
 // begin decides whether this call continues the portrait already in the panel.
 // A different subject starts a new portrait: the old graph and its metrics

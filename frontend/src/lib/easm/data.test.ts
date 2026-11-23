@@ -29,13 +29,13 @@ describe("EASM snapshot relationships", () => {
   // data"; once nothing more can arrive it must never leave a spinner behind.
   it("keeps a section loading until its step can no longer deliver", () => {
     const running = { status: "running" as const, steps: [{ id: "heat" as const, status: "pending" as const }, { id: "summary" as const, status: "done" as const }] }
-    expect(sectionLoading({ ...fixture, collection: running }, "heat", false)).toBe(true)
-    expect(sectionLoading({ ...fixture, collection: running }, "summary", true)).toBe(false)
+    expect(sectionLoading({ ...fixture, collection: running }, "heat", false, "running")).toBe(true)
+    expect(sectionLoading({ ...fixture, collection: running }, "summary", true, "running")).toBe(false)
     const skipped = { status: "done" as const, steps: [{ id: "heat" as const, status: "skipped" as const, code: "no_query" }] }
     expect(sectionLoading({ ...fixture, collection: skipped }, "heat", true)).toBe(true)
     expect(sectionLoading({ ...fixture, collection: skipped }, "heat", false)).toBe(false)
     expect(sectionLoading({ ...fixture, collection: { status: "idle", steps: [] } }, "components", true)).toBe(true)
-    expect(sectionLoading({ ...fixture, collection: { ...running, status: "interrupted" } }, "heat", false)).toBe(false)
+    expect(sectionLoading({ ...fixture, collection: { ...running, status: "interrupted" } }, "heat", false, "interrupted")).toBe(false)
   })
 
   // A first batch without a query leaves the collection idle: the section must
@@ -51,11 +51,24 @@ describe("EASM snapshot relationships", () => {
 
   // The agent pushes the graph itself, so no step owns it: it waits while a
   // call is collecting or the conversation can still push another batch.
-  it("keeps the graph loading for a running collection or an active task", () => {
-    expect(graphSectionLoading(fixture, false)).toBe(false)
-    expect(graphSectionLoading({ ...fixture, collection: { status: "running", steps: [] } }, false)).toBe(true)
-    expect(graphSectionLoading({ ...fixture, collection: { status: "idle", steps: [] } }, true)).toBe(true)
-    expect(graphSectionLoading({ ...fixture, collection: { status: "interrupted", steps: [] } }, false)).toBe(false)
+  it("keeps the graph loading for a running source or an active task", () => {
+    expect(graphSectionLoading(false)).toBe(false)
+    expect(graphSectionLoading(false, "running")).toBe(true)
+    expect(graphSectionLoading(true)).toBe(true)
+    expect(graphSectionLoading(false, "interrupted")).toBe(false)
+    expect(graphSectionLoading(false, "finished")).toBe(false)
+  })
+
+  // A source killed by an engine restart leaves its stored steps saying
+  // "running"; only the host's receipt can tell the reload that nothing collects
+  // any more, so the sections must not spin on the stale state alone.
+  it("stops loading a stale running state once the host reports the source interrupted", () => {
+    const stale = { status: "running" as const, steps: [{ id: "heat" as const, status: "running" as const }, { id: "components" as const, status: "pending" as const }] }
+    expect(sectionLoading({ ...fixture, collection: stale }, "heat", false, "running")).toBe(true)
+    expect(sectionLoading({ ...fixture, collection: stale }, "heat", false, "interrupted")).toBe(false)
+    expect(sectionLoading({ ...fixture, collection: stale }, "components", false, "interrupted")).toBe(false)
+    expect(sectionLoading({ ...fixture, collection: stale }, "heat", false)).toBe(false)
+    expect(graphSectionLoading(false, "interrupted")).toBe(false)
   })
 
   it("rejects duplicate IDs, invalid roots and dangling references", () => {
