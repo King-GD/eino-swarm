@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/mcpclient"
 	"github.com/LubyRuffy/eino-swarm/internal/panelplugins/easm"
+	"github.com/LubyRuffy/eino-swarm/internal/provider"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 	"github.com/LubyRuffy/eino-swarm/internal/taskpanel"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -173,7 +175,7 @@ func TestEASMCallerMapsTransportOutcomes(t *testing.T) {
 	server := easmFixtureServer(t)
 	manager := mcpclient.NewManager()
 	defer manager.Close()
-	caller := &easmCaller{manager: manager, servers: []config.MCPServer{server}, serverID: server.ID, workspace: t.TempDir()}
+	caller := &easmCaller{manager: manager, servers: []config.MCPServer{server}, serverID: server.ID, workspace: t.TempDir(), admitted: true}
 	if _, err := caller.Call(t.Context(), "absent_tool", nil); err != easm.ErrUnavailable {
 		t.Fatalf("missing tool err=%v", err)
 	}
@@ -197,5 +199,106 @@ func TestEASMCallerMapsTransportOutcomes(t *testing.T) {
 	cancel()
 	if _, err := caller.Call(cancelled, "heat_fixture", nil); err != context.Canceled {
 		t.Fatalf("cancelled err=%v", err)
+	}
+}
+
+// A restricted account's turn mounts no MCP tools. The panel source runs on
+// the agent's behalf, so it must not reach the MCP server either: the
+// aggregations report unavailable and the server sees no call.
+func TestRestrictedAccountPanelSourceMakesNoMCPCall(t *testing.T) {
+	var calls atomic.Int32
+	remote := mcp.NewServer(&mcp.Implementation{Name: "easm-counted", Version: "test"}, nil)
+	for _, name := range []string{"stats_fixture", "heat_fixture"} {
+		remote.AddTool(&mcp.Tool{Name: name, InputSchema: map[string]any{"type": "object"}}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			calls.Add(1)
+			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: `{}`}}}, nil
+		})
+	}
+	endpoint := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return remote }, nil))
+	t.Cleanup(endpoint.Close)
+	server := config.MCPServer{ID: "easm-counted", Transport: "streamable_http", URL: endpoint.URL, Enabled: true, TimeoutSeconds: 3}
+
+	var panelID string
+	e, _ := newScheduleCompletionHTTPEngine(t, func(w http.ResponseWriter, _ *http.Request, step int, request scheduleCompletionRequest) {
+		switch step {
+		case 1:
+			easmToolCall(w, request, "easm-open", "open_task_panel", `{"plugin_id":"easm-asset-portrait"}`)
+		case 2:
+			var panel taskpanel.Panel
+			if err := json.Unmarshal([]byte(request.Messages[len(request.Messages)-1].Content), &panel); err != nil {
+				t.Error(err)
+			}
+			panelID = panel.ID
+			raw, _ := json.Marshal(map[string]any{"panel_id": panel.ID, "input": map[string]any{"subject": "Subject Co", "query": easmFixtureQuery}})
+			easmToolCall(w, request, "easm-final", "run_panel_source", string(raw))
+		default:
+			writeContextFlowReply(w, request.Stream, map[string]any{"content": "done"}, "stop")
+		}
+	})
+	if err := e.cfg.Update(func(c *config.Config) error {
+		c.MCP.Servers = []config.MCPServer{server}
+		c.TaskPanels.EASM.ServerID = server.ID
+		c.TaskPanels.EASM.Tools = map[string]string{"stats": "stats_fixture", "heat": "heat_fixture", "product_rules": ""}
+		// Account profiles apply only outside local model mode.
+		c.Product.Mode = ""
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	base := e.cfg.Snapshot().Models.Providers[0].BaseURL
+	src, err := provider.NewAccountProfile(accountCatalogID, base, "token", provider.AccountProfile{Label: "Restricted", Tools: []string{"read"}, RestrictTools: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.pool.SetAccountSource(src)
+	thread, err := e.CreateThread("Restricted portrait", src.ID(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, err := e.store.GetThread(thread.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.turnMountsMCP(stored, false) {
+		t.Fatal("a restricted account still mounts MCP tools")
+	}
+	turn, err := e.StartTurn(thread.ID, "Build the portrait of the confirmed subject.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := waitForTurn(t, e, turn.ID); got.Status != store.TurnDone {
+		t.Fatalf("turn = %+v", got)
+	}
+	waitSettled(t, e, thread.ID)
+	panel, err := e.store.TaskPanel(t.Context(), thread.ID, panelID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state easm.State
+	if err := json.Unmarshal(panel.State, &state); err != nil {
+		t.Fatal(err)
+	}
+	for _, status := range state.Collection.Steps {
+		if status.Status != "unavailable" {
+			t.Fatalf("step %s = %+v in %s", status.ID, status, panel.State)
+		}
+	}
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("restricted turn reached the MCP server %d times", got)
+	}
+}
+
+// One admission rule decides whether a turn may use MCP; plan and read-only
+// turns are refused, and a context without a decision is not admitted.
+func TestTurnMCPAdmissionFollowsPlanAndReadOnly(t *testing.T) {
+	e, _ := newScheduleCompletionHTTPEngine(t, func(w http.ResponseWriter, _ *http.Request, _ int, request scheduleCompletionRequest) {
+		writeContextFlowReply(w, request.Stream, map[string]any{"content": "done"}, "stop")
+	})
+	th := &store.Thread{}
+	if !e.turnMountsMCP(th, false) || e.turnMountsMCP(th, true) || e.turnMountsMCP(&store.Thread{PlanMode: true}, false) || e.turnMountsMCP(nil, false) {
+		t.Fatal("admission does not follow plan and read-only modes")
+	}
+	if mcpAdmitted(t.Context()) || !mcpAdmitted(withMCPAdmission(t.Context(), true)) {
+		t.Fatal("a context without a decision must not be admitted")
 	}
 }

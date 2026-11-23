@@ -190,6 +190,11 @@ func (e *Engine) runPanelSource(ctx context.Context, turn *store.Turn, workspace
 	if runner == nil {
 		return nil, fmt.Errorf("panel source is unavailable")
 	}
+	thread, err := e.store.GetThread(turn.ThreadID)
+	if err != nil {
+		return nil, err
+	}
+	ctx = withMCPAdmission(ctx, e.turnMountsMCP(thread, turn.NuwaReadOnly))
 	if err := taskpanel.ValidateState(taskpanel.Definition{Schema: definition.InputSchema}, in.Input); err != nil {
 		return nil, err
 	}

@@ -37,6 +37,17 @@ type historyContext struct {
 	ProjectName string `json:"project_name"`
 }
 
+// turnMountsMCP is the one admission rule for remote MCP tools in a turn. A
+// panel producer calling MCP on the agent's behalf must pass the same rule, or
+// a restricted account would reach tools it was never given.
+func (e *Engine) turnMountsMCP(th *store.Thread, readOnly bool) bool {
+	if e.mcp == nil || th == nil || th.PlanMode || readOnly {
+		return false
+	}
+	restrict, _ := e.pool.AccountToolPolicy(th.ProviderID)
+	return !restrict
+}
+
 // conversationTools is shared by new, restored and parked turns. Keeping the
 // host reader here also gives delegated workers the same original sources.
 func (e *Engine) conversationTools(ctx context.Context, th *store.Thread) (*tools.Set, error) {
@@ -57,7 +68,7 @@ func (e *Engine) conversationToolsForExecution(ctx context.Context, th *store.Th
 		set = tools.AllowWorkspace(set, allow)
 	}
 	set.TaskFileInstruction = e.taskWorkspaceInstruction(th)
-	if e.mcp != nil && !th.PlanMode && !readOnly && !restrict {
+	if e.turnMountsMCP(th, readOnly) {
 		cfg := e.cfg.Snapshot()
 		external, err := e.mcp.Tools(ctx, cfg.MCP.Servers, set.WorkspaceDir, cfg.Tools.ToolResultLimit())
 		if err != nil {

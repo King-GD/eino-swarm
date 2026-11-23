@@ -57,21 +57,36 @@ func (e *Engine) runEASMSource(ctx context.Context, raw json.RawMessage, current
 	for role, name := range settings.EASM.Tools {
 		tools[role] = name
 	}
-	caller := &easmCaller{manager: e.mcp, servers: e.cfg.Snapshot().MCP.Servers, serverID: settings.EASM.ServerID, workspace: workspace}
+	caller := &easmCaller{manager: e.mcp, servers: e.cfg.Snapshot().MCP.Servers, serverID: settings.EASM.ServerID, workspace: workspace, admitted: mcpAdmitted(ctx)}
 	return easm.Run(ctx, input, easm.Settings{Tools: tools, MaxDomains: settings.EASM.MaxDomains, MaxComponents: settings.EASM.MaxComponents}, current, caller, publish)
 }
 
+// mcpAdmissionKey carries whether the calling turn may use remote MCP tools.
+// A producer reached without it is treated as not admitted.
+type mcpAdmissionKey struct{}
+
+func withMCPAdmission(ctx context.Context, admitted bool) context.Context {
+	return context.WithValue(ctx, mcpAdmissionKey{}, admitted)
+}
+
+func mcpAdmitted(ctx context.Context) bool {
+	admitted, _ := ctx.Value(mcpAdmissionKey{}).(bool)
+	return admitted
+}
+
 // easmCaller resolves each tool to one configured MCP server and maps
-// transport outcomes to the producer's step results.
+// transport outcomes to the producer's step results. A turn that does not
+// mount MCP tools gets no remote call: every step reports unavailable.
 type easmCaller struct {
 	manager   *mcpclient.Manager
 	servers   []config.MCPServer
 	serverID  string
 	workspace string
+	admitted  bool
 }
 
 func (c *easmCaller) server(tool string) (config.MCPServer, bool) {
-	if c.manager == nil {
+	if c.manager == nil || !c.admitted {
 		return config.MCPServer{}, false
 	}
 	if c.serverID == "" {
