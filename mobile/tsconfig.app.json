@@ -25,7 +25,14 @@
       "shiki/engine/javascript": ["./node_modules/shiki/dist/engine-javascript.d.mts"],
       "shiki/*": ["./node_modules/shiki/dist/*"],
       "mermaid": ["./node_modules/mermaid"],
-      "mdast-util-from-markdown": ["./node_modules/mdast-util-from-markdown"]
+      "mdast-util-from-markdown": ["./node_modules/mdast-util-from-markdown"],
+      "@radix-ui/react-dialog": ["./node_modules/@radix-ui/react-dialog"],
+      "@radix-ui/react-slot": ["./node_modules/@radix-ui/react-slot"],
+      "@radix-ui/react-tooltip": ["./node_modules/@radix-ui/react-tooltip"],
+      "class-variance-authority": ["./node_modules/class-variance-authority"],
+      "force-graph": ["./node_modules/force-graph"],
+      "lucide-react": ["./node_modules/lucide-react"],
+      "recharts": ["./node_modules/recharts"]
     },
     "types": ["vitest/globals", "@testing-library/jest-dom"]
   },
