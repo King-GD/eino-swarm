@@ -19,6 +19,9 @@ func TestToolCallerIdentifiesActualWorkerGenerationAndManager(t *testing.T) {
 	if _, ok := ToolCallerModelBinding(t.Context()); ok {
 		t.Fatal("plain context has a resolved worker binding")
 	}
+	if ToolCallerHasWorkerTool(t.Context(), "record_identity") {
+		t.Fatal("plain context has a worker tool")
+	}
 	reg := NewRegistry()
 	defer reg.Close()
 	seen := make(chan context.Context, 3)
@@ -63,6 +66,12 @@ func TestToolCallerIdentifiesActualWorkerGenerationAndManager(t *testing.T) {
 		case ctx := <-seen:
 			if got, ok := ToolCaller(ctx); !ok || got != want {
 				t.Fatalf("caller=%+v want=%+v", got, want)
+			}
+			if got := ToolCallerHasWorkerTool(ctx, "record_identity"); got != (want.Generation != 0) {
+				t.Fatalf("generation %d registered worker tool = %v", want.Generation, got)
+			}
+			if ToolCallerHasWorkerTool(ctx, "") || ToolCallerHasWorkerTool(ctx, "not_registered") {
+				t.Fatalf("generation %d granted a missing tool", want.Generation)
 			}
 			got, known := ToolCallerModelBinding(ctx)
 			if want.Generation == 0 {

@@ -115,6 +115,12 @@ Each clue retains its first source edge. A later observation can enrich the clue
 
 With `query` set, the producer runs unfinished `summary`, `heat` and `components` steps concurrently and publishes each completion. Retrying the same query retains completed results. Changing the query clears the old range's results and runs every step. A batch without `query` only merges observations. `collection.steps[]` reports status and a stable code, for example `tool_error`, `missing_ip_total` or `not_configured`. Stop marks unfinished steps `interrupted`. The producer uses the tool bindings in the turn's MCP mount receipt. Enabling a service or changing a role takes effect at the next turn. Account restrictions, disabled servers and immediate tool switches can still prevent calls. A restored legacy turn without recorded EASM bindings reports those steps unavailable. See [Configuration](CONFIG.md#task-panels).
 
+For a Worker call, each aggregation also requires its direct MCP tool or the
+matching server's call proxy in the calling Worker's registered tools. The
+producer can merge supplied observations even when a Worker is limited to
+listing tools or an aggregation is unavailable. Ordinary manager calls use
+the bindings admitted for their turn.
+
 - `summary` finishes when a single valid response contains the exact asset and distinct-IP totals. Zero is valid. Partial responses retain any exact count they carry and name the missing total in the receipt. Legacy summaries marked complete with only one total remain eligible for retry. `clues` counts saved observations beyond the root.
 - `heat` requires strictly ascending `YYYY-MM-DD` points.
 - `components` aggregates only hardware (`product1`) and applications (`product5`) for the supply chain, excluding the operating-system, service and support layers. FOFA merges the two requested layers into one `product` list. When the product-rule role is configured, the producer resolves numeric rule IDs to names; a failed name lookup keeps the IDs. These fields are selected by the Go producer; changing an agent Skill does not change its MCP requests.

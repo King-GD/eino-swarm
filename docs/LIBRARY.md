@@ -116,6 +116,11 @@ according to the captured configuration. Selection is scoped to the worker,
 and descendants may further narrow it. Resuming a scoped worker reapplies
 the saved `WorkerToolNames` before claiming a generation.
 
+`ToolCallerHasWorkerTool(ctx, name)` reads the exact registered tools of the
+calling Worker from the trusted invocation context. A host tool that delegates
+work to another tool can use it to enforce the calling Worker's scope. A
+context without a Worker executor grants no tool through this query.
+
 For durable configuration, set a host-owned `WorkerConfig.Tag` and implement
 `Registry.ResolveWorkerConfig(ctx, tag)`. Checkpoints, `RestoredWorker` and
 `FinishedWorker` retain `ConfigTag`, `DelegationEnabled`, `ParentID` and

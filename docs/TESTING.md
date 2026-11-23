@@ -9562,6 +9562,14 @@ EASM producer fixtures feed one published state back into `Run` for the next bat
 
 `internal/engine/task_panel_easm_http_test.go` drives the real model, Registry, streamable MCP HTTP and durable panel. It checks restricted account refusal, zero HTTP contact for a server enabled after model dispatch, successful next-turn admission, restored binding identity and immediate tool disable. `internal/engine/task_panel_graph_http_test.go` exercises direct publication through the model tool and checks that refusal leaves the stored revision and journal intact. `internal/mcpclient/producer_test.go` covers exact text replies and isolation from task execution failures.
 
+`internal/engine/task_panel_worker_scope_http_test.go` exercises the actual
+Nuwa Worker model and panel source with a counted loopback MCP endpoint. A
+Worker with an empty selection or a listing-only proxy still publishes its
+observations, and the aggregation is unavailable with zero MCP requests during
+the panel call. The call proxy and the matching direct tool allow collection.
+A Worker with only the direct heat tool cannot use the same server's statistics
+binding.
+
 The desktop and phone E2E specs exercise the same saved graph with detached clues and duplicate historical certificate serials. They check the first discovery's card, hide detached and duplicate observations, then publish another batch and reopen the panel. `mobile/src/components/task-panels.test.tsx` uses the real conversation, EASM sheet and supply-chain detail and calls the JavaScript entry used by Android Back. It checks detail → sheet after initial open and reopening, including a refreshed sheet over Outputs.
 
 The task-panel [formal model map](../models/panels/README.md) states finite bounds and the exact implementation boundaries. Current cases and guard-removal counterexamples cover operation digests/CAS, running source ownership, recovery failure isolation, overlapping GET/SSE per-panel revisions/deletions, hidden iframe resynchronization and observed HTTP result delivery before join. Every model has reachable witness cases. The independent audit regressions preserve the original failing order; protocol model success is not a SQLite atomicity, cancelled final-flush durability, wall-clock or native presentation proof.

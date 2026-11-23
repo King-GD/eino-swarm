@@ -58,6 +58,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 - EASM uses the MCP service and tool bindings admitted for the turn. Later enablement takes effect on the next turn, and existing disable controls still apply immediately.
 
+- EASM aggregations called by a Worker respect that Worker's registered MCP tools. A Worker can still publish observations when a remote aggregation is unavailable.
+
 - The EASM graph shows clues reachable from the confirmed subject and keeps ambiguous ownership unconfirmed. Shared certificates appear only under their first discovery domain. On Android, Back closes supply-chain detail before closing the task panel.
 
 - The phone app builds from a clean install: its TypeScript paths resolve the shared frontend packages from `mobile/node_modules` instead of requiring `frontend/node_modules`.

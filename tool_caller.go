@@ -2,8 +2,10 @@ package swarm
 
 import (
 	"context"
+	"slices"
 
 	"github.com/cloudwego/eino/adk"
+	"github.com/cloudwego/eino/components/tool"
 )
 
 // AgentIdentity identifies the actual runtime invocation of a model or tool.
@@ -23,6 +25,7 @@ type toolReceiptScopeKey struct{}
 type toolInvocation struct {
 	identity     AgentIdentity
 	modelBinding *ModelBinding
+	workerTools  []tool.BaseTool
 }
 
 func (caller toolInvocation) context(ctx context.Context) context.Context {
@@ -34,6 +37,15 @@ func (caller toolInvocation) context(ctx context.Context) context.Context {
 func ToolCaller(ctx context.Context) (AgentIdentity, bool) {
 	caller, ok := ctx.Value(toolCallerKey{}).(toolInvocation)
 	return caller.identity, ok
+}
+
+// ToolCallerHasWorkerTool reports whether name is registered on the calling
+// worker's executor. A context without a worker's registered tools grants none.
+func ToolCallerHasWorkerTool(ctx context.Context, name string) bool {
+	caller, _ := ctx.Value(toolCallerKey{}).(toolInvocation)
+	return name != "" && slices.ContainsFunc(caller.workerTools, func(candidate tool.BaseTool) bool {
+		return toolName(candidate) == name
+	})
 }
 
 // ToolCallerModelBinding returns a value copy of the current worker invocation's

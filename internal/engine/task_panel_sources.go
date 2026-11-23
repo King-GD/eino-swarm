@@ -9,6 +9,7 @@ import (
 	"slices"
 	"time"
 
+	swarm "github.com/LubyRuffy/eino-swarm"
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/mcpclient"
 	"github.com/LubyRuffy/eino-swarm/internal/panelplugins/easm"
@@ -58,7 +59,12 @@ func (e *Engine) runEASMSource(ctx context.Context, raw json.RawMessage, current
 	}
 	names := make(map[string]string, len(set.PanelMCP))
 	servers := make(map[string]config.MCPServer, len(set.PanelMCP))
+	invoker, _ := swarm.ToolCaller(ctx)
+	workerHasTool := func(name string) bool { return swarm.ToolCallerHasWorkerTool(ctx, name) }
 	for role, binding := range set.PanelMCP {
+		if invoker.AgentID != swarm.DefaultManagerID && !panelMCPToolMounted(binding.Server.ID, binding.Name, workerHasTool) {
+			continue
+		}
 		names[role] = binding.Name
 		servers[binding.Name] = binding.Server
 	}
@@ -118,10 +124,9 @@ func bindPanelMCP(set *tools.Set, bindings map[string]panelMCPBinding, servers [
 		return
 	}
 	set.PanelMCP = make(map[string]tools.PanelMCPTool, len(bindings))
+	mounted := func(name string) bool { return slices.Contains(set.Names, name) }
 	for role, binding := range bindings {
-		_, proxy := mcpclient.ProxyNames(binding.ServerID)
-		direct := mcpclient.DirectToolName(binding.ServerID, binding.Name)
-		if !slices.Contains(set.Names, proxy) && !slices.Contains(set.Names, direct) {
+		if !panelMCPToolMounted(binding.ServerID, binding.Name, mounted) {
 			continue
 		}
 		for _, server := range servers {
@@ -131,6 +136,11 @@ func bindPanelMCP(set *tools.Set, bindings map[string]panelMCPBinding, servers [
 			}
 		}
 	}
+}
+
+func panelMCPToolMounted(serverID, name string, mounted func(string) bool) bool {
+	_, call := mcpclient.ProxyNames(serverID)
+	return mounted(call) || mounted(mcpclient.DirectToolName(serverID, name))
 }
 
 // The mount receipt can distinguish a replaced server without storing its
