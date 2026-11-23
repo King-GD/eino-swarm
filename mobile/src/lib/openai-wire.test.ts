@@ -85,6 +85,28 @@ describe("openai wire", () => {
     expect(messages[0].content.map((part) => part.type)).toEqual(["text", "image_url", "file"])
   })
 
+  it.each([
+    ["https://api.z.ai/api/paas/v4", { thinking: { type: "disabled" } }],
+    ["https://open.bigmodel.cn/api/paas/v4", { thinking: { type: "disabled" } }],
+    ["https://openrouter.ai/api/v1", { reasoning: { enabled: false } }],
+    ["https://dashscope-intl.aliyuncs.com/compatible-mode/v1", { enable_thinking: false }],
+    ["https://gateway.invalid/v1", { reasoning_effort: "none" }],
+  ])("sends one explicit off field at %s", (url, field) => {
+    expect(chatRequestBody("m", turns, " NONE ", url)).toEqual({
+      model: "m", stream: true, messages: chatRequestBody("m", turns, "").messages, ...field,
+    })
+    expect(responsesRequestBody("m", turns, "none").reasoning).toEqual({ effort: "none" })
+  })
+
+  it("rejects reported reasoning tokens in a streamed or JSON reply only when thinking was off", () => {
+    const usage = { output_tokens_details: { reasoning_tokens: 1 } }
+    const frame = JSON.stringify({ type: "response.completed", response: { usage } })
+    expect(() => pieceFromData(frame, true)).toThrow("thinking_off_ignored")
+    expect(() => replyFromJSON({ usage }, true)).toThrow("thinking_off_ignored")
+    expect(pieceFromData(frame)).toBeNull()
+    expect(pieceFromData(JSON.stringify({ usage: { output_tokens_details: { reasoning_tokens: 0 } } }), true)).toBeNull()
+  })
+
   it("uses input_text for the user and output_text for the assistant", () => {
     const body = responsesRequestBody(
       "m",

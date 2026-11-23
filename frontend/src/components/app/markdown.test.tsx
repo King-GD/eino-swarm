@@ -3,6 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 
 import { loadHighlighter } from "@/lib/highlighter"
 import { MemoMarkdown } from "./markdown"
+import { WorkspaceFileOpenProvider } from "./workspace-file-open"
 
 beforeAll(async () => {
   await loadHighlighter("cpp")
@@ -247,6 +248,64 @@ describe("MemoMarkdown", () => {
 
   // A long unbreakable cell used to set the column's min-content and paint
   // under the side panel. The scrollport is the cap; the cell still renders.
+  it("turns workspace paths in an answer into preview buttons", () => {
+    const open = vi.fn().mockResolvedValue(undefined)
+    const text = [
+      "Wrote [the site](https://example.invalid/docs/guide.md).",
+      "",
+      "| File | Note |",
+      "| --- | --- |",
+      "| report/list/out.md | body |",
+      "| rows.tsv | table |",
+      "| refs.tsv / dir/ / notes.md | mixed |",
+      "",
+      "Also `./report/list/out.md` and",
+      "",
+      "```",
+      "report/list/out.md",
+      "```",
+    ].join("\n")
+    render(
+      <WorkspaceFileOpenProvider open={open}>
+        <MemoMarkdown text={text} />
+      </WorkspaceFileOpenProvider>,
+    )
+    const links = screen.getAllByTestId("workspace-file-link")
+    expect(links.map((link) => link.getAttribute("data-path"))).toEqual([
+      "report/list/out.md",
+      "rows.tsv",
+      "refs.tsv",
+      "notes.md",
+      "report/list/out.md",
+    ])
+    expect(screen.getByRole("link", { name: "the site" })).toHaveAttribute("href", "https://example.invalid/docs/guide.md")
+    expect(screen.getByText("dir/", { exact: false })).toBeInTheDocument()
+    fireEvent.click(links[0]!)
+    expect(open).toHaveBeenCalledWith("report/list/out.md", expect.objectContaining({
+      returnFocus: links[0],
+    }))
+  })
+
+  it("leaves a path as text while the answer is still streaming", () => {
+    const open = vi.fn()
+    const text = "Saved report/list/out.md."
+    const { rerender } = render(
+      <WorkspaceFileOpenProvider open={open}>
+        <MemoMarkdown text={text} streaming />
+      </WorkspaceFileOpenProvider>,
+    )
+    expect(screen.queryByTestId("workspace-file-link")).not.toBeInTheDocument()
+    expect(screen.getByText(/report\/list\/out\.md/)).toBeInTheDocument()
+    rerender(
+      <WorkspaceFileOpenProvider open={open}>
+        <MemoMarkdown text={text} />
+      </WorkspaceFileOpenProvider>,
+    )
+    expect(screen.getByTestId("workspace-file-link")).toHaveAttribute("data-path", "report/list/out.md")
+    rerender(<MemoMarkdown text={text} />)
+    expect(screen.queryByTestId("workspace-file-link")).not.toBeInTheDocument()
+  })
+
   it("parks a gfm table in a scrollport so a long cell cannot widen the column", () => {
     const cell = "x".repeat(80)
     render(<MemoMarkdown text={`| k | v |\n| --- | --- |\n| a | ${cell} |`} />)

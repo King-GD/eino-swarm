@@ -80,7 +80,10 @@ function foldedTranscript(current?: TranscriptState): TranscriptState {
   // row inside that span belongs to the timeline even though its SSE copy
   // will now be refused as already stored; only older rows are roster-only.
   const oldest = historyOldestSeq()
-  const merged = mergeLogEvents(uniqueStoredEvents([...roster, ...agentLogs]), events)
+  // The open roster omits spawned and finished bodies. The worker log is the
+  // stored copy of those same seqs, so it has to win; first-wins would keep
+  // the blank sidecar and hide the prompt after the worker is opened.
+  const merged = mergeLogEvents(uniqueStoredEvents([...agentLogs, ...roster]), events)
   storedSeqs = new Set(merged.map((ev) => ev.seq))
   let state = emptyTranscript()
   for (const ev of merged) {

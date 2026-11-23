@@ -213,7 +213,10 @@ Sysctl itself has no interruptible API. Other uname-supported platforms keep the
 The HTTP tests send side questions through the actual route with a running
 loopback-model turn and with an unanswered human prompt. They check original
 turn identity, absence of side text in the main conversation, request
-limits, provider-error redaction and independent cancellation. A held provider
+limits, provider-error redaction and independent cancellation. Lookup tests
+check that a side question can read task evidence, project notes and a
+recorded skill without writing skill usage, and that reasoning, other
+conversations and action tools stay out. A held provider
 stream verifies that the first delta reaches the client before the final answer,
 using the side model while preserving the main conversation model. The browser
 test drives transcript selection, follows up through the side panel and checks
@@ -3081,6 +3084,18 @@ diagnostic while blocking history/Trace reads, so a cold reload cannot hide a
 missing subscription. `internal/remote/desktop_recovery_test.go` and
 `mobile/src/lib/session-desktop-recovery.test.ts` keep those metadata frames from
 changing phone work state or trapping Earlier on an invisible history page.
+
+The private desktop recovery journal records the last observed WebView navigation
+stage with each failed probe. An independent, local-only `timeout_sample` row
+is requested at the original shell's first health-triggered reload and at
+each successor shell's first reported failed probe, before its parent timeout.
+It records a bounded engine metadata GET result and a short host CPU sample;
+neither collection nor Trace delivery gates reload or takeover. A missing
+navigation observation is not proof of a load failure. A finished navigation
+with no callback narrows the failure to the post-navigation path but does not
+separate page execution from bridge delivery. Host-wide idle CPU does not rule
+out a single busy thread, and a responding metadata route does not certify
+every engine operation.
 
 Formal native acceptance uses `tools/native_macos_resilience.py` inside ci-macOS
 and the unchanged versioned ZIP from the clean pushed source:
@@ -7094,9 +7109,11 @@ Several things are tested here, some as pure logic and some in jsdom:
   A worker-only tail keeps paging until a non-quiet, non-spawn manager row exists so the
   empty-state idea cards cannot cover a running conversation. The live-edge
   page also folds a `roster` sidecar (`spawned` / `finished` / `cleanup`
-  outside the viewport) so a manager-only tail does not empty the Agents tab.
-  Roster sidecar rows do not become manager "Started" lines. Opening a
-  worker off the live edge fetches `GET /api/threads/:id/agents/:agent/log`.
+  outside the viewport, plus `workers_retained` / `error`) so a manager-only tail does not empty the Agents tab.
+  The sidecar omits `spawned` and `finished` bodies; `err` and the smaller
+  lifecycle texts stay. Roster sidecar rows do not become manager "Started" lines.
+  Opening that worker fetches `GET /api/threads/:id/agents/:agent/log`,
+  and that log's copy of the same seq replaces the blank sidecar.
   `isWelcomePane`
   stays false while a turn is running, workers are on the roster, or older
   history is still above the tail.
@@ -8107,6 +8124,11 @@ ending early must not return. `testLegacyTurnPreviewsStayBrowsableBeforeJumping`
 uses the compact legacy fixture below and verifies that the same long right
 swipe moves the navigation strip instead of leaving the conversation. Browser
 tests of the return hook do not prove recognition of a real iOS touch sequence.
+With the same streamed-agents fixture, `testWorkerQuoteActionReturnsToParentDraft`
+long-presses a child agent reply and taps the native-screen **Add to chat**
+button, then checks the selected text in the parent draft.
+`mobile/e2e/selection-actions.spec.ts` also exercises read-aloud and translation
+in the worker log without leaving it or creating a quote until **Add to chat**.
 For the hidden-history opening regression, use the dedicated
 `mobile/e2e/ios-conversation-open.swift` case and disposable fixture described
 under Phone conversation loading below. The opening must reach a visible
@@ -8762,6 +8784,8 @@ outside the workspace, and keeps a remote `https` image.
 `frontend/src/lib/documents/zip.test.ts` rejects stored and deflate entries
 whose output is larger than the declared uncompressed size, including a
 declared size of zero.
+`frontend/e2e/conversation.spec.ts` clicks a workspace path in a finished
+scripted answer and checks that the file preview shows that file.
 `frontend/e2e/file-preview.spec.ts` creates conversations and uploads fixture
 bytes through the real loopback API without a model turn. It opens Markdown
 from the file tree by click and Enter, checks rendered/source switching, syntax

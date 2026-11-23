@@ -1,7 +1,10 @@
 package server_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/LubyRuffy/eino-swarm/internal/store"
@@ -165,4 +168,65 @@ func TestThreadAgentLogIsThatWorkerOnly(t *testing.T) {
 	}
 
 	h.json(http.MethodGet, "/api/threads/th_missing/agents/worker-1/log", nil, http.StatusNotFound)
+}
+
+func TestOpeningLogOmitsWorkerBodiesUntilTheWorkerIsOpened(t *testing.T) {
+	h := newHarness(t)
+	id := h.newThread()
+	prompt := "prompt-" + strings.Repeat("p", 4096)
+	result := "result-" + strings.Repeat("r", 4096)
+	rows := []store.Event{
+		{ThreadID: id, Kind: "spawned", AgentID: "worker-1", Role: "worker", Text: prompt},
+		{ThreadID: id, Kind: "finished", AgentID: "worker-1", Role: "worker", Text: result, Err: "worker failed"},
+		{ThreadID: id, Kind: "cleanup", AgentID: "manager", Text: "stopped 0"},
+		{ThreadID: id, Kind: "workers_retained", AgentID: "manager", Text: `{"worker_ids":["worker-1"]}`},
+		{ThreadID: id, Kind: "error", AgentID: "manager", Text: "visible failure", Err: "stopped"},
+	}
+	for i := range rows {
+		if err := h.app.Store.AppendEvent(&rows[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 4; i++ {
+		if err := h.app.Store.AppendEvent(&store.Event{
+			ThreadID: id, Kind: "tool_call", AgentID: "manager", Text: "exec",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got := h.json(http.MethodGet, "/api/threads/"+id+"/log?limit=2", nil, http.StatusOK)
+	raw, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(raw, []byte(prompt)) || bytes.Contains(raw, []byte(result)) {
+		t.Fatal("opening the conversation included a worker body")
+	}
+	roster, _ := got["roster"].([]any)
+	if len(roster) != 5 {
+		t.Fatalf("roster=%v", got["roster"])
+	}
+	spawn := roster[0].(map[string]any)
+	if spawn["kind"] != "spawned" || spawn["agent_id"] != "worker-1" || spawn["role"] != "worker" || spawn["text"] != "" {
+		t.Fatalf("spawn identity=%v", spawn)
+	}
+	finish := roster[1].(map[string]any)
+	if finish["kind"] != "finished" || finish["text"] != "" || finish["err"] != "worker failed" {
+		t.Fatalf("finish identity=%v", finish)
+	}
+	if roster[2].(map[string]any)["text"] != "stopped 0" ||
+		roster[3].(map[string]any)["text"] != `{"worker_ids":["worker-1"]}` ||
+		roster[4].(map[string]any)["text"] != "visible failure" {
+		t.Fatalf("small roster bodies=%v", roster[2:])
+	}
+
+	worker := h.json(http.MethodGet, "/api/threads/"+id+"/agents/worker-1/log", nil, http.StatusOK)
+	workerRaw, err := json.Marshal(worker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(workerRaw, []byte(prompt)) || !bytes.Contains(workerRaw, []byte(result)) {
+		t.Fatal("opening the worker lost its stored prompt and result")
+	}
 }

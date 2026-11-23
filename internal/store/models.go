@@ -78,7 +78,7 @@ type Thread struct {
 	// Settings change still applies. An account catalog's first name is not a
 	// setting: it is written here once, and a later catalog reorder leaves it.
 	Model string `gorm:"size:200" json:"model"`
-	// ReasoningEffort is this conversation's thinking level ("", low, medium,
+	// ReasoningEffort is this conversation's thinking level ("", none, low, medium,
 	// high). Empty means the model's own default. It applies from the next turn.
 	ReasoningEffort string `gorm:"size:16" json:"reasoning_effort"`
 	// WebExecution overrides the PC Web tool location from the next turn.

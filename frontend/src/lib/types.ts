@@ -609,7 +609,7 @@ export interface SwarmLimits {
   schedule_tick_ms?: number
   /** Schedule runs that may execute at once. */
   schedule_max_active?: number
-  /** Classifier thinking: blank is the background default (low); otherwise inherit, low, medium or high. */
+  /** Classifier thinking: blank uses the background default (low). Other values are inherit, none, low, medium and high. */
   policy_reasoning_effort?: string
 }
 
@@ -869,7 +869,7 @@ export interface MemorySettings {
   char_limit: number
   entry_max: number
   review_max_iterations: number
-  /** Blank is the background default (low); otherwise inherit, low, medium or high. */
+  /** Blank uses the background default. Other values are inherit, none, low, medium and high. */
   review_reasoning_effort?: string
   skills_index_max: number
   skill_stale_days?: number

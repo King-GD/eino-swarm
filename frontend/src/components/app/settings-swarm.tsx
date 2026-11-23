@@ -272,6 +272,7 @@ export function SwarmTab({
         >
           <SelectItem value="default">{t("settings.swarm.policyThinkingDefault")}</SelectItem>
           <SelectItem value="inherit">{t("settings.swarm.policyThinkingInherit")}</SelectItem>
+          <SelectItem value="none">{t("reason.none")}</SelectItem>
           <SelectItem value="low">{t("settings.swarm.policyThinkingLow")}</SelectItem>
           <SelectItem value="medium">{t("settings.swarm.policyThinkingMedium")}</SelectItem>
           <SelectItem value="high">{t("settings.swarm.policyThinkingHigh")}</SelectItem>

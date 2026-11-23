@@ -21,7 +21,8 @@ const (
 // conversation paints the live edge first; older pages load when the
 // reader scrolls up. The live-edge payload also carries spawned /
 // finished / cleanup and failure ownership rows outside that viewport, so
-// the Agents tab still has a roster.
+// the Agents tab still has a roster. Spawned and finished bodies stay out of
+// this payload; opening that worker reads them from its own log.
 func (s *Server) listLog(c *gin.Context) {
 	th, ok := s.thread(c)
 	if !ok {
@@ -43,7 +44,7 @@ func (s *Server) listLog(c *gin.Context) {
 	// Only the live-edge page carries the roster. Older pages must not
 	// move the history cursor; the client already has these rows.
 	if before == 0 {
-		roster, err := s.engine.Store().ListRosterEvents(th.ID)
+		roster, err := s.engine.Store().ListRosterIdentities(th.ID)
 		if err != nil {
 			s.fail(c, err)
 			return

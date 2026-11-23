@@ -112,6 +112,7 @@ export function ThinkingPicker({ levels, value, onSelect, onClose }: {
 
 export function thinkingLabel(level: string) {
   if (level === "") return t("composer.thinkingDefault")
+  if (level === "none") return t("reason.none")
   if (level === "low") return t("reason.low")
   if (level === "medium") return t("reason.medium")
   if (level === "high") return t("reason.high")

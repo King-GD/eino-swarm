@@ -14,6 +14,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 - Task panels can show an enterprise asset portrait (EASM). The agent confirms the subject, performs the discovery lookups itself, and pushes each finished batch of companies, domains and certificates into the panel, which merges the batches into one graph; on the batch that carries the final asset query the panel collects the asset totals, attention trend and components itself. Each aggregation shows its own progress and a failure never stops the others. The panel follows the app language on PC, Web and paired phones.
 
+- Desktop and Web answers turn a workspace file path into a preview button. Clicking it opens the same file preview as the Files tab. (`F-140`)
+
+- Desktop, web, terminal and phone can explicitly turn thinking off for a conversation. Models that continue to report reasoning surface a request error. (`F-130`, `F-220`, `F-230`, `C-009`)
+
 - New tasks keep work, results and uploads in independent directories. PC and paired phone Files open to task results and can switch to a read-only project folder. Existing conversations and external files stay in place. (`F-140`, `F-224`, `C-052`)
 
 - The phone composer's Add menu and slash suggestions list `/goal`, `/plan` and `/image` in PC chats, including after draft text. Direct chat offers `/image` when the selected Gateway source has authorized image generation. Choosing a leading command keeps the draft as its argument. (`F-150`, `F-182`, `F-220`, `C-009`, `C-051`)
@@ -26,6 +30,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - The EASM panel takes the agent's own findings instead of looking them up: the Go producer no longer queries the company, investment, branch, filing, asset-rule or certificate sources, and the certificates the agent reports never add domains on their own. `task_panels.easm` binds only `stats`, `heat` and `product_rules`; retired roles in an existing configuration are dropped when it loads, and `max_domains` now bounds the domain nodes of the whole portrait instead of the certificate lookups of one run.
 
 - Settings → Tools → Task panels shows the common panel options. EASM lookup bindings and limits are managed through `task_panels.easm` in the configuration file.
+
+- Side chat answers from the current task's findings, project notes and recorded skills. It can search that task and open a skill, and it still cannot change the task. (`F-147`, `C-042`)
 
 - iOS 支持从内容区中间横滑到右侧逐层返回；左缘返回和轮次导航条的横向滚动保持不变。 (`F-220`, `C-015`)
 
@@ -57,6 +63,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - EASM supply-chain collection again requests only FOFA `product1,product5`, excluding service and support products that were unintentionally added.
 
 - The EASM asset graph shows the same loading spinner as attention trend and supply chain while waiting for its first data, and stops spinning when an empty collection ends.
+
+- Opening a long conversation no longer reads every worker prompt, worker result, stored answer, or engine protocol prompt into the first screen. The Agents list keeps identities and failure reasons; opening a worker still loads that worker's text. Context size still counts the same replay, without scanning every historical manager message. (`F-120`, `C-003`, `C-008`)
 
 - 手机打开子智能体列表或从子智能体日志返回时，从顶部显示正在运行的子智能体，不再跳到历史列表底部。 (`F-220`)
 

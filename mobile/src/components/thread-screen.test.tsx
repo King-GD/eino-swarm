@@ -141,6 +141,42 @@ describe("ThreadScreen", () => {
     expect(onBack).toHaveBeenCalledOnce()
   })
 
+  it("adds a worker thought to the parent draft without replacing an existing quote or sending", () => {
+    setLocale("en")
+    const onSend = vi.fn()
+    const events: Partial<RemoteEvent>[] = [
+      { kind: "agent_message", agent_id: "manager", text: "Main evidence" },
+      { kind: "spawned", agent_id: "worker-1", role: "reader" },
+      { kind: "reasoning", agent_id: "worker-1", text: "Checked the source" },
+      { kind: "agent_message", agent_id: "worker-1", text: "Worker evidence" },
+    ]
+    const blocks = events.reduce<CompactBlock[]>((current, event, index) => applyEvent(current, {
+      thread_id: "t1", seq: index + 1, created_at: "2026-09-25T00:00:00Z", text: "", ...event,
+    } as RemoteEvent), [])
+    render(<ThreadScreen detail={{ id: "t1", title: "talk" }} blocks={blocks} caughtUp
+      onBack={vi.fn()} onSend={onSend} onStop={vi.fn()} onAnswer={vi.fn()} onAnswerStructured={vi.fn()} />)
+    const add = () => screen.getByRole("button", { name: "Add to chat" })
+    select(screen.getByText("Main evidence"))
+    fireEvent.click(add())
+    fireEvent.click(screen.getByRole("button", { name: "Agents (1)" }))
+    const openWorker = () => fireEvent.click(screen.getByRole("button", { name: /reader worker-1.*running/i }))
+    openWorker()
+    select(screen.getByText("Worker evidence"))
+    expect(add()).toBeVisible()
+    act(() => { window.__zwaiAndroidBack?.() })
+    expect(screen.getByTestId("agent-roster")).toBeVisible()
+    expect(screen.queryByRole("toolbar", { name: "Selected text actions" })).not.toBeInTheDocument()
+    openWorker()
+    expect(screen.queryByRole("button", { name: "Add to chat" })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId("phone-thought-toggle"))
+    select(screen.getByTestId("phone-thought"))
+    fireEvent.click(add())
+    expect(screen.getByRole("heading", { name: "talk" })).toBeVisible()
+    expect(screen.getByRole("textbox", { name: "Edit quote 1" })).toHaveValue("Main evidence")
+    expect(screen.getByRole("textbox", { name: "Edit quote 2" })).toHaveValue("Checked the source")
+    expect(onSend).not.toHaveBeenCalled()
+  })
+
   it("shows a failed worker's error in its own activity view", () => {
     setLocale("en")
     let blocks = applyEvent([], { thread_id: "t1", seq: 1, kind: "spawned", agent_id: "w1", role: "reader", text: "", created_at: "2026-09-25T00:00:00Z" })

@@ -155,6 +155,8 @@ export const zh: Record<MessageKey, string> = {
   "composer.thinking": "思考强度",
   "composer.thinkingDefault": "默认思考",
   "composer.loading": "正在加载模型",
+  "reason.none": "关闭思考",
+  "reason.offIgnored": "此模型在关闭思考后仍生成了推理内容。请选择其他模型或切换思考档位。",
   "reason.low": "低思考",
   "reason.medium": "中思考",
   "reason.high": "高思考",

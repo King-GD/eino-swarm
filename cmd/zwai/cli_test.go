@@ -376,6 +376,10 @@ func TestTUIFlagHelpersNormalizeKnownValues(t *testing.T) {
 	if err != nil || got != config.ReasoningMedium {
 		t.Fatalf("medium=%q err=%v", got, err)
 	}
+	got, err = tuiReasoningFlag(" NONE ")
+	if err != nil || got != config.ReasoningNone {
+		t.Fatalf("thinking off=%q err=%v", got, err)
+	}
 	name, ok := pickSessionModel("BETA", []string{"beta"})
 	if !ok || name != "beta" || !catalogHas([]string{"beta"}, "beta") {
 		t.Fatalf("catalog fold=%q ok=%v", name, ok)

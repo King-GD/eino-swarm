@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -24,17 +25,25 @@ var ErrRecoveryCancelled = errors.New("desktop recovery successor was closed")
 
 // RecoveryDiagnostic contains lifecycle facts, never page content or snapshot pixels.
 type RecoveryDiagnostic struct {
-	SessionID  string    `json:"session_id"`
-	Generation int       `json:"generation"`
-	Attempt    int       `json:"attempt"`
-	ShellPID   int       `json:"shell_pid"`
-	EnginePID  int       `json:"engine_pid,omitempty"`
-	ThreadID   string    `json:"thread_id,omitempty"`
-	TurnID     string    `json:"turn_id,omitempty"`
-	Phase      string    `json:"phase"`
-	Reason     string    `json:"reason,omitempty"`
-	At         time.Time `json:"at"`
-	DurationMS int64     `json:"duration_ms,omitempty"`
+	SessionID  string             `json:"session_id"`
+	Generation int                `json:"generation"`
+	Attempt    int                `json:"attempt"`
+	ShellPID   int                `json:"shell_pid"`
+	EnginePID  int                `json:"engine_pid,omitempty"`
+	ThreadID   string             `json:"thread_id,omitempty"`
+	TurnID     string             `json:"turn_id,omitempty"`
+	Phase      string             `json:"phase"`
+	Reason     string             `json:"reason,omitempty"`
+	At         time.Time          `json:"at"`
+	DurationMS int64              `json:"duration_ms,omitempty"`
+	Navigation string             `json:"navigation,omitempty"`
+	Resources  *RecoveryResources `json:"resources,omitempty"`
+}
+
+type RecoveryResources struct {
+	EngineHTTP   string `json:"engine_http"`
+	EngineStatus int    `json:"engine_status,omitempty"`
+	HostCPU      string `json:"host_cpu,omitempty"`
 }
 
 // RecoveryAttempt carries the cumulative lineage budget into a successor shell.
@@ -87,6 +96,7 @@ type recoveryController struct {
 	cancel          context.CancelFunc
 	done            <-chan struct{}
 	stopOnce        sync.Once
+	navigation      atomic.Uint32
 	initialActivity recoveryWindowActivity
 	probe           func(string)
 	capture         func(context.Context) ([]byte, error)
@@ -142,6 +152,9 @@ func startRecoveryForHost(host recoveryHost, opts Options) *recoveryController {
 }
 
 func bindRecoveryActivity(host recoveryHost, c *recoveryController) {
+	host.OnWindowEvent(events.Mac.WebViewDidStartProvisionalNavigation, func() { c.navigation.Store(1) })
+	host.OnWindowEvent(events.Mac.WebViewDidCommitNavigation, func() { c.navigation.Store(2) })
+	host.OnWindowEvent(events.Mac.WebViewDidFinishNavigation, func() { c.navigation.Store(3) })
 	host.OnWindowEvent(events.Common.WindowFocus, func() { c.setActivity(recoveryFocused, true) })
 	host.OnWindowEvent(events.Common.WindowLostFocus, func() { c.setActivity(recoveryFocused, false) })
 	host.OnWindowEvent(events.Mac.WindowDidMiniaturize, func() { c.setActivity(recoveryMinimized, true) })
@@ -223,7 +236,11 @@ func (c *recoveryController) run(ctx context.Context) {
 			if !probeStarted.IsZero() && !observed.Before(probeStarted) {
 				elapsed = observed.Sub(probeStarted).Milliseconds()
 			}
-			c.opts.Diagnostic(RecoveryDiagnostic{SessionID: c.opts.SessionID, Generation: c.opts.Generation, Attempt: state.attempts, ShellPID: os.Getpid(), ThreadID: location.ThreadID, TurnID: location.TurnID, Phase: phase, Reason: reason, At: observed.UTC(), DurationMS: elapsed})
+			navigation := ""
+			if phase == "probe_failed" || phase == "reloading" {
+				navigation = [...]string{"not_observed", "provisional", "committed", "finished"}[c.navigation.Load()]
+			}
+			c.opts.Diagnostic(RecoveryDiagnostic{SessionID: c.opts.SessionID, Generation: c.opts.Generation, Attempt: state.attempts, ShellPID: os.Getpid(), ThreadID: location.ThreadID, TurnID: location.TurnID, Phase: phase, Reason: reason, At: observed.UTC(), DurationMS: elapsed, Navigation: navigation})
 		}
 	}
 	clearProbe := func() {
@@ -404,6 +421,7 @@ func (c *recoveryController) run(ctx context.Context) {
 				document++
 				expected = location
 				awaitingLocation = expected != (recoveryLocation{})
+				c.navigation.Store(0)
 				c.reload(location.windowURL(c.windowURL))
 			case recoveryReplace:
 				report("probe_failed", probeStage)

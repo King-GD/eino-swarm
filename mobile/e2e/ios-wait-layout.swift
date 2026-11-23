@@ -863,6 +863,35 @@ final class BindFlowTests: XCTestCase {
                   "tapping Add to chat must create a quote")
   }
 
+  func testWorkerQuoteActionReturnsToParentDraft() throws {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launch()
+    let agents = app.buttons["Agents (3)"]
+    XCTAssertTrue(agents.waitForExistence(timeout: 20), "requires history=streamed-agents")
+    agents.tap()
+    let worker = app.buttons.matching(NSPredicate(format: "label CONTAINS 'worker-1'")).firstMatch
+    XCTAssertTrue(worker.waitForExistence(timeout: 8))
+    worker.tap()
+    let answer = app.staticTexts["Worker evidence"]
+    XCTAssertTrue(answer.waitForExistence(timeout: 8))
+    XCTAssertTrue(answer.isHittable)
+    answer.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5)).press(forDuration: 1.2)
+    let action = app.buttons["Add to chat"]
+    let visible = action.waitForExistence(timeout: 5)
+    recordAgentPage(app, name: "worker-selection-native-menu")
+    XCTAssertTrue(visible && action.isHittable, "the worker selection action must be reachable without covering the system menu")
+    action.tap()
+    XCTAssertTrue(agents.waitForExistence(timeout: 8))
+    let quote = app.textViews["Edit quote 1"].firstMatch
+    XCTAssertTrue(quote.waitForExistence(timeout: 5))
+    let selected = try XCTUnwrap(quote.value as? String)
+    XCTAssertFalse(selected.isEmpty)
+    XCTAssertTrue("Worker evidence".contains(selected))
+    XCTAssertFalse(action.exists, "the selection toolbar must close after returning to the parent draft")
+    recordAgentPage(app, name: "worker-selection-in-parent-draft")
+  }
+
   // iOS can expose a button that opens a dialog as a pop-up control.
   private func composerPickerControl(_ app: XCUIApplication, label: String) -> XCUIElement {
     app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch

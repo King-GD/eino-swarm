@@ -789,7 +789,7 @@ func mustAbs(t *testing.T, p string) string {
 
 // The thinking level goes on the wire as reasoning_effort, so an unknown value
 // must collapse to the empty default rather than reaching an endpoint that
-// rejects it. Only low/medium/high survive.
+// rejects it. The explicit off value survives.
 func TestNormalizeReasoningKeepsOnlyKnownLevels(t *testing.T) {
 	cases := map[string]string{
 		"low":     ReasoningLow,
@@ -797,16 +797,16 @@ func TestNormalizeReasoningKeepsOnlyKnownLevels(t *testing.T) {
 		" high ":  ReasoningHigh,
 		"":        ReasoningDefault,
 		"extreme": ReasoningDefault,
-		"none":    ReasoningDefault,
+		" NONE ":  ReasoningNone,
 	}
 	for in, want := range cases {
 		if got := NormalizeReasoning(in); got != want {
 			t.Fatalf("NormalizeReasoning(%q)=%q, want %q", in, got, want)
 		}
 	}
-	if levels := ReasoningEfforts(); len(levels) != 3 ||
-		levels[0] != ReasoningLow || levels[2] != ReasoningHigh {
-		t.Fatalf("the UI needs low/medium/high in order, got %v", levels)
+	if levels := ReasoningEfforts(); len(levels) != 4 ||
+		levels[0] != ReasoningNone || levels[1] != ReasoningLow || levels[2] != ReasoningMedium || levels[3] != ReasoningHigh {
+		t.Fatalf("unexpected composer levels: %v", levels)
 	}
 }
 

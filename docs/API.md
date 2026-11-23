@@ -304,7 +304,7 @@ Client startup metadata. During recovery, clients poll it until `startup` is `re
   "configured": true,
   "default_provider": "default",
   "account_models": {"state": "signed_out", "models": 0},
-  "reasoning_levels": ["low", "medium", "high"],
+  "reasoning_levels": ["none", "low", "medium", "high"],
   "data_dir": "/Users/me/.zwai-swarm",
   "data_generation": 0,
   "capabilities": { "reveal": false, "open_url": false, "memory": true, "restart_handoff": true },
@@ -2041,7 +2041,8 @@ waiting for the human (still `running`): the sidebar paints a question mark inst
 the working pulse. `waiting` is true while a thread wake still owns the next
 turn (not `running`): the sidebar paints a clock, the title bar says Waiting
 instead of Idle, and `/goal` does not auto-continue. `reasoning_effort` is the conversation's thinking level (`""`,
-`low`, `medium`, `high`); empty means the model's own default. `project_id` is empty for
+`none`, `low`, `medium`, `high`). Empty inherits the configured default. `none`
+explicitly requests non-thinking mode. `project_id` is empty for
 a conversation that belongs to no project. `goal` is the standing objective from
 `/goal` (empty when none). `goal_complete` is true after the manager called
 `complete_goal` succeeds; a scheduled check with its own still-active manager
@@ -2195,8 +2196,8 @@ next turn. Empty follows a user-configured default (`models.account_model`, or
 the provider's own `model`). It does not follow a later change in account
 catalog order: that order is stored on the conversation the first time a
 concrete name is required. `reasoning_effort` is
-one of `""` (the model default), `low`, `medium` or `high` — a blank clears back
-to the default, and any other value is rejected the same way an unknown provider
+one of `""` (inherit), `none` (off), `low`, `medium` or `high`. An empty string clears
+the override, and any other value is rejected the same way an unknown provider
 is. An empty `project_id` takes the conversation out of its project; from then on
 it works in its own workspace again. `pinned` tracks a conversation at the top
 of the sidebar (`pinned_at` is set on pin and cleared on unpin). `goal` is the standing objective (empty
@@ -2287,20 +2288,25 @@ oldest first, with answers up to 8192 UTF-8 bytes each. The JSON envelope is
 limited to 384 KiB. Optionally send `provider_id` and `model` together to
 select a model for this request without changing the conversation.
 
-The model receives a bounded snapshot of that conversation's task context,
-including its goal, current request, recent original user messages and
-manager replies where available. With no override, an active turn supplies
-its saved model selection and an idle conversation supplies its current
-selection. The default response is `{"answer":"…"}`.
+The model receives a bounded snapshot of that conversation's task context:
+its goal, current request, recent original user messages and manager replies,
+recent tool results and worker findings, project notes and the recorded skill
+index, where available. It may call `search_task` to look through that same
+conversation's user messages, manager and worker text, and tool results, and
+`skill_view` to read one indexed skill. Those lookups do not record skill use
+or change notes. Reasoning, diagnostics, attachments and other conversations
+stay out. With no override, an active turn supplies its saved model selection
+and an idle conversation supplies its current selection. The default response
+is `{"answer":"…"}`.
 With `Accept: text/event-stream`, each `delta` event carries `{"text":"…"}`,
 and `done` carries the complete bounded `{"answer":"…"}`. After a delta,
 failure is an `error` event with `error` and `code`; an earlier failure uses
 the ordinary HTTP error response. Only `done` completes an exchange. Both
 response modes use `Cache-Control: no-store`.
 Side chat works during a running turn or a pause for human input. It uses a
-separate model request without tools and creates no turn, event, queued
-follow-up or answer to a main-task prompt. The client owns the temporary
-exchange and can cancel the request by closing it.
+separate model request. Its only tools are the read-only lookups above; it
+creates no turn, event, queued follow-up or answer to a main-task prompt.
+The client owns the temporary exchange and can cancel the request by closing it.
 
 Invalid input returns `400 invalid_side_chat`, an oversized body returns
 `413 invalid_side_chat`, and an unknown thread returns `404`. During startup
@@ -2711,10 +2717,12 @@ turn is running. `409 restoring` while startup recovery is in progress.
 
 ### `GET /api/threads/:id/turns`
 
-Every turn of the conversation, oldest first. This is what renders the
-"Worked for 12s" footers. Engine-started rows (`goal_continue`,
-`schedule_continue`) still carry the protocol `user_text`; they are not
-human sends. The jump rail keys off a `user_message`, so those rows share
+Every turn of the conversation, oldest first. This is the open-screen list
+that renders the "Worked for 12s" footers and the jump rail. `final` is
+empty here. Engine-started rows (`goal_continue`, `schedule_continue`) also
+have an empty `user_text`; a human row keeps its `user_text`. The stored
+turn, Trace and the phone preview still return the answer and the protocol
+prompt. The jump rail keys off a `user_message`, so engine-started rows share
 the previous human tick.
 
 Historical rows with a stored `retry_turn_id` include it as read-only
@@ -2760,7 +2768,10 @@ the next older page. An empty conversation is `"events":[]` with
 `has_more: false`. The live-edge page (`before` omitted or `0`) also sends
 `roster`: every `spawned`, `finished`, `cleanup`, `workers_retained` and `error`
 row whose seq is **not** already in `events`. A long turn's viewport is often only manager tools;
-without those rows the Agents tab looks empty. Older pages omit `roster` —
+without those rows the Agents tab looks empty. `spawned` and `finished` rows in
+this sidecar omit `text` (the worker prompt and result). `err` stays, and
+`cleanup`, `workers_retained` and `error` keep `text`. Opening that worker
+fetches the stored bodies. Older pages omit `roster` —
 the client already has it, and mixing those seqs into `before` would skip
 the tools in between. The client hydrates the Agents tab from `roster`
 without inserting "Started" rows into the manager transcript. Sidecar ownership

@@ -28,10 +28,10 @@ func WithFirstRequestReasoningEffort(base model.BaseChatModel, effort string) mo
 
 // Consume the override after admission so a cancelled wait does not spend it.
 // A routing probe or later tool round gets the original request options.
-func (r *recordingModel) firstRequestOptions(opts []model.Option) []model.Option {
+func (r *recordingModel) firstRequestOptions(opts []model.Option) ([]model.Option, bool) {
 	first := r.firstReasoning
 	if first == nil || !first.sent.CompareAndSwap(false, true) {
-		return opts
+		return opts, r.reasoning == config.ReasoningNone
 	}
-	return append([]model.Option{r.reasoningOption(first.level)}, opts...)
+	return append([]model.Option{r.reasoningOption(first.level)}, opts...), first.level == config.ReasoningNone
 }

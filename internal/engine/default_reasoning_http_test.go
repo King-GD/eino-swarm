@@ -20,6 +20,7 @@ func TestDefaultReasoningReachesManagerAndAuxiliaryHTTPRequests(t *testing.T) {
 	}{
 		{"unset preserves current requests", "", "medium", "medium", ""},
 		{"explicit default covers auxiliary calls", "high", "medium", "medium", "high"},
+		{"turn can explicitly turn thinking off", "high", "none", "none", "high"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var mu sync.Mutex

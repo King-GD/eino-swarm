@@ -491,7 +491,7 @@ func wrap(m model.BaseChatModel, agentID string, p config.Provider, effort strin
 	if rec == nil && effort == "" && maxTokens <= 0 {
 		return m
 	}
-	r := &recordingModel{inner: m, agentID: agentID, providerID: p.ID, model: p.Model, reasoning: effort, maxTokens: maxTokens, rec: rec}
+	r := &recordingModel{inner: m, agentID: agentID, providerID: p.ID, model: p.Model, baseURL: p.BaseURL, reasoning: effort, maxTokens: maxTokens, rec: rec}
 	if shared, ok := m.(*recordingModel); ok && (shared.gate != nil || shared.policyUse != nil) && shared.rec == nil {
 		// Admission and telemetry must surround the same request. Wrapping the
 		// gate again would count a cancelled wait as a completed model call.
@@ -515,6 +515,7 @@ type recordingModel struct {
 	agentID    string
 	providerID string
 	model      string
+	baseURL    string
 	reasoning  string
 	// optionalEffort marks reasoning as an engine default for a background
 	// call, not a level the human chose: an endpoint that rejects it is asked
@@ -541,13 +542,19 @@ func (r *recordingModel) reasoningOption(level string) model.Option {
 	if _, ok := r.inner.(*responsesModel); ok {
 		return responsesReasoningOption(level)
 	}
+	if level == config.ReasoningNone {
+		if _, ok := r.inner.(*mockModel); ok {
+			return model.WrapImplSpecificOptFn(func(o *mockOptions) { o.thinkingOff = true })
+		}
+		return openaimodel.WithExtraFields(config.ChatThinkingOffFields(r.baseURL))
+	}
 	return openaimodel.WithReasoningEffort(openaimodel.ReasoningEffortLevel(level))
 }
 
 func (r *recordingModel) Generate(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.Message, error) {
 	out, err := r.generate(ctx, in, r.withReasoning(opts, r.reasoning))
 	if r.effortRejected(err) {
-		out, err = r.generate(ctx, in, r.withReasoning(opts, ""))
+		out, err = r.withoutReasoningEffort().generate(ctx, in, r.withReasoning(opts, ""))
 	}
 	return out, err
 }
@@ -561,27 +568,33 @@ func (r *recordingModel) generateOnce(ctx context.Context, in []*schema.Message,
 	ctx, builtin := observeBuiltinTools(ctx, recorder != nil)
 	ctx, route := observeRouteRejection(ctx)
 	start := time.Now()
-	out, err := r.inner.Generate(ctx, in, r.firstRequestOptions(opts)...)
+	opts, thinkingOff := r.firstRequestOptions(opts)
+	out, err := r.inner.Generate(ctx, in, opts...)
 	err = route.wrap(err)
+	if err == nil && thinkingOff && reportedThinking(out) {
+		err = errThinkingOffIgnored
+	}
 	finish(err)
-	if recorder == nil {
-		return out, modelCallError(err)
+	if recorder != nil {
+		rec := r.base(ctx, in, start)
+		rec.BuiltinTools = builtin.snapshot()
+		rec.Err = err
+		if out != nil {
+			rec.OutputChars = len(out.Content) + len(out.ReasoningContent)
+			applyUsage(&rec, tokenUsageOf(out))
+		}
+		recorder(rec)
 	}
-	rec := r.base(ctx, in, start)
-	rec.BuiltinTools = builtin.snapshot()
-	rec.Err = err
-	if out != nil {
-		rec.OutputChars = len(out.Content) + len(out.ReasoningContent)
-		applyUsage(&rec, tokenUsageOf(out))
+	if err == errThinkingOffIgnored {
+		return nil, modelCallError(err)
 	}
-	recorder(rec)
 	return out, modelCallError(err)
 }
 
 func (r *recordingModel) Stream(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
 	out, err := r.stream(ctx, in, r.withReasoning(opts, r.reasoning))
 	if r.effortRejected(err) {
-		out, err = r.stream(ctx, in, r.withReasoning(opts, ""))
+		out, err = r.withoutReasoningEffort().stream(ctx, in, r.withReasoning(opts, ""))
 	}
 	return out, err
 }
@@ -598,12 +611,13 @@ func (r *recordingModel) streamOnce(ctx context.Context, in []*schema.Message, o
 	ctx, route := observeRouteRejection(ctx)
 	progress, _ := ctx.Value(backoffProgressKey{}).(func())
 	start := time.Now()
-	stream, err := r.inner.Stream(ctx, in, r.firstRequestOptions(opts)...)
+	opts, thinkingOff := r.firstRequestOptions(opts)
+	stream, err := r.inner.Stream(ctx, in, opts...)
 	err = route.wrap(err)
 	if err != nil {
 		finish(err)
 	}
-	if recorder == nil && ((r.gate == nil && r.policyUse == nil) || err != nil) {
+	if recorder == nil && ((!thinkingOff && r.gate == nil && r.policyUse == nil) || err != nil) {
 		return stream, modelCallError(err)
 	}
 	if err != nil {
@@ -628,6 +642,10 @@ func (r *recordingModel) streamOnce(ctx context.Context, in []*schema.Message, o
 		finished := false
 		for {
 			msg, recvErr := stream.Recv()
+			if recvErr == nil && thinkingOff && reportedThinking(msg) {
+				usage = mergeUsage(usage, msg)
+				recvErr = errThinkingOffIgnored
+			}
 			if isStreamEnd(recvErr) && completion.http.Load() && !completion.done.Load() && !finished {
 				recvErr = io.ErrUnexpectedEOF
 			}

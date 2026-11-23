@@ -32,6 +32,7 @@ import { ToastStack } from "@/components/app/toast-stack"
 import { TerminalPanel } from "@/components/app/terminal-panel"
 import { WelcomeGate } from "@/components/app/welcome-gate"
 import { Transcript } from "@/components/app/transcript"
+import { WorkspaceFilePreview } from "@/components/app/workspace-file-preview"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { api } from "@/lib/api"
 import { toggleContentWidth, toggleTranscriptMode } from "@/lib/appearance"
@@ -397,6 +398,7 @@ function AppShell() {
   ])
 
   return (
+    <WorkspaceFilePreview>
     <>
       <SettingsIdleChrome>
       <AppHeader
@@ -552,6 +554,7 @@ function AppShell() {
 
       <AppSettings trafficInset={trafficLights} />
     </>
+    </WorkspaceFilePreview>
   )
 }
 
@@ -851,8 +854,12 @@ function AppComposer({
       reasoning={thread?.reasoning_effort ?? ""}
       reasoningLevels={meta?.reasoning_levels ?? []}
       onReasoningChange={(level) => {
-        if (activeId)
-          void api.patchThread(activeId, { reasoning_effort: level }).then(() => refreshThreads())
+        void (async () => {
+          const id = activeId ?? await newThread(projectId, composerDraftKey(activeId, projectId))
+          if (!id) return
+          await api.patchThread(id, { reasoning_effort: level })
+          await refreshThreads()
+        })().catch((err: unknown) => useApp.getState().setError(String(err)))
       }}
       onSend={(text, images, opts) => send(text, images, opts)}
       onStop={() => void interrupt()}

@@ -515,7 +515,7 @@ func (s *Server) listTurns(c *gin.Context) {
 	if !ok {
 		return
 	}
-	turns, err := s.engine.Store().ListTurns(th.ID)
+	turns, err := s.engine.Store().ListTurnOpenings(th.ID)
 	if err != nil {
 		s.fail(c, err)
 		return

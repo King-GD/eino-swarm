@@ -1,5 +1,5 @@
 import { parseSlashSubmit } from "../../../frontend/src/lib/slash-core"
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { ArrowDown, ChevronLeft, ChevronRight, FileText, Loader2, UsersRound } from "lucide-react"
 
 import type { ComposerPrediction } from "../../../frontend/src/lib/composer-prediction"
@@ -133,6 +133,7 @@ export function ThreadScreen({
   const ask = pendingAsk(manager)
   const opening = !caughtUp && blocks.length === 0
   const asking = Boolean(detail.running?.ask_user || ask?.pending)
+  const canSelectTranscript = !asking && (agentPage === "chat" || Boolean(selectedAgent))
   const running = Boolean(detail.running)
   const iterationLimit = pendingIterationLimit(manager, detail.running?.turn_id)
   const waiting = Boolean(detail.waiting && !running)
@@ -148,17 +149,19 @@ export function ThreadScreen({
   const [atTail, setAtTail] = useState(false)
   const [behind, setBehind] = useState(false)
 
+  const resetSelectionAction = useCallback(() => {
+    setSelectedText("")
+    setQuoteActionPosition(null)
+    setQuoteActionDocked(false)
+  }, [])
+
   useEffect(() => {
     setAgentPage("chat")
-    setSelectedText("")
-    setQuoteActionPosition(null)
-    setQuoteActionDocked(false)
-  }, [detail.id])
+    resetSelectionAction()
+  }, [detail.id, resetSelectionAction])
 
   const changePage = (page: string) => {
-    setSelectedText("")
-    setQuoteActionPosition(null)
-    setQuoteActionDocked(false)
+    resetSelectionAction()
     pinHeight.current = null
     stick.current = true
     setBehind(false)
@@ -173,7 +176,7 @@ export function ThreadScreen({
   }), [agentPage, taskPanels.open, taskPanels.close])
 
   useEffect(() => {
-    if (asking) return
+    if (!canSelectTranscript) return
     const inMessage = (node: Node) => {
       const element = node instanceof Element ? node : node.parentElement
       return element?.closest("[data-quote-text]")
@@ -188,8 +191,7 @@ export function ThreadScreen({
       const source = quoteSource.current
       if (!source?.contains(range.startContainer) || !source.contains(range.endContainer) ||
         !inMessage(range.startContainer) || !inMessage(range.endContainer)) {
-        setSelectedText("")
-        setQuoteActionDocked(false)
+        resetSelectionAction()
         return
       }
       setSelectedText(normalizeSelectedText(selection.toString()))
@@ -227,9 +229,7 @@ export function ThreadScreen({
         event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom)) return
       if (range && quoteSource.current?.contains(range.startContainer) && quoteSource.current.contains(range.endContainer) &&
         inMessage(range.startContainer) && inMessage(range.endContainer)) selection?.removeAllRanges()
-      setSelectedText("")
-      setQuoteActionPosition(null)
-      setQuoteActionDocked(false)
+      resetSelectionAction()
     }
     document.addEventListener("selectionchange", read)
     document.addEventListener("click", dismissOnOutsideClick, true)
@@ -237,7 +237,7 @@ export function ThreadScreen({
       document.removeEventListener("selectionchange", read)
       document.removeEventListener("click", dismissOnOutsideClick, true)
     }
-  }, [asking])
+  }, [canSelectTranscript, resetSelectionAction])
 
   useLayoutEffect(() => {
     if (!quoteActionDocked) return
@@ -499,7 +499,7 @@ export function ThreadScreen({
             ) : null}
           </div>
         </div>
-        {agentPage === "chat" && selectedText && !asking ? (
+        {canSelectTranscript && selectedText ? (
           <div
             className={cn(
               "z-20 w-[calc(100%-1.5rem)] max-w-sm rounded-xl border border-foreground/20 bg-card text-card-foreground shadow-xl",
@@ -508,20 +508,18 @@ export function ThreadScreen({
             )}
             data-phone-quote-action=""
             style={!quoteActionDocked ? quoteActionPosition ?? undefined : undefined}
-            onPointerDown={(event) => {
-              // Touching an action must not collapse the native text range.
+            onMouseDown={(event) => {
               if ((event.target as Element).closest("button")) event.preventDefault()
             }}
           >
             <SelectionActions key={`${detail.id}:${selectedText}`} text={selectedText} threadId={detail.id} link={fileLink} providerID={detail.provider_id}
               onExpand={() => { setQuoteActionDocked(true); setQuoteActionPosition(null) }}
-              onDismiss={() => { setSelectedText(""); setQuoteActionPosition(null); setQuoteActionDocked(false); window.getSelection()?.removeAllRanges() }}
+              onDismiss={() => { resetSelectionAction(); window.getSelection()?.removeAllRanges() }}
               onAdd={() => {
                 setQuotes((current) => [...current, selectedText])
-                setSelectedText("")
-                setQuoteActionPosition(null)
-                setQuoteActionDocked(false)
                 window.getSelection()?.removeAllRanges()
+                if (selectedAgent) changePage("chat")
+                else resetSelectionAction()
               }} />
           </div>
         ) : null}

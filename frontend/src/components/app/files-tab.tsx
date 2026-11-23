@@ -18,6 +18,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { CopyButton } from "@/components/app/copy-button"
 import { ConfirmDeleteDialog } from "@/components/app/confirm-delete-dialog"
 import { FilePreviewDialog } from "@/components/app/file-preview"
+import { useWorkspaceFileOpen } from "@/components/app/workspace-file-open"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -80,6 +81,7 @@ export function FilesTab({
   onSearch?: (query: string) => Promise<FileEntry[]>
 }) {
   const t = useT()
+  const openWorkspaceFile = useWorkspaceFileOpen()
   const project = fileScope === "project"
   const isolated = !project && Boolean(fileView?.isolated)
   const location: FileLocation | undefined = project || fileView?.root ? { scope: fileScope, root: fileView?.root } : undefined
@@ -166,6 +168,10 @@ export function FilesTab({
   }
 
   const openFile = (path: string) => {
+    if (openWorkspaceFile) {
+      void openWorkspaceFile(path, { listed: true, location, returnFocus: treeRef.current })
+      return
+    }
     if (threadId) setPreview({ threadId, path })
   }
 
@@ -320,7 +326,7 @@ export function FilesTab({
           })}
         </div>
       )}
-      {preview && preview.threadId === threadId ? (
+      {!openWorkspaceFile && preview && preview.threadId === threadId ? (
         <FilePreviewDialog
           key={`${preview.threadId}/${preview.path}`}
           threadId={preview.threadId}

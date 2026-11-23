@@ -153,8 +153,8 @@ func TestSideChatProviderFailuresAndCancellationStaySeparateFromLiveTask(t *test
 			}
 			slashReply(w, true, map[string]any{"role": "assistant", "content": "The main task finished."}, "stop")
 		case bytes.Contains(raw, []byte("side-question-marker")):
-			if len(input.Tools) != 0 || !bytes.Contains(raw, []byte(mainText)) {
-				t.Error("side model call lacked task context or acquired tools")
+			if !sideChatLookupTools(input.Tools) || !bytes.Contains(raw, []byte(mainText)) {
+				t.Error("side model call lacked task context or acquired an action tool")
 			}
 			if bytes.Contains(raw, []byte("provider-failure")) {
 				w.Header().Set("Content-Type", "application/json")
@@ -260,7 +260,7 @@ func TestSideChatStreamsSelectedModelBeforeCompletionAndCancelsIndependently(t *
 			t.Error(err)
 			return
 		}
-		if req.Model != selected || !req.Stream || len(req.Tools) != 0 || len(req.Messages) != 3 {
+		if req.Model != selected || !req.Stream || !sideChatLookupTools(req.Tools) || len(req.Messages) != 3 {
 			t.Errorf("wrong isolated side model request: %+v", req)
 			return
 		}
@@ -358,6 +358,35 @@ func TestSideChatStreamsSelectedModelBeforeCompletionAndCancelsIndependently(t *
 	if err != nil || after.ProviderID != before.ProviderID || after.Model != before.Model {
 		t.Fatalf("side selection changed the main conversation: before=%+v after=%+v err=%v", before, after, err)
 	}
+}
+
+func sideChatLookupTools(raw []json.RawMessage) bool {
+	if len(raw) == 0 || len(raw) > 2 {
+		return false
+	}
+	found := false
+	for _, item := range raw {
+		var tool map[string]any
+		if json.Unmarshal(item, &tool) != nil {
+			return false
+		}
+		if typ, _ := tool["type"].(string); typ != "" && typ != "function" {
+			return false
+		}
+		name, _ := tool["name"].(string)
+		if name == "" {
+			if fn, ok := tool["function"].(map[string]any); ok {
+				name, _ = fn["name"].(string)
+			}
+		}
+		if name != "search_task" && name != "skill_view" {
+			return false
+		}
+		if name == "search_task" {
+			found = true
+		}
+	}
+	return found
 }
 
 func waitSideChatSignal(t *testing.T, signal <-chan struct{}, label string) {
