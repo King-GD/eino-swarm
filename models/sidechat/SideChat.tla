@@ -77,7 +77,9 @@ Send(id) ==
     /\ UNCHANGED <<selected, panel, answers, staleApplied, toolsExposed, lateDropped>>
 
 (* Read after dispatch, when navigation may already have happened. Data is
-   indexed by the route's captured thread. No worker tool surface is installed. *)
+   indexed by the route's captured thread. No worker tool surface is installed.
+   A read-only search of this task and a read of a recorded skill are not that
+   surface: EnableSideTools remains the fault of installing action tools. *)
 BeginModel(id) ==
     /\ req[id].phase = "sent"
     /\ req' = [req EXCEPT ![id].phase = "model",

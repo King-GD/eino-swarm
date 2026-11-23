@@ -21,7 +21,7 @@ export class MockProductMode {
     const preset = { provider_id: "gateway:preset", provider_label: "Partner", catalog_group: "third_party" as const, model: "shared-model", default: true }
     return { ...this.policy(), models: this.mode === "local" ? [preset,
       { provider_id: "gateway:original", provider_label: "Main", catalog_group: "original", model: "shared-model" },
-    ] : [{ ...preset, locked: true }], reasoning_levels: ["low", "medium", "high"] }
+    ] : [{ ...preset, locked: true }], reasoning_levels: ["none", "low", "medium", "high"] }
   }
 
   private policy(): Partial<RemoteResponse> {

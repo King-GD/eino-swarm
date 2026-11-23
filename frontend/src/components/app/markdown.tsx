@@ -15,7 +15,9 @@ import remarkMath from "remark-math"
 
 import { ChartPending } from "@/components/app/chart-pending"
 import { MarkdownCodeBlock, readFence } from "@/components/app/markdown-code"
+import { useWorkspaceFileOpen, WorkspaceFileLink } from "@/components/app/workspace-file-open"
 import { classifyHref } from "@/lib/external-links"
+import { remarkWorkspaceFiles, workspaceFileFromHref } from "@/lib/workspace-file-ref"
 import { isMathFence } from "@/lib/math-fence"
 import { chartSpecsEqual, parseChartSpec, type ChartSpec } from "@/lib/chart-spec"
 import { closeIncompleteMarkdown } from "@/lib/stream-markdown"
@@ -38,7 +40,7 @@ const MarkdownMermaid = lazy(async () => {
 
 /** remark plugins are module-level so a memoised markdown block is not
  *  invalidated by a new array on every parent render. */
-const PLUGINS = [remarkGfm, remarkMath]
+const PLUGINS = [remarkGfm, remarkMath, remarkWorkspaceFiles]
 
 const MarkdownStreaming = createContext(false)
 const MarkdownSource = createContext("")
@@ -181,6 +183,13 @@ function MarkdownLink({
   node: _node,
   ...props
 }: ComponentPropsWithoutRef<"a"> & { node?: unknown }) {
+  const file = workspaceFileFromHref(href)
+  const open = useWorkspaceFileOpen()
+  const streaming = useContext(MarkdownStreaming)
+  if (file) {
+    if (!open || streaming) return <>{children}</>
+    return <WorkspaceFileLink path={file}>{children}</WorkspaceFileLink>
+  }
   const origin =
     typeof window === "undefined" ? "http://127.0.0.1" : window.location.origin
   const action = classifyHref(href, origin)

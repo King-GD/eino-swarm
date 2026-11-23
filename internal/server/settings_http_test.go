@@ -52,8 +52,8 @@ func TestMetaTellsTheUIWhatItCanDo(t *testing.T) {
 	}
 	// the composer builds its thinking-level menu from this, so it must arrive
 	levels, ok := got["reasoning_levels"].([]any)
-	if !ok || len(levels) != 3 || levels[0] != "low" || levels[2] != "high" {
-		t.Fatalf("meta must offer low/medium/high thinking levels, got %v", got["reasoning_levels"])
+	if !ok || len(levels) != 4 || levels[0] != "none" || levels[1] != "low" || levels[2] != "medium" || levels[3] != "high" {
+		t.Fatalf("meta must offer off, low, medium and high thinking levels, got %v", got["reasoning_levels"])
 	}
 	swarm, ok := got["swarm"].(map[string]any)
 	if !ok {

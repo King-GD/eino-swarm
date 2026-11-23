@@ -110,9 +110,10 @@ actual size and copyable source. Incomplete, invalid, resource-bearing, or
 over-paint-budget diagrams remain code. In paired PC conversations, an idle empty composer can show the
 PC's latest next-step suggestion. Tap it or press Tab to edit it as a draft;
 Send remains explicit. The PC settings switch also controls this phone hint.
-Selected transcript text opens an opaque, high-contrast action panel in both
-light and dark themes, with 44px touch targets and a close button. Add to chat
-preserves the existing quote draft flow. Read aloud is available when the
+Selected text in the main transcript or a child agent's log opens the same
+high-contrast action panel, with 44px touch targets and a close button.
+On a child agent page, **Add to chat** returns to the parent conversation with
+the quote in the draft; it does not send the message. Read aloud is available when the
 selected PC’s speech output is enabled and ready, using the same phone speech
 route and player as completed answers. In a Chinese UI, English selections
 also offer Translate; the PC uses its translation role or current conversation
@@ -475,6 +476,9 @@ a short thread is bottom-aligned, and scrolling away from the tail raises
 sends (Shift+Enter is a newline, and an IME candidate list is never a
 send). Tap the message field to expand it and show the available **Model**
 and **Thinking level** icons below. Each icon opens its settings sheet.
+**Thinking off** is saved with the conversation and applies to the next request
+in direct Chat or the next turn on the paired PC. If the model still reports
+reasoning after the request disables it, the conversation shows an error.
 The leftmost control is **Add**. It attaches files and lists `/goal`,
 `/plan` and `/image` in a paired PC conversation or new chat. Direct chat
 offers `/image` when the selected Gateway source has an authorized image model.

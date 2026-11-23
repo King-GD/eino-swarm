@@ -168,13 +168,14 @@ func TestPolicyEffortDefaultsToBlankLowAndRoundTrips(t *testing.T) {
 		optional                    bool
 	}{
 		{"", "high", "low", true}, {"inherit", "high", "high", false}, {"inherit", "", "", false}, {"medium", "", "medium", false},
+		{"inherit", "none", "none", false}, {"none", "high", "none", false},
 	} {
 		got, optional := (SwarmConfig{PolicyReasoningEffort: tc.setting}).PolicyEffort(tc.conversation)
 		if got != tc.want || optional != tc.optional {
 			t.Fatalf("policy effort setting=%q conversation=%q got %q/%v want %q/%v", tc.setting, tc.conversation, got, optional, tc.want, tc.optional)
 		}
 	}
-	if got := AuxiliaryReasoningChoices(); len(got) != 4 || got[0] != ReasoningInherit {
+	if got := AuxiliaryReasoningChoices(); len(got) != 5 || got[0] != ReasoningInherit || got[1] != ReasoningNone {
 		t.Fatalf("choices=%v", got)
 	}
 }

@@ -74,8 +74,11 @@ func TestReplayReadsOnlyItsHistoryRowsOnce(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("history=%+v", got)
 	}
-	if messageReads != 1 || eventReads != 1 {
-		t.Fatalf("message/event reads=%d/%d, want 1/1", messageReads, eventReads)
+	// Steering evidence and missing manager answers are separate indexed
+	// lookups. One combined kind scan was the read that walked every historical
+	// manager message while opening a long conversation.
+	if messageReads != 1 || eventReads != 2 {
+		t.Fatalf("message/event reads=%d/%d, want 1/2", messageReads, eventReads)
 	}
 }
 

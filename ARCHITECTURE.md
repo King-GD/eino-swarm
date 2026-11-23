@@ -83,7 +83,9 @@ keep their existing metadata operations.
 
 PC side chat uses a separate HTTP request and a browser-memory panel owned by
 the selected conversation. The server reads a bounded textual snapshot of
-that conversation and makes an independently cancelable, tool-free model call.
+that conversation, including recent task evidence, project notes and the
+skill index, and makes an independently cancelable model call. That call may
+only search the same task record and read one recorded skill.
 The panel can override the model for its own request and receives answer
 deltas over that request, with a final answer before committing local history.
 There is no side-chat write path into the turn runtime, durable transcript,

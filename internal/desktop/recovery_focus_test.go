@@ -22,8 +22,15 @@ func TestRecoverySuccessorDoesNotRequestItsOwnActivationOnNavigation(t *testing.
 	for _, ready := range []func(context.Context) error{nil, func(context.Context) error { return nil }} {
 		host := &recoveryTestHost{window: &directoryRecordingWindow{}, windowEvents: make(map[events.WindowEventType]func()), appEvents: make(map[events.ApplicationEventType]func())}
 		controller := startRecoveryForHost(host, Options{URL: "http://127.0.0.1:1234", Recovery: &RecoveryOptions{Ready: ready}})
-		if host.windowEvents[events.Mac.WebViewDidFinishNavigation] != nil {
-			t.Fatal("a successor retained a competing self-activation path")
+		for index, event := range []events.WindowEventType{events.Mac.WebViewDidStartProvisionalNavigation, events.Mac.WebViewDidCommitNavigation, events.Mac.WebViewDidFinishNavigation} {
+			observe := host.windowEvents[event]
+			if observe == nil {
+				t.Fatal("missing passive navigation observer")
+			}
+			observe()
+			if got := controller.navigation.Load(); got != uint32(index+1) {
+				t.Fatalf("navigation observer recorded stage %d for %v", got, event)
+			}
 		}
 		controller.shutdown()
 	}

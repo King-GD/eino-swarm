@@ -26,9 +26,9 @@ export class ModelCallError extends Error {
   }
 }
 
-const LEVELS = new Set(["low", "medium", "high"])
+const LEVELS = new Set(["none", "low", "medium", "high"])
 
-/** Same three levels as config.ReasoningEfforts. Anything else is the
+/** Same levels as config.ReasoningEfforts. Anything else is the
  *  model's own default and must not be sent. */
 export function normalizeReasoning(raw: string): string {
   const v = raw.trim().toLowerCase()
@@ -67,6 +67,7 @@ export function chatRequestBody(
   model: string,
   turns: WireTurn[],
   reasoning: string,
+  baseURL = "",
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model,
@@ -74,8 +75,21 @@ export function chatRequestBody(
     messages: turns.map(chatMessage),
   }
   const effort = normalizeReasoning(reasoning)
-  if (effort) body.reasoning_effort = effort
+  if (effort === "none") Object.assign(body, chatThinkingOffFields(baseURL))
+  else if (effort) body.reasoning_effort = effort
   return body
+}
+
+// Match the PC provider's Chat Completions dialects. The endpoint
+// determines the field even when several providers sell the same model.
+function chatThinkingOffFields(baseURL: string): Record<string, unknown> {
+  const host = baseURL ? new URL(baseURL).hostname : ""
+  if (host === "open.bigmodel.cn" || host === "api.z.ai") {
+    return { thinking: { type: "disabled" } }
+  }
+  if (host === "openrouter.ai") return { reasoning: { enabled: false } }
+  if (host.startsWith("dashscope") && host.endsWith(".aliyuncs.com")) return { enable_thinking: false }
+  return { reasoning_effort: "none" }
 }
 
 export function responsesRequestBody(
@@ -95,7 +109,7 @@ export function responsesRequestBody(
   // field is retried without it; the default stays on.
   if (effort) {
     body.reasoning =
-      opts?.summary === false ? { effort } : { effort, summary: "auto" }
+      effort === "none" || opts?.summary === false ? { effort } : { effort, summary: "auto" }
   }
   return body
 }
@@ -264,7 +278,7 @@ export function looksLikeSSE(raw: string): boolean {
 
 /** Delta events append. A terminal snapshot is ignored so the same sentence
  *  is not painted twice. `[DONE]` ends the stream. */
-export function pieceFromData(data: string): StreamPiece | "done" | null {
+export function pieceFromData(data: string, thinkingOff = false): StreamPiece | "done" | null {
   const trimmed = data.trim()
   if (!trimmed) return null
   if (trimmed === "[DONE]") return "done"
@@ -275,16 +289,27 @@ export function pieceFromData(data: string): StreamPiece | "done" | null {
     return null
   }
   assertNoError(json)
+  if (thinkingOff) checkThinkingOffUsage(json)
   return deltaPiece(json)
 }
 
-export function replyFromJSON(json: unknown): StreamPiece {
+export function replyFromJSON(json: unknown, thinkingOff = false): StreamPiece {
   assertNoError(json)
+  if (thinkingOff) checkThinkingOffUsage(json)
   const root = asRecord(json)
   const direct = recordPiece(root)
   if (direct.text || direct.reasoning) return direct
   // response.completed wraps the finished reply one level down.
   return recordPiece(asRecord(root?.response))
+}
+
+function checkThinkingOffUsage(json: unknown) {
+  const root = asRecord(json)
+  const usage = asRecord(root?.usage ?? asRecord(root?.response)?.usage)
+  const details = asRecord(usage?.completion_tokens_details ?? usage?.output_tokens_details)
+  if (typeof details?.reasoning_tokens === "number" && details.reasoning_tokens > 0) {
+    throw new ModelCallError("thinking_off_ignored", "parse")
+  }
 }
 
 function recordPiece(root: Record<string, unknown> | null): StreamPiece {

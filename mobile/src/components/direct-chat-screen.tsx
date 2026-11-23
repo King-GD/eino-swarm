@@ -36,7 +36,7 @@ import { ModelCallError, redact } from "@/lib/openai-wire"
 import type { SavedLink } from "@/lib/store"
 import { timeAgo } from "@/lib/when"
 
-const thinking = ["low", "medium", "high"]
+const thinking = ["none", "low", "medium", "high"]
 
 /** A conversation that lives on the phone. Same composer as a PC thread:
  *  model, thinking level, image or file. The call does not go through the PC. */
@@ -527,6 +527,7 @@ function explain(err: unknown, secret: string): string {
     if (err.message === "gateway_login_required") return t("account.webLoginRequired")
     if (err.message === "gateway_access_denied") return t("account.accessDenied")
     if (err.message === "cloud_tools_model_unsupported") return t("account.webModelUnsupported")
+    if (err.message === "thinking_off_ignored") return t("reason.offIgnored")
     if (err.message === "cloud_tools_login") return t("account.expired")
     if (err.message === "cloud_tools_denied") return t("account.webDenied")
     if (err.message.startsWith("cloud_tools_") && err.message.endsWith("limit")) return t("account.webLimit")

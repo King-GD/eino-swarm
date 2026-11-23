@@ -89,6 +89,13 @@ test("runs a swarm turn end to end and keeps it after a reload", async ({ page }
   await transcript.getByRole("tab", { name: "Chart" }).click()
   await expect(transcript.getByTestId("transcript-chart").locator("svg")).toBeVisible()
   await expect(transcript.getByText(/Worked for/)).toBeVisible()
+  const fileLink = answer.getByRole("button", { name: "Preview notes/researcher.md" })
+  await fileLink.click()
+  const preview = page.getByTestId("file-preview")
+  await expect(preview.getByRole("heading", { name: "researcher notes" })).toBeVisible()
+  await expect(preview.getByText("work/notes/researcher.md")).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(preview).toBeHidden()
 
   // billed tokens land on the composer ring and the Trace tab, not as a
   // transcript row. A missing kind used to dump the JSON snapshot as a notice.
@@ -606,6 +613,26 @@ test("switches the thinking level and keeps it after a reload", async ({ page })
   // the choice is stored on the conversation; reload goes home, then the row brings it back
   await reloadOpenConversation(page)
   await expect(page.getByLabel("Thinking level")).toContainText("High")
+
+  await level.click()
+  await page.getByRole("option", { name: "Thinking off", exact: true }).click()
+  await expect(level).toHaveText("Thinking off")
+  await reloadOpenConversation(page)
+  await expect(level).toHaveText("Thinking off")
+  await level.click()
+  await page.getByRole("option", { name: "Default thinking", exact: true }).click()
+  await expect(level).toHaveText("Default thinking")
+})
+
+test("sets Thinking off before the first message from the home composer", async ({ page }) => {
+  await page.goto("/")
+  await expect(page.getByRole("heading", { name: "What should we work on?" })).toBeVisible()
+  const level = page.getByLabel("Thinking level")
+  await level.click()
+  await page.getByRole("option", { name: "Thinking off", exact: true }).click()
+  await expect(level).toHaveText("Thinking off")
+  await reloadOpenConversation(page)
+  await expect(level).toHaveText("Thinking off")
 })
 
 test("switches the model in the composer and keeps it after a reload", async ({

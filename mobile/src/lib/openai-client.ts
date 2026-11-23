@@ -9,6 +9,7 @@ import {
   ModelCallError,
   modelsURL,
   normalizeNewlines,
+  normalizeReasoning,
   peelThought,
   pieceFromData,
   redact,
@@ -163,7 +164,7 @@ export async function streamCompletion(input: {
         ? responsesRequestBody(input.model, input.turns, input.reasoning, {
             summary: !omitSummary,
           })
-        : chatRequestBody(input.model, input.turns, input.reasoning)
+        : chatRequestBody(input.model, input.turns, input.reasoning, base)
     const offerImage = Boolean(imageTarget && !imageAttempted && gatewayImageTarget(input.provider)?.model === imageTarget.model)
     continuation?.request(body, style, Boolean(tools), offerImage)
     const collector = continuation ? new ToolRoundCollector(style) : undefined
@@ -199,7 +200,7 @@ export async function streamCompletion(input: {
       const piece = await readCompletion(iterator, (delta) => {
         onToken()
         input.onDelta({ text: previousText + delta.text, reasoning: previousReasoning + delta.reasoning })
-      }, ctrl, idleMs, collector)
+      }, ctrl, idleMs, normalizeReasoning(input.reasoning) === "none", collector)
       return { piece, round: collector?.finish(), offerImage }
     } finally { seenToolFrames ||= collector?.seen ?? false }
   }
@@ -352,6 +353,7 @@ async function readCompletion(
   onDelta: (piece: StreamPiece) => void,
   ctrl: AbortController,
   idleMs: number,
+  thinkingOff: boolean,
   collector?: ToolRoundCollector,
 ) {
   let pending = ""
@@ -367,6 +369,7 @@ async function readCompletion(
     text = nextText
     reasoning = nextReason
     const next = present(text, reasoning, false)
+    if (thinkingOff && next.reasoning.trim()) throw new ModelCallError("thinking_off_ignored", "parse")
     if (next.text === shown.text && next.reasoning === shown.reasoning) return false
     emitted = true
     // The thought lands before the answer, the same order a PC thread paints.
@@ -387,7 +390,7 @@ async function readCompletion(
   const take = async (data: string): Promise<boolean> => {
     try {
       collector?.accept(data)
-      const piece = pieceFromData(data)
+      const piece = pieceFromData(data, thinkingOff)
       if (piece === "done") { ended = true; return false }
       if (piece) return apply(piece)
       // A stream that sends only the completed snapshot has no deltas.
@@ -399,7 +402,7 @@ async function readCompletion(
       } catch {
         return false
       }
-      const full = replyFromJSON(json)
+      const full = replyFromJSON(json, thinkingOff)
       if (!full.text && !full.reasoning) return false
       return apply(full)
     } finally { if (collector?.ended) ended = true }
@@ -433,7 +436,7 @@ async function readCompletion(
       } catch {
         throw new ModelCallError("parse", "parse")
       }
-      const full = replyFromJSON(json)
+      const full = replyFromJSON(json, thinkingOff)
       if (full.text || full.reasoning) await apply(full)
     }
   }

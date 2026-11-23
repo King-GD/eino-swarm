@@ -17,7 +17,7 @@ const DefaultAuxiliaryReasoning = ReasoningLow
 // AuxiliaryReasoningChoices is what Settings offers for a background call
 // besides the blank default.
 func AuxiliaryReasoningChoices() []string {
-	return []string{ReasoningInherit, ReasoningLow, ReasoningMedium, ReasoningHigh}
+	return append([]string{ReasoningInherit}, ReasoningEfforts()...)
 }
 
 // NormalizeAuxiliaryReasoning keeps inherit or an explicit level and maps

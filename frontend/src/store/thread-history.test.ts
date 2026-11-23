@@ -230,5 +230,28 @@ describe("thread history buffer", () => {
     expect(rememberStored("th_1", resumed)).toBe(false)
     expect(state?.turns.find((t) => t.id === "tn_b")?.agentIds).toEqual(["worker-1"])
   })
+
+  it("fills a blank open roster from the worker log", () => {
+    resetThreadHistory()
+    const spawned: SwarmEvent = {
+      thread_id: "th_1", turn_id: "tn_a", seq: 2, kind: "spawned", agent_id: "worker-1", role: "worker",
+      text: "", created_at: new Date().toISOString(),
+    }
+    const finished: SwarmEvent = {
+      thread_id: "th_1", turn_id: "tn_a", seq: 3, kind: "finished", agent_id: "worker-1", role: "worker",
+      text: "", err: "disk full", created_at: new Date().toISOString(),
+    }
+    const opened = applyTail("th_1", [ev(40, "still going")], [spawned, finished])
+    expect(opened.agents["worker-1"]?.instruction).toBeUndefined()
+    expect(opened.agents["worker-1"]?.status).toBe("failed")
+    const state = applyAgentLog("th_1", [
+      { ...spawned, text: "inspect the assigned notes" },
+      { ...finished, text: "the notes are complete" },
+    ])
+    expect(state?.agents["worker-1"]?.instruction).toBe("inspect the assigned notes")
+    expect(state?.agents["worker-1"]?.result).toBe("the notes are complete")
+    expect(state?.agents["worker-1"]?.error).toBe("disk full")
+    expect(state?.agents[MANAGER_ID]?.blocks.filter((block) => block.kind === "spawn")).toEqual([])
+  })
 })
 

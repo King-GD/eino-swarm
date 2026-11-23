@@ -180,7 +180,7 @@ type SwarmConfig struct {
 	ScheduleMaxActive int `yaml:"schedule_max_active" json:"schedule_max_active"`
 	// PolicyReasoningEffort is the schedule-claim and wake-permission
 	// classifiers' thinking level: blank (DefaultAuxiliaryReasoning),
-	// inherit, low, medium or high. Unknown values are repaired to blank.
+	// inherit, none, low, medium or high. Unknown values are repaired to blank.
 	PolicyReasoningEffort string `yaml:"policy_reasoning_effort" json:"policy_reasoning_effort"`
 }
 
@@ -379,39 +379,6 @@ func contains(list []string, want string) bool {
 type LogConfig struct {
 	// Level is one of debug, info, warn, error.
 	Level string `yaml:"level" json:"level"`
-}
-
-// Reasoning-effort levels. These are the OpenAI `reasoning_effort` values, not
-// an app setting, so they live as constants rather than in the config file. An
-// empty level means "let the model decide": no reasoning_effort is sent, which
-// is what keeps a non-reasoning endpoint from being handed a field it rejects.
-const (
-	ReasoningDefault = ""
-	ReasoningLow     = "low"
-	ReasoningMedium  = "medium"
-	ReasoningHigh    = "high"
-)
-
-// ReasoningEfforts is the ordered set of explicit levels the UI offers. The
-// empty default is rendered as "Default" and is not one of these values.
-func ReasoningEfforts() []string {
-	return []string{ReasoningLow, ReasoningMedium, ReasoningHigh}
-}
-
-// NormalizeReasoning maps any input to a known level, falling back to the
-// empty default so a typo or an old value never sends an invalid one on the
-// wire.
-func NormalizeReasoning(s string) string {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case ReasoningLow:
-		return ReasoningLow
-	case ReasoningMedium:
-		return ReasoningMedium
-	case ReasoningHigh:
-		return ReasoningHigh
-	default:
-		return ReasoningDefault
-	}
 }
 
 // Defaults, all overridable from the config file.

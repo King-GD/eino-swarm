@@ -131,8 +131,12 @@ from the model list without dropping a conversation that already uses it.
 Hiding the default moves new conversations to an endpoint that is still
 listed. The last endpoint stays on. The composer picker groups models by
 provider, searches, refreshes the catalog, and jumps to Edit providers. A
-thinking-level menu (Default / Low / Medium / High) applies from the next
-turn. A thought that is still streaming is not cut off by the request timeout.
+thinking-level menu applies from the next turn. **Default thinking** follows
+the configured default. **Thinking off** explicitly asks the same model to
+answer without reasoning. Low, Medium and High select a reasoning level.
+If the endpoint rejects the setting or still returns reasoning, the turn
+reports an error. GLM-5.3 and GLM-5.3-Flash require thinking. A thought that is
+still streaming is not cut off by the request timeout.
 
 If the model sends no first byte, open its provider and raise **First-byte
 timeout (seconds)** (default 30). The error's **Configure first-byte timeout**
@@ -313,11 +317,12 @@ conversation.
 
 **Side chat** is separate from the turn. Open it from the conversation header,
 enter `/side` or `/side <question>`, or select text and choose **Ask in side
-chat**. The panel uses the task's recent context and your selection. Drag its
-left edge to resize it. Its model picker can follow the task model or use
-another one. Closing it, switching conversations, or reloading clears its
-temporary history. It does not write into the turn, the transcript, or the
-schedule.
+chat**. The panel reads the task's recent record, including tool and worker
+findings, plus the project's notes and recorded skills. It can search that
+task and open a recorded skill. Drag its left edge to resize it. Its model
+picker can follow the task model or use another one. Closing it, switching
+conversations, or reloading clears its temporary history. It does not write
+into the turn, the transcript, the notes, the skills, or the schedule.
 
 ### How workers are used
 
@@ -435,7 +440,9 @@ highlighted and has a copy control, including paired and direct phone
 conversations. Unknown or empty language tags stay plain. `$…$`, `$$…$$`, and
 `math` fences paint as formulas. A GFM table stays inside the column. A
 markdown URL opens in a new browser tab (`zwai web`) or the system browser
-(`zwai desktop`).
+(`zwai desktop`). A workspace-relative file path in a finished answer opens
+that file in the same preview as the Files tab. A path written from the task
+working directory is found under `work/` when that is where the file is.
 
 A `mermaid` fence renders a diagram in desktop and Web conversations, tool
 output, and Markdown file previews. Incomplete live fences, invalid diagrams,
@@ -701,7 +708,8 @@ its files. Deletion only cleans up app-managed task files; external workdirs
 and their tasks stay on disk. The **Files** tab is a collapsible tree: filter at
 the top, directories expand, download on hover. In the desktop app the toolbar
 opens the workspace in the file manager. The selected directory keeps a button
-to open that folder. Click a file or press Enter to preview it. HTML opens in
+to open that folder. Click a file or press Enter to preview it. The same
+preview opens from a workspace path in an answer. HTML opens in
 a sandbox without access to the app origin and can switch back to source. CSV
 and TSV open as tables. DOCX, XLSX, PPTX, and EPUB show their saved package
 content. SVG stays source. Images offer zoom, actual size, and fit to window.

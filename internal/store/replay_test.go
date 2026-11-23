@@ -64,40 +64,54 @@ func TestReplayIndexesMigrateExistingDatabaseAndBoundQueries(t *testing.T) {
 			t.Fatalf("%s columns=%v", name, names)
 		}
 	}
-	var query string
-	var args []any
+	type capturedSQL struct {
+		sql  string
+		args []any
+	}
+	var got []capturedSQL
 	if err := s.db.Callback().Query().After("gorm:query").Register("test:explain_replay", func(tx *gorm.DB) {
-		if tx.Statement.Table == "events" || tx.Statement.Table == "messages" {
-			query = tx.Statement.SQL.String()
-			args = append([]any(nil), tx.Statement.Vars...)
+		table := tx.Statement.Table
+		if table == "events" || table == "messages" || strings.Contains(table, "events") || strings.Contains(table, "messages") {
+			got = append(got, capturedSQL{tx.Statement.SQL.String(), append([]any(nil), tx.Statement.Vars...)})
 		}
 	}); err != nil {
 		t.Fatal(err)
 	}
-	for _, events := range []bool{false, true} {
-		if events {
-			_, err = s.ListReplayEvents("thread", 3, "skip")
-		} else {
-			_, err = s.ListReplayMessages("thread", 3, "skip")
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
+	explain := func(query string, args []any) string {
+		t.Helper()
 		var plan []struct{ Detail string }
 		if err := s.db.Raw("EXPLAIN QUERY PLAN "+query, args...).Scan(&plan).Error; err != nil {
 			t.Fatal(err)
 		}
 		details := fmt.Sprint(plan)
 		t.Log(details)
-		wanted := "idx_msg_thread_role_seq"
-		if events {
-			wanted = "idx_evt_thread_kind_seq"
-			if strings.Count(details, "idx_messages_turn_id") != 2 {
-				t.Fatalf("per-turn existence lookups not indexed: %s", details)
+		return details
+	}
+	if _, err = s.ListReplayMessages("thread", 3, "skip"); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 || !strings.Contains(explain(got[len(got)-1].sql, got[len(got)-1].args), "idx_msg_thread_role_seq") {
+		t.Fatalf("role filter lost index: %+v", got)
+	}
+	got = nil
+	if _, err = s.ListReplayEvents("thread", 3, "skip"); err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, query := range got {
+		plan := explain(query.sql, query.args)
+		for _, index := range []string{"idx_evt_thread_kind_seq", "idx_evt_thread_turn_kind_seq", "idx_messages_turn_id", "idx_msg_thread_seq"} {
+			if strings.Contains(plan, index) {
+				seen[index] = true
 			}
 		}
-		if !strings.Contains(details, wanted) {
-			t.Fatalf("kind/role filter lost index: %s", details)
+		if strings.Contains(query.sql, "agent_message") && strings.Contains(plan, "idx_evt_thread_kind_seq") && !strings.Contains(plan, "idx_evt_thread_turn_kind_seq") {
+			t.Fatalf("manager answers still scan every kind row: %s", plan)
+		}
+	}
+	for _, index := range []string{"idx_evt_thread_kind_seq", "idx_evt_thread_turn_kind_seq", "idx_messages_turn_id"} {
+		if !seen[index] {
+			t.Fatalf("replay lookup lost %s: %+v", index, got)
 		}
 	}
 }
@@ -176,6 +190,22 @@ func TestReplayStoreKeepsOnlyRelevantRowsAndPreservesOldAnswerIdentity(t *testin
 	events, err = s.ListReplayEvents(th.ID, 0, "")
 	if err != nil || len(events) != 5 {
 		t.Fatalf("uncompacted events=%+v err=%v", events, err)
+	}
+}
+
+func TestReplayAnswerLookupReportsItsRead(t *testing.T) {
+	s := open(t)
+	n := 0
+	if err := s.db.Callback().Query().Before("gorm:query").Register("test:fail_replay_answers", func(tx *gorm.DB) {
+		n++
+		if n == 2 {
+			_ = tx.AddError(fmt.Errorf("blocked answers"))
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ListReplayEvents("thread", 0, ""); err == nil || !strings.Contains(err.Error(), "list replay events") {
+		t.Fatalf("answer lookup err=%v", err)
 	}
 }
 

@@ -20,7 +20,8 @@ type defaultReasoningRequest struct {
 	Stream    bool    `json:"stream"`
 	Effort    *string `json:"reasoning_effort"`
 	Reasoning *struct {
-		Effort *string `json:"effort"`
+		Effort  *string `json:"effort"`
+		Summary *string `json:"summary"`
 	} `json:"reasoning"`
 }
 
@@ -98,6 +99,9 @@ func assertDefaultReasoningRequest(t *testing.T, requests <-chan defaultReasonin
 			got = nil
 			if request.Reasoning != nil {
 				got = request.Reasoning.Effort
+				if want == "none" && request.Reasoning.Summary != nil {
+					t.Fatal("thinking off also requested a reasoning summary")
+				}
 			}
 		}
 		if want == "" {
@@ -132,6 +136,8 @@ func TestModelBuilderDefaultReasoningAtHTTP(t *testing.T) {
 				{name: "empty effort inherits high", setting: "high", want: "high"},
 				{name: "explicit low overrides high", setting: "high", effort: "low", want: "low"},
 				{name: "explicit high overrides low", setting: "low", effort: "high", want: "high"},
+				{name: "explicit off overrides high", setting: "high", effort: " NONE ", want: "none"},
+				{name: "off can be the configured default", setting: "none", want: "none"},
 				{name: "normalized empty effort inherits normalized default", setting: " HIGH ", effort: " \t ", want: "high"},
 				{name: "normalized explicit effort wins", setting: "high", effort: " LOW ", want: "low"},
 				{name: "invalid explicit effort normalizes before inheritance", setting: "high", effort: "unsupported", want: "high"},
@@ -196,6 +202,7 @@ func TestAuxiliaryBuilderInheritsDefaultReasoningAtHTTP(t *testing.T) {
 	for _, tc := range []struct{ name, effort, want string }{
 		{"empty auxiliary effort inherits", "", "high"},
 		{"explicit background low remains low", "low", "low"},
+		{"explicit off overrides the configured default", "none", "none"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			endpoint, requests := defaultReasoningEndpoint(t, config.APIModeChatCompletions)
@@ -219,6 +226,7 @@ func TestWorkerReasoningBindingSurvivesDefaultChangesAtHTTP(t *testing.T) {
 		t.Run(apiMode, func(t *testing.T) {
 			for _, tc := range []struct{ name, initial, later, want string }{
 				{"inherited high stays high", "high", "low", "high"},
+				{"bound off stays off", "none", "high", "none"},
 				{"selected omission stays omitted", "", "high", ""},
 			} {
 				t.Run(tc.name, func(t *testing.T) {

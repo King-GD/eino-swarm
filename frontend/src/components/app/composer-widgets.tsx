@@ -65,6 +65,7 @@ export function ComposerSlashMenu({
 }
 
 export function thinkingLabel(level: string, t: Translate): string {
+  if (level === "none") return t("reason.none")
   if (level === "low") return t("reason.low")
   if (level === "medium") return t("reason.medium")
   if (level === "high") return t("reason.high")

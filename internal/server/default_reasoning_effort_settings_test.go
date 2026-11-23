@@ -77,6 +77,7 @@ func TestSettingsDefaultReasoningEffortNormalizesAndSavesExplicitValues(t *testi
 	for _, tc := range []struct{ name, value, want string }{
 		{"high normalization", " HIGH ", "high"},
 		{"low", "low", "low"},
+		{"off", " NONE ", "none"},
 		{"medium normalization", " Medium ", "medium"},
 		{"invalid uses default", "unsupported", ""},
 		{"explicit empty clears", "", ""},

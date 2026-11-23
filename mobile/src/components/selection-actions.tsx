@@ -97,7 +97,7 @@ export function SelectionActions({ text, threadId, link, providerID, onAdd, onDi
   }
 
   return <>
-    <div role="toolbar" aria-label={t("selection.actions")} className="flex items-center gap-1 p-1">
+    <div role="toolbar" aria-label={t("selection.actions")} className="flex select-none items-center gap-1 p-1">
       <Button className="h-11 flex-1 gap-1 whitespace-nowrap rounded-lg px-1.5 text-xs" onClick={onAdd}>
         <MessageSquarePlus aria-hidden className="size-4 shrink-0" />{t("quote.add")}
       </Button>

@@ -150,7 +150,7 @@ export function Composer({
   onModelChange: (providerId: string, model: string) => void
   /** The conversation's thinking level: "" for the model's default. */
   reasoning?: string
-  /** Explicit levels the server offers (low/medium/high), in order. */
+  /** Explicit levels the server offers, in order. */
   reasoningLevels: string[]
   onReasoningChange: (level: string) => void
   activeTurnId?: string

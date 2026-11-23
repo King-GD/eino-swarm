@@ -11,7 +11,7 @@ const (
 )
 
 // ReviewReasoningNone explicitly disables thinking for the turn review.
-const ReviewReasoningNone = "none"
+const ReviewReasoningNone = ReasoningNone
 
 // MemoryConfig governs a project's memory: the notes carried into every turn
 // and the skill documents the agents write for themselves.

@@ -119,7 +119,11 @@ func (m *responsesModel) requestOnce(ctx context.Context, in []*schema.Message, 
 		body["top_p"] = *o.TopP
 	}
 	if specific.reasoning != "" {
-		body["reasoning"] = map[string]any{"effort": specific.reasoning, "summary": "auto"}
+		reasoning := map[string]any{"effort": specific.reasoning}
+		if specific.reasoning != config.ReasoningNone {
+			reasoning["summary"] = "auto"
+		}
+		body["reasoning"] = reasoning
 	}
 	if o.ToolChoice != nil {
 		choice := "auto"

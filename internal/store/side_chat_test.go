@@ -85,6 +85,12 @@ func TestSideChatReadSnapshotPreservesMissingAndStorageErrors(t *testing.T) {
 	if _, err := s.ReadSideChatContext(ctx, th.ID); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled snapshot error = %v", err)
 	}
+	if _, err := s.SearchSideChatEvidence(ctx, th.ID, "term"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled evidence search error = %v", err)
+	}
+	if _, err := s.RecentSideChatEvidence(ctx, th.ID); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled recent evidence error = %v", err)
+	}
 	for _, table := range []string{"events", "turns", "threads"} {
 		if err := s.db.Exec("DROP TABLE " + table).Error; err != nil {
 			t.Fatal(err)
@@ -92,5 +98,60 @@ func TestSideChatReadSnapshotPreservesMissingAndStorageErrors(t *testing.T) {
 		if got, err := s.ReadSideChatContext(t.Context(), th.ID); err == nil || !strings.Contains(err.Error(), "no such table: "+table) || got.Thread.ProviderID != "" {
 			t.Fatalf("snapshot with %s missing: got=%+v err=%v", table, got, err)
 		}
+	}
+}
+
+func TestSideChatEvidenceKeepsTaskRecordsAndDropsPrivateText(t *testing.T) {
+	s := open(t)
+	th := mustThread(t, s)
+	other := mustThread(t, s)
+	quiet := &Turn{ThreadID: th.ID, Status: TurnDone, Quiet: true}
+	active := &Turn{ThreadID: th.ID, Status: TurnDone}
+	if err := s.CreateTurn(quiet); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateTurn(active); err != nil {
+		t.Fatal(err)
+	}
+	events := []Event{
+		{ThreadID: th.ID, TurnID: active.ID, Kind: "tool_result", Text: "100% recorded"},
+		{ThreadID: th.ID, TurnID: active.ID, Kind: "tool_result", Text: "1000 recorded"},
+		{ThreadID: th.ID, TurnID: active.ID, Kind: "tool_result", Text: "a_b recorded"},
+		{ThreadID: th.ID, TurnID: active.ID, Kind: "tool_result", Text: "axb recorded"},
+		{ThreadID: th.ID, TurnID: active.ID, Kind: "reasoning", Text: "100% recorded"},
+		{ThreadID: th.ID, TurnID: quiet.ID, Kind: "tool_result", Text: "100% recorded"},
+		{ThreadID: other.ID, Kind: "tool_result", Text: "100% recorded"},
+		{ThreadID: th.ID, TurnID: active.ID, Kind: "tool_result", Text: "   "},
+	}
+	for i := range sideChatEvidenceRows + 1 {
+		events = append(events, Event{ThreadID: th.ID, TurnID: active.ID, Kind: "tool_result", AgentID: "worker", Text: fmt.Sprintf("later-record-%d", i)})
+	}
+	for i := range events {
+		if err := s.AppendEvent(&events[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.ReadSideChatContext(t.Context(), th.ID)
+	if err != nil || got.Thread.ID != th.ID {
+		t.Fatalf("thread identity = %+v err=%v", got.Thread, err)
+	}
+	recent, err := s.RecentSideChatEvidence(t.Context(), th.ID)
+	if err != nil || len(recent) != sideChatEvidenceRows {
+		t.Fatalf("recent evidence = %+v err=%v", recent, err)
+	}
+	if recent[0].Text != "later-record-1" || recent[len(recent)-1].Text != fmt.Sprintf("later-record-%d", sideChatEvidenceRows) || recent[0].AgentID != "worker" {
+		t.Fatalf("recent evidence order = %+v", recent)
+	}
+	percent, err := s.SearchSideChatEvidence(t.Context(), th.ID, "100%")
+	if err != nil || len(percent) != 1 || percent[0].Text != "100% recorded" || percent[0].Kind != "tool_result" {
+		t.Fatalf("literal percent search = %+v err=%v", percent, err)
+	}
+	underscore, err := s.SearchSideChatEvidence(t.Context(), th.ID, "a_b")
+	if err != nil || len(underscore) != 1 || underscore[0].Text != "a_b recorded" {
+		t.Fatalf("literal underscore search = %+v err=%v", underscore, err)
+	}
+	blank, err := s.SearchSideChatEvidence(t.Context(), th.ID, "  ")
+	if err != nil || len(blank) != 0 {
+		t.Fatalf("blank evidence survived search = %+v err=%v", blank, err)
 	}
 }

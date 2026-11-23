@@ -110,6 +110,14 @@ func TestTuneSetsModelAndThinkingAndOpenShowsThem(t *testing.T) {
 	if !opened.OK || opened.Detail == nil || opened.Detail.Model != "side" || opened.Detail.Reasoning != config.ReasoningHigh {
 		t.Fatalf("detail %+v", opened.Detail)
 	}
+	off := config.ReasoningNone
+	updated := Handle(e, config.RemoteConfig{}, Request{
+		ID: "off", Op: OpTune, ThreadID: th.ID, Reasoning: &off,
+	}, "relay", "s")
+	opened = Handle(e, config.RemoteConfig{}, Request{ID: "read-off", Op: OpOpen, ThreadID: th.ID}, "relay", "s")
+	if !updated.OK || !opened.OK || opened.Detail == nil || opened.Detail.Reasoning != off {
+		t.Fatalf("thinking off did not survive reopening: update=%+v, detail=%+v", updated, opened.Detail)
+	}
 	blank := ""
 	cleared := Handle(e, config.RemoteConfig{}, Request{
 		ID: "z", Op: OpTune, ThreadID: th.ID, Reasoning: &blank,

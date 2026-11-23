@@ -12,6 +12,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Added
 
+- Desktop and Web answers turn a workspace file path into a preview button. Clicking it opens the same file preview as the Files tab. (`F-140`)
+
+- Desktop, web, terminal and phone can explicitly turn thinking off for a conversation. Models that continue to report reasoning surface a request error. (`F-130`, `F-220`, `F-230`, `C-009`)
+
 - New tasks keep work, results and uploads in independent directories. PC and paired phone Files open to task results and can switch to a read-only project folder. Existing conversations and external files stay in place. (`F-140`, `F-224`, `C-052`)
 
 - The phone composer's Add menu and slash suggestions list `/goal`, `/plan` and `/image` in PC chats, including after draft text. Direct chat offers `/image` when the selected Gateway source has authorized image generation. Choosing a leading command keeps the draft as its argument. (`F-150`, `F-182`, `F-220`, `C-009`, `C-051`)
@@ -19,6 +23,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - PC and Web voice settings can choose a preferred microphone or follow the operating-system input. Phones use their own microphone. (`F-148`, `C-048`)
 
 ### Changed
+
+- Side chat answers from the current task's findings, project notes and recorded skills. It can search that task and open a skill, and it still cannot change the task. (`F-147`, `C-042`)
 
 - iOS 支持从内容区中间横滑到右侧逐层返回；左缘返回和轮次导航条的横向滚动保持不变。 (`F-220`, `C-015`)
 
@@ -38,6 +44,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - 网关模式下，普通网关和第三方接入会根据可用的识别、朗读模型分别默认开启语音。语音设置仅显示网关允许编辑的参数，录音格式和超时等设置默认折叠。(`F-148`, `C-048`)
 
 ### Fixed
+
+- Opening a long conversation no longer reads every worker prompt, worker result, stored answer, or engine protocol prompt into the first screen. The Agents list keeps identities and failure reasons; opening a worker still loads that worker's text. Context size still counts the same replay, without scanning every historical manager message. (`F-120`, `C-003`, `C-008`)
 
 - 手机打开子智能体列表或从子智能体日志返回时，从顶部显示正在运行的子智能体，不再跳到历史列表底部。 (`F-220`)
 

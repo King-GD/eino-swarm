@@ -29,34 +29,54 @@ func (s *Store) ListReplayMessages(threadID string, through int64, skipTurnID st
 // ListReplayEvents reads retraction evidence and manager answers that still need
 // repair. Event seq and message seq have different watermarks: steering evidence
 // must remain available even when its seq precedes the message watermark.
+//
+// Manager answers are not read through the kind index. That plan visits every
+// historical manager message in the conversation, including bodies the filter
+// then discards, and opening a long conversation waited on it. Live turns are
+// the ones that still have a message past the compact watermark; only those
+// turns are candidates, and a stored assistant copy still suppresses repair.
 func (s *Store) ListReplayEvents(threadID string, through int64, skipTurnID string) ([]Event, error) {
-	// A turn can be live even if it contains only tool/empty/retracted rows. These
-	// scalar identity checks preserve that rule without loading their bodies.
-	live := `EXISTS (SELECT 1 FROM messages AS live INDEXED BY idx_messages_turn_id
-  WHERE live.thread_id = events.thread_id AND live.turn_id = events.turn_id`
-	args := []any{}
-	if through > 0 {
-		live += " AND live.seq > ?"
-		args = append(args, through)
-	}
-	if skipTurnID != "" {
-		live += " AND live.turn_id <> ?"
-		args = append(args, skipTurnID)
-	}
-	live += ")"
-	// Do not repair an answer already stored below the compact watermark: that
-	// would give it a new seq and resurrect compacted context. The turn-id index
-	// bounds each lookup to one turn rather than rescanning every assistant row.
-	missing := `NOT EXISTS (SELECT 1 FROM messages AS stored INDEXED BY idx_messages_turn_id
-  WHERE stored.thread_id = events.thread_id AND stored.turn_id = events.turn_id
-  AND stored.role = 'assistant' AND trim(stored.content, ?) = trim(events.text, ?))`
-	args = append(args, replayWhitespace, replayWhitespace)
-	var rows []Event
-	err := s.db.Table("events INDEXED BY idx_evt_thread_kind_seq").Where("thread_id = ? AND seq > 0 AND kind IN ?", threadID, []string{"steer_retracted", "steer", "agent_message"}).
-		Where("kind <> 'agent_message' OR ((agent_id = '' OR agent_id = 'manager' OR agent_id IS NULL) AND "+live+" AND "+missing+")", args...).
-		Order("seq asc").Find(&rows).Error
+	var steers []Event
+	err := s.db.Table("events INDEXED BY idx_evt_thread_kind_seq").
+		Where("thread_id = ? AND seq > 0 AND kind IN ?", threadID, []string{"steer_retracted", "steer"}).
+		Order("seq asc").Find(&steers).Error
 	if err != nil {
 		return nil, fmt.Errorf("store: list replay events: %w", err)
 	}
-	return rows, nil
+	// A turn can be live even if it contains only tool/empty/retracted rows.
+	// The message watermark is on seq, not on the event, so the turn list is
+	// the identity check. Do not repair an answer already stored below the
+	// compact watermark: that would give it a new seq and resurrect compacted
+	// context. The turn-id index bounds each lookup to one turn.
+	live := `turn_id IN (SELECT turn_id FROM messages WHERE thread_id = ? AND (? = 0 OR seq > ?) AND (? = '' OR turn_id <> ?))`
+	missing := `NOT EXISTS (SELECT 1 FROM messages AS stored INDEXED BY idx_messages_turn_id
+  WHERE stored.thread_id = events.thread_id AND stored.turn_id = events.turn_id
+  AND stored.role = 'assistant' AND trim(stored.content, ?) = trim(events.text, ?))`
+	var answers []Event
+	err = s.db.Table("events INDEXED BY idx_evt_thread_turn_kind_seq").
+		Where("thread_id = ? AND seq > 0 AND kind = ? AND (agent_id = '' OR agent_id = 'manager' OR agent_id IS NULL)", threadID, "agent_message").
+		Where(live, threadID, through, through, skipTurnID, skipTurnID).
+		Where(missing, replayWhitespace, replayWhitespace).
+		Order("seq asc").Find(&answers).Error
+	if err != nil {
+		return nil, fmt.Errorf("store: list replay events: %w", err)
+	}
+	return mergeEventsBySeq(steers, answers), nil
+}
+
+func mergeEventsBySeq(left, right []Event) []Event {
+	out := make([]Event, 0, len(left)+len(right))
+	i, j := 0, 0
+	for i < len(left) && j < len(right) {
+		if left[i].Seq <= right[j].Seq {
+			out = append(out, left[i])
+			i++
+			continue
+		}
+		out = append(out, right[j])
+		j++
+	}
+	out = append(out, left[i:]...)
+	out = append(out, right[j:]...)
+	return out
 }

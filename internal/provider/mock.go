@@ -118,6 +118,8 @@ const (
 // model "generates".
 type mockScript func(turn int, msgs []*schema.Message) *schema.Message
 
+type mockOptions struct{ thinkingOff bool }
+
 type mockModel struct {
 	script     mockScript
 	instant    bool
@@ -135,7 +137,15 @@ func (m *mockModel) nextTurn() int {
 	return m.turn
 }
 
-func (m *mockModel) Generate(ctx context.Context, in []*schema.Message, _ ...model.Option) (*schema.Message, error) {
+func (m *mockModel) reply(in []*schema.Message, opts []model.Option) *schema.Message {
+	out := m.script(m.nextTurn(), in)
+	if model.GetImplSpecificOptions(&mockOptions{}, opts...).thinkingOff {
+		out.ReasoningContent = ""
+	}
+	return out
+}
+
+func (m *mockModel) Generate(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.Message, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -148,12 +158,12 @@ func (m *mockModel) Generate(ctx context.Context, in []*schema.Message, _ ...mod
 	if err := waitMockWorkerTimeout(ctx, m.role); err != nil {
 		return nil, err
 	}
-	out := m.script(m.nextTurn(), in)
+	out := m.reply(in, opts)
 	attachMockUsage(in, out)
 	return out, nil
 }
 
-func (m *mockModel) Stream(ctx context.Context, in []*schema.Message, _ ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+func (m *mockModel) Stream(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -166,7 +176,7 @@ func (m *mockModel) Stream(ctx context.Context, in []*schema.Message, _ ...model
 	if err := waitMockWorkerTimeout(ctx, m.role); err != nil {
 		return nil, err
 	}
-	out := m.script(m.nextTurn(), in)
+	out := m.reply(in, opts)
 	sr, sw := schema.Pipe[*schema.Message](8)
 	go func() {
 		defer sw.Close()

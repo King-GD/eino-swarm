@@ -521,6 +521,8 @@ func stopRecoveryChild(command *exec.Cmd, exit <-chan error) error {
 }
 
 func desktopRecoveryReporter(spec desktopRecoverySpec) (func(desktop.RecoveryDiagnostic), func()) {
+	var sampleOnce sync.Once
+	var sampleDone chan struct{}
 	queue := make(chan desktop.RecoveryDiagnostic, 32)
 	stop := make(chan struct{})
 	var queueMu sync.Mutex
@@ -566,6 +568,20 @@ func desktopRecoveryReporter(spec desktopRecoverySpec) (func(desktop.RecoveryDia
 				queueMu.Unlock()
 				return
 			}
+			if event.Phase == "reloading" || spec.Generation > 0 && event.Phase == "probe_failed" {
+				sampleOnce.Do(func() {
+					sampleDone = make(chan struct{})
+					go func(event desktop.RecoveryDiagnostic, done chan struct{}) {
+						defer close(done)
+						event = normalizeRecoveryDiagnostic(event, spec.Engine.PID)
+						event.Phase = "timeout_sample"
+						event.Resources = collectDesktopRecoveryResources(spec.Engine.URL)
+						if err := appendRecoveryDiagnostic(spec.Journal, event); err != nil {
+							slog.Warn("desktop recovery sample write failed", "session_id", spec.SessionID, "error", err)
+						}
+					}(event, sampleDone)
+				})
+			}
 			select {
 			case queue <- event:
 				queueMu.Unlock()
@@ -585,6 +601,12 @@ func desktopRecoveryReporter(spec desktopRecoverySpec) (func(desktop.RecoveryDia
 			select {
 			case <-done:
 			case <-time.After(3 * time.Second):
+			}
+			if sampleDone != nil {
+				select {
+				case <-sampleDone:
+				case <-time.After(2 * time.Second):
+				}
 			}
 		}
 }

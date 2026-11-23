@@ -61,6 +61,7 @@ func TestDefaultReasoningEffortNormalizesAndPersists(t *testing.T) {
 		{"blank", "", ""},
 		{"high normalization", " HIGH ", "high"},
 		{"low", "low", "low"},
+		{"off", " NONE ", "none"},
 		{"medium normalization", " Medium ", "medium"},
 		{"invalid uses default", "unsupported", ""},
 		{"inherit is not a level", "inherit", ""},

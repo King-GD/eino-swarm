@@ -126,6 +126,8 @@ export const en = {
   "composer.thinking": "Thinking level",
   "composer.thinkingDefault": "Default thinking",
   "composer.loading": "Loading models",
+  "reason.none": "Thinking off",
+  "reason.offIgnored": "This model still generated reasoning with Thinking off. Choose another model or change the thinking level.",
   "reason.low": "Low thinking",
   "reason.medium": "Medium thinking",
   "reason.high": "High thinking",

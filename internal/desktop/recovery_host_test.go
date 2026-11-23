@@ -82,7 +82,7 @@ func TestNativeRecoveryLifecycleWiringHasNoHostGUIRequirement(t *testing.T) {
 	}
 	host := &recoveryTestHost{window: &directoryRecordingWindow{}, windowEvents: make(map[events.WindowEventType]func()), appEvents: make(map[events.ApplicationEventType]func())}
 	controller := startRecoveryForHost(host, Options{URL: "http://127.0.0.1:1234", Recovery: &RecoveryOptions{SessionID: "session"}})
-	if controller == nil || len(host.windowEvents) != 4 || len(host.appEvents) != 3 || host.shutdown == nil {
+	if controller == nil || len(host.windowEvents) != 7 || len(host.appEvents) != 3 || host.shutdown == nil {
 		t.Fatal("native lifecycle hooks missing")
 	}
 	for _, fn := range host.windowEvents {
