@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/LubyRuffy/eino-swarm/internal/panelplugins/easm"
+	"github.com/LubyRuffy/eino-swarm/internal/store"
 	"github.com/LubyRuffy/eino-swarm/internal/taskpanel"
 )
 
@@ -70,5 +72,114 @@ func TestEASMDirectPublishRefusesNewCycleAtomically(t *testing.T) {
 	changes, err := e.store.TaskPanelChanges(t.Context(), thread.ID, 0)
 	if err != nil || len(changes) != 2 || changes[1].Revision != 2 {
 		t.Fatalf("changes=%+v err=%v", changes, err)
+	}
+}
+
+// Read the panel back through the model's tools after one attempted publication.
+// A rejected edit must leave both the first source and the delivery cursor intact.
+func TestEASMDirectPublishPreservesSavedFirstSources(t *testing.T) {
+	const original = `{"schema_version":1,"title":"Subject","collection":{"status":"idle","steps":[]},"nodes":[{"id":"root","kind":"root","label":"Subject"},{"id":"domain:observed.test","kind":"domain","label":"observed.test"},{"id":"domain:unlinked.test","kind":"domain","label":"unlinked.test"}],"edges":[{"source":"root","target":"domain:observed.test","confirmed":false}],"heat":[],"components":[]}`
+	for _, tc := range []struct {
+		name    string
+		update  taskpanel.Update
+		refusal string
+	}{
+		{"remove_edge", taskpanel.Update{Kind: "patch", Operations: json.RawMessage(`[{"op":"remove","path":"/edges/0"}]`)}, "retain the first source"},
+		{"remove_clue_and_edge", taskpanel.Update{Kind: "patch", Operations: json.RawMessage(`[{"op":"remove","path":"/edges/0"},{"op":"remove","path":"/nodes/1"}]`)}, "retain the first source"},
+		{"clear_snapshot", taskpanel.Update{Kind: "snapshot", State: json.RawMessage(`{"schema_version":1,"title":"Subject","collection":{"status":"idle","steps":[]},"nodes":[],"edges":[],"heat":[],"components":[]}`)}, "saved sources requires a subject root"},
+		{"enrich_confirm_and_link", taskpanel.Update{Kind: "patch", Operations: json.RawMessage(`[
+			{"op":"add","path":"/nodes/1/detail","value":{"description":"Registry observation"}},
+			{"op":"replace","path":"/edges/0/confirmed","value":true},
+			{"op":"add","path":"/edges/-","value":{"source":"root","target":"domain:unlinked.test","confirmed":true}}
+		]`)}, ""},
+		{"switch_subject", taskpanel.Update{Kind: "snapshot", State: json.RawMessage(`{"schema_version":1,"title":"Other Subject","collection":{"status":"idle","steps":[]},"nodes":[{"id":"root","kind":"root","label":"Other Subject"},{"id":"domain:other.test","kind":"domain","label":"other.test"}],"edges":[{"source":"root","target":"domain:other.test","confirmed":true}],"heat":[],"components":[]}`)}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, fixture := newScheduleCompletionHTTPEngine(t, func(w http.ResponseWriter, _ *http.Request, step int, request scheduleCompletionRequest) {
+				switch step {
+				case 1:
+					easmToolCall(w, request, "open-portrait", "open_task_panel", `{"plugin_id":"easm-asset-portrait"}`)
+				case 2, 3, 4:
+					previousCall := "publish-original"
+					if step == 2 {
+						previousCall = "open-portrait"
+					}
+					var panel taskpanel.Panel
+					result := nuwaValidationReceipt(request, previousCall)
+					if err := json.Unmarshal([]byte(result), &panel); err != nil || panel.ID == "" {
+						t.Errorf("invalid panel receipt %q: %v", result, err)
+					}
+					if step == 4 {
+						easmToolCall(w, request, "read-portrait", "read_panel_state", fmt.Sprintf(`{"panel_id":%q}`, panel.ID))
+						return
+					}
+					callID, update := "publish-candidate", tc.update
+					if step == 2 {
+						callID, update = "publish-original", taskpanel.Update{Kind: "snapshot", State: json.RawMessage(original)}
+					}
+					update.ProtocolVersion, update.PanelID = taskpanel.ProtocolVersion, panel.ID
+					update.OperationID, update.BaseRevision = callID, panel.Revision
+					raw, err := json.Marshal(update)
+					if err != nil {
+						t.Error(err)
+					}
+					easmToolCall(w, request, callID, "publish_panel_update", string(raw))
+				default:
+					writeContextFlowReply(w, request.Stream, map[string]any{"content": "The panel was read after publication."}, "stop")
+				}
+			})
+			thread, err := e.CreateThread("Portrait first source fixture", "", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			turn, err := e.StartTurn(thread.ID, "Update the recorded portrait observations.")
+			if err != nil {
+				t.Fatal(err)
+			}
+			finished := waitForTurn(t, e, turn.ID)
+			waitSettled(t, e, thread.ID)
+			requests := fixture.snapshot()
+			if finished.Status != store.TurnDone || len(requests) != 5 {
+				t.Fatalf("turn=%+v, model requests=%d", finished, len(requests))
+			}
+			var panel taskpanel.Panel
+			read := nuwaValidationReceipt(requests[4], "read-portrait")
+			if err := json.Unmarshal([]byte(read), &panel); err != nil || panel.ID == "" {
+				t.Fatalf("invalid readback %q: %v", read, err)
+			}
+			attempt := tc.update
+			attempt.ProtocolVersion, attempt.PanelID = taskpanel.ProtocolVersion, panel.ID
+			attempt.OperationID, attempt.BaseRevision = "publish-candidate", 2
+			wantState, err := taskpanel.Apply(panel.Definition, json.RawMessage(original), attempt)
+			if err != nil {
+				t.Fatalf("candidate must pass the panel schema: %v", err)
+			}
+			wantRevision, wantSource := int64(3), "publish-candidate"
+			var receipt struct {
+				Revision int64  `json:"revision"`
+				Error    string `json:"error"`
+			}
+			result := nuwaValidationReceipt(requests[3], "publish-candidate")
+			if err := json.Unmarshal([]byte(result), &receipt); err != nil {
+				t.Fatalf("invalid publication receipt %q: %v", result, err)
+			}
+			if tc.refusal != "" {
+				if !strings.Contains(receipt.Error, tc.refusal) {
+					t.Errorf("first publication should be refused: %s", result)
+				}
+				wantState, wantRevision, wantSource = json.RawMessage(original), 2, "publish-original"
+			} else if receipt.Error != "" || receipt.Revision != wantRevision {
+				t.Errorf("legitimate publication should succeed: %s", result)
+			}
+			gotDigest, err := taskpanel.Digest(panel.State)
+			wantDigest, wantErr := taskpanel.Digest(wantState)
+			if err != nil || wantErr != nil || gotDigest != wantDigest || panel.Revision != wantRevision || panel.Source.ToolCallID != wantSource {
+				t.Errorf("readback revision=%d, source=%q, state=%s, errors=%v/%v; want revision=%d, source=%q, state=%s", panel.Revision, panel.Source.ToolCallID, panel.State, err, wantErr, wantRevision, wantSource, wantState)
+			}
+			changes, err := e.store.TaskPanelChanges(t.Context(), thread.ID, 0)
+			if err != nil || len(changes) != int(wantRevision) || changes[len(changes)-1].Revision != wantRevision {
+				t.Fatalf("changes=%+v err=%v", changes, err)
+			}
+		})
 	}
 }

@@ -107,7 +107,12 @@ Stop preserves an HTTP observation already returned to the source reducer, but d
 
 Batches are cumulative for the confirmed subject. Use its full name for every batch. A unique confirmed company row for that subject can bind its registry ID to the root. The same registry identity can continue a portrait, while a conflicting registry ID or different unverified subject starts a new portrait. A company row that matches the subject's identity enriches the root. Name-only ownership requires a unique eligible candidate. Unresolved or ambiguous parent names are counted in `unresolved_parents` and kept as unconfirmed clues. Domains are bounded by `max_domains` across the whole portrait; entries over it are counted in `refused_domains`.
 
-Each clue retains its first source edge. A later observation can enrich the clue and upgrade confirmation for that relationship. Both the registered source and direct updates check new relationships for reachability from the single subject root. Older graph records and detached clues stay in stored state, and their detached sources are skipped on follow-up batches. Desktop and phone render only the portion reachable from the subject. Domains use one IDNA normalization. Node evidence is structured as `detail.basis[] = {source, via?, date?}`; the renderer words it in the user's language and shows unrecognized tool names as stored.
+Each clue retains its first source edge. A later observation can enrich the clue and upgrade confirmation for a relationship reachable from the subject. Both the registered source and direct updates check new relationships for reachability from the single subject root. Older graph records and detached clues stay in stored state, and their detached sources are skipped on follow-up batches. Desktop and phone render only the portion reachable from the subject. Domains use one IDNA normalization. Node evidence is structured as `detail.basis[] = {source, via?, date?}`; the renderer words it in the user's language and shows unrecognized tool names as stored.
+
+Updates to the same subject must preserve saved first-source edges and their
+target clues. A previously unsourced clue can receive its first valid source.
+Replacing a portrait uses a valid root for the new subject. An empty snapshot
+is accepted while the portrait has no saved sources.
 
 - Companies take the reporting tool's `registry_id` as their identity when it gives one, otherwise their name. `relation` and `share` are shown on the card as reported.
 - Domains hang under their company, or under the subject when none is named or the named one is not on the graph.

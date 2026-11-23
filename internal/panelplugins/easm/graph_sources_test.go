@@ -148,6 +148,7 @@ func TestPublishCannotRewriteFirstSourcesOrCreateLegacyDuplicateCertificates(t *
 	legacy := State{Nodes: []Node{root, first, other, duplicate}, Edges: []Edge{firstSource, otherSource, duplicateSource}}
 	legacyMissingSource := State{Nodes: []Node{root, duplicate}, Edges: []Edge{duplicateSource}}
 	beforeSourceRemoved := State{Nodes: []Node{root, other, duplicate}, Edges: []Edge{otherSource, duplicateSource}}
+	otherSubject := Node{ID: RootID, Kind: "root", Label: "Other subject"}
 	cases := []struct {
 		name         string
 		before, next State
@@ -159,6 +160,12 @@ func TestPublishCannotRewriteFirstSourcesOrCreateLegacyDuplicateCertificates(t *
 		{"new duplicate serial", valid, legacy, true},
 		{"reordered legacy duplicate", legacy, State{Nodes: []Node{root, duplicate, first, other}, Edges: legacy.Edges}, true},
 		{"changed first source", valid, State{Nodes: valid.Nodes, Edges: []Edge{otherSource, {Source: other.ID, Target: first.ID}}}, true},
+		{"removed first source", valid, State{Nodes: valid.Nodes, Edges: []Edge{otherSource}}, true},
+		{"removed sourced observation", valid, State{Nodes: []Node{root, other}, Edges: []Edge{otherSource}}, true},
+		{"empty snapshot with saved sources", valid, State{}, true},
+		{"empty snapshot without saved sources", State{Nodes: []Node{root}}, State{}, false},
+		{"unknown source now established", State{Nodes: valid.Nodes, Edges: []Edge{otherSource}}, valid, false},
+		{"new subject", valid, State{Nodes: []Node{otherSubject}}, false},
 		{"orphaned parent", State{}, State{Nodes: valid.Nodes, Edges: []Edge{{Source: other.ID, Target: first.ID}}}, true},
 		{"missing source retained", legacyMissingSource, legacyMissingSource, false},
 		{"new missing source", State{}, legacyMissingSource, true},

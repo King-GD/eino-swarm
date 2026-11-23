@@ -122,8 +122,8 @@ func (g *Graph) keepRootedSources(savedEdges int) {
 	g.edges = edges
 }
 
-// ValidateGraphUpdate checks publish-time source relations after a patch has
-// been applied. Historical detached links may be carried forward unchanged.
+// ValidateGraphUpdate checks new relations and preserves the first sources of
+// the same subject, including historical detached links.
 func ValidateGraphUpdate(previous, state json.RawMessage) error {
 	var before, after State
 	if err := json.Unmarshal(previous, &before); err != nil {
@@ -133,6 +133,9 @@ func ValidateGraphUpdate(previous, state json.RawMessage) error {
 		return err
 	}
 	if len(after.Nodes) == 0 && len(after.Edges) == 0 {
+		if len(before.Edges) != 0 {
+			return fmt.Errorf("panel state with saved sources requires a subject root")
+		}
 		return nil
 	}
 	graph, err := loadGraph(after)
@@ -159,11 +162,15 @@ func ValidateGraphUpdate(previous, state json.RawMessage) error {
 		if !reached[edge.Target] && (!existed || prior != edge || lostSource) {
 			return fmt.Errorf("panel state gives %q a source outside the subject's graph", edge.Target)
 		}
-		if samePortrait && existed && prior.Source != edge.Source {
-			return fmt.Errorf("panel state changes the first source of %q", edge.Target)
-		}
 	}
-	if !samePortrait {
+	if samePortrait {
+		for _, prior := range before.Edges {
+			current := graph.parent[prior.Target]
+			if current == nil || current.Source != prior.Source {
+				return fmt.Errorf("panel state must retain the first source of %q", prior.Target)
+			}
+		}
+	} else {
 		before.Nodes = nil
 	}
 	return validateCertificateSources(before.Nodes, after.Nodes)
