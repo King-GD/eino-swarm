@@ -111,6 +111,8 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-120 Conversations and projects
 
+- PC 历史上滚：用户和开发模式均按上一条用户输入或主管正文翻页。较早思考和工具默认显示摘要，点击展开后按范围读取；最新消息的明细随首屏加载。首次打开即显示会话的子 Agent 名单，选择某个子 Agent 时读取独立日志。关联契约 `C-003`；实现／验证：`internal/server/log_history.go`、`frontend/src/lib/use-history-window.ts`、`frontend/e2e/message-history.spec.ts`。
+
 - 新任务的工作目录在创建时固定；项目选择仍决定共享资料和记忆，移动任务或编辑项目目录不会搬迁任务文件。关联 `C-052`；实现 `internal/engine/task_workspace.go`，验证 `internal/engine/task_workspace_test.go`。
 
 - 失败重试：桌面和 Web 的最新人类失败轮显示「重试」。点击即确认，从该轮失败时已存储的上下文继续，保留用户消息、图片和已完成的工具结果，不回退后续进度，也不打开编辑框。目标续办、定时检查、人工停止和没有可核对用户输入的失败不提供入口。设置打开、回合运行、引擎恢复或本次提交进行时禁用。关联契约 `C-003`。实现 `frontend/src/components/app/transcript-error.tsx`、`frontend/src/components/app/transcript.tsx`、`frontend/src/lib/use-retry-input.ts`、`internal/engine/retry_failed.go`。验证 `frontend/e2e/transcript-error-retry.spec.ts`、`internal/engine/retry_failed_http_test.go`。

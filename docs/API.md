@@ -2838,7 +2838,7 @@ clamped to 200. Response:
  "roster":[{ "seq": 4, "kind": "spawned", "agent_id": "worker-1", "…" : "…" }]}
 ```
 
-The front end opens a conversation with one viewport of this tail, then
+A client using the raw event view can fetch one viewport of this tail, then
 `GET /api/threads/:id/events?since=<last seq>` for live. Scrolling up fetches
 the next older page. An empty conversation is `"events":[]` with
 `has_more: false`. The live-edge page (`before` omitted or `0`) also sends
@@ -2854,6 +2854,31 @@ without inserting "Started" rows into the manager transcript. Sidecar ownership
 receipts and errors reconstruct worker lifecycle state without inserting old
 error bubbles or turn dividers; those belong to the contiguous event page. Clicking a worker whose tools are
 outside the viewport fetches `GET /api/threads/:id/agents/:agent/log`.
+
+### `GET /api/threads/:id/log?view=messages&before=<seq>`
+
+Desktop and Web open on the latest manager message and its local work.
+A page with `before` set reaches one preceding user input or nonblank
+manager answer. Multiple answers in one turn are separate stops. Synthetic
+scheduled-check inputs do not count. An active turn opens with the bounded
+raw event tail for live controls. Ask cards, errors, plans and compaction notices
+retain their event positions.
+
+The response adds `before` (the oldest scanned seq, exclusive on the next
+request) and `seq` (the newest scanned seq, used as the initial SSE `since`).
+These bounds include deferred events. An older page returns ordered `events`
+and may include `history_work` entries with inclusive `from` and `through`,
+`turn_id`, `created_at`, `agent_ids`, a `thinking` flag and a `tools` count.
+A summary can also carry `failed`. The initial `roster` sidecar supplies
+workers before their creation or wait enters the loaded history.
+
+### `GET /api/threads/:id/log?work_from=<seq>&work_through=<seq>&since=<seq>&limit=<n>`
+
+Returns stored manager work inside the inclusive range, in ascending
+sequence order. `since` is an exclusive continuation cursor (optional for the
+first request). Continue with response `seq` while `has_more` is true.
+Malformed bounds or cursors return `400`. Worker details use the worker
+endpoint below.
 
 ### `GET /api/threads/:id/agents/:agent/log`
 

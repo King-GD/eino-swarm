@@ -28,7 +28,15 @@ func (s *Server) listLog(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if c.Request.URL.Query().Has("work_from") || c.Request.URL.Query().Has("work_through") {
+		s.listHistoryWork(c, th.ID)
+		return
+	}
 	before := parseBefore(c)
+	if c.Query("view") == "messages" {
+		s.listMessageHistory(c, th.ID, before)
+		return
+	}
 	events, hasMore, err := s.engine.Store().ListTailEvents(th.ID, before, parseLogLimit(c))
 	if err != nil {
 		s.fail(c, err)

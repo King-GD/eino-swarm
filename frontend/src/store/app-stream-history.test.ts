@@ -159,6 +159,28 @@ describe("history and live event overlap", () => {
     expect(workerThoughts().map((b) => b.text)).toEqual(["replacement"])
   })
 
+  it("drops deferred work after a rewind while keeping preceding summary ranges and the real SSE cursor", () => {
+    const manager = (seq: number, kind: string, text: string) => event(seq, kind, text, { agent_id: "manager" })
+    const earlier = manager(2, "user_message", "Keep this input")
+    const replaced = manager(8, "user_message", "Replace this input")
+    const bounds = {
+      events: [earlier, replaced], before: 2, seq: 14, has_more: true,
+      history_work: [
+        { from: 3, through: 6, turn_id: "tn_1", created_at: earlier.created_at, agent_ids: ["manager"], thinking: true, tools: 1 },
+        { from: 10, through: 13, turn_id: "tn_2", created_at: earlier.created_at, agent_ids: ["manager"], thinking: false, tools: 3 },
+      ],
+    }
+    state.transcript = applyTail("th_1", bounds.events, [], bounds)
+    const ranges = () => state.transcript.agents.manager.blocks.flatMap((b) => b.historyWork ? [b.historyWork.from] : [])
+    expect(ranges()).toEqual([3, 10])
+    emit(manager(15, "rewound", "8"))
+    expect(ranges()).toEqual([3])
+    emit(manager(16, "user_message", "Replacement input"))
+    expect(state.transcript.lastSeq).toBe(16)
+    expect(state.transcript.agents.manager.blocks.map((b) => b.text))
+      .toEqual(["Keep this input", "", "Replacement input"])
+  })
+
   for (const fromAgentLog of [false, true]) {
     it(`restores a pre-cut checkpoint from ${fromAgentLog ? "agent history" : "the page"} after a merged thought is rewound`, () => {
       const checkpoints = [

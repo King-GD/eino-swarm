@@ -8,6 +8,8 @@ import {
   logPageSize,
   mergeLogEvents,
   uniqueStoredEvents,
+  type HistoryWork,
+  type ThreadLog,
 } from "@/lib/thread-log"
 import {
   emptyTranscript,
@@ -19,7 +21,7 @@ import {
   type TranscriptState,
 } from "@/lib/transcript"
 import { managerHasVisibleBlocks } from "@/lib/welcome"
-import { replaceStreaming } from "@/lib/transcript-blocks"
+import { append, replaceStreaming, touchAgent } from "@/lib/transcript-blocks"
 import type { SwarmEvent } from "@/lib/types"
 
 /** Stored events for the open conversation, oldest first. Live deltas stay
@@ -31,6 +33,10 @@ let threadId = ""
 let events: SwarmEvent[] = []
 let roster: SwarmEvent[] = []
 let agentLogs: SwarmEvent[] = []
+let deferredWork: HistoryWork[] = []
+let scannedBefore = 0
+let tailSeq = 0
+let messageHistory = false
 let storedSeqs = new Set<number>()
 // A response begun before a rewind may contain deleted rows newer than the
 // client's cursor. Their seq cannot identify that stale snapshot.
@@ -39,7 +45,7 @@ const loadedAgents = new Set<string>()
 
 /** One in-flight older page. A jump must join this instead of seeing
  *  `historyLoading` and treating the busy sentinel as the end of the log. */
-let olderLoad: Promise<void> | undefined
+let olderLoad: { generation: number; promise: Promise<void> } | undefined
 
 /** Stored seqs inside a resent cut. A late replay must not put them back. */
 let cutFrom = 0
@@ -55,6 +61,10 @@ export function resetThreadHistory() {
   events = []
   roster = []
   agentLogs = []
+  deferredWork = []
+  scannedBefore = 0
+  tailSeq = 0
+  messageHistory = false
   storedSeqs.clear()
   loadedAgents.clear()
   cutFrom = 0
@@ -63,16 +73,33 @@ export function resetThreadHistory() {
 }
 
 export function historyNewestSeq(): number {
-  return newestOf(events)
+  return Math.max(tailSeq, newestOf(events))
 }
 
 export function historyOldestSeq(): number {
-  const oldest = oldestOf(events)
+  const oldest = scannedBefore || oldestOf(events)
   return unloadedBelow > 0 && (oldest === 0 || oldest > unloadedBelow) ? unloadedBelow : oldest
 }
 
 export function agentLogIsLoaded(agentId: string): boolean {
   return loadedAgents.has(agentId)
+}
+
+/** Deferred work is a view of stored rows, with no event identity or live side effects. */
+function appendHistoryWork(state: TranscriptState, work: HistoryWork): TranscriptState {
+  if (state.quietTurns?.includes(work.turn_id)) return state
+  const next = { ...state, agents: { ...state.agents } }
+  append(touchAgent(next, MANAGER_ID), {
+    id: `history-work:${work.from}:${work.through}`,
+    kind: "history_work",
+    agentId: MANAGER_ID,
+    text: "",
+    turnId: work.turn_id,
+    seq: work.from,
+    at: work.created_at,
+    historyWork: work,
+  })
+  return next
 }
 
 function foldedTranscript(current?: TranscriptState): TranscriptState {
@@ -86,9 +113,17 @@ function foldedTranscript(current?: TranscriptState): TranscriptState {
   const merged = mergeLogEvents(uniqueStoredEvents([...agentLogs, ...roster]), events)
   storedSeqs = new Set(merged.map((ev) => ev.seq))
   let state = emptyTranscript()
+  let workIndex = 0
   for (const ev of merged) {
+    while (workIndex < deferredWork.length && deferredWork[workIndex]!.from < ev.seq) {
+      state = appendHistoryWork(state, deferredWork[workIndex++]!)
+    }
     state = reduceEvent(state, ev, oldest > 0 && ev.seq >= oldest ? "full" : "roster")
   }
+  while (workIndex < deferredWork.length) {
+    state = appendHistoryWork(state, deferredWork[workIndex++]!)
+  }
+  state.lastSeq = Math.max(state.lastSeq, tailSeq)
   if (current && !current.rewindCut?.live) preserveLiveOutput(state, current)
   if (!current?.rewindCut) return state
   const cut = current.rewindCut
@@ -126,22 +161,34 @@ export function applyTail(
   id: string,
   page: SwarmEvent[],
   extra: SwarmEvent[] = [],
+  bounds?: ThreadLog,
 ): TranscriptState {
   historyGeneration++
   threadId = id
   events = page.filter((ev) => (ev.seq ?? 0) > 0)
   roster = extraRosterEvents(extra, events)
   agentLogs = []
+  deferredWork = bounds?.history_work ?? []
+  scannedBefore = bounds?.before ?? 0
+  tailSeq = bounds?.seq ?? 0
+  messageHistory = bounds?.before !== undefined
   loadedAgents.clear()
   unloadedBelow = 0
   return foldedTranscript()
 }
 
-export function prependOlder(id: string, older: SwarmEvent[], current?: TranscriptState): TranscriptState | undefined {
+export function prependOlder(
+  id: string, older: SwarmEvent[], current?: TranscriptState, page?: ThreadLog,
+): TranscriptState | undefined {
   if (threadId !== id) return undefined
   const have = new Set(events.map((ev) => ev.seq))
   const add = older.filter((ev) => (ev.seq ?? 0) > 0 && !have.has(ev.seq) && outsideRewind(ev.seq))
   events = [...add, ...events]
+  if (page?.before) {
+    scannedBefore = page.before
+    unloadedBelow = 0
+  }
+  deferredWork = [...(page?.history_work ?? []), ...deferredWork]
   roster = extraRosterEvents(roster, events)
   agentLogs = extraRosterEvents(agentLogs, events)
   return foldedTranscript(current)
@@ -175,6 +222,9 @@ export function rememberRewind(id: string, cut: number, through = 0, marker = 0)
   // it, a replayed copy would otherwise look new and cut again.
   const keep = (seq: number) => seq < cut || (cutThrough > 0 && seq > cutThrough) || (marker > 0 && seq === marker)
   events = events.filter((ev) => keep(ev.seq))
+  deferredWork = deferredWork.filter((range) => range.through < cut)
+  if (scannedBefore >= cut) scannedBefore = 0
+  if (tailSeq >= cut) tailSeq = marker
   // A sidecar row past the cut is either truncated or newer than the marker.
   // The latter is still ahead of SSE, which delivers it again.
   roster = roster.filter((ev) => ev.seq < cut)
@@ -224,55 +274,50 @@ export async function loadOlderHistory(
 ): Promise<void> {
   const want = get().activeId
   if (!want) return
-  for (;;) {
-    if (olderLoad) {
-      await olderLoad
-      continue
-    }
-    if (get().activeId !== want || !get().historyHasMore) return
-    const before = historyOldestSeq()
-    if (before <= 0) {
-      set({ historyHasMore: false })
+  const generation = historyGeneration
+  if (olderLoad?.generation === generation) return olderLoad.promise
+  if (!get().historyHasMore) return
+  const before = historyOldestSeq()
+  if (before <= 0) {
+    set({ historyHasMore: false })
+    return
+  }
+  let release: () => void = () => {}
+  const mine = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  olderLoad = { generation, promise: mine }
+  set({ historyLoading: true })
+  try {
+    const page = await api.threadLog(want, {
+      before,
+      limit: logPageSize(clientHeight ?? 0),
+      view: "messages",
+    })
+    if (get().activeId !== want) return
+    if (generation !== historyGeneration) {
+      if (!olderLoad || olderLoad.promise === mine) set({ historyLoading: false })
       return
     }
-    let release: () => void = () => {}
-    const mine = new Promise<void>((resolve) => {
-      release = resolve
-    })
-    olderLoad = mine
-    set({ historyLoading: true })
-    const generation = historyGeneration
-    try {
-      const page = await api.threadLog(want, {
-        before,
-        limit: logPageSize(clientHeight ?? 0),
-      })
-      if (get().activeId !== want) return
-      if (generation !== historyGeneration) {
-        set({ historyLoading: false })
-        return
-      }
-      const transcript = prependOlder(want, page.events ?? [], get().transcript)
-      if (!transcript) {
-        set({ historyLoading: false })
-        return
-      }
-      // Empty body with has_more still true never moved the cursor, so the
-      // sentinel stayed hot and the reader could not get past this page.
-      const advanced = historyOldestSeq() < before
-      set({
-        transcript,
-        historyHasMore: advanced && Boolean(page.has_more),
-        historyLoading: false,
-      })
-    } catch (e) {
-      if (get().activeId !== want) return
-      set({ historyLoading: false, ...(generation === historyGeneration ? { error: fail(e) } : {}) })
-    } finally {
-      if (olderLoad === mine) olderLoad = undefined
-      release()
+    const transcript = prependOlder(want, page.events ?? [], get().transcript, page)
+    if (!transcript) {
+      set({ historyLoading: false })
+      return
     }
-    return
+    // Empty body with has_more still true never moved the cursor, so the
+    // sentinel stayed hot and the reader could not get past this page.
+    const advanced = historyOldestSeq() < before
+    set({
+      transcript,
+      historyHasMore: advanced && Boolean(page.has_more),
+      historyLoading: false,
+    })
+  } catch (e) {
+    if (get().activeId !== want || (olderLoad && olderLoad.promise !== mine)) return
+    set({ historyLoading: false, ...(generation === historyGeneration ? { error: fail(e) } : {}) })
+  } finally {
+    if (olderLoad?.promise === mine) olderLoad = undefined
+    release()
   }
 }
 
@@ -338,10 +383,9 @@ export async function loadAgentHistory(
   if (loadedAgents.has(agentId)) return
   const agent = get().transcript.agents[agentId]
   const hasBody = (agent?.blocks ?? []).some((b) => b.kind !== "user")
-  // A complete page walk is contiguous; skip only when this worker already
-  // has rows. Roster-only "starting" with an empty pane is the hole the
-  // on-demand log exists to fill — even after has_more flipped false.
-  if (!get().historyHasMore && hasBody) {
+  // Message pages omit worker work even after the conversation cursor is
+  // exhausted. A live delta or roster event cannot complete that worker log.
+  if (!messageHistory && !get().historyHasMore && hasBody) {
     loadedAgents.add(agentId)
     return
   }

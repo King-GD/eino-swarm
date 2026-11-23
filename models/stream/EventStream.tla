@@ -8,6 +8,7 @@
 (* deletes the rows from a user message on and tells readers where it cut. *)
 (* The engine may restart, which reseeds its sequence counter from the     *)
 (* database (store.nextEventSeq).                                          *)
+(* VisibleHistory checks the projected log cursor used to start replay.  *)
 (* NuwaCollaboration checks the separate project revision committed with  *)
 (* a source rewind. That SSE invalidates a snapshot independently.         *)
 (*                                                                         *)

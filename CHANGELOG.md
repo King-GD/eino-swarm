@@ -62,6 +62,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Scrolling up in desktop and Web history now reaches the previous visible message even across dense tool activity. Older thought and tool folds fetch details when opened. (`F-120`, `C-003`)
+
 - 独立定时任务复用已有结果会话。会话列表显示任务 ID 和来源，静默运行不会顶起已有发现。 (`F-150`, `C-009`)
 
 - A transient Gateway discovery failure can recover before the next bound chat, session briefing or memory review request. The request waits for fresh authorization, and an ongoing outage or revoked grant remains visible in Trace. (`C-040`, `C-025`)

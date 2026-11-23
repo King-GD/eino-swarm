@@ -2865,6 +2865,21 @@ reconnection or task success. `models/generation/ModelGenerationRecovery.tla`
 and actual Registry/HTTP regressions protect this ordering.
 
 
+## Desktop and Web transcript history
+
+The renderer opens with the message view of `GET /api/threads/:id/log`.
+The server selects visible-message boundaries over stored events and
+projects older manager work into counted sequence ranges. The view retains
+control events and uses separate upper and lower scan bounds for SSE and
+upward paging. The open snapshot supplies the conversation's worker roster
+alongside the history. Selecting a worker reads its independent log.
+
+The transcript store replays stored events with their original identities.
+Deferred ranges enter the view at their sequence positions. Expanding one
+reads bounded detail pages with an exclusive cursor and folds them into the
+existing thought and tool components. These reads do not enter the live
+event reducer or advance the conversation cursor.
+
 ## Automatic restart handoff
 
 `cmd/zwai/engine_restart.go` coordinates the existing lease with the old

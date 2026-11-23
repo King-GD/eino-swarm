@@ -53,7 +53,7 @@ export function isOmittedBlock(block: Block): boolean {
 
 export function isFoldableBlock(block: Block): boolean {
   if (isOmittedBlock(block)) return false
-  return block.kind === "reasoning" || block.kind === "tool" || block.kind === "spawn"
+  return block.kind === "reasoning" || block.kind === "tool" || block.kind === "spawn" || block.kind === "history_work"
 }
 
 function isAlwaysVisible(block: Block): boolean {
@@ -76,7 +76,7 @@ export function foldTurnItems(
 ): TurnItem[] {
   const visible = blocks.filter((b) => !isOmittedBlock(b))
   if (mode !== "user") {
-    return visible.map((block) => ({ type: "block", block }))
+    return visible.map((block) => block.historyWork ? { type: "work", blocks: [block] } : { type: "block", block })
   }
 
   const items: TurnItem[] = []
@@ -110,6 +110,11 @@ export function workFoldStats(blocks: Block[]): WorkFoldStats {
   let failed = false
   let live = false
   for (const b of blocks) {
+    if (b.historyWork) {
+      if (b.historyWork.thinking) thoughts++
+      tools += b.historyWork.tools
+      failed ||= Boolean(b.historyWork.failed)
+    }
     if (b.kind === "reasoning") {
       thoughts++
       if (b.streaming) live = true
@@ -223,7 +228,8 @@ export function liveWorkIndex(items: TurnItem[], running: boolean): number {
   if (!running) return -1
   let last = -1
   for (let i = 0; i < items.length; i++) {
-    if (items[i]!.type === "work") last = i
+    const item = items[i]!
+    if (item.type === "work" && item.blocks.some((b) => !b.historyWork)) last = i
   }
   if (last < 0) return -1
   for (let i = last + 1; i < items.length; i++) {
@@ -247,7 +253,7 @@ export function planningTailAfterAnswer(
   let blocks: Block[] | undefined
   for (let i = 0; i < items.length; i++) {
     const item = items[i]!
-    if (item.type !== "work") continue
+    if (item.type !== "work" || item.blocks.every((b) => b.historyWork)) continue
     last = i
     blocks = item.blocks
   }

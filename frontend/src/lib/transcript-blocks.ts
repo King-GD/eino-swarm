@@ -1,4 +1,4 @@
-import type { AgentState, Block, BlockKind } from "./transcript"
+import type { AgentState, Block, BlockKind, TranscriptState } from "./transcript"
 import type { SwarmEvent } from "./types"
 
 export const MANAGER_ID = "manager"
@@ -20,6 +20,31 @@ export function block(ev: SwarmEvent, kind: BlockKind, text: string): Block {
 
 export function append(agent: AgentState, b: Block) {
   agent.blocks = [...agent.blocks, b]
+}
+
+export function touchAgent(
+  state: TranscriptState,
+  id: string,
+  role?: string,
+): AgentState {
+  const existing = state.agents[id]
+  if (existing) {
+    const updated = { ...existing, blocks: existing.blocks.slice() }
+    if (role && !existing.role) updated.role = role
+    state.agents[id] = updated
+    return updated
+  }
+  const created: AgentState = {
+    id,
+    role: role || (id === MANAGER_ID ? "manager" : id),
+    status: "running",
+    activity: "",
+    blocks: [],
+  }
+  state.agents[id] = created
+  state.agentOrder =
+    id === MANAGER_ID ? [id, ...state.agentOrder] : [...state.agentOrder, id]
+  return created
 }
 
 /** Replace the open streaming block of this kind, or open one. */

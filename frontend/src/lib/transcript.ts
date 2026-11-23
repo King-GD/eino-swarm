@@ -1,3 +1,4 @@
+import type { HistoryWork } from "./thread-log"
 import type { ImageRef, ReviewOutcome, SwarmEvent } from "./types"
 import { imageGeneration, imageGenerationIsNewer, type ImageGeneration } from "./image-generation"
 import { applyGenerationEvent, applyInterruptedOutput, recoverLegacyGeneration, type GenerationInterruption } from "./transcript-generation"
@@ -39,6 +40,7 @@ import {
   block,
   closeStreaming,
   replaceComplete,
+  touchAgent,
   replaceStreaming, supersededDelta,
 } from "./transcript-blocks"
 
@@ -70,6 +72,7 @@ export type BlockKind =
   | "user"
   | "steer"
   | "reasoning"
+  | "history_work"
   | "answer"
   | "tool"
   | "image_generation"
@@ -98,6 +101,7 @@ export interface Block {
   backoff?: BackoffContext
   /** One model output can span several manager turns and durable checkpoints. */
   messageId?: string
+  historyWork?: HistoryWork
   /** Still being streamed. Complete blocks stop showing a cursor and can be
    *  collapsed. */
   streaming?: boolean
@@ -978,31 +982,6 @@ function recordedInstruction(role?: string, text?: string): string | undefined {
   const name = (role ?? "").trim()
   if (!prompt || !name || prompt === name) return undefined
   return prompt
-}
-
-function touchAgent(
-  state: TranscriptState,
-  id: string,
-  role?: string,
-): AgentState {
-  const existing = state.agents[id]
-  if (existing) {
-    const updated = { ...existing, blocks: existing.blocks.slice() }
-    if (role && !existing.role) updated.role = role
-    state.agents[id] = updated
-    return updated
-  }
-  const created: AgentState = {
-    id,
-    role: role || (id === MANAGER_ID ? "manager" : id),
-    status: "running",
-    activity: "",
-    blocks: [],
-  }
-  state.agents[id] = created
-  state.agentOrder =
-    id === MANAGER_ID ? [id, ...state.agentOrder] : [...state.agentOrder, id]
-  return created
 }
 
 function upsertTurn(

@@ -21,6 +21,21 @@ async function expectContinuationNotices(page: Page, count: number) {
   }).toEqual({ total: count, resumed: 0 })
 }
 
+async function readGoalHistory(page: Page, notices: number, completions: number) {
+  const transcript = page.getByTestId("transcript")
+  await transcript.hover()
+  await expect.poll(async () => {
+    const progress = {
+      notices: await transcript.getByText("Continuing the standing objective.", { exact: true }).count(),
+      completions: await transcript.getByText("Standing objective completed.", { exact: true }).count(),
+    }
+    if (progress.notices < notices || progress.completions < completions) {
+      await page.mouse.wheel(0, -10_000)
+    }
+    return progress
+  }).toEqual({ notices, completions })
+}
+
 test("one goal restore shows one notice on explicit resume and replay while paged Trace retains both events", async ({ page, request }, info) => {
   await freshConversation(page)
   const threadId = await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id")
@@ -58,6 +73,7 @@ test("one goal restore shows one notice on explicit resume and replay while page
   expect(afterFirst).toHaveLength(originalTurns.length + 1)
 
   await reloadOpenConversation(page)
+  await readGoalHistory(page, 1, 2)
   await expectContinuationNotices(page, 1)
   await page.getByTestId("transcript").getByText("Continuing the standing objective.", { exact: true }).scrollIntoViewIfNeeded()
   await page.screenshot({ path: info.outputPath("first-resume-one-notice.png"), animations: "disabled" })
@@ -82,21 +98,27 @@ test("one goal restore shows one notice on explicit resume and replay while page
   const pageStart = continuations[1].seq
   const beforeRequests: number[] = []
   await page.route(new RegExp(`/api/threads/${threadId}/log(?:\\?|$)`), async (route) => {
-    const response = await route.fetch()
-    const body = await response.json() as Log
-    const before = Number(new URL(route.request().url()).searchParams.get("before"))
-    if (before) beforeRequests.push(before)
-    else {
-      // Separate the real stored pair at the first-page boundary.
-      body.events = body.events.filter((event) => event.seq >= pageStart)
-      body.has_more = true
+    const url = new URL(route.request().url())
+    const before = Number(url.searchParams.get("before"))
+    if (before) {
+      beforeRequests.push(before)
+      await route.continue()
+      return
     }
+    // Use the raw compatibility view to place this fixture's first-page
+    // boundary between the two stored notices. Older reads use real message pages.
+    url.searchParams.delete("view")
+    url.searchParams.set("limit", "200")
+    const response = await route.fetch({ url: url.toString() })
+    const body = await response.json() as Log
+    body.events = body.events.filter((event) => event.seq >= pageStart)
+    body.has_more = true
     await route.fulfill({ response, json: body })
   })
   await reloadOpenConversation(page)
   const transcript = page.getByTestId("transcript")
-  await transcript.evaluate((element) => { element.scrollTop = 0; element.dispatchEvent(new Event("scroll")) })
-  await expect.poll(() => beforeRequests.includes(pageStart)).toBe(true)
+  await readGoalHistory(page, 2, 3)
+  expect(beforeRequests).toContain(pageStart)
   await expectContinuationNotices(page, 2)
   const replayedLog = await (await request.get(`/api/threads/${threadId}/log`)).json() as Log
   expect(replayedLog.events.filter((event) => event.kind === "goal_resumed" || event.kind === "goal_continued"))

@@ -839,12 +839,21 @@ export const api = {
   turns: (id: string) =>
     request<{ turns: Turn[] }>(`/api/threads/${id}/turns`).then((r) => r.turns),
   /** Newest stored events, oldest first. `before` pages upward from a seq. */
-  threadLog: (id: string, opts?: { before?: number; limit?: number }) => {
+  threadLog: (id: string, opts?: { before?: number; limit?: number; view?: "messages" }) => {
     const params = new URLSearchParams()
     if (opts?.before && opts.before > 0) params.set("before", String(opts.before))
     if (opts?.limit && opts.limit > 0) params.set("limit", String(opts.limit))
+    if (opts?.view) params.set("view", opts.view)
     const query = params.toString()
     return request<ThreadLog>(`/api/threads/${id}/log${query ? `?${query}` : ""}`)
+  },
+  threadHistoryWork: (id: string, from: number, through: number, since: number, signal: AbortSignal) => {
+    const params = new URLSearchParams({
+      work_from: String(from), work_through: String(through), since: String(since),
+    })
+    return request<{ events: SwarmEvent[]; seq: number; has_more: boolean }>(
+      `/api/threads/${id}/log?${params}`, { signal },
+    )
   },
   /** One worker's stored rows. The conversation tail often dropped them. */
   agentLog: (id: string, agentId: string) =>

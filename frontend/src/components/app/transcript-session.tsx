@@ -68,9 +68,8 @@ export function splitSessionBlocks(blocks: Block[]): {
   return { leading, work, trailing: [...trailing, ...holds] }
 }
 
-/** Hover clock lives under the user request and under the last finished
- *  answer of that turn. Intermediate answers while tools still run are
- *  not their own messages. */
+/** The response clock belongs to the turn's last answer. Intermediate answers
+ *  keep their own rows with the shared turn timing shown only at the end. */
 export function responseClockBlockId(blocks: Block[]): string | undefined {
   let last: Block | undefined
   for (const b of blocks) {

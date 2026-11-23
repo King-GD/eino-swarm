@@ -6317,6 +6317,8 @@ fixtures the requested reviews caught nothing the manager's own choice of
 review did not. The policy is re-measured with `tools/agent_eval_prereview.py`
 on any change to the Delegating section.
 
+The visible-history projection also runs six bounded TLC cases in `models/stream/VisibleHistory.tla`. The idle tail scans two deferred work rows, reads the preceding visible message and gives SSE a distinct watermark. Seeded cursors and a stale rewind range break the modeled invariants. The model abstracts the SQL and React rendering, which the real HTTP and Playwright tests exercise.
+
 ## The scripted offline provider
 
 `--mock` (or `provider.NewMock`) replaces the model with a script that behaves
@@ -7899,6 +7901,11 @@ npm run e2e
 npx playwright test --headed      # watch it happen
 npx playwright test e2e/shell.spec.ts -g "settings"
 ```
+
+The message-history spec seeds a private conversation in that server's
+SQLite database with a gap of more than 200 tool and reasoning events.
+It checks one visible message per upward page in both transcript modes,
+lazy expansion with retry, and independent worker-log requests.
 
 Playwright starts the real server itself (`go run ./cmd/zwai web --mock --no-open`),
 so a run exercises the whole stack: gin, the engine, SQLite, SSE and the built

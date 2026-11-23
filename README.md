@@ -11,7 +11,8 @@ Projects can opt into **Nuwa collaboration**: a planner model coordinates, and a
 executor model does the workspace and external-service work. See [Nuwa](docs/NUWA.md).
 With an authorized gateway image model, ask chat to draw or type `/image`
 followed by a description. Open or save the finished image from the conversation.
-Day-to-day use is in [Using zwai](docs/USAGE.md).
+In the desktop and Web transcript, scroll up for earlier messages and open
+older work folds to read their details. See [Using zwai](docs/USAGE.md).
 
 ```
 ┌───────────────┬─────────────────────────────────┬──────────────────┐

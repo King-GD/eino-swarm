@@ -57,13 +57,15 @@ The transcript is the middle. Once you have sent two messages, a tick cluster
 on its left edge lists your own turns; click one to pin that send at the top.
 A long conversation packs the ticks into a minimap. Auto-follow unpins so a
 live stream does not yank you back to the bottom. Opening another conversation
-lands at its latest turn. A long log loads from the live edge first; older
-turns appear when you scroll up. New tokens while you are reading light a
-jump-to-latest control.
+lands at its latest message. Each request while scrolling up reaches the
+previous user input or manager answer, including another answer in the same
+turn. New tokens while you are reading light a jump-to-latest control.
 
 Each visible finished turn has one duration and local completion time after
-its last pre-completion content. Reasoning and tool details start collapsed.
-A late memory-review notice stays at its event position and does not repeat
+its last pre-completion content. In user view, reasoning and tools start
+collapsed. The latest message's work is already available when you expand
+it. Older folds fetch details when expanded, including in developer view.
+Click a worker in Agents to read its own log. A late memory-review notice stays at its event position and does not repeat
 that end marker.
 
 A ring on the composer shows how full the last manager prompt is. Hover it

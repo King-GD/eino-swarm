@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import { reloadOpenConversation } from "./session"
+import { readEarlierTranscript, reloadOpenConversation } from "./session"
 
 async function freshConversation(page: Page) {
   await page.goto("/")
@@ -28,11 +28,13 @@ test("a completed goal leaves only its history notice after reload and reopening
   expect(thread).toMatchObject({ goal: "keep going", goal_complete: true })
 
   await reloadOpenConversation(page)
+  await readEarlierTranscript(page, completed)
   await expect(completed).toHaveCount(1)
   await expect(page.getByTestId("goal-banner")).toHaveCount(0)
   await expect(page.getByTestId("status-badge")).toContainText("Idle")
   await page.getByRole("button", { name: "New conversation", exact: true }).click()
   await page.locator(`[data-testid="thread-row"][data-id="${threadID}"]`).getByTestId("row-label").click()
+  await readEarlierTranscript(page, completed)
   await expect(completed).toHaveCount(1)
   await expect(page.getByTestId("goal-banner")).toHaveCount(0)
   await expect(page.getByTestId("status-badge")).toContainText("Idle")

@@ -112,6 +112,9 @@ class Model:
 MODELS = {
     m.name: m
     for m in (
+        Model("visible-history", ROOT / "models" / "stream" / "VisibleHistory.tla",
+              ("UseVisibleCursor", "SkipOlderMessage", "KeepRewoundWork"),
+              ("TypeOK", "NoDeferredReplay", "PreviousMessageReached", "WorkStillStored"), ()),
         Model("task-panel", ROOT / "models" / "panels" / "TaskPanel.tla",
               ("IgnoreOwner", "DeliverBeforeCommit", "ApplyDuplicate", "IgnoreBaseRevision", "IgnoreOperationDigest", "CleanupOtherOwner", "SkipRecovery", "SeparatePanelConnection"),
               ("TypeOK", "CommittedBeforeDelivery", "OwnerRequired", "Idempotent", "BaseRevisionRequired", "OperationBodyStable", "CleanupKeepsOwner", "NoOrphanAfterRestore", "SaveConnectionAvailable"), ()),
@@ -484,6 +487,15 @@ CASES: tuple[Case, ...] = (
     _case("task-panel-cleanup-owner", "seeded: old producer cleanup changes successor metadata", ("CleanupOtherOwner",), "CleanupKeepsOwner", model="task-panel"),
     _case("task-panel-orphan", "seeded: startup leaves interrupted producer running", ("SkipRecovery",), "NoOrphanAfterRestore", model="task-panel"),
     _case("task-panel-connection-budget", "observed two-window draft PUT starvation when separate panel SSE occupies all six H1 slots", ("SeparatePanelConnection",), "SaveConnectionAvailable", model="task-panel"),
+    _case("visible-history-current", "scanned tail and older cursors, detail expansion and rewind", model="visible-history"),
+    _case("visible-history-visible-cursor", "seeded: SSE starts from the last rendered row",
+          ("UseVisibleCursor",), "NoDeferredReplay", model="visible-history"),
+    _case("visible-history-skipped-older", "seeded: the older cursor skips the previous visible message",
+          ("SkipOlderMessage",), "PreviousMessageReached", model="visible-history"),
+    _case("visible-history-stale-work", "seeded: rewind keeps a deleted range",
+          ("KeepRewoundWork",), "WorkStillStored", model="visible-history"),
+    _case("visible-history-reach-live", "witness", witness="NeverOpenAndCatchUp", model="visible-history"),
+    _case("visible-history-reach-rewind", "witness", witness="NeverPageExpandRewind", model="visible-history"),
     _stream("stream-panel-cursor", "seeded: panel cursor emitted as chat SSE id", ("PanelCursorAsChatID",), "PanelCursorIsIndependent"),
     _stream("stream-panel-reach", "named panel frame reaches shared SSE without a chat cursor", witness="NeverPanelFrame"),
     _case("task-panel-current", "atomic owned publication and idempotent delivery", model="task-panel"),
