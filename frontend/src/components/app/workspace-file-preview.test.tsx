@@ -107,6 +107,27 @@ describe("answer file links open the workspace preview", () => {
     )
   })
 
+  it("lists each matching file when the answer names one that exists in more than one place", async () => {
+    vi.mocked(api.searchFiles).mockResolvedValue({
+      workspace: "/tmp/task",
+      files: [file("report/list/a.md"), file("recon/notes/a.md"), file("recon/notes/a.md")],
+    })
+    render(
+      <WorkspaceFilePreview>
+        <MemoMarkdown text="See a.md." />
+      </WorkspaceFilePreview>,
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Preview a.md" }))
+    expect(await screen.findByRole("heading", { name: "a.md" })).toBeInTheDocument()
+    expect(screen.getByText("Choose which file to preview")).toBeInTheDocument()
+    expect(readFilePreview).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole("button", { name: "Preview report/list/a.md" }))
+    expect(await screen.findByRole("heading", { name: "Notes" })).toBeInTheDocument()
+    expect(screen.getByText("report/list/a.md")).toBeInTheDocument()
+    expect(readFilePreview).toHaveBeenCalledTimes(1)
+    expect(readFilePreview).toHaveBeenCalledWith("th_1", "report/list/a.md", expect.any(AbortSignal))
+  })
+
   it("closes the preview when the conversation changes", async () => {
     render(
       <WorkspaceFilePreview>

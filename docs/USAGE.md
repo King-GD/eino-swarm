@@ -443,6 +443,8 @@ markdown URL opens in a new browser tab (`zwai web`) or the system browser
 (`zwai desktop`). A workspace-relative file path in a finished answer opens
 that file in the same preview as the Files tab. A path written from the task
 working directory is found under `work/` when that is where the file is.
+When more than one file has that name, the preview lists those paths and
+opens the one you choose.
 
 A `mermaid` fence renders a diagram in desktop and Web conversations, tool
 output, and Markdown file previews. Incomplete live fences, invalid diagrams,

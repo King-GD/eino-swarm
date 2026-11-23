@@ -1,7 +1,3 @@
-/** Agents resolve relative tool paths in this directory. The file tree is the
- * task root, so `notes/a.md` written from there is `work/notes/a.md`. */
-export const TASK_WORK_DIR = "work"
-
 /** A fragment, not a custom protocol: the markdown renderer drops unknown
  * schemes before the link component can see them. */
 const FILE_HREF = "#zwai-file:"
@@ -53,16 +49,23 @@ export function workspaceFilePath(raw: string): string | null {
 
 type ListedPath = { path: string; dir?: boolean }
 
-/** Prefer the path as written. Tool-relative names then live under `work/`. */
-export function chooseWorkspaceFile(requested: string, hits: readonly ListedPath[]): string {
+/** One real workspace path, or every path that shares the requested name. */
+export type WorkspaceFileMatch =
+  | { status: "one"; path: string }
+  | { status: "many"; paths: string[] }
+
+/** Prefer the path as written. A tool-relative name is the file under `work/`
+ * when that is the only match. Several files with the same name stay a choice,
+ * including one under `work/`. */
+export function chooseWorkspaceFile(requested: string, hits: readonly ListedPath[]): WorkspaceFileMatch {
   const files = hits.filter((hit) => hit.path && !hit.dir)
-  if (files.some((hit) => hit.path === requested)) return requested
-  const work = `${TASK_WORK_DIR}/${requested}`
-  if (files.some((hit) => hit.path === work)) return work
+  if (files.some((hit) => hit.path === requested)) return { status: "one", path: requested }
   const suffix = `/${requested}`
-  const matches = files.filter((hit) => hit.path.endsWith(suffix))
-  if (matches.length === 1) return matches[0]!.path
-  return requested
+  const paths = [...new Set(files.filter((hit) => hit.path.endsWith(suffix)).map((hit) => hit.path))]
+  paths.sort()
+  if (paths.length === 1) return { status: "one", path: paths[0]! }
+  if (paths.length > 1) return { status: "many", paths }
+  return { status: "one", path: requested }
 }
 
 function breaksPath(ch: string | undefined, side: "before" | "after"): boolean {

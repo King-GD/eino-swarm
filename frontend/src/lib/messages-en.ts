@@ -398,6 +398,7 @@ export const en = {
   "files.yours": "yours",
   "files.preview": "Preview",
   "files.openPreview": "Preview {path}",
+  "files.chooseMatch": "Choose which file to preview",
   "files.source": "Source",
   "files.content": "File content",
   "files.copyContent": "Copy file content",

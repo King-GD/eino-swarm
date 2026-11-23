@@ -8784,6 +8784,9 @@ outside the workspace, and keeps a remote `https` image.
 `frontend/src/lib/documents/zip.test.ts` rejects stored and deflate entries
 whose output is larger than the declared uncompressed size, including a
 declared size of zero.
+`frontend/src/components/app/workspace-file-preview.test.tsx` lists every
+matching path when a finished answer names a file that exists in more than
+one place, and opens only the path you choose.
 `frontend/e2e/conversation.spec.ts` clicks a workspace path in a finished
 scripted answer and checks that the file preview shows that file.
 `frontend/e2e/file-preview.spec.ts` creates conversations and uploads fixture

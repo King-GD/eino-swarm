@@ -390,6 +390,7 @@ export const zh: { [K in keyof typeof en]: string } = {
   "files.yours": "你的",
   "files.preview": "预览",
   "files.openPreview": "预览 {path}",
+  "files.chooseMatch": "选择要预览的文件",
   "files.source": "源码",
   "files.content": "文件内容",
   "files.copyContent": "复制文件内容",
