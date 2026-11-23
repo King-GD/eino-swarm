@@ -257,6 +257,7 @@ function flushQueued(set: StreamSet, get: StreamGet) {
       const outcome = parseReview(ev)
       void useProjects.getState().loadMemory()
       if (outcome?.changed) useProjects.getState().noteMemoryWrite()
+      if (outcome?.knowledgeCount && outcome.projectId) useKnowledge.getState().invalidate(outcome.projectId)
       useProjects.getState().finishReview(ev.turn_id, outcome, ev.thread_id, ev.seq)
     }
     if (ev.kind === "tool_result") {

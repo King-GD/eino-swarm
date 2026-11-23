@@ -3323,11 +3323,15 @@ the context used.
 ### Memory reviews
 
 With memory and auto-review enabled, a successful turn receives a full review
-regardless of manager writes. A failed project turn can retain explicit human
+regardless of manager writes. When Knowledge is already enabled for that
+project, the same automatic proposal can include wiki updates. A failed project turn can retain explicit human
 requirements as notes only, excluding task-tool output, assistant/derived text,
 skill edits and skill folding. Cancellation starts no automatic review.
 `memory_review` is stored under the original turn id, with model calls attributed
-to `memory-reviewer`. `text` is JSON:
+to `memory-reviewer`. A receipt with wiki writes includes `project_id` and a
+`knowledge` array of committed actions. A page action includes `id`, `title`
+and `revision`; a schema append includes its new `revision`.
+`text` is JSON:
 
 ```json
 {

@@ -47,10 +47,16 @@ func mockProjectDistillation(turn int, messages []*schema.Message) *schema.Messa
 			}
 		}
 		if !failed && systemContains(messages, "Knowledge is enabled.") {
-			pages = append(pages, map[string]any{"action": "write_page", "id": "observation-" + tag, "type": "entry",
-				"title": quote, "body": quote, "evidence": evidence})
+			pages = append(pages, mockKnowledgeObservation(seq, quote))
 		}
 	}
 	raw, _ := json.Marshal(map[string]any{"changes": changes, "knowledge": pages})
 	return &schema.Message{Role: schema.Assistant, ToolCalls: []schema.ToolCall{call("mock-project-distillation", "apply_project_distillation", string(raw))}}
+}
+
+func mockKnowledgeObservation(seq int64, quote string) map[string]any {
+	return map[string]any{
+		"action": "write_page", "id": "observation-" + conversationTag(quote), "type": "entry",
+		"title": quote, "body": quote, "evidence": []map[string]any{{"seq": seq, "quote": quote}},
+	}
 }

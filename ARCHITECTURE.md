@@ -2646,8 +2646,11 @@ inspector uses existing tool results and turn completion to refresh.
 Manual Distill shares the Memory reviewer and per-project review queue. A
 host-owned read snapshot maps reviewer handles to original history records.
 One validated proposal can update notes, Skills and Knowledge through their
-existing stores. The two panels read one SQLite receipt and link to the
-original turn's Trace. See [the distillation design](docs/plans/2026-11-23-unified-project-distillation.md)
+existing stores. Manual runs share one SQLite receipt between the two panels.
+For a successful turn with project memory, auto-review and Knowledge enabled,
+the existing reviewer applies wiki updates in the same batch as notes and
+Skills. It publishes their committed revisions in the original turn's
+`memory_review` event, which refreshes the open Knowledge panel. See [the distillation design](docs/plans/2026-11-23-unified-project-distillation.md)
 and [the wiki design](docs/plans/2026-11-23-project-knowledge-design.md).
 
 ## Integrated terminal

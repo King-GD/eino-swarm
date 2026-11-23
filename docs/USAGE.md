@@ -821,7 +821,11 @@ with unconfirmed writes asks you to check the current contents before retrying.
 You can also ask directly in an enabled project turn or edit the files under
 the project's `knowledge` directory. On desktop, the folder button opens it.
 
-To run incremental extraction, create a recurring task for the project in
+With project memory and **Review a conversation when it finishes** enabled,
+the automatic review of a successful turn considers notes, Skills and its
+enabled knowledge base together. It only saves findings worth keeping, and
+the turn receipt lists the writes that landed. For incremental extraction across
+multiple conversations, create a recurring task for the project in
 **Scheduled**. Set a time window that matches the recurrence, specify which
 history to read, and ask the agent to check existing pages and cite original
 records before recording changes. To work through the pending queue, give a
@@ -832,7 +836,8 @@ actual reads and writes. Each schedule uses the ordinary project tools.
 ## Memory and skills
 
 With memory and auto-review on, each successful turn is reviewed even if the
-manager already wrote memory. A failed project turn may retain explicit human
+manager already wrote memory. When the project has Knowledge enabled, the
+same review also considers wiki updates. A failed project turn may retain explicit human
 requirements as notes, without learning skills from failed work. Cancellation
 does not start an automatic review. Notes are short facts whose absence would
 misdirect future work. Skills are reusable procedures. Constraints needed only

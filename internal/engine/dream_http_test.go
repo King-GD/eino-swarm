@@ -36,10 +36,12 @@ func TestDreamRestoresLearnedRuleFromActualPostTurnEvidence(t *testing.T) {
 	}
 	t.Run("explicit_review_effort", func(t *testing.T) { runDreamHTTPScenario(t, "restored", "medium") })
 	t.Run("explicit_review_without_thinking", func(t *testing.T) { runDreamHTTPScenario(t, "restored", "none") })
+	t.Run("knowledge_after_audit_deferral", func(t *testing.T) { runDreamHTTPScenario(t, "read_other_skill", "", true) })
 }
 
-func runDreamHTTPScenario(t *testing.T, expected, explicitEffort string) {
+func runDreamHTTPScenario(t *testing.T, expected, explicitEffort string, wikiEnabled ...bool) {
 	t.Helper()
+	withWiki := len(wikiEnabled) > 0 && wikiEnabled[0]
 	var e *Engine
 	var seedThread, auditThread, projectID string
 	var sharedDir string
@@ -76,6 +78,10 @@ func runDreamHTTPScenario(t *testing.T, expected, explicitEffort string) {
 			reviewCalls.Add(1)
 			transcript, appendix, hasAudit := strings.Cut(user, dreamHTTPAppendix)
 			dreamField, hasAuditField := offered.Function.Parameters.Properties["dream"]
+			_, hasWiki := offered.Function.Parameters.Properties["knowledge"]
+			if hasWiki != withWiki {
+				t.Errorf("review Knowledge parameter=%t, want %t (audit=%t)", hasWiki, withWiki, hasAudit)
+			}
 			excluded := offered.Function.Parameters.Properties["changes"].Description == "Exclude the audited skill."
 			if excluded != hasAudit {
 				t.Errorf("ordinary change schema has exclusion=%t (audit=%t)", excluded, hasAudit)
@@ -129,7 +135,7 @@ func runDreamHTTPScenario(t *testing.T, expected, explicitEffort string) {
 				}
 			}
 			if !hasAudit && expected == "read_other_skill" && strings.Contains(user, dreamHTTPAudit) {
-				if len(req.Tools) != 2 {
+				if len(req.Tools) != 2 && !withWiki || withWiki && !nuwaPlannerOfferedTools(req)[ToolReadKnowledge] {
 					t.Error("ordinary continuation lost its normal tools")
 				}
 				if results["other-view"] == "" {
@@ -150,6 +156,12 @@ func runDreamHTTPScenario(t *testing.T, expected, explicitEffort string) {
 					if event.Kind == "tool_result" && event.ToolCallID == "later-receipt" {
 						ops = append(ops, reviewOperation{Target: memory.ToolMemory, Action: "add", Content: dreamHTTPNote,
 							Evidence: []reviewCitation{{Seq: event.Seq, Quote: "short receipt"}}})
+						if withWiki {
+							response["knowledge"] = []map[string]any{{
+								"action": "write_page", "id": "observation", "type": "entry", "title": "Observation",
+								"body": "A recorded observation.", "evidence": []reviewCitation{{Seq: event.Seq, Quote: "short receipt"}},
+							}}
+						}
 					}
 				}
 				// A fabricated late verdict cannot restore the skill or block
@@ -293,6 +305,11 @@ func runDreamHTTPScenario(t *testing.T, expected, explicitEffort string) {
 	e.cfg.Models.Providers[0].Model = "local-dream-fixture"
 	e.pool = provider.New(e.cfg)
 	project, source := projectThread(t, e)
+	if withWiki {
+		if _, err := e.EnableProjectKnowledge(project.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
 	seedThread, projectID = source.ID, project.ID
 	sharedDir = e.ProjectWorkdir(project)
 	mem := e.ProjectMemory(project.ID)
@@ -319,6 +336,9 @@ func runDreamHTTPScenario(t *testing.T, expected, explicitEffort string) {
 	}
 	auditThread = audit.ID
 	checked := runDreamHTTPTurn(t, e, audit.ID, dreamHTTPAudit)
+	if withWiki && (len(checked.Knowledge) != 1 || checked.Knowledge[0].ID != "observation") {
+		t.Fatalf("ordinary review lost Knowledge after deferring the audit: %+v", checked)
+	}
 	wantReviews, wantAudits := int32(2), int32(1)
 	wantStatus := expected
 	switch expected {

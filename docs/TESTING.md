@@ -993,6 +993,12 @@ receipts. The Playwright project knowledge suite walks all three scopes,
 switches between both panels and follows the Trace receipt. The
 `distillation-*` TLC cases cover exclusive admission, scoped publication,
 committed receipts, and a reachable run that saves all three targets.
+`TestCompletedTurnAutomaticallyKeepsNotesSkillsAndKnowledgeInOneReviewerBatch`
+drives a real completed turn and its automatic reviewer through the model
+adapter, and checks that one proposal and one original-turn receipt cover all
+three destinations. The Dream loopback test covers audit deferral while
+Knowledge is enabled. The offline browser regression keeps Knowledge visible
+and verifies its automatic refresh before reading Trace.
 
 ## Project Markdown knowledge (`F-138`, `C-053`)
 
@@ -6320,7 +6326,8 @@ Playwright (`go run`) still emit them.
 It answers as a **memory reviewer** too: the post-turn script submits a complete
 `apply_memory_review` batch derived from effective source events, with exact
 seq/quote citations. A normal project review can store a note and a skill;
-failed-turn requirements-only input stores notes without skills. Shared-library
+when Knowledge is enabled, the same mock review can also commit a cited wiki
+page. Failed-turn requirements-only input stores notes without skills. Shared-library
 review submits skills only. The batch exits the agent and the program supplies
 the result line, rather than billing a closing model call. A manager write does
 not skip this path. Explicit Review now selects the latest successful turn.

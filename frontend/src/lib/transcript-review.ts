@@ -12,7 +12,7 @@ export function parseReview(ev: SwarmEvent): ReviewOutcome | undefined {
     return undefined
   }
   if (!raw || typeof raw !== "object") return undefined
-  const body = raw as Partial<ReviewOutcome>
+  const body = raw as Partial<ReviewOutcome> & { project_id?: unknown; knowledge?: unknown }
   return {
     ...parseReviewDiagnostics(raw),
     stale_candidates: Array.isArray(body.stale_candidates) ? body.stale_candidates.filter((name): name is string => typeof name === "string" && name.trim() !== "") : undefined,
@@ -20,11 +20,20 @@ export function parseReview(ev: SwarmEvent): ReviewOutcome | undefined {
     notes: typeof body.notes === "object" && body.notes ? body.notes : undefined,
     skills: parseMemoryChanges(body.skills),
     changes: parseMemoryChanges(body.changes),
+    knowledgeCount: Array.isArray(body.knowledge) ? body.knowledge.filter(isCommittedKnowledgeChange).length : undefined,
+    projectId: typeof body.project_id === "string" ? body.project_id : undefined,
     note: typeof body.note === "string" ? body.note : undefined,
     err: typeof body.err === "string" && body.err ? body.err : ev.err || undefined,
     notify: notifyOf(body.notify),
     library: body.library === true,
   }
+}
+
+function isCommittedKnowledgeChange(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object") return false
+  const change = raw as { revision?: unknown; action?: unknown }
+  return typeof change.revision === "string" && change.revision.length > 0 &&
+    (change.action === "write_page" || change.action === "append_schema")
 }
 
 function parseMemoryChanges(raw: unknown): MemoryChange[] | undefined {
@@ -74,8 +83,10 @@ export function reviewPanelHint(outcome?: ReviewOutcome, locale: Locale = "en"):
 
 export function reviewNotice(outcome?: ReviewOutcome, locale: Locale = "en"): string | undefined {
   if (!outcome) return undefined
+  const count = outcome.knowledgeCount ?? 0
+  const wiki = count > 0 ? t(locale, "knowledge.reviewSaved", { count }) : ""
   const failure = reviewFailure(outcome, locale)
-  if (failure) return failure
+  if (failure) return wiki ? `${failure} ${wiki}` : failure
   if (!outcome.changed) return outcome.stale_candidates?.length ? t(locale, "memory.tidyReviewed") : undefined
   const parts: string[] = []
   for (const action of Object.keys(NOTE_VERBS)) {
@@ -97,7 +108,7 @@ export function reviewNotice(outcome?: ReviewOutcome, locale: Locale = "en"): st
         ? t(locale, "memory.reviewChanges", { detail: parts.join(locale === "zh" ? "，" : ", ") })
         : `Memory updated: ${parts.join(", ")}.`
       : "Memory updated."
-  const localizedHead = localizeNotice(head, locale)
+  const localizedHead = wiki && parts.length === 0 ? wiki : [localizeNotice(head, locale), wiki].filter(Boolean).join(" ")
   if (outcome.notify !== "verbose") return localizedHead
   const preview = (outcome.changes ?? [])
     .map(changePreview)

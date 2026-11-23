@@ -2,13 +2,14 @@
 
 Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user entry points and [CHANGELOG.md](../CHANGELOG.md) for history. Contract IDs are stable.
 
-## C-054 Unified manual project distillation
+## C-054 Unified project distillation
 
 - 范围涵盖 PC／Web 的 Memory 与 Knowledge、`F-138`、`F-420`、`C-025` 和 `C-053`。宿主在一个项目内合并重复的运行请求，根据范围读取最近成功回合、当前对话或当前项目已保留的历史。后两种范围允许失败回合中的明确人类要求作为笔记依据。运行和取消回合不参与提炼。
 - 一个 SQLite 读快照固定当前归属和输入范围。原始对话与事件 seq 绑定唯一的复查引用。来源以 2,000 rune 为单项上限，24,000 rune 为共享上限，并采用有界的扫描。宿主检查引文和来源归属，再以真实记录身份验证来源仍可用。助手文字只能用于带未核实归属的知识库分析。
 - 一份提案提交启用目标的操作。显式授权可以幂等启用知识库。笔记沿用一次 revision 比对提交，Skills 和知识库按各自的原子写入边界保存。保存失败可留下已提交项，回执仅列已实际保存的操作。
-- 两个面板读取同一项目的最新回执，原始回合仍是 Trace 锚点。进程退出且没有终态回执时显示中断并要求核实可能已保存的内容。项目删除清除关联回执。
-- 实现 `internal/engine/project_distill.go`、`internal/engine/project_distill_batch.go` 和 `internal/store/distillation.go`。验证见 `internal/engine/project_distill_test.go`、`internal/server/project_distill_test.go`、`frontend/e2e/project-knowledge.spec.ts` 和 `models/knowledge/ProjectDistillation.tla`。
+- 自动复盘与项目记忆开启时，已启用知识库的成功非计划回合在现有 `apply_memory_review` 提案中也可提交 wiki 更新。回合当前归属、设置和来源身份在写入前复核。回执以同一个 `memory_review` 事件列出已落盘页面与 schema revision，刷新笔记、Skills 和 Knowledge；普通复盘与 Dream 的原请求预算适用。
+- 两个面板读取同一项目的最新手动提炼回执，原始回合仍是 Trace 锚点。进程退出且没有终态回执时显示中断并要求核实可能已保存的内容。项目删除清除关联回执。
+- 实现 `internal/engine/project_distill.go`、`internal/engine/project_distill_batch.go`、`internal/engine/review_knowledge.go` 和 `internal/store/distillation.go`。验证见 `internal/engine/project_distill_test.go`、`internal/engine/review_knowledge_test.go`、`internal/engine/dream_http_test.go`、`internal/server/project_distill_test.go`、`frontend/e2e/project-knowledge.spec.ts` 和 `models/knowledge/ProjectDistillation.tla`。
 
 ## C-053 Project knowledge keeps stable pages and attributable sources
 
@@ -668,7 +669,7 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 
 - 状态：active；类型：lifecycle / consistency / data / compatibility；作用范围：自动复盘、notes 存储、skill 写入、复盘 Trace；关联功能：`F-420`、`F-160`；关联契约：`C-012`。
 - 新增、替换和技能降类的笔记内容归一化后须含至少一个 Unicode Letter 或 Number。拒绝时保留已存笔记和降类源技能。手工全量保存应用同一规则，可按归一化文本和已有次数保留历史条目，也可显式清空。读取与旧笔记的正常编辑不触发迁移。实现见 `internal/memory/store.go`、`internal/memory/reclassify.go`。回归见 `internal/memory/note_content_test.go`、`frontend/e2e/memory-boundary.spec.ts`。
-- 契约内容：memory 与 auto-review 开启时，成功回合完整复盘，不因 manager 曾写入任何一项记忆而跳过。失败项目回合只允许有效真实人类要求形成 notes，不读任务工具/助手/运行时续办/派生摘要作为新证据，不写技能或执行技能 fold；取消不自动复盘。旧版 Review now 接口和独立对话的共享 Skills 复查选择最近成功回合。项目统一提炼见 `C-054`。
+- 契约内容：memory 与 auto-review 开启时，成功回合完整复盘，不因 manager 曾写入任何一项记忆而跳过。已启用的知识库按 `C-054` 加入同一份自动提案。失败项目回合只允许有效真实人类要求形成 notes，不读任务工具/助手/运行时续办/派生摘要作为新证据，不写技能或执行技能 fold；取消不自动复盘。旧版 Review now 接口和独立对话的共享 Skills 复查选择最近成功回合。项目统一提炼见 `C-054`。
 - 输入边界：有效 steer 先应用修订与撤回；源事件优先人类、再近期按 agent/call ID 配对的工具交互、最后助手及派生文本，渲染保持时间顺序。单个事件源 2000、源总量 24000 rune 含完整生命周期前置块、framing、分隔与截断标记；成功回合先预留完整、有界的生命周期块，再从剩余预算选择人类/工具/claims，生成事实不伪造或截短真实身份；身份 framing 本身超出单源上限时省略整个来源组，工具配对不拆分，不截断身份字段或赋予被省略正文来源权限。当前 notes、技能目录和系统指令不在此源预算内，不承诺完整模型输入或费用的同一上限。取得项目复盘串行锁后、模型调用前读取当前 notes。
 - Worker 事实边界（`C-008`）：成功回合复盘先从完整持久化历史重建对应 turn 的生命周期事实，独立前置于选取的源转录与有界 briefing；历史恢复 ID、真实创建和拒绝调用不得混同。完整历史读取失败时跳过该成功回合的模型复盘并记录原因，仍保留成功回合确定性 skill fold，不从缺失数据宣称零创建。该事实前置块计入 24000 rune 源总预算，但不进入可引用源事件集合，不可据其内部文本伪造 seq 或写入依据；2000 rune 单项上限约束事件来源。失败回合 human-only 复盘不接收该前置块、briefing 或运行时/任务工具证据。
 - 写入边界：自动 reviewer 提交完整 apply_memory_review 批次，公开 manager 的 memory/skill 工具契约不变。notes 在内存草稿复用单条/总量上限、唯一匹配与技能重叠校验，基线与首次模型请求中的 notes 使用同一快照，在取得项目复盘锁后捕获；最终在同 Store 共享锁内比较该 Rev 并一次提交，零净变化不写盘。普通拒绝后的修复仍绑定同一 Rev，不自动刷新或静默重基；批次开始前检测到模型读取后的人类/manager 修改会终止冲突，不追加修复请求；最终 commit 的极短竞态可能追加一次修复请求，随后固定 Rev 仍禁止覆盖或静默重基。输入 notes 不可读时在模型调用前报错。失败不发布半套 notes，不自动重基覆盖并发人类/manager 修改；不承诺与外部直接文件写入之间的跨进程 CAS。

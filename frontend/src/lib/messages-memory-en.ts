@@ -70,7 +70,7 @@ export const memoryEn = {
     "Off disables recorded notes and skills, including the shared skill library. Installed project skills are still available.",
   "settings.memory.autoReview": "Review a conversation when it finishes",
   "settings.memory.autoReviewHint":
-    "A finished turn is read back so durable facts and reusable procedures are kept. A conversation outside a project keeps procedures in the shared skill library. Off means memory only changes when an agent or you write to it.",
+    "Review the finished turn for lasting notes and reusable Skills. Projects with Knowledge enabled can also save wiki pages in the same review. Conversations outside a project save procedures to the shared skill library.",
   "settings.memory.autoDream": "Verify and correct project skills",
   "settings.memory.autoDreamHint":
     "After a successful turn, checks skills from earlier automatic reviews against project history and successful tool results. The automatic review can restore a previous version when the evidence contradicts the update. Requires memory and automatic review.",

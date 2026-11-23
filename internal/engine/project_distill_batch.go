@@ -12,6 +12,7 @@ import (
 
 	"github.com/LubyRuffy/eino-swarm/internal/knowledge"
 	"github.com/LubyRuffy/eino-swarm/internal/memory"
+	"github.com/LubyRuffy/eino-swarm/internal/store"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
@@ -52,11 +53,7 @@ func (b *projectDistillBatch) Info(context.Context) (*schema.ToolInfo, error) {
 	if b.memory == nil {
 		changes.Desc = "Memory is disabled. Supply an empty array."
 	}
-	proposal := knowledgeWriteParams()
-	delete(proposal, "sources")
-	proposal["action"].Enum = []string{"write_page", "append_schema"}
-	proposal["evidence"] = changes.ElemInfo.SubParams["evidence"]
-	knowledgeList := &schema.ParameterInfo{Type: schema.Array, Required: true, ElemInfo: &schema.ParameterInfo{Type: schema.Object, SubParams: proposal}}
+	knowledgeList := distillKnowledgeParameter(true)
 	if !b.work.result.KnowledgeEnabled {
 		knowledgeList.Desc = "Knowledge is disabled. Supply an empty array."
 	}
@@ -64,6 +61,17 @@ func (b *projectDistillBatch) Info(context.Context) (*schema.ToolInfo, error) {
 		Name: distillBatchName, Desc: "Submit a complete, source-bound project distillation proposal for the enabled stores.",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{"changes": changes, "knowledge": knowledgeList}),
 	}, nil
+}
+
+func distillKnowledgeParameter(required bool) *schema.ParameterInfo {
+	proposal := knowledgeWriteParams()
+	delete(proposal, "sources")
+	proposal["action"].Enum = []string{"write_page", "append_schema"}
+	proposal["evidence"] = reviewChangesParameter().ElemInfo.SubParams["evidence"]
+	return &schema.ParameterInfo{
+		Type: schema.Array, Required: required, Desc: "Source-bound wiki updates and schema additions.",
+		ElemInfo: &schema.ParameterInfo{Type: schema.Object, SubParams: proposal},
+	}
 }
 
 func (b *projectDistillBatch) InvokableRun(ctx context.Context, raw string, _ ...tool.Option) (string, error) {
@@ -137,20 +145,27 @@ func (b *projectDistillBatch) validateSources(p distillProposal) ([]int64, error
 			handles[cite.Seq] = true
 		}
 	}
-	for i, op := range *p.Knowledge {
+	if err := collectDistillKnowledgeHandles(*p.Knowledge, b.work.sources.wiki, handles); err != nil {
+		return nil, err
+	}
+	return slices.Sorted(maps.Keys(handles)), nil
+}
+
+func collectDistillKnowledgeHandles(ops []distillKnowledgeOperation, visible map[int64]store.Event, handles map[int64]bool) error {
+	for i, op := range ops {
 		if op.Sources != nil || (op.Action != "write_page" && op.Action != "append_schema") ||
 			(op.Action == "append_schema" && (op.Add == nil || op.Revision == "")) {
-			return nil, fmt.Errorf("knowledge[%d]: use write_page or revision-checked append_schema and supply only evidence", i)
+			return fmt.Errorf("knowledge[%d]: use write_page or revision-checked append_schema and supply only evidence", i)
 		}
-		seqs, _, err := validateReviewEvidence(reviewOperation{Evidence: op.Evidence}, b.work.sources.wiki, false)
+		seqs, _, err := validateReviewEvidence(reviewOperation{Evidence: op.Evidence}, visible, false)
 		if err != nil {
-			return nil, fmt.Errorf("knowledge[%d]: %w", i, err)
+			return fmt.Errorf("knowledge[%d]: %w", i, err)
 		}
 		for _, seq := range seqs {
 			handles[seq] = true
 		}
 	}
-	return slices.Sorted(maps.Keys(handles)), nil
+	return nil
 }
 
 func (b *projectDistillBatch) publish(ctx context.Context, proposal distillProposal, handles []int64) (response string, committed bool, err error) {
@@ -215,20 +230,27 @@ func (b *projectDistillBatch) publish(ctx context.Context, proposal distillPropo
 			return "", true, fmt.Errorf("Memory partially saved: %s; Knowledge operations skipped: %d", reply.Error, len(*proposal.Knowledge))
 		}
 	}
+	changes, err := b.saveKnowledgeOperations(ctx, *proposal.Knowledge, sources)
+	b.work.result.Knowledge = append(b.work.result.Knowledge, changes...)
+	committed = committed || len(changes) > 0
+	if err != nil && !committed && b.memory != nil {
+		b.memory.complete = false
+		b.outcome.StopReason = ""
+	}
+	return "", committed || err == nil, err
+}
+
+func (b *projectDistillBatch) saveKnowledgeOperations(ctx context.Context, ops []distillKnowledgeOperation, sources map[int64]knowledgeSourceRef) ([]distillChange, error) {
 	stamp := knowledge.Stamp{UpdatedAt: time.Now().UTC(), UpdatedTurn: b.work.anchor.ID, UpdatedThread: b.work.anchor.ThreadID}
-	for i, op := range *proposal.Knowledge {
+	var changes []distillChange
+	for i, op := range ops {
 		change, err := b.saveKnowledge(ctx, op, sources, stamp)
 		if err != nil {
-			if !committed && b.memory != nil {
-				b.memory.complete = false
-				b.outcome.StopReason = ""
-			}
-			return "", committed, fmt.Errorf("knowledge[%d] %s %s: %w; subsequent operations skipped: %d", i, op.Action, op.ID, err, len(*proposal.Knowledge)-i-1)
+			return changes, fmt.Errorf("knowledge[%d] %s %s: %w; subsequent operations skipped: %d", i, op.Action, op.ID, err, len(ops)-i-1)
 		}
-		b.work.result.Knowledge = append(b.work.result.Knowledge, change)
-		committed = true
+		changes = append(changes, change)
 	}
-	return "", true, nil
+	return changes, nil
 }
 
 func (b *projectDistillBatch) saveKnowledge(ctx context.Context, op distillKnowledgeOperation, verified map[int64]knowledgeSourceRef, stamp knowledge.Stamp) (distillChange, error) {

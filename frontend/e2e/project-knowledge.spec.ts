@@ -152,3 +152,36 @@ for (const [scope, value, tab] of [
     expect((await page.request.delete(`/api/projects/${projectId}`)).status()).toBe(204)
   })
 }
+
+test("automatic review updates the open knowledge panel and the original Trace", async ({ page }) => {
+  const { settings } = await (await page.request.get("/api/settings")).json()
+  const { projectId, threadId } = await openProjectConversation(page, `Automatic knowledge ${Date.now()}`, true)
+  try {
+    expect((await page.request.put("/api/settings", { data: {
+      memory: { ...settings.memory, enabled: true, auto_review: true, notifications: "on" },
+    } })).ok()).toBe(true)
+    await knowledgeTab(page).click()
+    await page.getByTestId("knowledge-enable").click()
+    const tree = page.getByTestId("knowledge-tree")
+    await expect(tree).toContainText("No pages yet.")
+    const observed = "Record this observation with its verification procedure."
+    const delivery = page.waitForResponse((response) => response.request().method() === "POST" &&
+      new URL(response.url()).pathname === `/api/threads/${threadId}/deliver`)
+    await send(page, observed)
+    const { turn } = await (await delivery).json() as { turn: { id: string } }
+    // Observe live delivery and file refresh before a history or Trace query can hide a missing event.
+    await expect(page.getByTestId("memory-notice")).toContainText("Knowledge updated", { timeout: 30_000 })
+    await expect(tree.getByRole("button", { name: observed, exact: true })).toBeVisible()
+    const receipt = await (await page.request.get(`/api/trace/${turn.id}`)).json()
+    const reviews = receipt.events.filter((event: { kind: string }) => event.kind === "memory_review")
+    expect(reviews).toHaveLength(1)
+    expect(JSON.parse(reviews[0].text)).toMatchObject({
+      project_id: projectId, changed: true, notes: { add: 1 },
+      skills: [expect.objectContaining({ action: "create" })],
+      knowledge: [expect.objectContaining({ action: "write_page", title: observed })],
+    })
+  } finally {
+    await page.request.put("/api/settings", { data: { memory: settings.memory } })
+    await page.request.delete(`/api/projects/${projectId}`)
+  }
+})

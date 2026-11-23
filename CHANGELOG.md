@@ -32,6 +32,11 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
+- Automatic review after an eligible successful turn now includes the enabled
+  project wiki in the same proposal as notes and Skills. Knowledge writes
+  appear in the original turn receipt and refresh the open Knowledge panel.
+  (`F-138`, `F-420`, `C-025`, `C-054`)
+
 - The right panel groups Agents, Files, Trace and agent-opened panels under
   Task, and Memory, Collaboration and Knowledge under the project name.
   Conversations outside projects show Shared library. (`F-138`)

@@ -278,6 +278,8 @@ export interface ReviewOutcome {
   notes?: Record<string, number>
   skills?: MemoryChange[]
   changes?: MemoryChange[]
+  knowledgeCount?: number
+  projectId?: string
   note?: string
   err?: string
   /** How chatty this review is in the transcript: off | on | verbose. */
