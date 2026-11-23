@@ -650,6 +650,7 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 ## C-025 Memory review evidence and commit
 
 - 状态：active；类型：lifecycle / consistency / data / compatibility；作用范围：自动复盘、notes 存储、skill 写入、复盘 Trace；关联功能：`F-420`、`F-160`；关联契约：`C-012`。
+- 新增、替换和技能降类的笔记内容归一化后须含至少一个 Unicode Letter 或 Number。拒绝时保留已存笔记和降类源技能。手工全量保存应用同一规则，可按归一化文本和已有次数保留历史条目，也可显式清空。读取与旧笔记的正常编辑不触发迁移。实现见 `internal/memory/store.go`、`internal/memory/reclassify.go`。回归见 `internal/memory/note_content_test.go`、`frontend/e2e/memory-boundary.spec.ts`。
 - 契约内容：memory 与 auto-review 开启时，成功回合完整复盘，不因 manager 曾写入任何一项记忆而跳过。失败项目回合只允许有效真实人类要求形成 notes，不读任务工具/助手/运行时续办/派生摘要作为新证据，不写技能或执行技能 fold；取消不自动复盘。手动 Review now 仍选择最近成功回合。
 - 输入边界：有效 steer 先应用修订与撤回；源事件优先人类、再近期按 agent/call ID 配对的工具交互、最后助手及派生文本，渲染保持时间顺序。单个事件源 2000、源总量 24000 rune 含完整生命周期前置块、framing、分隔与截断标记；成功回合先预留完整、有界的生命周期块，再从剩余预算选择人类/工具/claims，生成事实不伪造或截短真实身份；身份 framing 本身超出单源上限时省略整个来源组，工具配对不拆分，不截断身份字段或赋予被省略正文来源权限。当前 notes、技能目录和系统指令不在此源预算内，不承诺完整模型输入或费用的同一上限。取得项目复盘串行锁后、模型调用前读取当前 notes。
 - Worker 事实边界（`C-008`）：成功回合复盘先从完整持久化历史重建对应 turn 的生命周期事实，独立前置于选取的源转录与有界 briefing；历史恢复 ID、真实创建和拒绝调用不得混同。完整历史读取失败时跳过该成功回合的模型复盘并记录原因，仍保留成功回合确定性 skill fold，不从缺失数据宣称零创建。该事实前置块计入 24000 rune 源总预算，但不进入可引用源事件集合，不可据其内部文本伪造 seq 或写入依据；2000 rune 单项上限约束事件来源。失败回合 human-only 复盘不接收该前置块、briefing 或运行时/任务工具证据。

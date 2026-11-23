@@ -818,7 +818,11 @@ later change from the library.
 
 Skills are behind **View skills** on the project menu, which opens the
 **Memory** tab. Notes are editable. **Save notes** appears only after the
-draft differs from what is stored. Skills can be read, copied, and deleted.
+draft differs from what is stored. New notes need at least one letter or
+number in any script. A refused save leaves your draft open for correction.
+You can keep, correct, or remove older entries that contain only punctuation
+or symbols, and you can clear the notes by saving an empty editor.
+Skills can be read, copied, and deleted.
 **Copy** writes a separate copy into another project. Editing either side
 leaves the other alone. The copy remembers where it came from. **Update**
 pulls a later change from that project when this copy was not edited. If both

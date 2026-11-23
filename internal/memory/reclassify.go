@@ -164,8 +164,8 @@ func (s *Store) DemoteSkill(name, content string) (ReclassifyResult, error) {
 		return result, err
 	}
 	content = normalizeEntry(content)
-	if content == "" {
-		return result, fmt.Errorf("memory: demote needs content")
+	if !hasNoteContent(content) {
+		return result, ErrNoteContent
 	}
 	if err := tooLong(content, s.entryMax); err != nil {
 		return result, err
