@@ -111,6 +111,8 @@ make native-smoke APP="$CANDIDATE_APP" \
 `config.yaml` 并显式选择 `product.mode: local`；清理回执保留
 `fixture_product_mode: local`。它验证无需账号的本地离线回合，不接受 FOFA
 登录流程，也不修改产品默认模式或用户配置。
+工作文件验收沿用任务文件 API 的 `file_view.isolated`：隔离任务按 `work/`
+解析 Trace 中的相对工具路径，旧任务按原工作区根解析，均逐字节比对实际写入。
 
 每轮用全新 evidence 目录。现有入口默认 scenario 50 秒、整轮 60 秒；锁内最多 5 秒的本次非交互预检共享预算，之后仍检查正确 PID／bundle／origin、真实 AX 窗口、非空像素、一次输入／Send、worker／文件／Trace 和可见结果。`ready_for_attempt`、App 登记、激活、AXPress 或 API 200 都不等于这些断言通过。明确 registration/window/content pending，以及下述严格限定的初始 AX 消息不完整观测，可在原共享 deadline 内等待；身份／权限拒绝、其他未知或业务断言失败不盲轮询、不重复 Send。
 

@@ -163,7 +163,7 @@ class SmokeTests(unittest.TestCase):
         (workspace / "notes").mkdir(parents=True)
         target = workspace / "notes/worker.md"
         target.write_text("verified")
-        with mock.patch.object(smoke, "request_json", return_value={"workspace": str(workspace)}):
+        with mock.patch.object(smoke, "request_json", return_value={"workspace": str(workspace), "file_view": {"isolated": False}}):
             outputs = smoke.assert_workspace_outputs("http://127.0.0.1:123", self.context, self.trace(), smoke.Deadline(1))
             self.assertEqual(outputs[0]["bytes"], 8)
             target.write_text("write failed or changed")
@@ -174,6 +174,25 @@ class SmokeTests(unittest.TestCase):
                 smoke.assert_workspace_outputs("http://127.0.0.1:123", self.context, self.trace(), smoke.Deadline(1))
         with mock.patch.object(smoke, "request_json", return_value={"workspace": str(self.root / "workspace")}):
             with self.assertRaisesRegex(RuntimeError, "private"):
+                smoke.assert_workspace_outputs("http://127.0.0.1:123", self.context, self.trace(), smoke.Deadline(1))
+
+    def test_isolated_worker_writes_resolve_from_task_work_subdirectory(self):
+        workspace = self.context["data"] / "workspaces/thread"
+        work_dir = workspace / "work"
+        (work_dir / "notes").mkdir(parents=True)
+        target = work_dir / "notes/worker.md"
+        target.write_text("verified")
+        # A task-root decoy must not satisfy or override a tool-relative write.
+        (workspace / "notes").mkdir()
+        (workspace / "notes/worker.md").write_text("decoy")
+        files = {"workspace": str(workspace), "file_view": {"isolated": True}}
+        with mock.patch.object(smoke, "request_json", return_value=files):
+            outputs = smoke.assert_workspace_outputs("http://127.0.0.1:123", self.context, self.trace(), smoke.Deadline(1))
+            self.assertEqual(outputs[0]["bytes"], 8)
+            self.assertEqual(json.loads((self.context["evidence"] / "smoke-workspace.json").read_text())["work_dir"], str(work_dir))
+            target.unlink()
+            target.symlink_to(workspace / "notes/worker.md")
+            with self.assertRaisesRegex(RuntimeError, "escaped"):
                 smoke.assert_workspace_outputs("http://127.0.0.1:123", self.context, self.trace(), smoke.Deadline(1))
 
     def test_real_loopback_http_json_and_redirect_boundary(self):

@@ -581,20 +581,27 @@ def assert_workspace_outputs(origin, context, trace, deadline):
     workspace = Path(files["workspace"]).resolve(strict=True)
     if not workspace.is_relative_to(context["data"]):
         raise RuntimeError("offline workspace does not belong to the private case data")
+    isolated = files.get("file_view", {}).get("isolated")
+    if type(isolated) is not bool:
+        raise RuntimeError("offline workspace layout is unknown")
+    work_dir = workspace / "work" if isolated else workspace
+    if work_dir.is_symlink() or not work_dir.is_dir():
+        raise RuntimeError("offline tool working directory is invalid")
     outputs = []
     for item in worker_writes(trace):
         deadline.remaining("worker output bytes")
         try:
-            path = (workspace / item["path"]).resolve(strict=True)
-            if not path.is_relative_to(workspace):
-                raise RuntimeError("worker write escaped its private workspace")
+            path = (work_dir / item["path"]).resolve(strict=True)
+            if not path.is_relative_to(work_dir):
+                raise RuntimeError("worker write escaped its private working directory")
             raw = path.read_bytes()
         except FileNotFoundError as error:
             raise RuntimeError("worker write output is missing") from error
         if raw != item["content"].encode("utf-8"):
             raise RuntimeError("worker output bytes differ from the actual write tool arguments")
         outputs.append(dict(agent_id=item["agent_id"], path=item["path"], bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest()))
-    runner.save_json(context["evidence"] / "smoke-workspace.json", dict(workspace=str(workspace), outputs=outputs))
+    runner.save_json(context["evidence"] / "smoke-workspace.json",
+                     dict(workspace=str(workspace), work_dir=str(work_dir), outputs=outputs))
     return outputs
 
 
