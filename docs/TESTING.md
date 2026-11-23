@@ -4104,6 +4104,14 @@ Concurrent runs follow the [E2E isolation rules](#end-to-end-tests).
 
 ## Memory review provenance and commit (F-420 / C-025 / C-012)
 
+`TestAutomaticMemoryReviewRecoversAfterAccountDiscoveryOutage` interrupts the
+actual account bootstrap before a turn finishes. It observes a streamed
+reviewer request and a committed note after fresh authorization. Outage and
+revocation cases retain their failure in the same turn with zero model requests
+and no note write. `TestOpenedAccountChatRechecksDiscoveryBeforeAnyModelRequest`
+covers the same preflight on an already-open account model, including
+cancellation and withdrawal of its role, model or wire adapter.
+
 The 2026-10-29 Issue #130 local candidate passed the full Go race suite with
 94.9% engine and 98.6% memory package coverage. The new proposal preflight and
 aggregate refusal functions measured 95.2% and 100%; the new capacity preview

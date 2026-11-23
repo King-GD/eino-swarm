@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 
@@ -82,11 +83,15 @@ func (p *Pool) trackedModelBinding(inner model.BaseChatModel, prov config.Provid
 		// resolved its endpoint. Later lookups read the new source.
 		if account {
 			source := currentSource()
+			if source != nil && source.discoveryInterrupted {
+				release()
+				return nil, errCapabilityDiscoveryInterrupted
+			}
 			if source != nil && source.unavailable {
 				release()
 				return nil, ErrAccountModelsUnavailable
 			}
-			if source == nil || source.negotiated && (source.capabilities == nil || !source.capabilities.Authorized || !source.capabilities.Available) {
+			if source == nil || source.negotiated && (source.capabilities == nil || !source.capabilities.Authorized || !source.capabilities.Available || !source.permits(prov.Model)) {
 				release()
 				return nil, ErrModelPolicy
 			}
@@ -101,6 +106,8 @@ func (p *Pool) trackedModelBinding(inner model.BaseChatModel, prov config.Provid
 	}}
 	if account {
 		tracked.roleSource = currentSource
+		tracked.apiMode = prov.APIMode
+		tracked.refreshPolicy = p.RefreshCapabilities
 	}
 	if !p.mock {
 		tracked.gate = p.backoffFor(prov.BaseURL)
@@ -121,7 +128,16 @@ func (r *recordingModel) checkPolicy() error {
 }
 
 func (r *recordingModel) admit(ctx context.Context) (context.Context, func(error), error) {
-	if err := r.checkPolicy(); err != nil {
+	err := r.checkPolicy()
+	if errors.Is(err, errCapabilityDiscoveryInterrupted) && r.refreshPolicy != nil {
+		if refreshErr := r.refreshPolicy(ctx); refreshErr == nil {
+			err = r.checkPolicy()
+		}
+		if ctx.Err() != nil {
+			return ctx, nil, ctx.Err()
+		}
+	}
+	if err != nil {
 		return ctx, nil, err
 	}
 	ctx, finish, err := r.admitBackoff(ctx)

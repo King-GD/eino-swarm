@@ -482,7 +482,7 @@ func (e *Engine) driveReviewer(run reviewRun, mu *sync.Mutex, outcome *reviewOut
 	}
 	ctx, cancel := context.WithTimeout(parent, e.cfg.SwarmSnapshot().AgentTimeout())
 	defer cancel()
-	ctx = provider.WithoutRouteRecovery(ctx)
+	ctx = provider.WithChatDiscoveryRecovery(provider.WithoutRouteRecovery(ctx))
 
 	if run.maxIter <= 0 {
 		run.maxIter = e.cfg.Memory.ReviewIterations()

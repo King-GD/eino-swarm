@@ -422,6 +422,12 @@ func (p *Pool) modelBuilder(ctx context.Context, id, modelName, effort string, r
 	if err != nil {
 		return nil, err
 	}
+	if source := p.accountForExecution(prov.ID); source != nil && source.discoveryInterrupted && ctx.Value(recoverChatDiscoveryKey{}) == true {
+		prov, err = p.recoverChatSelection(ctx, prov, source, id, modelName)
+		if err != nil {
+			return nil, err
+		}
+	}
 	limit := p.cfg.SwarmSnapshot().CompletionTokenLimit()
 	if p.mock {
 		return func(role, agentID string) model.BaseChatModel {
@@ -496,7 +502,7 @@ func wrap(m model.BaseChatModel, agentID string, p config.Provider, effort strin
 		// Admission and telemetry must surround the same request. Wrapping the
 		// gate again would count a cancelled wait as a completed model call.
 		r.inner, r.gate, r.policyUse = shared.inner, shared.gate, shared.policyUse
-		r.onResult, r.roleSource = shared.onResult, shared.roleSource
+		r.onResult, r.roleSource, r.refreshPolicy = shared.onResult, shared.roleSource, shared.refreshPolicy
 	}
 	return r
 }
@@ -517,6 +523,10 @@ type recordingModel struct {
 	model      string
 	baseURL    string
 	reasoning  string
+
+	// Account chat can refresh a suspended grant before this request.
+	refreshPolicy func(context.Context) error
+	apiMode       string
 	// optionalEffort marks reasoning as an engine default for a background
 	// call, not a level the human chose: an endpoint that rejects it is asked
 	// again without it.

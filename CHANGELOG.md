@@ -62,6 +62,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- A transient Gateway discovery failure can recover before the next bound chat, session briefing or memory review request. The request waits for fresh authorization, and an ongoing outage or revoked grant remains visible in Trace. (`C-040`, `C-025`)
+
 - Project memory refuses new notes without letters or numbers. The Memory editor keeps a refused draft available for correction, and existing notes can still be edited or removed. (`F-420`, `C-025`, #187)
 
 - 手机关闭模型或思考强度面板后回到输入框，保持展开、草稿和光标位置。输入框和操作按钮随键盘上移，保持可见。 (`F-220`, `F-230`)

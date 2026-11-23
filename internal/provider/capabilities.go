@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -120,6 +121,7 @@ func cloneCapabilities(source *SourceCapabilities) *SourceCapabilities {
 // Sources created directly by library callers retain their legacy behavior.
 func (s *AccountSource) SetCapabilities(value *SourceCapabilities) {
 	s.negotiated = true
+	s.discoveryInterrupted = false
 	s.capabilities = cloneCapabilities(value)
 }
 
@@ -163,13 +165,53 @@ func (p *Pool) guardCapability(inner model.BaseChatModel, id, role string) model
 		if err != nil {
 			return nil, err
 		}
-		if source := roleSource(); source == nil || !source.allowsRole(role) {
+		source := roleSource()
+		if !source.allowsRole(role) || source.negotiated && guarded.apiMode != "" &&
+			!slices.Contains(source.capabilities.Capabilities[role].Endpoints, guarded.apiMode) {
 			release()
 			return nil, ErrModelPolicy
 		}
 		return release, nil
 	}
 	return guarded
+}
+
+type recoverChatDiscoveryKey struct{}
+
+// WithChatDiscoveryRecovery allows background model preparation to wait for a
+// fresh grant. Synchronous turn admission may build without waiting on discovery.
+func WithChatDiscoveryRecovery(ctx context.Context) context.Context {
+	return context.WithValue(ctx, recoverChatDiscoveryKey{}, true)
+}
+
+// Recover selection before building a client so the wire protocol comes from
+// the fresh capability, even if the temporarily closed projection had none.
+func (p *Pool) recoverChatSelection(ctx context.Context, prev config.Provider, bound *AccountSource, id, name string) (config.Provider, error) {
+	refreshErr := p.RefreshCapabilities(ctx)
+	if err := ctx.Err(); err != nil {
+		return config.Provider{}, err
+	}
+	if refreshErr != nil {
+		return config.Provider{}, errCapabilityDiscoveryInterrupted
+	}
+	current := p.accountForExecution(prev.ID)
+	if current == nil {
+		return config.Provider{}, ErrAccountLoginRequired
+	}
+	if current.discoveryInterrupted {
+		return config.Provider{}, errCapabilityDiscoveryInterrupted
+	}
+	if !p.credentialMatches(current, prev, bound.owner) || current.catalogGroup != bound.catalogGroup || !current.allowsRole("conversation") {
+		return config.Provider{}, ErrAccountModelsUnavailable
+	}
+	resolved, err := p.ResolveModel(id, name)
+	if err != nil {
+		return config.Provider{}, err
+	}
+	if !p.credentialMatches(current, resolved, bound.owner) || resolved.Model != prev.Model || !current.permits(resolved.Model) {
+		return config.Provider{}, ErrAccountModelsUnavailable
+	}
+	return resolved, nil
 }
 
 // RefreshCapabilities requests discovery on its existing owner loop.
@@ -192,20 +234,35 @@ func (p *Pool) RefreshCapabilities(ctx context.Context) error {
 // InvalidateCapabilities retains catalog/selection identity during discovery
 // failure while closing feature admission until a later successful negotiation.
 func (p *Pool) InvalidateCapabilities() {
+	p.invalidateCapabilities(false)
+}
+
+// InterruptCapabilityDiscovery closes admission after a transient discovery
+// failure. A chat with a previously negotiated grant can request a fresh
+// authorization check from the discovery owner before sending anything.
+func (p *Pool) InterruptCapabilityDiscovery() {
+	p.invalidateCapabilities(true)
+}
+
+var errCapabilityDiscoveryInterrupted = fmt.Errorf("%w: Gateway authorization discovery was interrupted", ErrAccountModelsUnavailable)
+
+func (p *Pool) invalidateCapabilities(interrupted bool) {
+	invalidate := func(source *AccountSource) *AccountSource {
+		copy := *source
+		copy.SetCapabilities(nil)
+		copy.discoveryInterrupted = interrupted && (source.discoveryInterrupted || source.capabilities.Allows("conversation"))
+		return &copy
+	}
 	changed := false
 	if current := p.account.Load(); current != nil {
-		copy := *current
-		copy.SetCapabilities(nil)
 		// Narrow only the exact publication observed. Logout or a new device
 		// can replace it concurrently; invalidation must never revive it.
-		changed = p.account.CompareAndSwap(current, &copy)
+		changed = p.account.CompareAndSwap(current, invalidate(current))
 	}
 	if current := p.localAccounts.Load(); current != nil {
 		next := &localAccountList{}
 		for _, source := range current.sources {
-			copy := *source
-			copy.SetCapabilities(nil)
-			next.sources = append(next.sources, &copy)
+			next.sources = append(next.sources, invalidate(source))
 		}
 		changed = p.localAccounts.CompareAndSwap(current, next) || changed
 	}

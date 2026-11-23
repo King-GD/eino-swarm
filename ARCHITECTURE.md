@@ -1962,6 +1962,15 @@ restate the body. This changes no Markdown format or event kind.
    continuation, session briefing, final answer or task-tool evidence, no skill
    tools and no skill fold. Cancellation starts no automatic review.
 
+   When account discovery loses a previously negotiated conversation grant
+   after a transient refresh failure, the rolling briefing and reviewer can
+   wait for one refresh before building the model. A chat client already
+   opened by a turn can do the same before its next model request. The account
+   discovery loop coalesces concurrent requests, and each caller can cancel its
+   own wait. A request needs fresh authorization for the same source and model
+   and an allowed wire adapter. An unresolved failure reaches the original
+   turn's Trace without a model-call receipt.
+
    Dream verification is enabled by default. It discovers an already-recorded
    skill patch before automatic review using bounded same-project and
    same-provider history. Settings can disable it for later reviews.
