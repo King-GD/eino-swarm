@@ -807,15 +807,19 @@ Page sources distinguish primary material, unverified analysis and external
 links. Removed or rewound history remains listed as unavailable. An available
 last-update link opens its conversation or Trace.
 
-From **Knowledge → Distill**, choose **Current task** for the selected
-conversation's history or **Current project** for all conversations in the
-project. Both options enable the wiki if needed and start a new, titled
-project conversation. The ordinary turn uses `query_history` to read
-original project history and can save or update pages through
-`record_knowledge`. You can also ask directly in any enabled project turn
-or edit the files under the project's `knowledge` directory. On desktop,
-the folder button opens that directory. The Memory tab remains the place
-for shared working instructions and skills.
+Open **Distill** from **Memory** or **Knowledge**. Choose **Latest turn** for
+the most recent successful turn, **Current task** for this conversation or
+**Current project** for the project's retained conversations, including archived
+ones. A single background review can save notes, Skills and wiki pages.
+Both panels show the same result and a link to the original Trace. A larger
+scope can exceed the history budget; the result indicates omitted history.
+Failed turns can contribute explicit human requirements to notes.
+
+**Distill** uses enabled destinations. Choose **Enable knowledge and distill**
+to initialize a wiki and include it in the same review. An interrupted run
+with unconfirmed writes asks you to check the current contents before retrying.
+You can also ask directly in an enabled project turn or edit the files under
+the project's `knowledge` directory. On desktop, the folder button opens it.
 
 To run incremental extraction, create a recurring task for the project in
 **Scheduled**. Set a time window that matches the recurrence, specify which

@@ -54,21 +54,12 @@ func (e *Engine) knowledgeTools(pc *projectContext, turn *store.Turn, readOnly b
 	projectID := pc.project.ID
 	kb := pc.knowledge
 	resultLimit := e.cfg.Snapshot().Tools.ToolResultLimit()
-	read := &nuwaTool{name: ToolReadKnowledge,
-		description: "Read this project's knowledge schema, find existing pages, open one with its links, backlinks and sources, or inspect lint. For retained conversations, use query_history to inspect original records.",
-		params: map[string]*schema.ParameterInfo{
-			"action": {Type: schema.String, Required: true, Enum: []string{"schema", "search", "page", "lint"}},
-			"id":     {Type: schema.String, Desc: "Stable page ID for page."},
-			"query":  {Type: schema.String, Desc: "ID, title or alias text for search."},
-			"limit":  {Type: schema.Integer, Desc: "Maximum entries for search or lint, or maximum body characters for page."},
-			"offset": {Type: schema.Integer, Desc: "Resume lint or page body at the previous next_offset."},
-		},
-		run: func(ctx context.Context, raw string) (string, error) {
-			if err := e.knowledgeToolOwner(ctx, turn, projectID, false); err != nil {
-				return "", err
-			}
-			return e.readKnowledge(ctx, projectID, kb, raw, resultLimit)
-		}}
+	read := newKnowledgeReader(" For retained conversations, use query_history to inspect original records.", func(ctx context.Context, raw string) (string, error) {
+		if err := e.knowledgeToolOwner(ctx, turn, projectID, false); err != nil {
+			return "", err
+		}
+		return e.readKnowledge(ctx, projectID, kb, raw, resultLimit)
+	})
 	if readOnly || pc.planning || turn.NuwaReadOnly {
 		return []tool.BaseTool{read}
 	}
@@ -79,6 +70,20 @@ func (e *Engine) knowledgeTools(pc *projectContext, turn *store.Turn, readOnly b
 			return e.recordKnowledge(ctx, projectID, turn, kb, raw)
 		}}
 	return []tool.BaseTool{read, record}
+}
+
+func newKnowledgeReader(historyGuidance string, run func(context.Context, string) (string, error)) *nuwaTool {
+	return &nuwaTool{name: ToolReadKnowledge,
+		description: "Read this project's knowledge schema, find existing pages, open one with its links, backlinks and sources, or inspect lint." + historyGuidance,
+		params: map[string]*schema.ParameterInfo{
+			"action": {Type: schema.String, Required: true, Enum: []string{"schema", "search", "page", "lint"}},
+			"id":     {Type: schema.String, Desc: "Stable page ID for page."},
+			"query":  {Type: schema.String, Desc: "ID, title or alias text for search."},
+			"limit":  {Type: schema.Integer, Desc: "Maximum entries for search or lint, or maximum body characters for page."},
+			"offset": {Type: schema.Integer, Desc: "Resume lint or page body at the previous next_offset."},
+		},
+		run: run,
+	}
 }
 
 type knowledgeReadInput struct {
@@ -244,9 +249,13 @@ func encodeKnowledgeReply(reply map[string]any) (string, error) {
 	return string(body), err
 }
 
-func (e *Engine) writeKnowledgePage(ctx context.Context, projectID string, kb *knowledge.Store, input knowledgeWriteInput, stamp knowledge.Stamp) (*knowledge.Page, error) {
-	page := knowledge.Page{ID: input.ID, Type: input.Type, Title: input.Title, Aliases: input.Aliases,
+func pageFromKnowledgeWrite(input knowledgeWriteInput) knowledge.Page {
+	return knowledge.Page{ID: input.ID, Type: input.Type, Title: input.Title, Aliases: input.Aliases,
 		Fields: input.Fields, Links: input.Links, AsOf: input.AsOf, Body: input.Body, Revision: input.Revision}
+}
+
+func (e *Engine) writeKnowledgePage(ctx context.Context, projectID string, kb *knowledge.Store, input knowledgeWriteInput, stamp knowledge.Stamp) (*knowledge.Page, error) {
+	page := pageFromKnowledgeWrite(input)
 	if input.Sources != nil {
 		sources, err := e.resolveKnowledgeSources(ctx, projectID, *input.Sources)
 		if err != nil {

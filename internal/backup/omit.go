@@ -38,6 +38,9 @@ func omitThreads(ctx context.Context, q queryer, schema string, ids []string) er
 		query string
 		args  []any
 	}{
+		// A project receipt may cite or summarize any retained conversation.
+		{"project_distillations", `DELETE FROM ` + prefix + `project_distillations WHERE project_id IN (SELECT project_id FROM ` +
+			prefix + `threads WHERE ` + in("id") + `)`, args},
 		{"schedule_runs", `DELETE FROM ` + prefix + `schedule_runs WHERE ` + in("thread_id") +
 			` OR schedule_id IN (SELECT id FROM ` + prefix + `schedules WHERE ` + in("thread_id") + `)`, runArgs},
 		{"composer_draft_blobs", `DELETE FROM ` + prefix + `composer_draft_blobs WHERE ` + in("draft_key"), drafts},

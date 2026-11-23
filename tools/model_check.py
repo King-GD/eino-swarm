@@ -205,6 +205,12 @@ MODELS = {
             (),
         ),
         Model(
+            "project-distillation", ROOT / "models" / "knowledge" / "ProjectDistillation.tla",
+            ("AllowConcurrent", "AllowForeignSource", "ReceiptWithoutWrite"),
+            ("TypeOK", "OneManualRun", "ScopedWrites", "RealReceipts"),
+            (),
+        ),
+        Model(
             "project-knowledge", ROOT / "models" / "knowledge" / "ProjectKnowledge.tla",
             ("UseStaleOwner", "IgnoreReadOnly", "IgnoreRevision", "PublishPartial",
              "AllowForeignSource", "ResolveByLocatorOnly", "IgnoreContentChange", "ReplaceSchema"),
@@ -436,6 +442,15 @@ def _askpub(name: str, source: str, switches: tuple[str, ...] = (), violates: st
 
 
 CASES: tuple[Case, ...] = (
+    _case("distillation-current", "exclusive manual review and scoped publication receipts",
+          model="project-distillation"),
+    *(_case("distillation-fault-" + guard, "seeded: " + guard, (guard,), invariant,
+            model="project-distillation")
+      for guard, invariant in (("AllowConcurrent", "OneManualRun"),
+                               ("AllowForeignSource", "ScopedWrites"),
+                               ("ReceiptWithoutWrite", "RealReceipts"))),
+    _case("distillation-reach-all-targets", "one completed run saved every target",
+          witness="NeverThreeTargets", model="project-distillation"),
     _case("knowledge-current", "project-bound revision writes, append-only schema and scoped evidence",
           model="project-knowledge"),
     *(_case("knowledge-fault-" + name, source, (switch,), invariant, model="project-knowledge")

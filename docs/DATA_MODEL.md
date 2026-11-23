@@ -228,6 +228,17 @@ in this database: notes and skills are files, so a person can read and fix them
 | `sort_rank` | int | sidebar drag order. `0` means never dragged: those rows interleave by `updated_at` with ranked rows |
 | `created_at`, `updated_at` | time | gorm-managed. `updated_at` is also bumped when a conversation in the project is used, so the default project list is last used, not created |
 
+## `project_distillations` — latest manual project review receipt (`C-054`)
+
+`project_id` is the primary key. The row stores one run ID, state and JSON
+receipt. Receipt data covers the scope, Trace anchor and actual saved changes.
+Each admission replaces the previous receipt. Completion compares the same
+run ID and running state. The running owner lives in the engine. A saved
+running row without that owner indicates possible interruption. Deleting a
+project removes the row. Full database backups include the receipt unless a conversation in that project
+is omitted. Portable project bundles carry notes, Skills and knowledge files.
+Their restore resets the latest receipt for the replaced project.
+
 ## `nuwa_nodes` / `nuwa_revisions` — project collaboration (`C-037`)
 
 `nuwa_nodes` stores task/fact/artifact records. It is separate from memory files

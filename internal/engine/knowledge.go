@@ -110,7 +110,9 @@ func (e *Engine) knowledgeOrigin(ctx context.Context, projectID, threadID, turnI
 	if err != nil {
 		return "", err
 	}
-	if (threadID != "" && turn.ThreadID != threadID) || turn.ProjectID != projectID {
+	// A stamped thread is checked against its current project below. Manual
+	// distillation can use retained turns that predate a conversation move.
+	if (threadID != "" && turn.ThreadID != threadID) || (threadID == "" && turn.ProjectID != projectID) {
 		return "", nil
 	}
 	thread, err := e.store.GetThreadContext(ctx, turn.ThreadID)

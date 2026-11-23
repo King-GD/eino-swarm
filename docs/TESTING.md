@@ -984,6 +984,16 @@ own server port, data directory and output directory. Do not rebuild its served
 `dist` during a run. Browser results do not substitute for candidate-specific
 native macOS acceptance in `ci-macOS`.
 
+## Unified project distillation (`F-138`, `F-420`, `C-054`)
+
+`go test -race ./internal/engine ./internal/server -run 'Test(Project)?Distill'`
+exercises the provider and HTTP tool boundaries, distinct conversation sources
+with the same event sequence, partial storage conflicts and interrupted
+receipts. The Playwright project knowledge suite walks all three scopes,
+switches between both panels and follows the Trace receipt. The
+`distillation-*` TLC cases cover exclusive admission, scoped publication,
+committed receipts, and a reachable run that saves all three targets.
+
 ## Project Markdown knowledge (`F-138`, `C-053`)
 
 - `go test -race -cover ./internal/knowledge ./internal/engine ./internal/server ./internal/backup`

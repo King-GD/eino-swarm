@@ -1,6 +1,7 @@
 import { ChevronRight, Copy, Layers, Loader2, RefreshCw, Sparkles, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
+import { ProjectDistillMenu, ProjectDistillStatus, type ProjectDistillProps } from "@/components/app/project-distill"
 import { ReviewStatus } from "@/components/app/review-status"
 import { MemoMarkdown } from "@/components/app/markdown"
 import { ConfirmDeleteDialog } from "@/components/app/confirm-delete-dialog"
@@ -24,6 +25,7 @@ export interface MemoryPanelProps {
   onDeleteSkill: (name: string) => void
   onRefresh: () => void
   onReview: () => void
+  distill?: ProjectDistillProps
   onTidySkills: () => void
   /** A click is in flight; the matching memory_review has not arrived. */
   reviewing?: boolean
@@ -68,6 +70,7 @@ export function MemoryPanel({
   onDeleteSkill,
   onRefresh,
   onReview,
+  distill,
   onTidySkills,
   reviewing,
   reviewHint,
@@ -157,7 +160,7 @@ export function MemoryPanel({
         <p className="min-w-0 flex-1 truncate text-(length:--chrome-font-size) font-medium">
           {library ? t("memory.libraryTitle") : project?.name}
         </p>
-        <Button
+        {distill ? <ProjectDistillMenu {...distill} /> : <Button
           variant="ghost"
           size="icon-sm"
           onClick={onReview}
@@ -167,7 +170,7 @@ export function MemoryPanel({
           title={t("memory.reviewNow")}
         >
           {reviewing ? <Loader2 className="animate-spin" /> : <Sparkles />}
-        </Button>
+        </Button>}
         <Button
           variant="ghost"
           size="icon-sm"
@@ -178,6 +181,8 @@ export function MemoryPanel({
           <RefreshCw />
         </Button>
       </div>
+
+      {distill ? <ProjectDistillStatus projectId={distill.projectId} /> : null}
 
       {reviewing ? (
         <p role="status" data-testid="review-status" className="text-xs text-muted-foreground">{t("memory.reviewing")}</p>

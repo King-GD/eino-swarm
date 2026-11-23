@@ -43,6 +43,7 @@ import { defaultSpeechSettings } from "./speech-types"
 import type { ClientCatalog } from "./local-clients"
 import type { SendImage } from "./paste-image"
 import type { ThreadLog } from "./thread-log"
+import { distillationPath, type DistillRequest, type DistillResult } from "./distillation"
 import { knowledgePath, type KnowledgePage, type KnowledgeStatus, type KnowledgeTree } from "./knowledge"
 import type { ComposerDraftRecord } from "./composer-draft"
 import type { MCPServerInput, MCPServerView, MCPToolCatalog } from "./mcp-settings"
@@ -581,6 +582,11 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ ids }),
     }).then((r) => r.projects),
+
+  distillStatus: (projectId: string, signal?: AbortSignal) =>
+    request<DistillResult>(distillationPath(projectId), { signal, cache: "no-store" }),
+  startDistillation: (projectId: string, input: DistillRequest) =>
+    request<DistillResult>(distillationPath(projectId), { method: "POST", body: JSON.stringify(input) }),
 
   knowledgeStatus: (projectId: string, signal?: AbortSignal) =>
     request<KnowledgeStatus>(knowledgePath(projectId), { signal, cache: "no-store" }),

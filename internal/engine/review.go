@@ -284,6 +284,8 @@ type reviewOutcome struct {
 // reviewRun is one reviewer agent: post-turn extraction or the Memory panel's
 // catalog tidy. Same agent id so a trace still names the cost memory-reviewer.
 type reviewRun struct {
+	ctx        context.Context
+	recorder   provider.Recorder
 	threadID   string
 	turnID     string
 	providerID string
@@ -428,7 +430,10 @@ func (e *Engine) runReviewInput(threadID string, turn *store.Turn, pc *projectCo
 }
 
 func (e *Engine) reviewerModel(ctx context.Context, run reviewRun) (model.BaseChatModel, error) {
-	rec := e.callRecorder(run.threadID, run.turnID)
+	rec := run.recorder
+	if rec == nil {
+		rec = e.callRecorder(run.threadID, run.turnID)
+	}
 	modelBuilder := e.pool.ReviewModelBuilder
 	if run.optionalEffort {
 		modelBuilder = e.pool.AuxiliaryModelBuilder
@@ -463,7 +468,11 @@ func (e *Engine) reviewerModel(ctx context.Context, run reviewRun) (model.BaseCh
 // driveReviewer runs one ChatModelAgent with the memory tools. The caller
 // owns the outcome lock for onChange; this function writes Err and Note.
 func (e *Engine) driveReviewer(run reviewRun, mu *sync.Mutex, outcome *reviewOutcome) {
-	ctx, cancel := context.WithTimeout(context.Background(), e.cfg.SwarmSnapshot().AgentTimeout())
+	parent := run.ctx
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, e.cfg.SwarmSnapshot().AgentTimeout())
 	defer cancel()
 	ctx = provider.WithoutRouteRecovery(ctx)
 

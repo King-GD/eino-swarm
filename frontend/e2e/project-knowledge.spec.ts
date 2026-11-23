@@ -3,8 +3,8 @@ import { join } from "node:path"
 import { expect, test, type Page } from "@playwright/test"
 import { freshConversation, send, waitForIdle } from "./session"
 
-async function openProjectConversation(page: Page, name: string) {
-  const projectResponse = await page.request.post("/api/projects", { data: { name, memory_enabled: false } })
+async function openProjectConversation(page: Page, name: string, memoryEnabled = false) {
+  const projectResponse = await page.request.post("/api/projects", { data: { name, memory_enabled: memoryEnabled } })
   expect(projectResponse.status()).toBe(201)
   const { project } = await projectResponse.json() as { project: { id: string } }
   const title = "Original conversation"
@@ -113,34 +113,42 @@ test("enable, browse, follow links, and return through the project wiki", async 
   expect((await page.request.delete(`/api/projects/${projectId}`)).status()).toBe(204)
 })
 
-for (const scope of ["Current task", "Current project"] as const) {
-  test(`Distill ${scope.toLowerCase()} enables the wiki and sends a scoped ordinary turn`, async ({ page }) => {
-    const { projectId, threadId, title } = await openProjectConversation(page, `Distill ${scope} ${Date.now()}`)
-    const kb = `/api/projects/${projectId}/knowledge`
-    await knowledgeTab(page).click()
-    const create = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/threads")
-    const deliver = page.waitForResponse((response) => response.request().method() === "POST" && /\/api\/threads\/[^/]+\/steer$/.test(new URL(response.url()).pathname))
-    await page.getByTestId("knowledge-distill").click()
-    await page.getByRole("menuitem", { name: scope, exact: true }).click()
-    const created = await create
-    expect(created.status()).toBe(201)
-    const { thread } = await created.json() as { thread: { id: string; title: string; project_id: string } }
-    expect(thread.id).not.toBe(threadId)
-    expect(thread.project_id).toBe(projectId)
-    expect(thread.title).toBe(scope === "Current task" ? `Distill task knowledge: ${title}` : "Distill project knowledge")
-    const sent = await deliver
-    expect(new URL(sent.url()).pathname).toBe(`/api/threads/${thread.id}/steer`)
-    expect(sent.status()).toBe(202)
-    expect(await sent.json()).toMatchObject({ steered: false, turn: { thread_id: thread.id } })
-    expect(sent.request().postDataJSON()).toMatchObject({
-      text: scope === "Current task"
-        ? `Distill knowledge from the history of this conversation only. Conversation ID: ${threadId}. Conversation title: ${JSON.stringify(title)}.`
-        : "Distill knowledge from the history of all conversations in the current project.",
-    })
-    expect(sent.request().postDataJSON()).not.toHaveProperty("history_report")
-    expect(await (await page.request.get(kb)).json()).toMatchObject({ enabled: true })
-    await expect(page.getByTestId("thread-title")).toHaveText(thread.title)
+
+for (const [scope, value, tab] of [
+  ["Latest turn", "latest_turn", "Memory"],
+  ["Current task", "thread", "Knowledge"],
+  ["Current project", "project", "Knowledge"],
+] as const) {
+  test(`Distill ${scope.toLowerCase()} in place and share its receipt across panels`, async ({ page }) => {
+    const { projectId, threadId, title } = await openProjectConversation(page, `Distillation ${value} ${Date.now()}`, true)
+    await send(page, "Keep the observation and retain the reusable procedure.")
     await waitForIdle(page)
+    const endpoint = `/api/projects/${projectId}/distill`
+    await page.getByRole("tab", { name: tab === "Memory" ? /^Memory/ : "Knowledge" }).click()
+    const admitted = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === endpoint)
+    await page.getByTestId("knowledge-distill").click()
+    const enable = page.getByRole("menuitem", { name: `Enable knowledge and distill · ${scope}`, exact: true })
+    await expect(enable).toBeVisible()
+    await enable.click()
+    const reply = await admitted
+    expect(reply.status()).toBe(202)
+    expect(reply.request().postDataJSON()).toEqual({
+      scope: value,
+      ...(value === "project" ? {} : { thread_id: threadId }),
+      enable_knowledge: true,
+    })
+    const job = await reply.json()
+    const status = page.getByTestId("project-distill-status")
+    await expect(status).toContainText("Distillation finished.", { timeout: 45_000 })
+    expect(await (await page.request.get(endpoint)).json()).toMatchObject({
+      review_id: job.review_id, state: "completed", thread_id: threadId,
+      knowledge: [expect.objectContaining({ action: "write_page" })],
+    })
+    await expect(page.getByTestId("thread-title")).toHaveText(title)
+    await page.getByRole("tab", { name: tab === "Memory" ? "Knowledge" : /^Memory/ }).click()
+    await expect(status).toContainText("1 knowledge changes")
+    await status.getByRole("button", { name: "Open Trace" }).click()
+    await expect(page.getByRole("tab", { name: "Trace", exact: true })).toHaveAttribute("aria-selected", "true")
     expect((await page.request.delete(`/api/projects/${projectId}`)).status()).toBe(204)
   })
 }

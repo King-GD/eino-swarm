@@ -52,7 +52,7 @@ type reviewBatchTool struct {
 	finish func(context.Context) error
 }
 
-func (t *reviewBatchTool) Info(context.Context) (*schema.ToolInfo, error) {
+func reviewChangesParameter() *schema.ParameterInfo {
 	citation := &schema.ParameterInfo{Type: schema.Object, SubParams: map[string]*schema.ParameterInfo{
 		"seq":   {Type: schema.Integer, Required: true, Desc: "The source event sequence shown in the input."},
 		"quote": {Type: schema.String, Required: true, Desc: "An exact unchanged excerpt from that source event."},
@@ -68,9 +68,11 @@ func (t *reviewBatchTool) Info(context.Context) (*schema.ToolInfo, error) {
 		"sources":     {Type: schema.Array, ElemInfo: &schema.ParameterInfo{Type: schema.String}, Desc: "Other existing skill names for merge."},
 		"evidence":    {Type: schema.Array, Required: true, ElemInfo: citation, Desc: "Exact source quotes supporting this change, including any replacement or removal."},
 	}}
-	params := map[string]*schema.ParameterInfo{
-		"changes": {Type: schema.Array, Required: true, ElemInfo: op},
-	}
+	return &schema.ParameterInfo{Type: schema.Array, Required: true, ElemInfo: op}
+}
+
+func (t *reviewBatchTool) Info(context.Context) (*schema.ToolInfo, error) {
+	params := map[string]*schema.ParameterInfo{"changes": reviewChangesParameter()}
 	if t.dream != nil {
 		decisions := []string{"keep", "uncertain", "defer"}
 		for _, choice := range dreamRevertChoices(t.dream.ids) {

@@ -2642,9 +2642,13 @@ rebind it after a rewind.
 The engine binds knowledge tools to the project and turn. It stamps page
 updates, resolves and classifies historical sources, and injects a bounded
 schema summary at turn setup. HTTP reads reuse the same index. The right
-inspector uses existing tool results and turn completion to refresh. Distill
-creates a normal project conversation and submits a localized scope request
-through the existing delivery path. See [the design](docs/plans/2026-11-23-project-knowledge-design.md).
+inspector uses existing tool results and turn completion to refresh.
+Manual Distill shares the Memory reviewer and per-project review queue. A
+host-owned read snapshot maps reviewer handles to original history records.
+One validated proposal can update notes, Skills and Knowledge through their
+existing stores. The two panels read one SQLite receipt and link to the
+original turn's Trace. See [the distillation design](docs/plans/2026-11-23-unified-project-distillation.md)
+and [the wiki design](docs/plans/2026-11-23-project-knowledge-design.md).
 
 ## Integrated terminal
 

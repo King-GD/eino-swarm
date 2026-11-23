@@ -2,11 +2,10 @@ import { useEffect } from "react"
 import { RightPanel, type PanelTab } from "./panel"
 import { api } from "@/lib/api"
 import { LIBRARY_ID } from "@/lib/library"
-import { useT } from "@/lib/use-t"
 import { useApp } from "@/store/app"
 import { projectOf, useProjects } from "@/store/projects"
 import { useCoveredTranscript } from "@/store/settings-sheet"
-import { useTraceFocus } from "@/store/trace-focus"
+import { openProjectReviewTrace } from "./project-distill"
 
 export function AppPanel({
   tab,
@@ -17,7 +16,6 @@ export function AppPanel({
   onTabChange: (tab: PanelTab) => void
   focusSkill?: { projectId: string; name?: string }
 }) {
-  const t = useT()
   const transcript = useCoveredTranscript()
   const selectedAgent = useApp((s) => s.selectedAgent)
   const selectAgent = useApp((s) => s.selectAgent)
@@ -75,7 +73,7 @@ export function AppPanel({
   // time, so merely filtering the list does not swap the notes under you.
   const project =
     (focusSkill ? projectOf(projects, focusSkill.projectId) : undefined) ??
-    conversationProject
+    knowledgeProject
   // No project means the shared library: procedures from conversations that
   // belong to none, kept so they can be copied into an agent later.
   const memoryTarget = project?.id ?? (activeId ? LIBRARY_ID : undefined)
@@ -116,31 +114,10 @@ export function AppPanel({
       knowledge={activeId || knowledgeProject ? {
         project: knowledgeProject,
         thread: activeThread,
-        onDistill: async (scope) => {
-          if (!knowledgeProject || (scope === "thread" && !activeThread)) return
-          const app = useApp.getState()
-          if (app.creatingThread) throw new Error(t("knowledge.distillBusy"))
-          const title = scope === "thread" && activeThread
-            ? t("knowledge.distillTaskTitle", { title: activeThread.title })
-            : t("knowledge.distillProjectTitle")
-          const prompt = scope === "thread" && activeThread
-            ? t("knowledge.distillTaskPrompt", { id: activeThread.id, title: JSON.stringify(activeThread.title) })
-            : t("knowledge.distillProjectPrompt")
-          useProjects.getState().select(knowledgeProject.id)
-          const id = await app.newThread(knowledgeProject.id, undefined, title)
-          if (!id || !await useApp.getState().send(prompt, undefined, { threadId: id })) {
-            throw new Error(useApp.getState().error || t("knowledge.distillFailed"))
-          }
-        },
         onOpenThread: async (threadId) => {
           await useApp.getState().openThread(threadId)
         },
-        onTrace: async (threadId, turnId) => {
-          if (useApp.getState().activeId !== threadId) await useApp.getState().openThread(threadId)
-          if (useApp.getState().activeId !== threadId) return
-          await useApp.getState().loadUntilTurn(turnId)
-          if (useApp.getState().activeId === threadId) useTraceFocus.getState().open(turnId)
-        },
+        onTrace: openProjectReviewTrace,
       } : undefined}
       memory={
         memoryTarget
@@ -153,6 +130,10 @@ export function AppPanel({
               onDeleteSkill: (name) => void removeSkill(name),
               onRefresh: () => void loadMemory(memoryTarget),
               onReview: () => void reviewNow(),
+              distill: project ? {
+                projectId: project.id,
+                threadId: conversationProject?.id === project.id ? activeId : undefined,
+              } : undefined,
               onTidySkills: () => void tidySkills(),
               reviewing: reviewForTarget && reviewing,
               reviewHint: reviewForTarget ? reviewHint : undefined,

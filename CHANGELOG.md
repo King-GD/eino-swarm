@@ -13,9 +13,12 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 ### Added
 
 - PC and Web projects can keep a Markdown knowledge base with linked pages,
-  sources, relationship views and a pending queue. The Knowledge panel can
-  start a normal conversation to distill the current task or project history.
-  (`F-138`, `C-053`, #185)
+  sources, relationship views and a pending queue. (`F-138`, `C-053`, #185)
+
+- Memory and Knowledge share one manual distillation action for the latest
+  successful turn, current task or current project. A background review can
+  update notes, Skills and the wiki together and show actual writes in both
+  panels. (`F-138`, `F-420`, `C-054`, #185)
 
 - Desktop and Web answers turn a workspace file path into a preview button. Clicking it opens the same file preview as the Files tab. When several files share that name, the preview lists them and opens the one you choose. (`F-140`)
 

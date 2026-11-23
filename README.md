@@ -108,7 +108,7 @@ a follow-up; ⌘Enter steers the current turn. **Stop** cancels it.
 What you get is a plan, workers in the Agents tab, a workspace in the Files tab,
 and a Trace tab with the turn id (`zwai trace <id>`). `/goal` keeps pursuing a
 standing objective. `/plan` explores and writes a plan before changing files.
-Composer, schedule, projects, knowledge, memory and skills are in [Using zwai](docs/USAGE.md).
+Composer, schedule, projects and memory are in [Using zwai](docs/USAGE.md). Use **Distill** in a project’s Memory or Knowledge panel to review retained history and update notes, Skills and the wiki in one run.
 
 ## Common commands
 

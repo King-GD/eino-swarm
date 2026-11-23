@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest"
 
-import { t } from "./i18n"
 import {
   backKnowledgePage,
   filterKnowledgeIssues,
@@ -15,10 +14,6 @@ import { isKnowledgePageID, knowledgePageFromHref, splitKnowledgeLinks } from ".
 const shared: KnowledgeNode = { id: "shared", label: "Shared page", kind: "page", aliases: ["Alternate title"], cycle: true }
 
 describe("Knowledge navigation", () => {
-  it("keeps a human title literal when it contains replacement characters", () => {
-    expect(t("en", "knowledge.distillTaskTitle", { title: "Cost $& limit" })).toBe("Distill task knowledge: Cost $& limit")
-  })
-
   it("filters without dropping ancestors or coalescing copies under different parents", () => {
     const first: KnowledgeNode = { id: "one", label: "One", kind: "page", children: [shared] }
     const second: KnowledgeNode = { id: "two", label: "Two", kind: "page", children: [shared] }

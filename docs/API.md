@@ -1776,6 +1776,28 @@ Body `{"ids": ["pj_a", "pj_b"]}`. Pins that order in the sidebar. Unknown ids ar
 `404`; a repeated id is `400`. An empty list is a no-op. Responds with the same
 `{"projects": […]}` as `GET /api/projects`.
 
+### `POST /api/projects/:id/distill` · `GET /api/projects/:id/distill`
+
+Start one background review of retained project history. The JSON request
+contains `scope: "latest_turn" | "thread" | "project"`. Supply `thread_id`
+for the first two scopes. The conversation must currently belong to the
+project. Supply `enable_knowledge: true` to explicitly initialize Knowledge
+if needed. Both panels use the same project endpoint.
+
+An admitted request returns `202` with `review_id`, `state: "running"`,
+`scope` and, while the original anchor is available, `thread_id` and
+`turn_id`. A duplicate request returns the current run. A scope with no
+evidence returns `200` with `state: "no_work"`. Invalid scope arguments,
+foreign conversations and all destinations disabled return `400`, `404`
+and `409 distillation_disabled`, respectively.
+
+GET returns the latest durable receipt, or `state: "idle"`. Terminal states
+are `completed`, `partial`, `failed` and `interrupted`. Optional fields
+include `changes` for committed notes and Skills, `knowledge` for committed
+pages or schema revisions, `error`, `history_omitted` and `uncertain` for
+possible unconfirmed writes following interruption. Partial success retains
+its committed items. The browser polls this endpoint while showing a run.
+
 ### `GET /api/projects/:id/knowledge` · `POST /api/projects/:id/knowledge`
 
 Both return a status object with `enabled`, `page_count` and
