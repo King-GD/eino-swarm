@@ -32,12 +32,13 @@ function fileFailure(cause: unknown): string {
 
 // Files arrive over the sealed PC link. HTML is a sandboxed artifact.
 // EPUB stays script-free. Office packages are parsed, never executed.
-export function FileBrowser({ link, threadId, onClose, status, running }: {
+export function FileBrowser({ link, threadId, onClose, status, running, covered = false }: {
   link: RemoteLink
   threadId: string
   onClose: () => void
   status?: ReactNode
   running?: boolean
+  covered?: boolean
 }) {
   const [scope, setScope] = useState<FileScope>("task")
   const [fileView, setFileView] = useState<FileView>()
@@ -150,11 +151,14 @@ export function FileBrowser({ link, threadId, onClose, status, running }: {
     }
   }, [link, threadId, selected])
 
-  useEffect(() => installAndroidBack(() => {
-    if (selected) setSelected(null)
-    else onClose()
-    return true
-  }), [selected, onClose])
+  useEffect(() => {
+    if (covered) return
+    return installAndroidBack(() => {
+      if (selected) setSelected(null)
+      else onClose()
+      return true
+    })
+  }, [covered, selected, onClose])
 
   const needle = query.trim()
   const matches = hits?.query === needle ? hits.files : null

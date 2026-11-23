@@ -77,7 +77,7 @@ type DomainInput struct {
 }
 
 // CertificateInput is one certificate as the aggregation reported it. Serial
-// and issuer together identify it; Domain is where it was observed.
+// identifies it; the first observed Domain is its source.
 type CertificateInput struct {
 	Serial     string   `json:"serial"`
 	Domain     string   `json:"domain"`

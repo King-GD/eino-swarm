@@ -22,7 +22,9 @@ export function isEasmResult(value: unknown): value is EasmResult {
   if (result.nodes.length && root === undefined) return false
   const targets = new Set<string>()
   for (const edge of result.edges) {
-    if (!edge || !ids.has(edge.source) || !ids.has(edge.target) ||
+    // An older snapshot may retain a clue whose first source is missing.
+    // The rooted projection skips that relationship without losing the clue.
+    if (!edge || typeof edge.source !== "string" || !edge.source || !ids.has(edge.target) ||
       edge.source === edge.target || edge.target === root || targets.has(edge.target)) return false
     targets.add(edge.target)
   }

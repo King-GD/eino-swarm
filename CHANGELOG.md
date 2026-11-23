@@ -26,7 +26,7 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
-- The EASM portrait keeps the subject as its root when the agent writes the subject with a bracketed short name or also reports the subject's own registry row; that row enriches the root instead of becoming a copy that took every child. The batch that collects the final numbers tells the agent to summarize and stop, so the conversation no longer keeps researching after the panel is complete.
+- EASM batches retain the confirmed subject and its first-source relationships. A confirmed registry row can enrich the root. The collection receipt prompts the agent to summarize the available results.
 - The EASM panel takes the agent's own findings instead of looking them up: the Go producer no longer queries the company, investment, branch, filing, asset-rule or certificate sources, and the certificates the agent reports never add domains on their own. `task_panels.easm` binds only `stats`, `heat` and `product_rules`; retired roles in an existing configuration are dropped when it loads, and `max_domains` now bounds the domain nodes of the whole portrait instead of the certificate lookups of one run.
 
 - Settings → Tools → Task panels shows the common panel options. EASM lookup bindings and limits are managed through `task_panels.easm` in the configuration file.
@@ -54,9 +54,11 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 - A restarted EASM source no longer leaves the panel spinning: loading follows the host's `source_status`, so an interrupted collection stops even though the steps it stored still say running.
 
-- The EASM receipt no longer claims the panel holds every number when an aggregation failed or was unavailable; it names the missing steps and still ends the turn instead of repeating them.
+- EASM retries only unfinished steps for the same query and keeps earlier valid counts. The summary requires both asset and distinct-IP totals in one valid response. Partial receipts identify the missing count and remain eligible for retry.
 
-- An EASM panel source reaches MCP only when the turn may mount MCP tools, so plan mode, a read-only turn or a restricted account gets `unavailable` steps instead of remote calls the account never allowed.
+- EASM uses the MCP service and tool bindings admitted for the turn. Later enablement takes effect on the next turn, and existing disable controls still apply immediately.
+
+- The EASM graph shows clues reachable from the confirmed subject and keeps ambiguous ownership unconfirmed. Shared certificates appear only under their first discovery domain. On Android, Back closes supply-chain detail before closing the task panel.
 
 - The phone app builds from a clean install: its TypeScript paths resolve the shared frontend packages from `mobile/node_modules` instead of requiring `frontend/node_modules`.
 

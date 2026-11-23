@@ -2968,14 +2968,14 @@ A catalog definition with `renderer:"native"` has no iframe entry; its state is 
 ```
 agent lookups (its own MCP tools) → run_panel_source({subject, companies?, domains?, certificates?, query?})
   engine registry (task_panel_sources.go) → easm.Run(input, settings, currentState, caller, publish)
-    restore easm.Graph from currentState → merge the batch → publish(state)
-    query given → three aggregations in parallel (role → tool name from task_panels.easm)
+    restore observations and first sources → merge the batch → publish(state)
+    query given → unfinished aggregations in parallel (role → turn's admitted MCP binding)
     each step → publish(state) → engine diff → store revision → SSE / Pairlink → EASM renderer
 ```
 
-The producer performs no discovery lookup: which companies, domains and certificates belong to the portrait is the agent's finding, and every entry keeps the tool that reported it as its evidence. `easm.Graph` owns the tree invariants (one subject root, one parent per node, confirmation only ever upgrades), so a later batch can enrich the portrait but never re-parent or downgrade it, and a different subject starts a new portrait. Domain nodes are bounded by `max_domains`; entries over it are refused and counted in the receipt.
+The agent confirms the subject and supplies company, domain and certificate evidence. The producer retains each observation's first source. A different subject starts a new portrait, and a certificate serial belongs to its first discovery in that portrait. Both registered sources and direct updates validate new source links before their state commits. Existing detached observations and their original links survive replay. The shared React renderer walks from the confirmed subject, so desktop and phone show the same rooted graph. Domain nodes are bounded by `max_domains`; entries over it are refused and counted in the receipt.
 
-The engine knows only the registry entry: no EASM fields enter the turn lifecycle, the task-panel protocol, the event stream or the phone transport. Step status lives in the panel state, so loading indicators survive reload and reach the phone through the ordinary revision. A failed aggregation marks its own step. The producer's remote calls pass the same MCP admission as the agent's own tools, so a plan-mode, read-only or restricted-account turn gets `unavailable` steps instead of tools the agent was never given.
+The engine captures EASM role bindings with the turn's MCP tool surface. The mount receipt retains role, tool and server identities and a destination digest. Producer calls use the captured bindings, and current account and MCP disable checks can still refuse them. Later enablement applies at the next turn. Step status travels in the ordinary panel state revision to desktop and phone. Same-query retries preserve completed steps and their data. A summary step completes when one valid response contains both totals.
 
 The paired phone bundles the same plugin documents and `TaskPanelFrame` host.
 `mobile/src/lib/use-task-panels.ts` polls small manifests over the existing

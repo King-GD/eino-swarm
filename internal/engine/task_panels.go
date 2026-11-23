@@ -11,8 +11,10 @@ import (
 
 	swarm "github.com/LubyRuffy/eino-swarm"
 	"github.com/LubyRuffy/eino-swarm/frontend"
+	"github.com/LubyRuffy/eino-swarm/internal/panelplugins/easm"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 	"github.com/LubyRuffy/eino-swarm/internal/taskpanel"
+	"github.com/LubyRuffy/eino-swarm/internal/tools"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
@@ -59,7 +61,7 @@ func (e *Engine) panelSource(ctx context.Context, turn *store.Turn) (taskpanel.S
 	return taskpanel.Source{ThreadID: turn.ThreadID, TurnID: turn.ID, AgentID: caller.AgentID, Generation: caller.Generation, ToolCallID: call}, nil
 }
 
-func (e *Engine) taskPanelTools(turn *store.Turn, workspace string, readOnly, planner bool) []tool.BaseTool {
+func (e *Engine) taskPanelTools(turn *store.Turn, set *tools.Set, readOnly, planner bool) []tool.BaseTool {
 	if turn == nil || !*e.cfg.Snapshot().TaskPanels.WithDefaults().Enabled {
 		return nil
 	}
@@ -147,7 +149,7 @@ func (e *Engine) taskPanelTools(turn *store.Turn, workspace string, readOnly, pl
 	out := []tool.BaseTool{read, open, publish}
 	if !planner {
 		out = append(out, makeTool("run_panel_source", "Run an installed panel's registered data source for this task. Input must follow that source's schema; progress reaches the panel directly. A source run is merged into the panel state the call starts from, so a source that accepts batches can be run again for the next batch. It performs external work only when the user requested it. The tool finishes after collecting and joining all work.", map[string]*schema.ParameterInfo{"panel_id": {Type: schema.String, Required: true}, "input": {Type: schema.Object, Required: true}}, func(ctx context.Context, args string) (any, error) {
-			return e.runPanelSource(ctx, turn, workspace, args)
+			return e.runPanelSource(ctx, turn, set, args)
 		}))
 	}
 	return out
@@ -163,10 +165,20 @@ func (e *Engine) publishTaskPanel(ctx context.Context, source taskpanel.Source, 
 	if !*limits.Enabled {
 		return taskpanel.Panel{}, fmt.Errorf("task panels are disabled")
 	}
-	return e.store.PublishTaskPanel(ctx, source, update, taskpanel.Limits{MaxStateBytes: limits.MaxStateBytes, MaxUpdateBytes: limits.MaxUpdateBytes})
+	return e.store.PublishTaskPanel(ctx, source, update, taskpanel.Limits{
+		MaxStateBytes: limits.MaxStateBytes, MaxUpdateBytes: limits.MaxUpdateBytes,
+		ValidateStateChange: validatePanelStateChange,
+	})
 }
 
-func (e *Engine) runPanelSource(ctx context.Context, turn *store.Turn, workspace, args string) (any, error) {
+func validatePanelStateChange(definition taskpanel.Definition, previous, state json.RawMessage) error {
+	if definition.ID == "easm-asset-portrait" {
+		return easm.ValidateGraphUpdate(previous, state)
+	}
+	return nil
+}
+
+func (e *Engine) runPanelSource(ctx context.Context, turn *store.Turn, set *tools.Set, args string) (any, error) {
 	var in struct {
 		PanelID string          `json:"panel_id"`
 		Input   json.RawMessage `json:"input"`
@@ -190,11 +202,15 @@ func (e *Engine) runPanelSource(ctx context.Context, turn *store.Turn, workspace
 	if runner == nil {
 		return nil, fmt.Errorf("panel source is unavailable")
 	}
-	thread, err := e.store.GetThread(turn.ThreadID)
-	if err != nil {
-		return nil, err
+	if len(set.PanelMCP) != 0 {
+		thread, err := e.store.GetThread(turn.ThreadID)
+		if err != nil {
+			return nil, err
+		}
+		if !e.turnMountsMCP(thread, turn.NuwaReadOnly) {
+			set = &tools.Set{WorkspaceDir: set.WorkspaceDir}
+		}
 	}
-	ctx = withMCPAdmission(ctx, e.turnMountsMCP(thread, turn.NuwaReadOnly))
 	if err := taskpanel.ValidateState(taskpanel.Definition{Schema: definition.InputSchema}, in.Input); err != nil {
 		return nil, err
 	}
@@ -229,7 +245,7 @@ func (e *Engine) runPanelSource(ctx context.Context, turn *store.Turn, workspace
 		return nil, err
 	}
 	counter := 0
-	summary, runErr := runner(ctx, in.Input, panel.State, settings, workspace, func(ctx context.Context, state json.RawMessage) error {
+	summary, runErr := runner(ctx, in.Input, panel.State, settings, set, func(ctx context.Context, state json.RawMessage) error {
 		current, err := e.store.TaskPanel(ctx, source.ThreadID, panel.ID)
 		if err != nil {
 			return err

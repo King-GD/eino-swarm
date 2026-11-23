@@ -313,6 +313,21 @@ func TestAmbiguousCompanyNamesCannotOwnAnEntry(t *testing.T) {
 	}
 }
 
+func TestNameOnlyOwnerStaysPendingWhenARegisteredCompanySharesItsName(t *testing.T) {
+	state, result, err := push(t, nil, Input{
+		Subject:   "Chosen Org",
+		Companies: []CompanyInput{{Name: "Identical", RegistryID: "1", Source: "registry"}, {Name: "Identical", Source: "name_lookup"}},
+		Domains:   []DomainInput{{Domain: "same.test", Parent: "Identical", Confirmed: true, Source: "name_lookup"}},
+	}, onlyRoles(), &fakeCaller{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	edge, found := edgeOf(state, DomainID("same.test"))
+	if result.UnresolvedParents != 1 || !found || edge.Source != RootID || edge.Confirmed {
+		t.Fatalf("result = %+v, edge = %+v", result, edge)
+	}
+}
+
 // A domain can name the subject itself as its owner; that is the root, not a
 // company node duplicating it.
 func TestSubjectNameAsParentResolvesToTheRoot(t *testing.T) {
@@ -437,32 +452,38 @@ func TestUnusableCertificatesStayPendingClues(t *testing.T) {
 	}
 }
 
-// A certificate served on two domains stays one node: the second domain records
-// it as an effective feature instead of a second edge.
-func TestASharedCertificateKeepsOneNode(t *testing.T) {
+// A second tool or domain cannot replace the first discovery of a serial.
+func TestASharedCertificateKeepsItsFirstDomainAcrossBatches(t *testing.T) {
 	state, _, err := push(t, nil, Input{
 		Subject: "Subject Co",
 		Domains: []DomainInput{{Domain: "a.test", Source: "t"}, {Domain: "b.test", Source: "t"}},
 		Certificates: []CertificateInput{
-			{Serial: "s1", Domain: "a.test", Issuer: "CA", SubjectCN: "a.test", Valid: boolean(true), Match: boolean(true), Source: "stats_tool"},
-			{Serial: "s1", Domain: "b.test", Issuer: "CA", SubjectCN: "a.test", Valid: boolean(true), Match: boolean(true), Source: "stats_tool"},
+			{Serial: "s1", Domain: "a.test", Issuer: "First CA", SubjectCN: "a.test", Valid: boolean(true), Match: boolean(true), Source: "first_tool"},
+			{Serial: "s1", Domain: "b.test", Issuer: "Different CA", SubjectCN: "b.test", Valid: boolean(true), Match: boolean(true), Source: "second_tool"},
 		},
 	}, onlyRoles(), &fakeCaller{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(state.Edges) != 3 {
-		t.Fatalf("edges = %+v", state.Edges)
+	next, _, err := push(t, stateJSON(t, state), Input{Subject: "Subject Co", Certificates: []CertificateInput{
+		{Serial: " s1 ", Domain: "never-added.test", Issuer: "Third CA", Source: "third_tool"},
+	}}, onlyRoles(), &fakeCaller{})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if edge, ok := edgeOf(state, certificateID("s1", "CA")); !ok || edge.Source != DomainID("a.test") {
+	if len(next.Edges) != 3 || len(next.Nodes) != 4 {
+		t.Fatalf("nodes = %+v, edges = %+v", next.Nodes, next.Edges)
+	}
+	if edge, ok := edgeOf(next, certificateID("s1", "First CA")); !ok || edge.Source != DomainID("a.test") || !edge.Confirmed {
 		t.Fatalf("certificate edge = %+v %v", edge, ok)
 	}
-	second, ok := nodeOf(state, DomainID("b.test"))
-	if !ok || len(second.Detail.Features) != 1 {
-		t.Fatalf("second domain = %+v %v", second, ok)
+	cert, _ := nodeOf(next, certificateID("s1", "First CA"))
+	if cert.Detail == nil || cert.Detail.Issuer != "First CA" || len(cert.Detail.Basis) != 1 || cert.Detail.Basis[0].Source != "first_tool" {
+		t.Fatalf("certificate = %+v", cert)
 	}
-	if feature := second.Detail.Features[0]; feature.Kind != "cert" || feature.NodeID != certificateID("s1", "CA") {
-		t.Fatalf("shared feature = %+v", feature)
+	second, ok := nodeOf(next, DomainID("b.test"))
+	if !ok || second.Detail != nil && len(second.Detail.Features) != 0 {
+		t.Fatalf("second domain = %+v %v", second, ok)
 	}
 }
 
@@ -700,7 +721,7 @@ func TestQueryChangesClearAndRerunTheMetrics(t *testing.T) {
 		return &fakeCaller{replies: map[string]func(map[string]any) (string, error){
 			RoleStats: func(arguments map[string]any) (string, error) {
 				if arguments["fields"] == "ip" {
-					return reply(map[string]any{"query": query, "size": 4})
+					return reply(map[string]any{"query": query, "size": 4, "distinct": map[string]int{"ip": 1}})
 				}
 				return reply(map[string]any{"query": query, "aggs": map[string]any{"product": []any{}}})
 			},

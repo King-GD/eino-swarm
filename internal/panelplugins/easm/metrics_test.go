@@ -172,7 +172,7 @@ func componentCaller(products string, rules func(map[string]any) (string, error)
 	return &fakeCaller{replies: metricReplies{
 		RoleStats: func(arguments map[string]any) (string, error) {
 			if arguments["fields"] == "ip" {
-				return `{"size":1}`, nil
+				return `{"size":1,"distinct":{"ip":1}}`, nil
 			}
 			return products, nil
 		},

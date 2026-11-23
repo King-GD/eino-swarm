@@ -15,7 +15,7 @@ func (e *Engine) wireTaskPanelRegistry(reg *swarm.Registry, set *tools.Set, turn
 	if thread, err := e.store.GetThread(turn.ThreadID); err == nil {
 		readOnly = readOnly || thread.PlanMode
 	}
-	reg.SubAgentTools = append(reg.SubAgentTools, e.taskPanelTools(turn, set.WorkspaceDir, readOnly, false)...)
+	reg.SubAgentTools = append(reg.SubAgentTools, e.taskPanelTools(turn, set, readOnly, false)...)
 	reg.WorkerPreamble = JoinPromptSections(reg.WorkerPreamble, e.taskPanelInstruction())
 }
 

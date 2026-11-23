@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { graphSectionLoading, isEasmResult, sectionLoading } from "./data"
+import { projectEasmResult } from "./model"
 import type { EasmResult } from "./types"
 
 const fixture: EasmResult = {
@@ -80,6 +81,20 @@ describe("EASM snapshot relationships", () => {
     expect(isEasmResult({ ...fixture, nodes, edges: [] })).toBe(false)
     nodes[0].detail.features[0].node_id = "root|x"
     expect(isEasmResult({ ...fixture, nodes, edges: [] })).toBe(true)
+  })
+
+  it("preserves an older missing source without drawing its detached clue", () => {
+    const detached = { id: "domain|detached.test", kind: "domain", label: "detached.test" } as const
+    const edge = { source: "company|missing", target: detached.id, confirmed: true }
+    const saved = { ...fixture, nodes: [...fixture.nodes, detached], edges: [...fixture.edges, edge] }
+    expect(isEasmResult(saved)).toBe(true)
+    expect(projectEasmResult(saved)).toEqual(fixture)
+    expect(saved.nodes).toContain(detached)
+    expect(saved.edges).toContain(edge)
+
+    for (const source of ["", 0, null, undefined]) {
+      expect(isEasmResult({ ...saved, edges: [...fixture.edges, { ...edge, source }] })).toBe(false)
+    }
   })
 
   it("rejects invalid or unsorted dates and repeated component tag types", () => {

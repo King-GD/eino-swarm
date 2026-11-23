@@ -33,7 +33,7 @@ function initialize() {
   if (initialized) return
   initialized = true
   const mode = new URLSearchParams(location.search).get("panels")
-  if (!mode) return
+  if (!mode || mode === "easm") return
   if (mode !== "delayed") add("mobile-map", mode === "incompatible" ? "older-version" : definition.version)
   if (mode === "multi") add("mobile-map-second")
   if (mode === "failed") failures = 1
@@ -41,12 +41,22 @@ function initialize() {
 }
 
 /** This event exists only in the offline walkthrough. It exercises normal
- * manifest/chunk RPCs and the shipped iframe rather than injecting HTML. */
+ * manifest/chunk RPCs and the shipped panel renderer. */
 function control(event: Event) {
-  if (!new URLSearchParams(location.search).get("panels")) return
+  const mode = new URLSearchParams(location.search).get("panels")
+  if (!mode) return
   initialize()
-  const detail = (event as CustomEvent<{ kind: string; panel_id?: string }>).detail
+  const detail = (event as CustomEvent<{ kind: string; panel_id?: string; state?: unknown }>).detail
   if (!detail) return
+  if (mode === "easm") {
+    if (detail.kind !== "snapshot" || !detail.panel_id || !detail.state) return
+    const easm = catalog.find((item) => item.id === "easm-asset-portrait")
+    if (!easm) return
+    const previous = panels.get(detail.panel_id)
+    panels.set(detail.panel_id, { id: detail.panel_id, thread_id: "t-live", plugin_id: easm.id, plugin_version: easm.version,
+      revision: (previous?.revision ?? 0) + 1, definition: easm, state: detail.state })
+    return
+  }
   if (detail.kind === "show") { add(); return }
   if (detail.kind === "remove") { panels.delete(detail.panel_id ?? "mobile-map"); return }
   const id = detail.panel_id ?? "mobile-map", panel = panels.get(id)

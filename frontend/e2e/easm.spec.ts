@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import { readFileSync } from "node:fs"
 import type { EasmResult } from "../src/lib/easm/types"
+import { firstCertificate, firstDomain, laterDomain, nextDomain, rootedEasmNodeIds, savedEasmGraph, updatedEasmGraph } from "./easm-graph-fixture"
 
 type GraphStage = HTMLDivElement & { __easmNodePoint?: (id: string) => { x: number; y: number } | undefined }
 
@@ -26,7 +27,7 @@ async function servePanel(page: Page, thread: string, state: EasmResult, sourceS
       },
     })
   })
-  await page.route(`**/api/threads/${thread}/panels`, (route) => route.fulfill({ json: { panels: [saved], cursor: 1 } }))
+  await page.route(`**/api/threads/${thread}/panels`, (route) => route.fulfill({ json: { panels: [saved], cursor: saved.revision } }))
   return saved
 }
 
@@ -54,6 +55,61 @@ const portrait: EasmResult = {
   summary: { clues: 2, fofa_assets: 120, fofa_ips: 9 },
   heat: [], components: [],
 }
+
+test("EASM shows the first certificate source and hides detached clues after reopening", async ({ page }) => {
+  const title = `EASM saved graph ${Date.now()}`
+  const response = await page.request.post("/api/threads", { data: { title } })
+  await expect(response).toBeOK()
+  const created = await response.json()
+  const saved = await servePanel(page, created.thread.id, savedEasmGraph, "finished")
+  const panel = page.getByTestId("easm-task-panel")
+
+  async function openConversation() {
+    await page.getByTestId("dest-chats").click()
+    await page.getByRole("button", { name: title, exact: true }).click()
+    await expect(panel).toHaveAttribute("data-revision", String(saved.revision))
+  }
+
+  const stage = panel.getByTestId("easm-graph")
+  async function expectRootedGraph(includesNextBatch: boolean) {
+    await expect(stage).toHaveAttribute("data-ready", "true")
+    const ids = updatedEasmGraph.nodes.map(({ id }) => id)
+    await expect.poll(() => stage.evaluate((element, nodes) => nodes.filter((id) => (element as GraphStage).__easmNodePoint?.(id)), ids))
+      .toEqual(includesNextBatch ? [...rootedEasmNodeIds, nextDomain.id] : rootedEasmNodeIds)
+  }
+
+  await page.goto("/")
+  await openConversation()
+  await expectRootedGraph(false)
+  await expect(stage).toHaveAttribute("data-layout-moving", "false", { timeout: 20_000 })
+  const card = panel.getByTestId("easm-node-card")
+  await stage.click({ position: await nodePoint(stage, laterDomain.id) })
+  await expect(card.getByRole("heading", { name: laterDomain.label, exact: true })).toBeVisible()
+  await expect(card.getByText("No saved effective features")).toBeVisible()
+  await expect(card.getByRole("button", { name: /certificate/i })).toHaveCount(0)
+  await card.getByRole("button", { name: "Close node card" }).click()
+
+  // Open the first source last, since opening the certificate zooms the graph.
+  await stage.click({ position: await nodePoint(stage, firstDomain.id) })
+  await expect(card.getByRole("heading", { name: firstDomain.label, exact: true })).toBeVisible()
+  await card.getByRole("button", { name: firstCertificate.label, exact: true }).click()
+  await expect(card.getByRole("heading", { name: firstCertificate.label, exact: true })).toBeVisible()
+  await expect(card.getByText(firstCertificate.detail.serial, { exact: true })).toBeVisible()
+  await card.getByRole("button", { name: "Close node card" }).click()
+
+  saved.revision++
+  saved.state = updatedEasmGraph
+  await emit(page, {
+    cursor: saved.revision, thread_id: saved.thread_id, panel_id: saved.id, revision: saved.revision, base_revision: saved.revision - 1,
+    kind: "snapshot", state: saved.state, source_status: saved.source_status,
+  })
+  await expect(panel).toHaveAttribute("data-revision", "2")
+  await expectRootedGraph(true)
+
+  await page.reload()
+  await openConversation()
+  await expectRootedGraph(true)
+})
 
 // The producer stores structured evidence and step status only. The user must
 // see matching loading indicators before the first data, then the graph and

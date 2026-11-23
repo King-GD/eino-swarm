@@ -19,6 +19,9 @@ func (m *Manager) CallTool(ctx context.Context, server config.MCPServer, workspa
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	if m.remoteDisabled(server.ID, name) {
+		return nil, &Error{Code: "tool_switched_off", ServerID: server.ID}
+	}
 	encoded := make(map[string]json.RawMessage, len(arguments))
 	for key, value := range arguments {
 		raw, err := json.Marshal(value)
@@ -56,39 +59,4 @@ func replyBody(result *mcp.CallToolResult) json.RawMessage {
 		return body
 	}
 	return nil
-}
-
-// ServerOffering returns the enabled server whose saved catalog lists name.
-// It reports ambiguity as a miss: a producer must not pick between two
-// servers that happen to expose the same tool name.
-func (m *Manager) ServerOffering(servers []config.MCPServer, name string) (config.MCPServer, bool) {
-	var found []config.MCPServer
-	for _, server := range servers {
-		if !server.Enabled || disabled(server, name) {
-			continue
-		}
-		catalog, ok := LoadCatalog(m.catalogDirectory(), server)
-		if !ok {
-			continue
-		}
-		for _, tool := range catalog.Tools {
-			if tool.OriginalName == name || tool.OriginalName == "" && tool.Name == name {
-				found = append(found, server)
-				break
-			}
-		}
-	}
-	if len(found) != 1 {
-		return config.MCPServer{}, false
-	}
-	return found[0], true
-}
-
-func disabled(server config.MCPServer, name string) bool {
-	for _, off := range server.DisabledTools {
-		if off == name {
-			return true
-		}
-	}
-	return false
 }

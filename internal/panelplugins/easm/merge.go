@@ -13,6 +13,10 @@ import (
 // mergeCompanies folds the batch's companies into the graph in two passes, so a
 // child reported before its parent in the same batch still finds it.
 func (r *run) mergeCompanies() {
+	if len(r.input.Companies) == 0 {
+		return
+	}
+	savedEdges := len(r.graph.edges)
 	for _, entry := range r.input.Companies {
 		id, name, ok := companyIdentity(entry)
 		if !ok {
@@ -22,7 +26,6 @@ func (r *run) mergeCompanies() {
 			// The subject's own registry row describes the root. A separate node
 			// would take the subject's name, and every child naming the subject
 			// as parent would hang under that copy instead of the root.
-			r.graph.Upsert(Node{ID: RootID, Label: r.input.Subject, Detail: subjectRegistry(entry, name)})
 			r.graph.AddBasis(RootID, basisOf(entry.Source, entry.Via))
 			continue
 		}
@@ -39,6 +42,7 @@ func (r *run) mergeCompanies() {
 		parent, known := r.ownerOf(entry.Parent)
 		r.graph.Link(parent, id, entry.Confirmed && known)
 	}
+	r.graph.keepRootedSources(savedEdges)
 }
 
 // mergeDomains places each reported domain under its company. Domains are
@@ -64,11 +68,21 @@ func (r *run) mergeDomains() {
 // observed on. Certificate names do not create domain nodes: the agent decides
 // what enters the portrait, the producer only records what it was given.
 func (r *run) mergeCertificates() {
+	if len(r.input.Certificates) == 0 {
+		return
+	}
+	serials := make(map[string]bool)
+	for _, node := range r.graph.nodes {
+		if serial := certificateSerial(node); serial != "" {
+			serials[serial] = true
+		}
+	}
 	for _, entry := range r.input.Certificates {
 		serial := strings.TrimSpace(entry.Serial)
-		if serial == "" {
+		if serial == "" || serials[serial] {
 			continue
 		}
+		serials[serial] = true
 		issuer := strings.TrimSpace(entry.Issuer)
 		id := certificateID(serial, issuer)
 		label := strings.TrimSpace(entry.SubjectCN)
@@ -82,13 +96,6 @@ func (r *run) mergeCertificates() {
 		// certificate's own flags say nothing about who owns the domain.
 		effective := isTrue(entry.Valid) && isTrue(entry.Match) && !isTrue(entry.Expired)
 		r.graph.Link(source, id, effective && placed)
-		if parent, ok := r.graph.Parent(id); ok && parent != source && effective {
-			// A shared certificate keeps its first parent; this domain records it
-			// as an effective feature instead of a second edge.
-			if domain := r.graph.Node(source); domain != nil {
-				r.graph.Upsert(Node{ID: source, Label: domain.Label, Detail: &Detail{Features: []Feature{{Kind: "cert", Value: label, NodeID: id}}}})
-			}
-		}
 	}
 }
 
@@ -112,25 +119,20 @@ func (r *run) resolveCompany(name string) (string, bool) {
 		// Omitted parent: the entry hangs under the subject by definition.
 		return RootID, true
 	}
-	if root := r.graph.Root(); root != nil && legalName(root.Label) == legalName(name) {
-		return RootID, true
-	}
-	if node := r.graph.Node(companyNameID(name)); node != nil && node.Kind == "company" {
-		return node.ID, true
-	}
-	found := 0
-	owner := ""
+	var owner string
 	for _, node := range r.graph.nodes {
-		if node.Kind != "company" || node.Label != name {
+		if node.Kind != "company" && node.Kind != "root" {
 			continue
 		}
-		found++
+		if name != node.Label && (node.Detail == nil || name != node.Detail.RegistryName) {
+			continue
+		}
+		if owner != "" {
+			return "", false
+		}
 		owner = node.ID
 	}
-	if found != 1 {
-		return "", false
-	}
-	return owner, true
+	return owner, owner != "" && !r.graph.detached[owner]
 }
 
 // certificateDomain returns the node a certificate hangs under. A domain the
@@ -162,38 +164,33 @@ func (r *run) reserveDomain() bool {
 	return true
 }
 
-// isSubject reports whether a company entry is the subject itself: the same
-// legal name, ignoring a trailing bracketed short name, or the registry ID the
-// root already carries.
+// isSubject requires the same registration when one is known; a name-only
+// record cannot identify itself as a known registration.
 func (r *run) isSubject(entry CompanyInput) bool {
-	if name := legalName(entry.Name); name != "" && name == legalName(r.input.Subject) {
-		return true
-	}
-	registry := strings.TrimSpace(entry.RegistryID)
 	root := r.graph.Root()
-	return registry != "" && root != nil && root.Detail != nil && root.Detail.RegistryID == registry
+	reported := strings.TrimSpace(entry.RegistryID)
+	if saved := registryID(root); saved != "" {
+		return reported == saved
+	}
+	return reported == "" && strings.TrimSpace(entry.Name) == root.Label
 }
 
-// legalName drops one trailing bracketed alias, e.g. a brand written after the
-// registered name, so "X（Brand）" and "X" name the same organization.
-func legalName(name string) string {
-	name = strings.TrimSpace(name)
-	for _, pair := range [][2]string{{"（", "）"}, {"(", ")"}} {
-		if strings.HasSuffix(name, pair[1]) {
-			if open := strings.LastIndex(name, pair[0]); open > 0 {
-				return strings.TrimSpace(name[:open])
-			}
+// Only an unambiguous confirmed row for the selected name can establish its
+// registration. Other companies in the batch are evidence for other clues.
+func selectedRegistry(input Input) string {
+	var registry string
+	for _, entry := range input.Companies {
+		id := strings.TrimSpace(entry.RegistryID)
+		if id == "" || !entry.Confirmed || strings.TrimSpace(entry.Source) == "" ||
+			strings.TrimSpace(entry.Name) != input.Subject || strings.TrimSpace(entry.Parent) != "" {
+			continue
 		}
+		if registry != "" && registry != id {
+			return ""
+		}
+		registry = id
 	}
-	return name
-}
-
-func subjectRegistry(entry CompanyInput, name string) *Detail {
-	registry := strings.TrimSpace(entry.RegistryID)
-	if registry == "" {
-		return nil
-	}
-	return &Detail{RegistryID: registry, RegistryName: name}
+	return registry
 }
 
 // companyIdentity is a company's node identity. A registry ID wins so one
@@ -262,14 +259,21 @@ func certificateDetail(entry CertificateInput, serial, issuer string) *Detail {
 	}
 }
 
-// certificateID is issuer plus serial: a certificate served on several domains
-// stays one node, and two issuers reusing a serial stay two.
+// Keep the existing ID format for the first stored observation. Deduplication
+// uses the serial, independently of the issuer included in this ID.
 func certificateID(serial, issuer string) string {
 	id := "feature:cert:" + serial
 	if issuer != "" {
 		id += "@" + issuer
 	}
 	return id
+}
+
+func certificateSerial(node *Node) string {
+	if node.Kind != "feature" || node.FeatureKind != "cert" || node.Detail == nil {
+		return ""
+	}
+	return strings.TrimSpace(node.Detail.Serial)
 }
 
 func basisOf(source, via string) Basis {

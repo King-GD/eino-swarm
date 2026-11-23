@@ -99,26 +99,41 @@ func (r *run) next() string {
 	}
 	var missing []string
 	for _, step := range r.state.Collection.Steps {
-		if step.Status != statusDone {
-			missing = append(missing, fmt.Sprintf("%s (%s)", step.ID, step.Status))
+		if step.Status == statusDone {
+			continue
 		}
+		detail := step.Status
+		if step.ID == StepSummary {
+			switch step.Code {
+			case missingAssetTotal:
+				detail = "latest response missing the asset total"
+			case missingIPTotal:
+				detail = "latest response missing the distinct IP total"
+			}
+		}
+		missing = append(missing, fmt.Sprintf("%s (%s)", step.ID, detail))
 	}
 	if len(missing) == 0 {
 		return finishedNext
 	}
-	return "The panel is missing " + strings.Join(missing, ", ") + " for this query. Reply with a short summary of what the panel holds and end the turn without calling more tools."
+	return "The panel could not finish " + strings.Join(missing, ", ") + " for this query. Reply with a short summary of what the panel holds and end the turn without calling more tools."
 }
 
 // begin decides whether this call continues the portrait already in the panel.
 // A different subject starts a new portrait: the old graph and its metrics
 // describe another subject and must not be mixed with the new one.
 func (r *run) begin(current json.RawMessage) error {
-	r.graph = NewGraph(r.input.Subject, rootDetail(r.input))
+	registry := selectedRegistry(r.input)
+	detail := rootDetail(r.input)
+	if registry != "" {
+		detail = mergeDetail(detail, &Detail{RegistryID: registry, RegistryName: r.input.Subject})
+	}
+	r.graph = NewGraph(r.input.Subject, detail)
 	r.state = State{SchemaVersion: 1, Title: r.input.Subject, Collection: Collection{Status: statusIdle}, Heat: []HeatPoint{}, Components: []Component{}}
 	for _, step := range Steps {
 		r.state.Collection.Steps = append(r.state.Collection.Steps, StepStatus{ID: step, Status: statusPending})
 	}
-	previous, continuing, err := continuation(current, r.input.Subject)
+	previous, continuing, err := continuation(current, r.input.Subject, registry)
 	if err != nil || !continuing {
 		return err
 	}
@@ -127,7 +142,8 @@ func (r *run) begin(current json.RawMessage) error {
 		return err
 	}
 	r.graph = graph
-	r.graph.Upsert(Node{ID: RootID, Label: r.input.Subject, Detail: rootDetail(r.input)})
+	r.graph.Root().Label = r.input.Subject
+	r.graph.Upsert(Node{ID: RootID, Label: r.input.Subject, Detail: detail})
 	r.previousQuery = strings.TrimSpace(previous.Query)
 	r.state.Query = r.previousQuery
 	r.state.Summary = previous.Summary
@@ -148,30 +164,44 @@ func (r *run) begin(current json.RawMessage) error {
 // planMetrics decides whether this call collects the aggregations and sets the
 // collection status its merge publication shows.
 func (r *run) planMetrics() bool {
-	if r.input.Query == "" {
-		r.state.Collection.Status = statusIdle
-		if r.allStepsDone() {
-			r.state.Collection.Status = statusDone
-		}
-		return false
-	}
-	if r.input.Query == r.previousQuery && r.allStepsDone() {
-		r.state.Collection.Status = statusDone
-		return false
-	}
+	hasQuery := r.input.Query != ""
+	changed := hasQuery && r.input.Query != r.previousQuery
 	// Numbers collected for another query describe another asset range, so they
 	// leave the panel before the new range is aggregated.
-	if r.input.Query != r.previousQuery {
+	if changed {
 		r.state.Query = r.input.Query
 		r.state.Summary = nil
 		r.state.Heat = []HeatPoint{}
 		r.state.Components = []Component{}
 	}
-	for i := range r.state.Collection.Steps {
-		r.state.Collection.Steps[i] = StepStatus{ID: Steps[i], Status: statusRunning}
+	summary := r.state.Summary
+	if summary != nil {
+		clues := r.clueCount()
+		summary.Clues = &clues
 	}
-	r.state.Collection.Status = statusRunning
-	return true
+	collect := false
+	for i := range r.state.Collection.Steps {
+		step := &r.state.Collection.Steps[i]
+		// Older panels could mark a summary done with one total missing.
+		if !changed && step.ID == StepSummary && step.Status == statusDone {
+			if code := missingTotalCode(summary != nil && summary.FOFAAssets != nil, summary != nil && summary.FOFAIPs != nil); code != "" {
+				*step = StepStatus{ID: StepSummary, Status: statusFailed, Code: code}
+			}
+		}
+		if hasQuery && (changed || step.Status != statusDone) {
+			*step = StepStatus{ID: step.ID, Status: statusRunning}
+			collect = true
+		}
+	}
+	switch {
+	case collect:
+		r.state.Collection.Status = statusRunning
+	case r.allStepsDone():
+		r.state.Collection.Status = statusDone
+	default:
+		r.state.Collection.Status = statusIdle
+	}
+	return collect
 }
 
 // collect runs the aggregations concurrently and publishes each completion.
@@ -179,6 +209,9 @@ func (r *run) collect(ctx context.Context) error {
 	ready := make([]bool, len(Steps))
 	r.mu.Lock()
 	for i, step := range Steps {
+		if r.state.Collection.Steps[i].Status != statusRunning {
+			continue
+		}
 		def, known := stepFuncs[step]
 		ready[i] = known && r.settings.configured(def.roles)
 		if !ready[i] {
@@ -356,7 +389,7 @@ func decodeReply(body json.RawMessage, out any) error {
 
 // continuation decodes the panel state this call starts from. Only a portrait of
 // the same subject is continued; anything else starts a new one.
-func continuation(current json.RawMessage, subject string) (State, bool, error) {
+func continuation(current json.RawMessage, subject, registry string) (State, bool, error) {
 	if len(current) == 0 || string(current) == "null" {
 		return State{}, false, nil
 	}
@@ -364,10 +397,32 @@ func continuation(current json.RawMessage, subject string) (State, bool, error) 
 	if err := json.Unmarshal(current, &previous); err != nil {
 		return State{}, false, fmt.Errorf("panel state cannot be read: %w", err)
 	}
-	if len(previous.Nodes) == 0 || legalName(previous.Title) != legalName(subject) {
-		return State{}, false, nil
+	for _, root := range previous.Nodes {
+		if root.ID == RootID {
+			return previous, sameSubject(root, subject, registry), nil
+		}
 	}
-	return previous, true, nil
+	// Let Restore report a missing root when the old state claims this subject.
+	return previous, len(previous.Nodes) > 0 && previous.Title == subject, nil
+}
+
+func sameSubject(root Node, subject, registry string) bool {
+	if saved := registryID(&root); saved != "" {
+		if registry != "" {
+			return saved == registry
+		}
+		if root.Detail.RegistryName == subject {
+			return true
+		}
+	}
+	return root.Label == subject
+}
+
+func registryID(node *Node) string {
+	if node.Detail == nil {
+		return ""
+	}
+	return node.Detail.RegistryID
 }
 
 // rootDetail carries the subject's own description. It is shown as reported and

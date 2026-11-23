@@ -16,6 +16,7 @@ import (
 	"github.com/LubyRuffy/eino-swarm/internal/provider"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 	"github.com/LubyRuffy/eino-swarm/internal/taskpanel"
+	"github.com/LubyRuffy/eino-swarm/internal/tools"
 )
 
 func panelAdmissionCall(w http.ResponseWriter, request scheduleCompletionRequest, id, name, args string) {
@@ -234,7 +235,7 @@ func TestTaskPanelDelegatedWorkerPublishesAtActualHTTPBoundary(t *testing.T) {
 func TestTaskPanelSourceArgumentAndFailureCategories(t *testing.T) {
 	settings := config.TaskPanelConfig{}.WithDefaults()
 	for _, input := range []string{`{"extra":true}`, `{"query":"","max_assets":1}`, `{"query":"fixture","max_assets":-1}`, fmt.Sprintf(`{"query":"fixture","max_assets":%d}`, settings.MaxAssets+1)} {
-		if _, err := runFOFAWorldSource(t.Context(), []byte(input), nil, settings, t.TempDir(), func(context.Context, json.RawMessage) error { return nil }); err == nil {
+		if _, err := runFOFAWorldSource(t.Context(), []byte(input), nil, settings, &tools.Set{WorkspaceDir: t.TempDir()}, func(context.Context, json.RawMessage) error { return nil }); err == nil {
 			t.Fatal("source input accepted", input)
 		}
 	}

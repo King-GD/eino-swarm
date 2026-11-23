@@ -2,14 +2,11 @@ package easm
 
 import "testing"
 
-// The agent may write the subject with its short name in brackets and also
-// list the subject's own registry row among the companies. That row must merge
-// into the root: a separate copy took the subject's name and every company
-// and domain naming the subject as parent hung under the copy, leaving the
-// root with one edge.
+// A registry row for the confirmed subject must enrich the root. A display
+// alias can continue the portrait when the agent confirms the same registry ID.
 func TestSubjectRegistryRowMergesIntoTheRoot(t *testing.T) {
 	input := Input{
-		Subject: "Subject Co（Brand）",
+		Subject: "Subject Co",
 		Companies: []CompanyInput{
 			{Name: "Subject Co", RegistryID: "91SUBJECT", Relation: "subject", Confirmed: true, Source: "company_info"},
 			{Name: "Child Co", Parent: "Subject Co", RegistryID: "91CHILD", Confirmed: true, Source: "relation"},
@@ -36,32 +33,69 @@ func TestSubjectRegistryRowMergesIntoTheRoot(t *testing.T) {
 		t.Fatalf("result = %+v", result)
 	}
 
-	// A later batch writing the bare legal name continues the same portrait,
-	// and the registry ID alone also identifies the subject.
-	next := Input{Subject: "Subject Co", Companies: []CompanyInput{{Name: "Subject Company Ltd", RegistryID: "91SUBJECT", Source: "branch"}}}
+	next := Input{Subject: "Subject Co（Brand）", Companies: []CompanyInput{
+		{Name: "Subject Co（Brand）", RegistryID: "91SUBJECT", Confirmed: true, Source: "company_info"},
+		{Name: "Subject Company Ltd", RegistryID: "91SUBJECT", Source: "branch"},
+	}}
 	again, _, err := push(t, stateJSON(t, state), next, onlyRoles(), &fakeCaller{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := edgeOf(again, DomainID("subject.test")); !ok {
-		t.Fatal("the bare legal name started a new portrait")
+		t.Fatal("the confirmed registry alias started a new portrait")
 	}
 	if _, ok := nodeOf(again, registryCompanyID("91SUBJECT")); ok {
 		t.Fatal("the subject's registry ID became a separate company")
 	}
+	if root, _ := nodeOf(again, RootID); root.Label != again.Title {
+		t.Fatalf("root %q and panel title %q disagree", root.Label, again.Title)
+	}
+	originalName, _, err := push(t, stateJSON(t, again), Input{Subject: input.Subject}, onlyRoles(), &fakeCaller{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := nodeOf(originalName, DomainID("subject.test")); !ok {
+		t.Fatal("the verified registry name started a new portrait")
+	}
 }
 
-func TestLegalNameDropsOneTrailingAlias(t *testing.T) {
-	for raw, want := range map[string]string{
-		"Subject Co（Brand）":  "Subject Co",
-		"Subject Co (Brand)": "Subject Co",
-		" Subject Co ":       "Subject Co",
-		"(Brand)":            "(Brand)",
-		"Subject (A) Co":     "Subject (A) Co",
-	} {
-		if got := legalName(raw); got != want {
-			t.Fatalf("legalName(%q) = %q, want %q", raw, got, want)
+// A user changing the confirmed region or registration must see only the new
+// subject, even if the display names share a base or are exactly the same.
+func TestChangingConfirmedSubjectDropsPreviousClues(t *testing.T) {
+	t.Run("different parenthesized names", func(t *testing.T) {
+		first, _, err := push(t, nil, Input{Subject: "Atlas (West)", Domains: []DomainInput{{Domain: "old.test", Source: "registry"}}}, onlyRoles(), &fakeCaller{})
+		if err != nil {
+			t.Fatal(err)
 		}
+		next, _, err := push(t, stateJSON(t, first), Input{Subject: "Atlas (East)"}, onlyRoles(), &fakeCaller{})
+		if err != nil || len(next.Nodes) != 1 || next.Nodes[0].Label != "Atlas (East)" || next.Title != next.Nodes[0].Label {
+			t.Fatalf("portrait = %+v, error = %v", next, err)
+		}
+	})
+	t.Run("same name with a different registration", func(t *testing.T) {
+		first, _, err := push(t, nil, Input{Subject: "Atlas", Companies: []CompanyInput{{Name: "Atlas", RegistryID: "west", Confirmed: true, Source: "registry"}}, Domains: []DomainInput{{Domain: "old.test", Source: "registry"}}}, onlyRoles(), &fakeCaller{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		next, _, err := push(t, stateJSON(t, first), Input{Subject: "Atlas", Companies: []CompanyInput{{Name: "Atlas", RegistryID: "east", Confirmed: true, Source: "registry"}}}, onlyRoles(), &fakeCaller{})
+		if err != nil || len(next.Nodes) != 1 || registryID(&next.Nodes[0]) != "east" {
+			t.Fatalf("portrait = %+v, error = %v", next, err)
+		}
+	})
+}
+
+func TestOnlyOneConfirmedRegistrationCanIdentifyTheRoot(t *testing.T) {
+	state, result, err := push(t, nil, Input{Subject: "Atlas", Companies: []CompanyInput{
+		{Name: "Atlas", RegistryID: "atlas-1", Confirmed: true, Source: "registry"},
+		{Name: "Atlas", RegistryID: "atlas-2", Confirmed: true, Source: "registry"},
+	}, Domains: []DomainInput{{Domain: "same.test", Parent: "Atlas", Source: "registry", Confirmed: true}}}, onlyRoles(), &fakeCaller{})
+	if err != nil || len(state.Nodes) != 4 {
+		t.Fatalf("portrait = %+v, error = %v", state, err)
+	}
+	root, _ := nodeOf(state, RootID)
+	edge, _ := edgeOf(state, DomainID("same.test"))
+	if registryID(&root) != "" || result.UnresolvedParents != 1 || edge.Source != RootID || edge.Confirmed {
+		t.Fatalf("root = %+v, edge = %+v, receipt = %+v", root, edge, result)
 	}
 }
 

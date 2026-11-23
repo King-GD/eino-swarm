@@ -1,6 +1,7 @@
 package easm
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"strings"
@@ -16,10 +17,11 @@ const RootID = "root"
 // node keeps the first source that reached it. A later observation may
 // confirm that same edge or enrich node details, never re-parent a node.
 type Graph struct {
-	nodes  []*Node
-	byID   map[string]*Node
-	edges  []*Edge
-	parent map[string]*Edge
+	nodes    []*Node
+	byID     map[string]*Node
+	edges    []*Edge
+	parent   map[string]*Edge
+	detached map[string]bool
 }
 
 // NewGraph starts a portrait at its subject.
@@ -29,11 +31,18 @@ func NewGraph(subject string, detail *Detail) *Graph {
 	return g
 }
 
-// Restore rebuilds the graph from a published state so a later call merges into
-// the portrait the user already sees. It enforces the same tree invariants as
-// Graph: exactly the subject root, no second incoming edge, no edge into it.
-// A state that breaks them cannot be continued without inventing a parent.
+// Restore keeps saved observations and their first sources. Only nodes
+// reachable from the confirmed subject can be sources for later findings.
 func Restore(state State) (*Graph, error) {
+	g, err := loadGraph(state)
+	if err != nil {
+		return nil, err
+	}
+	g.keepRootedSources(len(g.edges))
+	return g, nil
+}
+
+func loadGraph(state State) (*Graph, error) {
 	g := &Graph{byID: map[string]*Node{}, parent: map[string]*Edge{}}
 	roots := 0
 	for _, node := range state.Nodes {
@@ -54,7 +63,9 @@ func Restore(state State) (*Graph, error) {
 		return nil, fmt.Errorf("panel state has no single subject root")
 	}
 	for _, edge := range state.Edges {
-		if g.byID[edge.Source] == nil || g.byID[edge.Target] == nil {
+		// A saved clue can outlive its source. Keep its raw edge and let
+		// root reachability exclude it until that source exists again.
+		if edge.Source == "" || g.byID[edge.Target] == nil {
 			return nil, fmt.Errorf("panel state has a dangling edge")
 		}
 		if edge.Source == edge.Target || edge.Target == RootID {
@@ -70,6 +81,126 @@ func Restore(state State) (*Graph, error) {
 	return g, nil
 }
 
+func (g *Graph) reachable() map[string]bool {
+	children := make(map[string][]string)
+	for _, edge := range g.edges {
+		children[edge.Source] = append(children[edge.Source], edge.Target)
+	}
+	queue := []string{RootID}
+	reached := map[string]bool{RootID: true}
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		for _, child := range children[id] {
+			if !reached[child] {
+				reached[child] = true
+				queue = append(queue, child)
+			}
+		}
+	}
+	return reached
+}
+
+// Keep the raw historic relationships, but do not accept new relationships
+// from a batch that couldn't establish a path to the subject.
+func (g *Graph) keepRootedSources(savedEdges int) {
+	reached := g.reachable()
+	g.detached = make(map[string]bool)
+	for id := range g.byID {
+		if !reached[id] {
+			g.detached[id] = true
+		}
+	}
+	edges := g.edges[:savedEdges]
+	for _, edge := range g.edges[savedEdges:] {
+		if reached[edge.Target] {
+			edges = append(edges, edge)
+		} else {
+			delete(g.parent, edge.Target)
+		}
+	}
+	g.edges = edges
+}
+
+// ValidateGraphUpdate checks publish-time source relations after a patch has
+// been applied. Historical detached links may be carried forward unchanged.
+func ValidateGraphUpdate(previous, state json.RawMessage) error {
+	var before, after State
+	if err := json.Unmarshal(previous, &before); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(state, &after); err != nil {
+		return err
+	}
+	if len(after.Nodes) == 0 && len(after.Edges) == 0 {
+		return nil
+	}
+	graph, err := loadGraph(after)
+	if err != nil {
+		return err
+	}
+	oldSources := make(map[string]Edge, len(before.Edges))
+	for _, edge := range before.Edges {
+		oldSources[edge.Target] = edge
+	}
+	root := graph.Root()
+	previousNodes := make(map[string]bool, len(before.Nodes))
+	var samePortrait bool
+	for _, node := range before.Nodes {
+		previousNodes[node.ID] = true
+		if node.ID == RootID {
+			samePortrait = sameSubject(node, root.Label, registryID(root))
+		}
+	}
+	reached := graph.reachable()
+	for _, edge := range after.Edges {
+		prior, existed := oldSources[edge.Target]
+		lostSource := graph.byID[edge.Source] == nil && previousNodes[edge.Source]
+		if !reached[edge.Target] && (!existed || prior != edge || lostSource) {
+			return fmt.Errorf("panel state gives %q a source outside the subject's graph", edge.Target)
+		}
+		if samePortrait && existed && prior.Source != edge.Source {
+			return fmt.Errorf("panel state changes the first source of %q", edge.Target)
+		}
+	}
+	if !samePortrait {
+		before.Nodes = nil
+	}
+	return validateCertificateSources(before.Nodes, after.Nodes)
+}
+
+func validateCertificateSources(before, after []Node) error {
+	firstSaved, saved := make(map[string]string), make(map[string]string)
+	for i := range before {
+		if serial := certificateSerial(&before[i]); serial != "" {
+			id := before[i].ID
+			saved[id] = serial
+			if firstSaved[serial] == "" {
+				firstSaved[serial] = id
+			}
+		}
+	}
+	first := make(map[string]string)
+	for i := range after {
+		node := &after[i]
+		serial := certificateSerial(node)
+		if serial == "" {
+			continue
+		}
+		// Old duplicates may stay in the raw state. They cannot become
+		// the first observation through reordering or a new duplicate.
+		if first[serial] == "" {
+			if id := firstSaved[serial]; id != "" && id != node.ID {
+				return fmt.Errorf("panel state changes the first observation of a certificate")
+			}
+			first[serial] = node.ID
+		} else if saved[node.ID] != serial {
+			return fmt.Errorf("panel state repeats a certificate serial")
+		}
+	}
+	return nil
+}
+
 // Root returns the subject node.
 func (g *Graph) Root() *Node { return g.byID[RootID] }
 
@@ -79,7 +210,7 @@ func (g *Graph) Node(id string) *Node { return g.byID[id] }
 // Parent returns the source of a node's incoming edge, if any.
 func (g *Graph) Parent(id string) (string, bool) {
 	edge, ok := g.parent[id]
-	if !ok {
+	if !ok || g.detached[id] {
 		return "", false
 	}
 	return edge.Source, true
@@ -107,7 +238,7 @@ func (g *Graph) Upsert(node Node) *Node {
 // Link adds source → target. It reports whether the graph changed. An
 // existing edge from the same source can only be upgraded to confirmed.
 func (g *Graph) Link(source, target string, confirmed bool) bool {
-	if source == target || target == RootID || g.byID[source] == nil || g.byID[target] == nil {
+	if source == target || target == RootID || g.byID[source] == nil || g.byID[target] == nil || g.detached[source] {
 		return false
 	}
 	if edge, ok := g.parent[target]; ok {
@@ -123,6 +254,7 @@ func (g *Graph) Link(source, target string, confirmed bool) bool {
 	edge := &Edge{Source: source, Target: target, Confirmed: confirmed}
 	g.edges = append(g.edges, edge)
 	g.parent[target] = edge
+	delete(g.detached, target)
 	return true
 }
 

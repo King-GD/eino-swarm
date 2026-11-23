@@ -220,7 +220,7 @@
     "id": "easm-asset-portrait",
     "version": "1",
     "name": "EASM",
-    "description": "Show an enterprise asset portrait: the confirmed organization, its related companies, domains and certificates as a graph, with asset totals, attention trend and component distribution. Use when the user asks for an organization's external asset portrait. Confirm the subject first (ask the user when it is ambiguous) and open this panel. Then run its source once per finished batch of the agent's own lookups: pass the companies, domains and certificates that batch newly confirmed, and on the last batch the final asset query. The panel keeps every batch and collects the totals, trend and components for that query itself; do not look those three up separately.",
+    "description": "Show an enterprise asset portrait: the confirmed organization, its related companies, domains and certificates as a graph, with asset totals, attention trend and component distribution. Confirm the task subject first and ask the user when it is ambiguous. Open this panel and use the same full subject for every batch unless the task explicitly changes subject. Run the source per finished batch of the agent's own lookups. Include the subject's exact registry row as a confirmed company when available. Pass the findings with their first source and confirm ownership only when the evidence identifies the parent. Include the final asset query on the last batch. The panel collects the totals, trend and components for that query.",
     "entry": "",
     "renderer": "native",
     "schema": {

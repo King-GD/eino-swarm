@@ -206,7 +206,7 @@ func (rt *runtime) runManager(ctx context.Context, turn *store.Turn, reg *swarm.
 	managerTools = append(managerTools, AskUserTool(rt.waitAsk))
 	managerTools = append(managerTools, rt.managerScheduleTools(turn)...)
 	managerTools = append(managerTools, rt.managerTaskTools(turn)...)
-	managerTools = append(managerTools, e.taskPanelTools(turn, toolset.WorkspaceDir, turn.NuwaReadOnly || (th != nil && th.PlanMode), turn.NuwaEnabled)...)
+	managerTools = append(managerTools, e.taskPanelTools(turn, toolset, turn.NuwaReadOnly || (th != nil && th.PlanMode), turn.NuwaEnabled)...)
 	budget := e.cfg.SwarmSnapshot().ManagerIterations()
 	if pursuingGoal(th) && !pausedStandingGoal(th) {
 		budget = e.cfg.SwarmSnapshot().GoalSessionIterations()

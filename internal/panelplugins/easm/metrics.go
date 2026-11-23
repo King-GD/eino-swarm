@@ -19,12 +19,21 @@ func init() {
 // the panel would then mislabel as FOFA counts.
 const fofaSource = "fofa"
 
+const (
+	missingAssetTotal = "missing_asset_total"
+	missingIPTotal    = "missing_ip_total"
+)
+
 // summary records the asset and distinct-IP totals of the run's query. Clues
 // counts the non-root nodes the agent pushed: the number is derived from the
 // graph, so it is present even when the totals lookup fails.
 func (r *run) summary(ctx context.Context) error {
-	clues := r.clueCount()
-	r.apply(func(state *State) { state.Summary = &Summary{Clues: &clues} })
+	r.apply(func(state *State) {
+		if state.Summary == nil {
+			clues := r.clueCount()
+			state.Summary = &Summary{Clues: &clues}
+		}
+	})
 	var reply struct {
 		Query    json.RawMessage            `json:"query"`
 		Size     json.RawMessage            `json:"size"`
@@ -45,13 +54,7 @@ func (r *run) summary(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("distinct ip total: %w", err)
 	}
-	if !hasAssets && !hasIPs {
-		return fmt.Errorf("reply carries no totals")
-	}
 	r.apply(func(state *State) {
-		if state.Summary == nil {
-			state.Summary = &Summary{Clues: &clues}
-		}
 		if hasAssets {
 			state.Summary.FOFAAssets = &assets
 		}
@@ -59,7 +62,25 @@ func (r *run) summary(ctx context.Context) error {
 			state.Summary.FOFAIPs = &ips
 		}
 	})
+	if code := missingTotalCode(hasAssets, hasIPs); code != "" {
+		return &ToolError{Code: code}
+	}
 	return nil
+}
+
+// missingTotalCode accounts for the counts in one reply independently of
+// which previously collected counts the panel can still show.
+func missingTotalCode(hasAssets, hasIPs bool) string {
+	switch {
+	case hasAssets && hasIPs:
+		return ""
+	case hasAssets:
+		return missingIPTotal
+	case hasIPs:
+		return missingAssetTotal
+	default:
+		return "malformed_reply"
+	}
 }
 
 // clueCount reports what the portrait holds beyond the subject itself.

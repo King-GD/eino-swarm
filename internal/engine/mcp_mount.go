@@ -26,12 +26,13 @@ type mcpMountServer struct {
 }
 
 type mcpMountRecord struct {
-	Mode         string           `json:"mode"`
-	Percent      int              `json:"percent"`
-	Window       int              `json:"window"`
-	Budget       int              `json:"budget"`
-	SchemaTokens int              `json:"schema_tokens"`
-	Servers      []mcpMountServer `json:"servers"`
+	Mode         string                     `json:"mode"`
+	Percent      int                        `json:"percent"`
+	Window       int                        `json:"window"`
+	Budget       int                        `json:"budget"`
+	SchemaTokens int                        `json:"schema_tokens"`
+	Servers      []mcpMountServer           `json:"servers"`
+	PanelTools   map[string]panelMCPBinding `json:"panel_tools,omitempty"`
 }
 
 func mcpMountBudget(window, fallback int) int {
@@ -76,6 +77,8 @@ func toolsetHasMCP(set *tools.Set) bool {
 
 func withMCPTools(set *tools.Set, extra []tool.BaseTool, extraNames []string) *tools.Set {
 	next := *set
+	next.MCPAdmission = nil
+	next.PanelMCP = nil
 	next.Tools = make([]tool.BaseTool, 0, len(set.Names)+len(extra))
 	next.Names = make([]string, 0, len(set.Names)+len(extraNames))
 	inserted := false
@@ -222,7 +225,11 @@ func remoteCallRoutes(server config.MCPServer, catalog mcpclient.Catalog) map[st
 
 func (e *Engine) resolveMCPSurface(ctx context.Context, turn *store.Turn, set *tools.Set) (*tools.Set, mcpMountRecord, error) {
 	snap := e.cfg.Snapshot()
-	percent := snap.MCP.DirectLoadPercent
+	admission := set.MCPAdmission
+	if admission == nil {
+		admission = &tools.MCPAdmission{Config: snap.MCP, Panel: snap.TaskPanels.EASM}
+	}
+	percent := admission.Config.DirectLoadPercent
 	window := 0
 	if e.pool != nil {
 		window = e.pool.WindowFor(turn.ProviderID, turn.Model)
@@ -231,12 +238,13 @@ func (e *Engine) resolveMCPSurface(ctx context.Context, turn *store.Turn, set *t
 	record := mcpMountRecord{Percent: percent, Window: window, Budget: budget}
 	dir := e.cfg.DataDir()
 	type ready struct {
-		server  config.MCPServer
-		catalog mcpclient.Catalog
-		errCode string
+		server        config.MCPServer
+		catalog       mcpclient.Catalog
+		uncachedProxy bool
+		errCode       string
 	}
 	var rows []ready
-	for _, server := range snap.MCP.Servers {
+	for _, server := range admission.Config.Servers {
 		if !server.Enabled {
 			continue
 		}
@@ -244,8 +252,8 @@ func (e *Engine) resolveMCPSurface(ctx context.Context, turn *store.Turn, set *t
 			return nil, mcpMountRecord{}, ctx.Err()
 		}
 		if percent <= 0 {
-			catalog, _ := mcpclient.LoadCatalog(dir, server)
-			rows = append(rows, ready{server: server, catalog: catalog})
+			catalog, cached := mcpclient.LoadCatalog(dir, server)
+			rows = append(rows, ready{server: server, catalog: catalog, uncachedProxy: !cached})
 			continue
 		}
 		if catalog, ok := mcpclient.LoadCatalog(dir, server); ok {
@@ -281,6 +289,7 @@ func (e *Engine) resolveMCPSurface(ctx context.Context, turn *store.Turn, set *t
 	maxChars := snap.Tools.ToolResultLimit()
 	var extra []tool.BaseTool
 	var names []string
+	mounted := make([]mountedPanelMCP, 0, len(rows))
 	for _, row := range rows {
 		item := mcpMountServer{ID: row.server.ID, Mode: "progressive"}
 		mountable, skipped := mcpclient.PrepareDirect(row.server, row.catalog, true, nil)
@@ -300,6 +309,7 @@ func (e *Engine) resolveMCPSurface(ctx context.Context, turn *store.Turn, set *t
 			built, builtNames := e.mcp.DirectTools(row.server, set.WorkspaceDir, maxChars, mountable)
 			extra = append(extra, built...)
 			names = append(names, builtNames...)
+			mounted = append(mounted, mountedPanelMCP{server: row.server, tools: mountable})
 			record.Servers = append(record.Servers, item)
 			continue
 		}
@@ -313,6 +323,7 @@ func (e *Engine) resolveMCPSurface(ctx context.Context, turn *store.Turn, set *t
 		} else {
 			extra = append(extra, proxies...)
 			names = append(names, proxyNames...)
+			mounted = append(mounted, mountedPanelMCP{server: row.server, tools: mountable, uncachedProxy: row.uncachedProxy})
 		}
 		record.Servers = append(record.Servers, item)
 	}
@@ -326,7 +337,10 @@ func (e *Engine) resolveMCPSurface(ctx context.Context, turn *store.Turn, set *t
 	if len(record.Servers) == 0 {
 		record.Mode = "progressive"
 	}
-	return withMCPTools(set, extra, names), record, nil
+	record.PanelTools = panelMCPBindings(admission.Panel, mounted)
+	next := withMCPTools(set, extra, names)
+	bindPanelMCP(next, record.PanelTools, admission.Config.Servers)
+	return next, record, nil
 }
 
 func (e *Engine) rebuildMCPSurface(set *tools.Set, record mcpMountRecord) *tools.Set {
@@ -368,7 +382,9 @@ func (e *Engine) rebuildMCPSurface(set *tools.Set, record mcpMountRecord) *tools
 		extra = append(extra, proxies...)
 		names = append(names, proxyNames...)
 	}
-	return withMCPTools(set, extra, names)
+	next := withMCPTools(set, extra, names)
+	bindPanelMCP(next, record.PanelTools, snap.MCP.Servers)
+	return next
 }
 
 func (e *Engine) storeMCPMount(turn *store.Turn, record mcpMountRecord) {

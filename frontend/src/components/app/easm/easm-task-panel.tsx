@@ -1,6 +1,7 @@
 import { useMemo } from "react"
 import { graphSectionLoading, isEasmResult, sectionLoading } from "../../../lib/easm/data"
 import { easmText, EasmTextContext } from "../../../lib/easm/messages"
+import { projectEasmResult } from "../../../lib/easm/model"
 import { panelDefinitionCompatible } from "../../../task-panels/definition"
 import { panelText } from "../../../task-panels/messages"
 import type { TaskPanel } from "../../../task-panels/types"
@@ -15,7 +16,7 @@ export function EasmTaskPanel({ panel, visible, locale, sheet, active = false }:
     () => panelDefinitionCompatible(panel),
     [panel.definition, panel.plugin_id, panel.plugin_version],
   )
-  const result = useMemo(() => isEasmResult(panel.state) ? panel.state : undefined, [panel.state])
+  const result = useMemo(() => isEasmResult(panel.state) ? projectEasmResult(panel.state) : undefined, [panel.state])
   if (!compatible) return <p role="alert" className="p-3 text-sm">{panelText(locale, "incompatible")} {panelText(locale, "regenerateEasm")}</p>
   if (!result) return <p role="alert" className="p-3 text-sm">{panelText(locale, "invalidEasm")} {panelText(locale, "regenerateEasm")}</p>
   return <div className="min-h-0 flex-1" data-testid="easm-task-panel" data-revision={panel.revision}>

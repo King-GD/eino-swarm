@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync/atomic"
 	"testing"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/LubyRuffy/eino-swarm/internal/provider"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 	"github.com/LubyRuffy/eino-swarm/internal/taskpanel"
+	"github.com/LubyRuffy/eino-swarm/internal/tools"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -110,6 +112,7 @@ func TestEASMSourceMergesPushedBatchesThroughActualManagerHTTP(t *testing.T) {
 	})
 	if err := e.cfg.Update(func(c *config.Config) error {
 		c.MCP.Servers = []config.MCPServer{server}
+		c.MCP.DirectLoadPercent = 0 // A cold explicit progressive binding needs no saved catalog.
 		c.TaskPanels.EASM.ServerID = server.ID
 		c.TaskPanels.EASM.Tools = map[string]string{"stats": "stats_fixture", "heat": "heat_fixture", "product_rules": ""}
 		return nil
@@ -175,7 +178,8 @@ func TestEASMCallerMapsTransportOutcomes(t *testing.T) {
 	server := easmFixtureServer(t)
 	manager := mcpclient.NewManager()
 	defer manager.Close()
-	caller := &easmCaller{manager: manager, servers: []config.MCPServer{server}, serverID: server.ID, workspace: t.TempDir(), admitted: true}
+	servers := map[string]config.MCPServer{"absent_tool": server, "stats_fixture": server, "heat_fixture": server}
+	caller := &easmCaller{manager: manager, servers: servers, workspace: t.TempDir()}
 	if _, err := caller.Call(t.Context(), "absent_tool", nil); err != easm.ErrUnavailable {
 		t.Fatalf("missing tool err=%v", err)
 	}
@@ -186,10 +190,17 @@ func TestEASMCallerMapsTransportOutcomes(t *testing.T) {
 	if body, err := caller.Call(t.Context(), "heat_fixture", map[string]any{"query": easmFixtureQuery}); err != nil || len(body) == 0 {
 		t.Fatalf("body=%s err=%v", body, err)
 	}
+	manager.UseRemoteSwitches(func() []config.MCPServer {
+		current := server
+		current.DisabledTools = []string{"heat_fixture"}
+		return []config.MCPServer{current}
+	})
+	if _, err := caller.Call(t.Context(), "heat_fixture", nil); err != easm.ErrUnavailable {
+		t.Fatalf("live switch did not revoke a mounted binding: %v", err)
+	}
 	for _, unresolved := range []*easmCaller{
-		{manager: manager, servers: []config.MCPServer{server}, serverID: "other"},
-		{manager: manager, servers: []config.MCPServer{server}},
-		{servers: []config.MCPServer{server}, serverID: server.ID},
+		{manager: manager},
+		{servers: servers},
 	} {
 		if _, err := unresolved.Call(t.Context(), "heat_fixture", nil); err != easm.ErrUnavailable {
 			t.Fatalf("unresolved server err=%v", err)
@@ -199,6 +210,115 @@ func TestEASMCallerMapsTransportOutcomes(t *testing.T) {
 	cancel()
 	if _, err := caller.Call(cancelled, "heat_fixture", nil); err != context.Canceled {
 		t.Fatalf("cancelled err=%v", err)
+	}
+}
+
+func TestPanelMCPOnlyBindsToolsOnTheRecordedSurface(t *testing.T) {
+	one := config.MCPServer{ID: "one", Enabled: true}
+	two := config.MCPServer{ID: "two", Enabled: true}
+	toolsByServer := []mountedPanelMCP{
+		{server: one, tools: []mcpclient.ToolDescriptor{{OriginalName: "stats"}, {Name: "heat"}}},
+		{server: two, tools: []mcpclient.ToolDescriptor{{OriginalName: "stats"}}},
+	}
+	settings := config.EASMPanelConfig{Tools: map[string]string{"stats": "stats", "heat": "heat", "missing": "missing", "off": ""}}
+	implicit := panelMCPBindings(settings, toolsByServer)
+	if len(implicit) != 1 || implicit["heat"] != (panelMCPBinding{ServerID: "one", Name: "heat", Destination: panelMCPDestination(one)}) {
+		t.Fatalf("only a uniquely offered tool may be implicit: %+v", implicit)
+	}
+	settings.ServerID = "two"
+	explicit := panelMCPBindings(settings, toolsByServer)
+	if len(explicit) != 1 || explicit["stats"] != (panelMCPBinding{ServerID: "two", Name: "stats", Destination: panelMCPDestination(two)}) {
+		t.Fatalf("explicit owner = %+v", explicit)
+	}
+	_, proxy := mcpclient.ProxyNames("one")
+	set := &tools.Set{Names: []string{proxy, mcpclient.DirectToolName("two", "another_tool")}}
+	servers := []config.MCPServer{one, two}
+	bindPanelMCP(set, implicit, servers)
+	if set.PanelMCP["heat"].Server.ID != "one" {
+		t.Fatalf("recorded progressive tool missing: %+v", set.PanelMCP)
+	}
+	bindPanelMCP(set, explicit, servers)
+	if len(set.PanelMCP) != 0 {
+		t.Fatalf("mounted a recorded binding without its direct tool: %+v", set.PanelMCP)
+	}
+	set.Names = append(set.Names, mcpclient.DirectToolName("two", "stats"))
+	servers[1].Enabled = false
+	bindPanelMCP(set, explicit, servers)
+	if len(set.PanelMCP) != 0 {
+		t.Fatalf("rebound a disabled server: %+v", set.PanelMCP)
+	}
+}
+
+func TestPanelMCPKeepsInitialSettingsAndDoesNotRestoreToAReplacement(t *testing.T) {
+	e := newTestEngine(t)
+	var requests atomic.Int32
+	localEndpoint := func() string {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			requests.Add(1)
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}))
+		t.Cleanup(server.Close)
+		return server.URL
+	}
+	one := config.MCPServer{ID: "original", Transport: "streamable_http", URL: localEndpoint(), Enabled: true, DisabledTools: []string{"blocked"}}
+	two := config.MCPServer{ID: "late", Transport: "streamable_http", URL: localEndpoint()}
+	replacement := localEndpoint()
+	if err := e.UpdateConfig(func(c *config.Config) error {
+		c.MCP.DirectLoadPercent = 0
+		c.MCP.Servers = []config.MCPServer{one, two}
+		c.TaskPanels.EASM.ServerID = one.ID
+		c.TaskPanels.EASM.Tools = map[string]string{"stats": "original_tool", "heat": "blocked", "product_rules": ""}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	thread, err := e.CreateThread("Portrait admission before first request", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	set, err := e.conversationTools(t.Context(), thread)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.UpdateConfig(func(c *config.Config) error {
+		c.MCP.Servers[0].DisabledTools = nil
+		c.MCP.Servers[1].Enabled = true
+		c.TaskPanels.EASM.ServerID = two.ID
+		c.TaskPanels.EASM.Tools["stats"] = "other_tool"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	turn := &store.Turn{ID: "easm-settings-receipt", ThreadID: thread.ID}
+	mounted, record, err := e.resolveMCPSurface(t.Context(), turn, set)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, lateProxy := mcpclient.ProxyNames(two.ID)
+	if slices.Contains(mounted.Names, lateProxy) || len(mounted.PanelMCP) != 1 ||
+		mounted.PanelMCP["stats"].Name != "original_tool" || mounted.PanelMCP["stats"].Server.ID != one.ID {
+		t.Fatalf("initial settings were overwritten: %+v %+v", mounted.Names, record.PanelTools)
+	}
+	e.storeMCPMount(turn, record)
+	loaded, ok := e.loadMCPMount(turn.ID)
+	if !ok {
+		t.Fatal("missing the recorded mount")
+	}
+	restored := e.rebuildMCPSurface(set, loaded)
+	if len(restored.PanelMCP) != 1 || restored.PanelMCP["stats"].Name != "original_tool" {
+		t.Fatalf("restored a different binding: %+v", restored.PanelMCP)
+	}
+	if err := e.UpdateConfig(func(c *config.Config) error {
+		c.MCP.Servers[0].URL = replacement
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.rebuildMCPSurface(set, loaded).PanelMCP; len(got) != 0 {
+		t.Fatalf("redirected the original panel binding to a replacement: %+v", got)
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("cold progressive admission contacted MCP %d times", requests.Load())
 	}
 }
 
@@ -288,8 +408,113 @@ func TestRestrictedAccountPanelSourceMakesNoMCPCall(t *testing.T) {
 	}
 }
 
-// One admission rule decides whether a turn may use MCP; plan and read-only
-// turns are refused, and a context without a decision is not admitted.
+// The settings save happens after the model has received this turn's tools.
+// The panel and the model must see the same server admission until the next turn.
+func TestEASMServerEnabledMidTurnWaitsForTheNextTurn(t *testing.T) {
+	var requests, calls atomic.Int32
+	const heatTool = "heat_fixture"
+	remote := mcp.NewServer(&mcp.Implementation{Name: "easm-admission", Version: "test"}, nil)
+	remote.AddTool(&mcp.Tool{Name: heatTool, InputSchema: map[string]any{"type": "object"}}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		calls.Add(1)
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: `{"hot_trend":[]}`}}}, nil
+	})
+	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return remote }, nil)
+	endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		handler.ServeHTTP(w, r)
+	}))
+	t.Cleanup(endpoint.Close)
+	server := config.MCPServer{ID: "easm-admission", Transport: "streamable_http", URL: endpoint.URL, TimeoutSeconds: 3}
+	var engine *Engine
+	var panelID string
+	engine, model := newScheduleCompletionHTTPEngine(t, func(w http.ResponseWriter, _ *http.Request, step int, request scheduleCompletionRequest) {
+		switch step {
+		case 1:
+			easmToolCall(w, request, "admission-open", "open_task_panel", `{"plugin_id":"easm-asset-portrait"}`)
+		case 2, 4:
+			if step == 2 {
+				var panel taskpanel.Panel
+				if err := json.Unmarshal([]byte(request.Messages[len(request.Messages)-1].Content), &panel); err != nil {
+					t.Error(err)
+				}
+				panelID = panel.ID
+				if err := engine.UpdateConfig(func(c *config.Config) error {
+					c.MCP.Servers[0].Enabled = true
+					return nil
+				}); err != nil {
+					t.Error(err)
+				}
+			}
+			raw, _ := json.Marshal(map[string]any{"panel_id": panelID, "input": map[string]any{"subject": "Fixture", "query": easmFixtureQuery}})
+			easmToolCall(w, request, fmt.Sprintf("admission-collect-%d", step), "run_panel_source", string(raw))
+		default:
+			writeContextFlowReply(w, request.Stream, map[string]any{"content": "done"}, "stop")
+		}
+	})
+	if err := engine.UpdateConfig(func(c *config.Config) error {
+		c.MCP.Servers = []config.MCPServer{server}
+		c.TaskPanels.EASM.ServerID = server.ID
+		c.TaskPanels.EASM.Tools = map[string]string{"stats": "", "heat": heatTool, "product_rules": ""}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	thread, err := engine.CreateThread("Portrait admission", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := func(text, wantStatus string) {
+		t.Helper()
+		turn, err := engine.StartTurn(thread.ID, text)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := waitForTurn(t, engine, turn.ID); got.Status != store.TurnDone {
+			t.Fatalf("turn = %+v", got)
+		}
+		waitSettled(t, engine, thread.ID)
+		panels, err := engine.store.TaskPanels(t.Context(), thread.ID)
+		if err != nil || len(panels) != 1 {
+			t.Fatalf("panels=%v err=%v", panels, err)
+		}
+		var state easm.State
+		if err := json.Unmarshal(panels[0].State, &state); err != nil {
+			t.Fatal(err)
+		}
+		if !slices.ContainsFunc(state.Collection.Steps, func(status easm.StepStatus) bool {
+			return status.ID == easm.StepHeat && status.Status == wantStatus
+		}) {
+			t.Errorf("want heat %s, got %+v", wantStatus, state.Collection.Steps)
+		}
+	}
+	run("Collect the portrait", "unavailable")
+	if requests.Load() != 0 || calls.Load() != 0 {
+		t.Errorf("first turn reached the late-enabled MCP endpoint: HTTP=%d calls=%d", requests.Load(), calls.Load())
+	}
+
+	run("Collect the missing aggregation", "done")
+	if calls.Load() != 1 {
+		t.Errorf("the next turn reached the MCP aggregation %d times", calls.Load())
+	}
+	list, call := mcpclient.ProxyNames(server.ID)
+	direct := mcpclient.DirectToolName(server.ID, heatTool)
+	modelRequests := model.snapshot()
+	if len(modelRequests) != 5 {
+		t.Fatalf("got %d manager requests", len(modelRequests))
+	}
+	for i, request := range modelRequests {
+		visible := false
+		for _, tool := range request.Tools {
+			name := tool.Function.Name
+			visible = visible || name == list || name == call || name == direct
+		}
+		if visible != (i >= 3) {
+			t.Errorf("manager request %d exposed MCP = %v", i+1, visible)
+		}
+	}
+}
+
+// Plan and read-only turns cannot build a tool set with MCP bindings.
 func TestTurnMCPAdmissionFollowsPlanAndReadOnly(t *testing.T) {
 	e, _ := newScheduleCompletionHTTPEngine(t, func(w http.ResponseWriter, _ *http.Request, _ int, request scheduleCompletionRequest) {
 		writeContextFlowReply(w, request.Stream, map[string]any{"content": "done"}, "stop")
@@ -297,8 +522,5 @@ func TestTurnMCPAdmissionFollowsPlanAndReadOnly(t *testing.T) {
 	th := &store.Thread{}
 	if !e.turnMountsMCP(th, false) || e.turnMountsMCP(th, true) || e.turnMountsMCP(&store.Thread{PlanMode: true}, false) || e.turnMountsMCP(nil, false) {
 		t.Fatal("admission does not follow plan and read-only modes")
-	}
-	if mcpAdmitted(t.Context()) || !mcpAdmitted(withMCPAdmission(t.Context(), true)) {
-		t.Fatal("a context without a decision must not be admitted")
 	}
 }

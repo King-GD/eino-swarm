@@ -29,8 +29,9 @@ const (
 
 // Limits carries a current host budget; zero leaves the protocol ceiling active.
 type Limits struct {
-	MaxStateBytes  int
-	MaxUpdateBytes int
+	MaxStateBytes       int
+	MaxUpdateBytes      int
+	ValidateStateChange func(Definition, json.RawMessage, json.RawMessage) error
 }
 
 // Errors preserve input, optimistic concurrency and missing-owner categories.

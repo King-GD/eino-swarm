@@ -139,6 +139,20 @@ type Set struct {
 	// WorkspaceDir is the directory relative paths resolve against.
 	WorkspaceDir        string
 	TaskFileInstruction string
+	// MCPAdmission pins the configuration before proxy and direct tools are built.
+	MCPAdmission *MCPAdmission
+	// PanelMCP contains the producer bindings admitted with the mounted MCP surface.
+	PanelMCP map[string]PanelMCPTool
+}
+
+type MCPAdmission struct {
+	Config config.MCPConfig
+	Panel  config.EASMPanelConfig
+}
+
+type PanelMCPTool struct {
+	Name   string
+	Server config.MCPServer
 }
 
 // Build assembles the toolset for one conversation.

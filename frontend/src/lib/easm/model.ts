@@ -10,6 +10,47 @@ export const displayKind = (node: EasmNode): DisplayKind =>
 
 export const kindLabel = (kind: DisplayKind, text: EasmText): string => text.kinds[kind]
 
+/** Display the confirmed subject's source tree without rewriting saved clues. */
+export function projectEasmResult(result: EasmResult): EasmResult {
+  const root = result.nodes.find((node) => node.kind === "root")
+  if (!root) return result
+
+  const candidates = new Set<string>()
+  const serials = new Set<string>()
+  for (const node of result.nodes) {
+    const savedSerial = node.detail?.serial
+    const serial = displayKind(node) === "cert" && typeof savedSerial === "string" ? savedSerial.trim() : ""
+    // Older portraits could save one node per issuer for the same serial.
+    // Node order is discovery order, so only the first keeps its source link.
+    if (serial && serials.has(serial)) continue
+    if (serial) serials.add(serial)
+    candidates.add(node.id)
+  }
+  const children = new Map<string, string[]>()
+  for (const { source, target } of result.edges) {
+    if (!candidates.has(source) || !candidates.has(target)) continue
+    const targets = children.get(source) ?? []
+    targets.push(target)
+    children.set(source, targets)
+  }
+
+  const reachable = new Set<string>()
+  const pending = [root.id]
+  while (pending.length) {
+    const id = pending.pop()!
+    if (reachable.has(id)) continue
+    reachable.add(id)
+    for (const child of children.get(id) ?? []) pending.push(child)
+  }
+
+  if (reachable.size === result.nodes.length) return result
+  return {
+    ...result,
+    nodes: result.nodes.filter((node) => reachable.has(node.id)),
+    edges: result.edges.filter((edge) => reachable.has(edge.source) && reachable.has(edge.target)),
+  }
+}
+
 /** Precomputed lookups the graph, card and search share. */
 export interface EasmIndex {
   byId: Map<string, EasmNode>

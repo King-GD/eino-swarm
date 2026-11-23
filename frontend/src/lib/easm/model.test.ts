@@ -2,7 +2,7 @@ import { easmText } from "./messages"
 import { describe, expect, it } from "vitest"
 import {
   basisText, displayKind, graphLabel, highlightIds, hotDays, indexResult, isSafeLink, kindLabel, layoutOrder,
-  nodeRadius, searchNodes, sortComponents, summaryStats, validity, visibleIds, wrapLabel,
+  nodeRadius, projectEasmResult, searchNodes, sortComponents, summaryStats, validity, visibleIds, wrapLabel,
 } from "./model"
 import type { EasmNode, EasmResult } from "./types"
 
@@ -20,6 +20,28 @@ const result: EasmResult = {
 const zh = easmText("zh")
 
 describe("EASM model", () => {
+  it("shows only root-reachable clues and keeps a certificate under its first saved source", () => {
+    const certificate = result.nodes[4]
+    const other = node("other-domain", "domain", { detail: { features: [{ kind: "cert", value: certificate.label, node_id: certificate.id }] } })
+    const duplicate = node("newer-cert", "feature", { featureKind: "cert", detail: { ...certificate.detail, issuer: "Other CA" } })
+    const detached = [node("detached-a", "company"), node("detached-b", "company")]
+    const saved: EasmResult = {
+      ...result, nodes: [...result.nodes, other, duplicate, ...detached],
+      edges: [
+        { source: "r", target: other.id }, { source: other.id, target: duplicate.id }, ...result.edges,
+        { source: "detached-a", target: "detached-b" }, { source: "detached-b", target: "detached-a" },
+      ],
+    }
+    const projection = projectEasmResult(saved)
+    const index = indexResult(projection)
+    expect(projection.nodes.map((item) => item.id)).toEqual(["r", "c", "d", "o", "cert", other.id])
+    expect(projection.edges).toEqual([saved.edges[0], ...result.edges])
+    expect(index.children.get("d")).toEqual([certificate])
+    expect(index.children.has(other.id)).toBe(false)
+    expect(saved.nodes).toContain(duplicate)
+    expect(saved.edges).toContainEqual({ source: "detached-b", target: "detached-a" })
+  })
+
   it("derives feature members and groups asset organizations apart from certificate subjects", () => {
     const index = indexResult(result)
     expect(index.rootId).toBe("r")

@@ -1,10 +1,13 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test"
 import { writeFile } from "node:fs/promises"
+import { firstCertificate, firstDomain, laterDomain, nextDomain, rootedEasmNodeIds, savedEasmGraph, updatedEasmGraph } from "../../frontend/e2e/easm-graph-fixture"
+
+type GraphStage = HTMLDivElement & { __easmNodePoint?: (id: string) => { x: number; y: number } | undefined }
 
 test.use({ screenshot: "only-on-failure", trace: "retain-on-failure" })
 
-async function control(page: Page, kind: "show" | "patch" | "snapshot" | "remove", panelId = "mobile-map") {
-  await page.evaluate(({ kind, panel_id }) => window.dispatchEvent(new CustomEvent("zwai.mock.task-panel", { detail: { kind, panel_id } })), { kind, panel_id: panelId })
+async function control(page: Page, kind: "show" | "patch" | "snapshot" | "remove", panelId = "mobile-map", state?: unknown) {
+  await page.evaluate((detail) => window.dispatchEvent(new CustomEvent("zwai.mock.task-panel", { detail })), { kind, panel_id: panelId, state })
 }
 async function capture(page: Page, info: TestInfo, name: string) {
   await writeFile(info.outputPath(name), await page.screenshot(), { mode: 0o600 })
@@ -12,6 +15,54 @@ async function capture(page: Page, info: TestInfo, name: string) {
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("zwai.phone.locale", "en"))
   await page.setViewportSize({ width: 390, height: 844 })
+})
+
+test("paired EASM shows the first certificate source and hides detached clues after reopening", async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.goto("/?mock=1&tick=0&panels=easm")
+  await expect(page.getByTestId("transcript")).toBeVisible()
+  await control(page, "snapshot", "mobile-easm", savedEasmGraph)
+  const sheet = page.getByRole("dialog", { name: "Task panels" })
+  const panel = sheet.getByTestId("easm-task-panel")
+  const stage = panel.getByTestId("easm-graph")
+  const card = panel.getByTestId("easm-node-card")
+  async function expectRootedGraph(includesNextBatch: boolean) {
+    await expect(stage).toHaveAttribute("data-ready", "true")
+    const ids = updatedEasmGraph.nodes.map(({ id }) => id)
+    await expect.poll(() => stage.evaluate((element, nodes) => nodes.filter((id) => (element as GraphStage).__easmNodePoint?.(id)), ids))
+      .toEqual(includesNextBatch ? [...rootedEasmNodeIds, nextDomain.id] : rootedEasmNodeIds)
+  }
+  async function openDomain(domain: typeof firstDomain) {
+    const point = await stage.evaluate((element, id) => (element as GraphStage).__easmNodePoint?.(id), domain.id)
+    if (!point) throw new Error(`Missing canvas position for ${domain.id}`)
+    await stage.click({ position: point })
+    await expect(card.getByRole("heading", { name: domain.label, exact: true })).toBeVisible()
+  }
+
+  await expect(panel).toHaveAttribute("data-revision", "1")
+  await expectRootedGraph(false)
+  await expect(stage).toHaveAttribute("data-layout-moving", "false", { timeout: 20_000 })
+  await openDomain(laterDomain)
+  await expect(card.getByText("No saved effective features")).toBeVisible()
+  await expect(card.getByRole("button", { name: /certificate/i })).toHaveCount(0)
+  await card.getByRole("button", { name: "Close node card" }).click()
+
+  // Opening the certificate zooms the graph, so inspect its source last.
+  await openDomain(firstDomain)
+  await card.getByRole("button", { name: firstCertificate.label, exact: true }).click()
+  await expect(card.getByRole("heading", { name: firstCertificate.label, exact: true })).toBeVisible()
+  await expect(card.getByText(firstCertificate.detail.serial, { exact: true })).toBeVisible()
+  await card.getByRole("button", { name: "Close node card" }).click()
+
+  await control(page, "snapshot", "mobile-easm", updatedEasmGraph)
+  await expect(panel).toHaveAttribute("data-revision", "2")
+  await expectRootedGraph(true)
+
+  await sheet.getByRole("button", { name: "Close", exact: true }).click()
+  await expect(sheet).toHaveCount(0)
+  await page.getByRole("button", { name: "Task panels", exact: true }).click()
+  await expect(panel).toHaveAttribute("data-revision", "2")
+  await expectRootedGraph(true)
 })
 
 test("a paired task opens its local map once and preserves touch zoom through patch, hidden snapshot and rotation", async ({ page }, info) => {

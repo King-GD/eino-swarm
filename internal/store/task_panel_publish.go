@@ -71,6 +71,11 @@ func (s *Store) PublishTaskPanel(ctx context.Context, src taskpanel.Source, u ta
 		if budget.MaxStateBytes > 0 && len(state) > budget.MaxStateBytes {
 			return fmt.Errorf("%w: state exceeds configured byte budget", taskpanel.ErrInvalid)
 		}
+		if budget.ValidateStateChange != nil {
+			if err := budget.ValidateStateChange(panel.Definition, row.State, state); err != nil {
+				return fmt.Errorf("%w: %v", taskpanel.ErrInvalid, err)
+			}
+		}
 		if panel.Source != src || row.SourceStatus != "running" {
 			row.SourceStatus = ""
 		}

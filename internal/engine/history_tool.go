@@ -37,9 +37,7 @@ type historyContext struct {
 	ProjectName string `json:"project_name"`
 }
 
-// turnMountsMCP is the one admission rule for remote MCP tools in a turn. A
-// panel producer calling MCP on the agent's behalf must pass the same rule, or
-// a restricted account would reach tools it was never given.
+// turnMountsMCP gates construction of the MCP surface for a turn.
 func (e *Engine) turnMountsMCP(th *store.Thread, readOnly bool) bool {
 	if e.mcp == nil || th == nil || th.PlanMode || readOnly {
 		return false
@@ -70,6 +68,7 @@ func (e *Engine) conversationToolsForExecution(ctx context.Context, th *store.Th
 	set.TaskFileInstruction = e.taskWorkspaceInstruction(th)
 	if e.turnMountsMCP(th, readOnly) {
 		cfg := e.cfg.Snapshot()
+		set.MCPAdmission = &tools.MCPAdmission{Config: cfg.MCP, Panel: cfg.TaskPanels.EASM}
 		external, err := e.mcp.Tools(ctx, cfg.MCP.Servers, set.WorkspaceDir, cfg.Tools.ToolResultLimit())
 		if err != nil {
 			return nil, err

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
@@ -76,34 +77,30 @@ func TestProducerToolErrorDoesNotBlockTheTask(t *testing.T) {
 	}
 }
 
-// Only one enabled server may own a tool name; two candidates are ambiguous.
-func TestServerOfferingNeedsOneEnabledServer(t *testing.T) {
-	dir := t.TempDir()
-	m := NewManager()
-	defer m.Close()
-	m.SetCatalogDir(dir)
-	one := config.MCPServer{ID: "one", Transport: "stdio", Command: "one", Enabled: true}
-	two := config.MCPServer{ID: "two", Transport: "stdio", Command: "two", Enabled: true}
-	off := config.MCPServer{ID: "off", Transport: "stdio", Command: "off", Enabled: false}
-	for _, server := range []config.MCPServer{one, two, off} {
-		if err := SaveCatalog(dir, server, Catalog{ServerID: server.ID, Tools: []ToolDescriptor{{Name: server.ID + "_x", OriginalName: "lookup"}}}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if got, ok := m.ServerOffering([]config.MCPServer{one, off}, "lookup"); !ok || got.ID != "one" {
-		t.Fatalf("single owner = %v %v", got.ID, ok)
-	}
-	if _, ok := m.ServerOffering([]config.MCPServer{one, two}, "lookup"); ok {
-		t.Fatal("ambiguous owner was chosen")
-	}
-	one.DisabledTools = []string{"lookup"}
-	if _, ok := m.ServerOffering([]config.MCPServer{one}, "lookup"); ok {
-		t.Fatal("switched-off tool was offered")
-	}
-	if _, ok := m.ServerOffering([]config.MCPServer{two}, "other"); ok {
-		t.Fatal("unknown tool was offered")
-	}
+func TestProducerDoesNotInventAnEmptyResult(t *testing.T) {
 	if replyBody(nil) != nil || replyBody(&mcp.CallToolResult{}) != nil {
 		t.Fatal("empty result produced a body")
+	}
+}
+
+func TestDisabledProducerToolDoesNotOpenAConnection(t *testing.T) {
+	var requests atomic.Int32
+	endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(endpoint.Close)
+	server := config.MCPServer{ID: "fixture", Transport: "streamable_http", URL: endpoint.URL, Enabled: true}
+	m := NewManager()
+	t.Cleanup(m.Close)
+	m.UseRemoteSwitches(func() []config.MCPServer {
+		current := server
+		current.DisabledTools = []string{"lookup"}
+		return []config.MCPServer{current}
+	})
+	_, err := m.CallTool(t.Context(), server, t.TempDir(), "lookup", nil)
+	var failure *Error
+	if !errors.As(err, &failure) || failure.Code != "tool_switched_off" || requests.Load() != 0 {
+		t.Fatalf("disabled tool opened an MCP connection: requests=%d err=%v", requests.Load(), err)
 	}
 }
