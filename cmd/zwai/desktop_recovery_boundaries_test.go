@@ -484,6 +484,9 @@ func TestRecoveryTargetCancellationAfterMetadataKeepsItsCause(t *testing.T) {
 
 func TestRecoveryReporterStaysNonblockingWhileTraceAndJournalFail(t *testing.T) {
 	spec, _ := recoveryEngineFixture(t)
+	// A successor's probe failure also starts a resource sample. Its GET and
+	// independent shutdown wait would contaminate the Trace observations.
+	spec.Generation = 0
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -500,6 +503,7 @@ func TestRecoveryReporterStaysNonblockingWhileTraceAndJournalFail(t *testing.T) 
 	spec.Engine.URL = "http://" + listener.Addr().String()
 	spec.Journal = t.TempDir()
 	report, finish := desktopRecoveryReporter(spec)
+	defer finish()
 	report(desktop.RecoveryDiagnostic{SessionID: spec.SessionID, Phase: "probe_failed", At: time.Now()})
 	select {
 	case <-accepted:

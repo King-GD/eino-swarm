@@ -256,7 +256,8 @@ func TestPhoneAskingForHumanDoesNotReadActionHistory(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.StartTurn(th.ID, "Inspect the current state."); err != nil {
+	turn, err := e.StartTurn(th.ID, "Inspect the current state.")
+	if err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
@@ -266,9 +267,21 @@ func TestPhoneAskingForHumanDoesNotReadActionHistory(t *testing.T) {
 	if !e.Status(th.ID).AwaitingAnswer {
 		t.Fatal("real manager ask did not pause for a human")
 	}
+
+	// Turn setup already replayed history on this same store. Measure only
+	// the reads made while taking the phone snapshot of the armed question.
+	before := actionReads.Load()
 	view := runningView(e, th, 80)
-	if reads := actionReads.Load(); view.Action != "ask_user" || !view.AskUser || reads != 0 {
-		t.Fatalf("human question=%+v action reads=%d", view, reads)
+	if reads := actionReads.Load() - before; view.TurnID != turn.ID || view.Action != "ask_user" || !view.AskUser || reads != 0 {
+		t.Fatalf("human question=%+v action reads during snapshot=%d", view, reads)
+	}
+
+	// The same observer must detect the ordinary action preview query.
+	if _, err := e.Store().ListTailEventsByKinds(th.ID, turn.ID, []string{"agent_message"}, 0, previewReadPage); err != nil {
+		t.Fatal(err)
+	}
+	if actionReads.Load() == before {
+		t.Fatal("ordinary preview query escaped the action read observer")
 	}
 }
 
