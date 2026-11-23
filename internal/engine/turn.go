@@ -248,9 +248,9 @@ func (rt *runtime) close() {
 
 // wireWorkerSurface is the worker half of a turn: workspace tools, skill_view
 // when the project has memory, and the host snapshot plus that memory index.
-// Writes stay off this surface. A parked registry is re-wired at the next
+// Memory writes stay off this surface. A parked registry is re-wired at the next
 // start so a later turn cannot keep yesterday's toolset.
-func (e *Engine) wireWorkerSurface(reg *swarm.Registry, toolset *tools.Set, pc *projectContext) {
+func (e *Engine) wireWorkerSurface(reg *swarm.Registry, toolset *tools.Set, pc *projectContext, turn *store.Turn) {
 	if reg == nil || toolset == nil {
 		return
 	}
@@ -261,8 +261,10 @@ func (e *Engine) wireWorkerSurface(reg *swarm.Registry, toolset *tools.Set, pc *
 		return nil, fmt.Errorf("workers cannot ask")
 	}))
 	workers = append(workers, denyScheduleTools()...)
-	reg.SubAgentTools = workers
-	reg.WorkerPreamble = JoinPromptSections(WorkerEnvironmentPrompt(toolset.WorkspaceDir), toolset.TaskFileInstruction, ExecFileSearchPrompt(toolset.Names), historyPrompt(toolset, historyForWorker), pc.workerPreambleTail())
+	reg.SubAgentTools = append(workers, e.knowledgeTools(pc, turn, false)...)
+	reg.WorkerPreamble = JoinPromptSections(WorkerEnvironmentPrompt(toolset.WorkspaceDir), toolset.TaskFileInstruction,
+		ExecFileSearchPrompt(toolset.Names), historyPrompt(toolset, historyForWorker), pc.workerPreambleTail(),
+		pc.knowledgePrompt(turn != nil && turn.NuwaReadOnly))
 	reg.ToolOutputBinder = tools.BindToolOutput
 	if reg.WorkerContextValues == nil {
 		reg.WorkerContextValues = historyWorkerContextValues
@@ -424,7 +426,7 @@ func (e *Engine) startTurnInput(threadID string, in UserInput) (*store.Turn, err
 		executorModel = strings.TrimSpace(pc.project.NuwaExecutorModel)
 	}
 	webExecution := e.turnWebExecution(th, nil)
-	toolset, err := e.conversationToolsForExecution(context.Background(), th, webExecution, false)
+	toolset, err := e.conversationToolsForExecution(context.Background(), th, webExecution, false, pc.hasKnowledge())
 	if err != nil {
 		return nil, err
 	}

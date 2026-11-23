@@ -2,9 +2,11 @@ import { useEffect } from "react"
 import { RightPanel, type PanelTab } from "./panel"
 import { api } from "@/lib/api"
 import { LIBRARY_ID } from "@/lib/library"
+import { useT } from "@/lib/use-t"
 import { useApp } from "@/store/app"
 import { projectOf, useProjects } from "@/store/projects"
 import { useCoveredTranscript } from "@/store/settings-sheet"
+import { useTraceFocus } from "@/store/trace-focus"
 
 export function AppPanel({
   tab,
@@ -15,6 +17,7 @@ export function AppPanel({
   onTabChange: (tab: PanelTab) => void
   focusSkill?: { projectId: string; name?: string }
 }) {
+  const t = useT()
   const transcript = useCoveredTranscript()
   const selectedAgent = useApp((s) => s.selectedAgent)
   const selectAgent = useApp((s) => s.selectAgent)
@@ -59,10 +62,9 @@ export function AppPanel({
   const reviewTurnId = useProjects((s) => s.reviewTurnId)
   const reviewThreadId = useProjects((s) => s.reviewThreadId)
   const reviewProjectId = useProjects((s) => s.reviewProjectId)
-  const conversationProject = projectOf(
-    projects,
-    threads.find((t) => t.id === activeId)?.project_id,
-  )
+  const activeThread = threads.find(({ id }) => id === activeId)
+  const conversationProject = projectOf(projects, activeThread?.project_id)
+  const knowledgeProject = activeId ? conversationProject : projectOf(projects, selectedProjectId)
   useEffect(() => {
     if (tab === "files") void refreshFiles()
     return () => setFileScope("task")
@@ -110,7 +112,36 @@ export function AppPanel({
       turns={turns}
       meta={meta}
       threadId={activeId}
-      nuwaProject={conversationProject ?? (!activeId ? projectOf(projects, selectedProjectId) : undefined)}
+      nuwaProject={knowledgeProject}
+      knowledge={activeId || knowledgeProject ? {
+        project: knowledgeProject,
+        thread: activeThread,
+        onDistill: async (scope) => {
+          if (!knowledgeProject || (scope === "thread" && !activeThread)) return
+          const app = useApp.getState()
+          if (app.creatingThread) throw new Error(t("knowledge.distillBusy"))
+          const title = scope === "thread" && activeThread
+            ? t("knowledge.distillTaskTitle", { title: activeThread.title })
+            : t("knowledge.distillProjectTitle")
+          const prompt = scope === "thread" && activeThread
+            ? t("knowledge.distillTaskPrompt", { id: activeThread.id, title: JSON.stringify(activeThread.title) })
+            : t("knowledge.distillProjectPrompt")
+          useProjects.getState().select(knowledgeProject.id)
+          const id = await app.newThread(knowledgeProject.id, undefined, title)
+          if (!id || !await useApp.getState().send(prompt, undefined, { threadId: id })) {
+            throw new Error(useApp.getState().error || t("knowledge.distillFailed"))
+          }
+        },
+        onOpenThread: async (threadId) => {
+          await useApp.getState().openThread(threadId)
+        },
+        onTrace: async (threadId, turnId) => {
+          if (useApp.getState().activeId !== threadId) await useApp.getState().openThread(threadId)
+          if (useApp.getState().activeId !== threadId) return
+          await useApp.getState().loadUntilTurn(turnId)
+          if (useApp.getState().activeId === threadId) useTraceFocus.getState().open(turnId)
+        },
+      } : undefined}
       memory={
         memoryTarget
           ? {

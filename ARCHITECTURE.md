@@ -2596,6 +2596,7 @@ $ZWAI_HOME (default ~/.zwai-swarm)
 └── projects/<project>/
     ├── workspace/         only when the project has no workdir of its own
     ├── installed-skills/  explicit external Agent Skills bundles
+    ├── knowledge/         schema.yaml + pages/<type-dir>/<page-id>.md
     └── memory/            MEMORY.md + skills/<name>/SKILL.md
                            (a copy adds origin_project / origin_name / origin_digest;
                             origin_project `library` is the shared library, not a project row)
@@ -2626,6 +2627,24 @@ A request holding the old catalog cannot publish a staged upload.
 Deleting a conversation removes only its app-managed task files. Project
 deletion preserves user-selected workdirs and task roots still owned by other
 conversations, even when those roots are physically under the deleted project.
+
+## Project knowledge
+
+`internal/knowledge` owns project Markdown files and rebuilds an in-memory
+index from schema and page stat signatures. The schema defines types, field
+requirements, typed links and navigation views. Pages occupy type folders,
+while relationship views expand ID-based graphs across multiple parents and
+stop on repeats in the current path. One request changes one file, with
+revision comparison and atomic publication. A host-validated history citation
+stores the original record identity so a recycled sequence number cannot
+rebind it after a rewind.
+
+The engine binds knowledge tools to the project and turn. It stamps page
+updates, resolves and classifies historical sources, and injects a bounded
+schema summary at turn setup. HTTP reads reuse the same index. The right
+inspector uses existing tool results and turn completion to refresh. Distill
+creates a normal project conversation and submits a localized scope request
+through the existing delivery path. See [the design](docs/plans/2026-11-23-project-knowledge-design.md).
 
 ## Integrated terminal
 

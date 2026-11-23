@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react"
+import { act, render, screen, within } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { RightPanel } from "./panel"
 import { emptyTranscript } from "@/lib/transcript"
@@ -52,7 +52,10 @@ describe("Project collaboration mode", () => {
     const onTabChange = vi.fn()
     const enabled = { ...project, nuwa_enabled: true }
     const view = render(<RightPanel {...props} onTabChange={onTabChange} tab="task-panels" threadId="first" nuwaProject={enabled} />)
-    expect(screen.getAllByRole("tab").slice(0, 2).map((item) => item.textContent)).toEqual(["Task panels", "Collaboration"])
+    const taskTabs = within(screen.getByRole("group", { name: "Task" }))
+    const projectTabs = within(screen.getByRole("group", { name: enabled.name }))
+    expect(taskTabs.getByRole("tab", { name: "Task panels" })).toHaveAttribute("aria-selected", "true")
+    expect(projectTabs.getByRole("tab", { name: "Collaboration" })).toHaveAttribute("aria-selected", "false")
     const frame = screen.getByTestId("registered-frame")
     expect(frame).toHaveTextContent(progress.id)
     expect(screen.queryByText(foreign.id)).toBeNull()

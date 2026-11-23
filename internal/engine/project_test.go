@@ -614,7 +614,7 @@ func toolNames(t *testing.T, tools []tool.BaseTool) map[string]bool {
 
 func TestNilProjectContextDoesNotInventMemoryTools(t *testing.T) {
 	e := newTestEngine(t)
-	e.wireWorkerSurface(nil, nil, nil)
+	e.wireWorkerSurface(nil, nil, nil, nil)
 	th, _ := e.CreateThread("t", "", "")
 	set := buildTestToolset(t, e, th.ID)
 	if (*projectContext)(nil).workerTools(nil) != nil {

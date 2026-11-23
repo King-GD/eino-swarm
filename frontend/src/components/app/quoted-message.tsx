@@ -1,5 +1,6 @@
 import { Pencil, Trash2 } from "lucide-react"
 
+import { KnowledgePlainText } from "@/components/app/knowledge-link-open"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useT } from "@/lib/use-t"
@@ -91,7 +92,7 @@ export function QuotedMessageBody({
   const parsed = parseQuotedMessage(text)
   if (parsed.quotes.length === 0) {
     return (
-      <p className={cn("stream-text whitespace-pre-wrap", className)}>{text}</p>
+      <p className={cn("stream-text whitespace-pre-wrap", className)}><KnowledgePlainText text={text} /></p>
     )
   }
   return (
@@ -103,7 +104,7 @@ export function QuotedMessageBody({
         <QuoteSnippet key={`${i}-${q.slice(0, 24)}`} index={i} text={q} />
       ))}
       {parsed.body ? (
-        <p className="stream-text whitespace-pre-wrap">{parsed.body}</p>
+        <p className="stream-text whitespace-pre-wrap"><KnowledgePlainText text={parsed.body} /></p>
       ) : null}
     </div>
   )

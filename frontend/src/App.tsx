@@ -19,6 +19,7 @@ import { DeleteProjectDialog } from "@/components/app/delete-project-dialog"
 import { EmptyState } from "@/components/app/empty-state"
 import { ExternalSkillsDialog } from "@/components/app/external-skills-dialog"
 import { FindBar, useFindController } from "@/components/app/find-bar"
+import { KnowledgeLinkProvider } from "@/components/app/knowledge-link-open"
 import type { PanelTab } from "@/components/app/panel"
 import { AppPanel } from "@/components/app/app-panel"
 import { useRegisteredInspectorAutoOpen } from "@/components/app/inspector-panels"
@@ -57,6 +58,7 @@ import { desktopShell, openLinksNatively } from "@/lib/shell"
 import { applyTheme, useApp } from "@/store/app"
 import { waitingThreadIds } from "@/store/app-schedule"
 import { useSideChat } from "@/store/app-side-chat"
+import { useKnowledge } from "@/store/knowledge"
 import { useTraceFocus } from "@/store/trace-focus"
 import { useProjects } from "@/store/projects"
 import { useTerminal } from "@/store/terminal"
@@ -198,6 +200,12 @@ function AppShell() {
     setPanelOpen(true)
     setPanelTab(tab)
   }, [])
+  const openKnowledgePage = useCallback((page: string) => {
+    const { activeId, threads } = useApp.getState()
+    const owner = threads.find(({ id }) => id === activeId)?.project_id
+    if (owner) useKnowledge.getState().openPage(owner, page)
+    showInspector("knowledge")
+  }, [showInspector])
   useRegisteredInspectorAutoOpen(activeId, showInspector)
   const traceRequest = useTraceFocus((s) => s.request)
   useEffect(() => useTraceFocus.getState().clear(), [activeId])
@@ -462,14 +470,16 @@ function AppShell() {
             inert={loginWall || undefined}
           >
             <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden">
-              <TranscriptPane
-                onSelectAgent={openAgent}
-                onPickIdea={pickIdea}
-                onEditQueuedSteer={editUnreadSteer}
-                findQuery={findOpen ? findQuery : ""}
-                findIndex={findIndex}
-                onFindCount={setFindTotal}
-              />
+              <KnowledgeLinkProvider open={openKnowledgePage}>
+                <TranscriptPane
+                  onSelectAgent={openAgent}
+                  onPickIdea={pickIdea}
+                  onEditQueuedSteer={editUnreadSteer}
+                  findQuery={findOpen ? findQuery : ""}
+                  findIndex={findIndex}
+                  onFindCount={setFindTotal}
+                />
+              </KnowledgeLinkProvider>
             </div>
             <AppComposer
               prefill={prefill}
@@ -502,14 +512,16 @@ function AppShell() {
         </div>
 
         {panelOpen && !side.shown ? (
-          <AppPanel
-            tab={panelTab}
-            onTabChange={(tab) => {
-              if (tab !== "memory") setFocusSkill(undefined)
-              setPanelTab(tab)
-            }}
-            focusSkill={focusSkill}
-          />
+          <KnowledgeLinkProvider open={openKnowledgePage}>
+            <AppPanel
+              tab={panelTab}
+              onTabChange={(tab) => {
+                if (tab !== "memory") setFocusSkill(undefined)
+                setPanelTab(tab)
+              }}
+              focusSkill={focusSkill}
+            />
+          </KnowledgeLinkProvider>
         ) : null}
       </ShellColumns>
 

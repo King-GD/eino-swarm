@@ -794,6 +794,37 @@ and [table semantics](DATA_MODEL.md#read-only-history-sql).
 executor model. Mode changes apply to subsequent turns. Current workers keep
 their configuration. See [Nuwa](NUWA.md).
 
+## Project knowledge
+
+In the right panel, open **Knowledge** under the project name and choose
+**Enable knowledge base**. If the conversation is in **Shared library**,
+move it into a project to use Knowledge. **By type** groups pages by their
+schema type. Project-defined views follow named relationships. **Pending**
+shows missing linked pages, stale pages and schema issues. Filter the tree,
+open a page, then follow its body links, relationships or backlinks. Use
+**Back** to retrace that path or **Expand preview** to read a long page.
+Page sources distinguish primary material, unverified analysis and external
+links. Removed or rewound history remains listed as unavailable. An available
+last-update link opens its conversation or Trace.
+
+From **Knowledge → Distill**, choose **Current task** for the selected
+conversation's history or **Current project** for all conversations in the
+project. Both options enable the wiki if needed and start a new, titled
+project conversation. The ordinary turn uses `query_history` to read
+original project history and can save or update pages through
+`record_knowledge`. You can also ask directly in any enabled project turn
+or edit the files under the project's `knowledge` directory. On desktop,
+the folder button opens that directory. The Memory tab remains the place
+for shared working instructions and skills.
+
+To run incremental extraction, create a recurring task for the project in
+**Scheduled**. Set a time window that matches the recurrence, specify which
+history to read, and ask the agent to check existing pages and cite original
+records before recording changes. To work through the pending queue, give a
+project task a bounded set of lint items to review, including instructions on
+when to leave a source or page unresolved. Turn results and Trace show the
+actual reads and writes. Each schedule uses the ordinary project tools.
+
 ## Memory and skills
 
 With memory and auto-review on, each successful turn is reviewed even if the

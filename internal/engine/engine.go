@@ -95,6 +95,8 @@ type Engine struct {
 
 	// memory holds one store per project, shared so its lock means something.
 	memory projectMemory
+	// knowledge holds the shared file store and revision lock for each project.
+	knowledge sync.Map
 	// reviews tracks the post-turn memory reviews still running, so shutdown
 	// can wait for a write instead of killing it halfway.
 	reviews reviewPool

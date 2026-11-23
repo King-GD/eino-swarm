@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/LubyRuffy/eino-swarm/internal/knowledge"
 	"github.com/LubyRuffy/eino-swarm/internal/memory"
 	"github.com/LubyRuffy/eino-swarm/internal/skills"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
@@ -153,6 +154,7 @@ func (e *Engine) DeleteProject(id string) error {
 		e.removeManagedTaskWorkspace(th)
 	}
 	e.forgetProjectMemory(id)
+	e.knowledge.Delete(id)
 	dir := e.cfg.ProjectDir(p.ID)
 	if err := removeProjectFiles(dir, e.cfg.ProjectWorkspaceDir(p.ID)); err != nil {
 		e.log.Warn("could not remove a project directory", "project", p.ID, "path", dir, "err", err)
@@ -269,6 +271,10 @@ type projectContext struct {
 	memory   *memory.Store
 	sections string
 	planning bool
+	// Knowledge is mounted once per execution start. The prompt and tool
+	// admission stay fixed while the shared store serves live reads/writes.
+	knowledge        *knowledge.Store
+	knowledgeSummary string
 	// tools is the manager set. Workers get the read-only skill tools in
 	// viewTools alongside their workspace tools.
 	tools     []tool.BaseTool
@@ -357,7 +363,7 @@ func (pc *projectContext) memoryLive() bool {
 // projectContextFor assembles a turn's project contribution. A conversation
 // in no project gets the shared skill library: the index in the prompt and
 // skill_view, with no notes and no write tools.
-func (e *Engine) projectContextFor(th *store.Thread) (*projectContext, error) {
+func (e *Engine) projectContextFor(th *store.Thread, original ...*store.Turn) (*projectContext, error) {
 	if strings.TrimSpace(th.ProjectID) == "" {
 		return e.libraryLiveContext(), nil
 	}
@@ -373,6 +379,10 @@ func (e *Engine) projectContextFor(th *store.Thread) (*projectContext, error) {
 		return nil, err
 	}
 	pc := &projectContext{project: p, planning: th.PlanMode}
+	if len(original) == 0 || original[0].ProjectID == p.ID {
+		e.snapshotProjectKnowledge(pc)
+	}
+	knowledgeEnabled := pc.hasKnowledge()
 	var snap memory.Snapshot
 	var skills []memory.SkillInfo
 	if e.MemoryEnabled(p) {
@@ -384,16 +394,16 @@ func (e *Engine) projectContextFor(th *store.Thread) (*projectContext, error) {
 			e.log.Warn("could not read a project's memory", "project", p.ID, "err", err)
 		} else {
 			pc.memory = mem
-			pc.tools = memory.Tools(mem, nil)
+			pc.tools = memory.Tools(mem, nil, knowledgeEnabled)
 			pc.viewTools = memory.ViewTools(mem)
 			// An unreadable skills directory costs the index, not the notes.
 			if skills, err = mem.ListSkills(); err != nil {
 				e.log.Warn("could not list a project's skills", "project", p.ID, "err", err)
 			}
-			pc.workerText = memory.WorkerPromptSections(snap, skills, e.cfg.Memory.IndexMax())
+			pc.workerText = memory.WorkerPromptSections(snap, skills, e.cfg.Memory.IndexMax(), knowledgeEnabled)
 		}
 	}
-	pc.sections = memory.PromptSections(p.SystemPrompt, snap, skills, e.cfg.Memory.IndexMax(), pc.memory != nil)
+	pc.sections = memory.PromptSections(p.SystemPrompt, snap, skills, e.cfg.Memory.IndexMax(), pc.memory != nil, knowledgeEnabled)
 	e.attachExternalSkills(pc)
 	return pc, nil
 }

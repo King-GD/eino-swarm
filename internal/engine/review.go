@@ -356,7 +356,7 @@ func (e *Engine) runReviewInput(threadID string, turn *store.Turn, pc *projectCo
 	}
 	memorySettings := e.cfg.Snapshot().Memory
 	deduplicateFeedback := memorySettings.ReviewDeduplicateFeedback
-	instruction := memory.ReviewPromptWithFeedback(deduplicateFeedback)
+	instruction := memory.ReviewPromptWithFeedback(deduplicateFeedback, pc.hasKnowledge())
 	description := "curates this project's memory after a conversation"
 	batch := &reviewBatchTool{store: pc.memory, sources: reviewEvidenceSources(sourceEvents, input.Events),
 		humanOnly: turn.Status == store.TurnError, library: pc.library, mu: &mu, outcome: &outcome,

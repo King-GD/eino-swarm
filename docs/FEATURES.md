@@ -12,6 +12,7 @@ This is the current user-facing capability map. The code and tests named below a
     - `F-135` Independent task coordination
     - `F-136` Nuwa project collaboration
     - `F-137` HTML/JS task panels
+    - `F-138` Project Markdown knowledge base
     - `F-140` Files and attachments
     - `F-145` Durable composer drafts
     - `F-146` Next-step composer suggestions
@@ -233,6 +234,15 @@ This is the current user-facing capability map. The code and tests named below a
 - 编辑重发移除来源事件后，已打开的 Collaboration 视图会将原引用标记为不可用。删除迁移过的会话会清理它在历史项目中创建的共享工作和版本，其他会话的引用保留。关联契约 `C-037`，验证见 `internal/server/nuwa_source_lifecycle_test.go`、`frontend/e2e/nuwa.spec.ts`。
 - Agent 可用已见的工具调用 ID 将自己的持久回执关联到共享记录。活跃 worker 跨轮保留时可引用当前执行的回执，冷恢复后可引用新执行产生的回执。事实保留原始作者，链接指向实际记录结果的轮次。持久化失败时写入会明确拒绝。验证见 `internal/engine/nuwa_adopted_evidence_test.go`、`internal/engine/nuwa_worker_restore_test.go` 和 `internal/store/nuwa_own_tool_evidence_test.go`。
 - 升级时回填旧 turn 未记录的项目归属，既有 worker 可跨重启恢复。已记录归属与当前项目不符时，显式继续目标返回冲突并保留 checkpoint，归属修复后可继续。见 [归属迁移](DATA_MODEL.md#turns--one-request-and-everything-done-to-answer-it)。
+
+### F-138 Project Markdown knowledge base
+
+- 目的：在一个项目内用可编辑的 Markdown 页面积累、查找和追溯跨对话的知识。
+- 入口：PC／Web 右侧 Knowledge 标签、提炼菜单、对话 wikilink、项目回合的 `read_knowledge`／`record_knowledge` 和项目知识库 HTTP 路由。Agents、Files、Trace、任务面板归任务组，Memory、Collaboration、Knowledge 归项目组。
+- 输入与输出：项目 schema、稳定页面 ID、Markdown、历史引用；提供类型或关系树、待处理项、单页、反链、来源、Trace 和宽幅预览。提炼当前任务／项目会在同项目创建带标题的普通对话。
+- 前置与失败：未启用时可显式启用或从提炼入口自动启用。无项目对话提示移动到项目。相同名称、旧 revision 和错误来源拒绝写入；已保存来源失效时给出提示。
+- 契约：`C-053`、`C-036`、`C-044`。
+- 实现证据：`internal/knowledge`、`internal/engine/knowledge.go`、`internal/server/project_knowledge.go`、`frontend/src/components/app/knowledge-panel.tsx`、`frontend/e2e/project-knowledge.spec.ts`。
 
 ### F-140 Files and attachments
 

@@ -14,9 +14,11 @@ import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
 
 import { ChartPending } from "@/components/app/chart-pending"
+import { KnowledgeWikiLink, useKnowledgeLinks } from "@/components/app/knowledge-link-open"
 import { MarkdownCodeBlock, readFence } from "@/components/app/markdown-code"
 import { useWorkspaceFileOpen, WorkspaceFileLink } from "@/components/app/workspace-file-open"
 import { classifyHref } from "@/lib/external-links"
+import { knowledgePageFromHref, remarkKnowledgeLinks } from "@/lib/knowledge-link-ref"
 import { remarkWorkspaceFiles, workspaceFileFromHref } from "@/lib/workspace-file-ref"
 import { isMathFence } from "@/lib/math-fence"
 import { chartSpecsEqual, parseChartSpec, type ChartSpec } from "@/lib/chart-spec"
@@ -41,6 +43,7 @@ const MarkdownMermaid = lazy(async () => {
 /** remark plugins are module-level so a memoised markdown block is not
  *  invalidated by a new array on every parent render. */
 const PLUGINS = [remarkGfm, remarkMath, remarkWorkspaceFiles]
+const KNOWLEDGE_PLUGINS = [remarkGfm, remarkMath, remarkKnowledgeLinks, remarkWorkspaceFiles]
 
 const MarkdownStreaming = createContext(false)
 const MarkdownSource = createContext("")
@@ -56,11 +59,12 @@ export const MemoMarkdown = memo(function MemoMarkdown({
   text: string
   streaming?: boolean
 }) {
+  const knowledge = useKnowledgeLinks()
   const source = streaming ? closeIncompleteMarkdown(text) : text
   return (
     <MarkdownStreaming.Provider value={streaming}>
       <MarkdownSource.Provider value={source}>
-        <Markdown remarkPlugins={PLUGINS} components={COMPONENTS}>
+        <Markdown remarkPlugins={knowledge ? KNOWLEDGE_PLUGINS : PLUGINS} components={COMPONENTS}>
           {source}
         </Markdown>
         {streaming ? (
@@ -184,8 +188,13 @@ function MarkdownLink({
   ...props
 }: ComponentPropsWithoutRef<"a"> & { node?: unknown }) {
   const file = workspaceFileFromHref(href)
+  const page = knowledgePageFromHref(href)
   const open = useWorkspaceFileOpen()
   const streaming = useContext(MarkdownStreaming)
+  if (page) {
+    if (streaming) return <>{children}</>
+    return <KnowledgeWikiLink id={page}>{children}</KnowledgeWikiLink>
+  }
   if (file) {
     if (!open || streaming) return <>{children}</>
     return <WorkspaceFileLink path={file}>{children}</WorkspaceFileLink>

@@ -3,6 +3,8 @@ package store
 import (
 	"fmt"
 	"strings"
+
+	"gorm.io/gorm"
 )
 
 const (
@@ -13,9 +15,13 @@ const (
 // MessageHasHumanSource resolves only legacy rows which match a runtime cue.
 // A real human event is authoritative even when its text quotes that cue.
 func (s *Store) MessageHasHumanSource(row Message) (bool, error) {
+	return messageHasHumanSource(s.db, row)
+}
+
+func messageHasHumanSource(db *gorm.DB, row Message) (bool, error) {
 	steer := strings.TrimPrefix(row.Content, "[steer] ")
 	var human bool
-	err := s.db.Raw(`SELECT (
+	err := db.Raw(`SELECT (
  NOT EXISTS (SELECT 1 FROM messages WHERE thread_id = @thread AND turn_id = @turn AND role = 'user' AND seq < @seq)
  AND (EXISTS (
   SELECT 1 FROM events WHERE thread_id = @thread AND turn_id = @turn AND kind = 'user_message' AND text = @content

@@ -984,6 +984,28 @@ own server port, data directory and output directory. Do not rebuild its served
 `dist` during a run. Browser results do not substitute for candidate-specific
 native macOS acceptance in `ci-macOS`.
 
+## Project Markdown knowledge (`F-138`, `C-053`)
+
+- `go test -race -cover ./internal/knowledge ./internal/engine ./internal/server ./internal/backup`
+  exercises schema and file validation, graph derivation, revision conflicts,
+  original history sources, HTTP project scope and backup round trips. The
+  Registry regression uses the real model adapter with a loopback scripted
+  response and checks the tool receipts. Core statement coverage is 92.8%;
+  the focused HTTP route tests exercise every statement of
+  `internal/server/project_knowledge.go`.
+- `cd frontend && npm run lint && npm test` checks knowledge tree/filter
+  helpers, navigation stack, Markdown links, inspector scopes and refresh.
+- `make e2e` includes `project-knowledge.spec.ts`. It exercises no-project
+  admission, project scope labels, enable, file-backed page views, pending
+  items, drilldown, preview, unavailable sources, transcript and Trace links and both ordinary distill
+  routes. The task panels spec also verifies registration in the task group
+  while retaining auto-open.
+- The bounded [ProjectKnowledge TLC model](../models/knowledge/README.md)
+  checks project write authority, revision conflicts and historical source
+  identity. Its reachability cases and seeded faults check the model's
+  sensitivity. The Go and browser tests exercise the implementation.
+- Native desktop acceptance uses the isolated ci-macOS candidate procedure.
+
 ## Original project-history SQL and source reports (`F-410`, `C-036`)
 
 `internal/history` uses real temporary WAL databases for single-statement
@@ -1359,6 +1381,10 @@ Phone opening has its own adapter and must be checked separately from the PC
 HTTP path (`F-210`, `F-220`, `C-006`). `snapshot_reads_test.go` checks actual SQL
 projection, row counts, current-turn selection and paging past hidden records;
 `phone_reads_test.go` checks legacy NULL values, index migration and query plans.
+The pending-question test measures the preview after the manager has armed
+the real question. It counts actual event reads and checks the observer with
+a real preview query. Turn-start replay uses the same event index and runs
+before the preview observation.
 `watch_open_test.go` checks one encrypted relay request carrying detail and
 tail, legacy response shape, combined frame budget and refusal cleanup.
 `mobile/src/lib/open-thread.test.ts` checks the single initial watch, legacy-host

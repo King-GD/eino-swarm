@@ -156,11 +156,11 @@ func (e *Engine) resumeParkedThreadContext(ctx context.Context, th *store.Thread
 }
 
 func (e *Engine) parkedRegistry(th *store.Thread, turn *store.Turn) (*swarm.Registry, error) {
-	pc, err := e.projectContextFor(th)
+	pc, err := e.projectContextFor(th, turn)
 	if err != nil {
 		return nil, err
 	}
-	set, err := e.conversationToolsForExecution(context.Background(), th, e.turnWebExecution(th, turn), turn.NuwaReadOnly)
+	set, err := e.conversationToolsForExecution(context.Background(), th, e.turnWebExecution(th, turn), turn.NuwaReadOnly, pc.hasKnowledge())
 	if err != nil {
 		return nil, err
 	}

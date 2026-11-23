@@ -12,6 +12,11 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Added
 
+- PC and Web projects can keep a Markdown knowledge base with linked pages,
+  sources, relationship views and a pending queue. The Knowledge panel can
+  start a normal conversation to distill the current task or project history.
+  (`F-138`, `C-053`, #185)
+
 - Desktop and Web answers turn a workspace file path into a preview button. Clicking it opens the same file preview as the Files tab. When several files share that name, the preview lists them and opens the one you choose. (`F-140`)
 
 - Desktop, web, terminal and phone can explicitly turn thinking off for a conversation. Models that continue to report reasoning surface a request error. (`F-130`, `F-220`, `F-230`, `C-009`)
@@ -23,6 +28,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - PC and Web voice settings can choose a preferred microphone or follow the operating-system input. Phones use their own microphone. (`F-148`, `C-048`)
 
 ### Changed
+
+- The right panel groups Agents, Files, Trace and agent-opened panels under
+  Task, and Memory, Collaboration and Knowledge under the project name.
+  Conversations outside projects show Shared library. (`F-138`)
 
 - Side chat answers from the current task's findings, project notes and recorded skills. It can search that task and open a skill, and it still cannot change the task. (`F-147`, `C-042`)
 
