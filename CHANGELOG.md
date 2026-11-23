@@ -54,6 +54,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Project memory refuses new notes without letters or numbers. The Memory editor keeps a refused draft available for correction, and existing notes can still be edited or removed. (`F-420`, `C-025`, #187)
+
 - 手机关闭模型或思考强度面板后回到输入框，保持展开、草稿和光标位置。输入框和操作按钮随键盘上移，保持可见。 (`F-220`, `F-230`)
 
 - MCP tool results that report HTTP 429 remain visible on the original tool while the model continues the turn without an automatic replay. Clearly mismatched argument types, including array elements, report the field path before dispatch so the model can correct the call in the same turn. (`F-176`, `C-041`, #179, #180)

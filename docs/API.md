@@ -1898,9 +1898,10 @@ snapshot in `memory`, so the panel can show both without a second round trip
 that could itself be stale. Omit `rev` and the write is unconditional, which is
 what a client that never read has to do.
 
-Responds with the new snapshot `{"memory": {…}}`. The character limit still
-applies: notes that no longer fit in a prompt are the same problem whoever
-typed them (`400`).
+Responds with the new snapshot `{"memory": {…}}`. A save returns `400` if it
+exceeds the character budget or introduces a note without a Unicode letter
+or number. Existing entries without either may be kept up to their stored
+occurrence count. An empty editor clears the notes.
 
 ### `POST /api/projects/:id/memory/tidy-skills` → `200`
 
