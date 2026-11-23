@@ -4,8 +4,9 @@ EXTENDS Naturals
 (* "expired" is a protocol rejection before execution. A Streamable HTTP
    call's local "deadline" leaves the effect unknown and the session usable
    by independent work. "missing" is produced by the local catalog check,
-   before a wire call. "tool_error" is received after dispatch and carries
-   no proof of when execution stopped. Other failures reserve the task's
+   before a wire call. "wrong_type" has the same local proof. "rate_limited"
+   is a tool result received after dispatch: it permits other work but has
+   no proof of when execution stopped. Unclassified tool errors reserve the task's
    admission gate. A manager already admitted receives cancellation on block. *)
 CONSTANTS
     RetryUncertain,
@@ -15,13 +16,16 @@ CONSTANTS
     BlockDeadline,
     BlockMissing,
     DispatchMissing,
-    AllowToolError
+    AllowToolError,
+    BlockRateLimit,
+    BlockWrongType,
+    DispatchWrongType
 
 VARIABLES phase, attempts, first, result, nextWork, cancelManager
 vars == <<phase, attempts, first, result, nextWork, cancelManager>>
 
-WireOutcomes == {"ok", "expired", "deadline", "unknown", "tool_error"}
-Outcomes == WireOutcomes \cup {"missing"}
+WireOutcomes == {"ok", "expired", "deadline", "unknown", "tool_error", "rate_limited"}
+Outcomes == WireOutcomes \cup {"missing", "wrong_type"}
 TypeOK ==
     /\ phase \in {"send", "resolve", "blocked", "done"}
     /\ attempts \in 0..4
@@ -37,6 +41,11 @@ DeadlineKeepsAdmission == result /= "deadline" \/ phase # "blocked"
 NeverNextWorkAfterDeadline == ~(result = "deadline" /\ nextWork)
 MissingKeepsAdmission == result /= "missing" \/ phase # "blocked"
 MissingNeverDispatches == result /= "missing" \/ attempts = (IF first = "expired" THEN 1 ELSE 0)
+RateLimitKeepsAdmission == result /= "rate_limited" \/ phase # "blocked"
+WrongTypeKeepsAdmission == result /= "wrong_type" \/ phase # "blocked"
+WrongTypeNeverDispatches == result /= "wrong_type" \/ attempts = (IF first = "expired" THEN 1 ELSE 0)
+NeverAdmitsWorkAfterRateLimit == ~(result = "rate_limited" /\ nextWork)
+NeverAdmitsWorkAfterWrongType == ~(result = "wrong_type" /\ nextWork)
 RemoteErrorBlocks == result /= "tool_error" \/ phase \in {"resolve", "blocked"}
 NeverAdmitsWorkAfterMissing == ~(result = "missing" /\ nextWork)
 NeverRecovered == ~(phase = "done" /\ attempts = 2 /\ result = "ok")
@@ -59,10 +68,9 @@ Send(outcome) ==
     /\ phase' = "resolve"
     /\ UNCHANGED <<nextWork, cancelManager>>
 
-RejectMissing ==
+RejectArgument(outcome) ==
     /\ phase = "send"
-    /\ ~DispatchMissing
-    /\ result' = "missing"
+    /\ result' = outcome
     /\ phase' = "resolve"
     /\ UNCHANGED <<attempts, first, nextWork, cancelManager>>
 
@@ -73,6 +81,8 @@ Decide ==
             THEN "send"
             ELSE IF result = "deadline" /\ ~BlockDeadline THEN "done"
             ELSE IF result = "missing" /\ ~BlockMissing THEN "done"
+            ELSE IF result = "wrong_type" /\ ~BlockWrongType THEN "done"
+            ELSE IF result = "rate_limited" /\ ~BlockRateLimit THEN "done"
             ELSE IF result = "tool_error" /\ AllowToolError THEN "done"
                  ELSE "blocked"
     /\ cancelManager' = (phase' = "blocked" /\ ~LeaveManagerRunning)
@@ -83,7 +93,9 @@ OtherWork ==
     /\ nextWork' = TRUE
     /\ UNCHANGED <<phase, attempts, first, result, cancelManager>>
 
-Next == (\E outcome \in WireOutcomes: Send(outcome)) \/ RejectMissing
-        \/ (DispatchMissing /\ Send("missing")) \/ Decide \/ OtherWork
+Next == (\E outcome \in WireOutcomes: Send(outcome))
+        \/ (IF DispatchMissing THEN Send("missing") ELSE RejectArgument("missing"))
+        \/ (IF DispatchWrongType THEN Send("wrong_type") ELSE RejectArgument("wrong_type"))
+        \/ Decide \/ OtherWork
 Spec == Init /\ [][Next]_vars
 =============================================================================

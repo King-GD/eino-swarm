@@ -18,6 +18,16 @@ import (
 )
 
 func TestMCPMissingRequiredArgumentCanBeCorrectedInTheSameTurn(t *testing.T) {
+	testMCPArgumentCanBeCorrected(t, `{"type":"string","minLength":1}`, `{}`, `{"record_key":"fixture"}`, "record_key")
+}
+
+func TestMCPWrongArrayItemTypeCanBeCorrectedInTheSameTurn(t *testing.T) {
+	testMCPArgumentCanBeCorrected(t, `{"type":"array","items":{"type":"string"}}`,
+		`{"record_key":[123]}`, `{"record_key":["fixture"]}`, "record_key[0]")
+}
+
+func testMCPArgumentCanBeCorrected(t *testing.T, property, invalid, valid, wantField string) {
+	t.Helper()
 	for _, mode := range []string{"direct", "proxy"} {
 		t.Run(mode, func(t *testing.T) {
 			var rejected, executed atomic.Int32
@@ -27,15 +37,12 @@ func TestMCPMissingRequiredArgumentCanBeCorrectedInTheSameTurn(t *testing.T) {
 			server := mcp.NewServer(&mcp.Implementation{Name: "validation fixture", Version: "test"}, nil)
 			server.AddTool(&mcp.Tool{Name: "lookup", InputSchema: map[string]any{
 				"type": "object", "required": []string{"record_key"},
-				"properties": map[string]any{"record_key": map[string]any{"type": "string", "minLength": 1}},
+				"properties": map[string]any{"record_key": json.RawMessage(property)},
 			}}, func(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				var args struct {
-					Key string `json:"record_key"`
-				}
-				if err := json.Unmarshal(req.Params.Arguments, &args); err != nil || args.Key == "" {
+				if string(req.Params.Arguments) != valid {
 					rejected.Add(1)
 					return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{
-						&mcp.TextContent{Text: "Missing required parameter: record_key"},
+						&mcp.TextContent{Text: "Remote argument rejection"},
 					}}, nil
 				}
 				executed.Add(1)
@@ -43,7 +50,7 @@ func TestMCPMissingRequiredArgumentCanBeCorrectedInTheSameTurn(t *testing.T) {
 			})
 			server.AddTool(&mcp.Tool{Name: "check", InputSchema: map[string]any{"type": "object"}},
 				func(ctx context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-					// The independent operation finishes after the missing-argument result.
+					// The independent operation finishes after the invalid-argument result.
 					select {
 					case <-ctx.Done():
 						return nil, ctx.Err()
@@ -59,20 +66,20 @@ func TestMCPMissingRequiredArgumentCanBeCorrectedInTheSameTurn(t *testing.T) {
 			cfg := config.MCPServer{ID: "schema-fixture", Enabled: true, Transport: "streamable_http", URL: remote.URL, TimeoutSeconds: 10}
 			_, proxy := mcpclient.ProxyNames(cfg.ID)
 			lookup, sibling := proxy, proxy
-			missing, corrected, other := `{"name":"lookup","arguments":{}}`, `{"name":"lookup","arguments":{"record_key":"fixture"}}`, `{"name":"check","arguments":{}}`
+			bad, corrected, other := `{"name":"lookup","arguments":`+invalid+`}`, `{"name":"lookup","arguments":`+valid+`}`, `{"name":"check","arguments":{}}`
 			if mode == "direct" {
 				lookup, sibling = mcpclient.DirectToolName(cfg.ID, "lookup"), mcpclient.DirectToolName(cfg.ID, "check")
-				missing, corrected, other = `{}`, `{"record_key":"fixture"}`, `{}`
+				bad, corrected, other = invalid, valid, `{}`
 			}
 			e, requests := newScheduleCompletionHTTPEngine(t, func(w http.ResponseWriter, _ *http.Request, step int, request scheduleCompletionRequest) {
 				switch step {
 				case 1:
 					writeContextFlowReply(w, request.Stream, map[string]any{"tool_calls": []any{
-						map[string]any{"index": 0, "id": "missing-arg", "type": "function", "function": map[string]any{"name": lookup, "arguments": missing}},
+						map[string]any{"index": 0, "id": "invalid-arg", "type": "function", "function": map[string]any{"name": lookup, "arguments": bad}},
 						map[string]any{"index": 1, "id": "independent-check", "type": "function", "function": map[string]any{"name": sibling, "arguments": other}},
 					}}, "tool_calls")
 				case 2:
-					if got := nuwaValidationReceipt(request, "missing-arg"); !strings.Contains(got, "record_key") || !strings.Contains(got, `"isError":true`) {
+					if got := nuwaValidationReceipt(request, "invalid-arg"); !strings.Contains(got, wantField) || !strings.Contains(got, `"isError":true`) {
 						t.Errorf("model did not receive the field error on the original call: %q", got)
 					}
 					if got := nuwaValidationReceipt(request, "independent-check"); !strings.Contains(got, "independent check finished") {
@@ -112,7 +119,7 @@ func TestMCPMissingRequiredArgumentCanBeCorrectedInTheSameTurn(t *testing.T) {
 					if !ok {
 						t.Fatal("subscription closed before the original call settled")
 					}
-					if event.Kind == "tool_result" && event.ToolCallID == "missing-arg" {
+					if event.Kind == "tool_result" && event.ToolCallID == "invalid-arg" {
 						release()
 						break waitForRejection
 					}

@@ -45,6 +45,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- MCP tool results that report HTTP 429 remain visible on the original tool while the model continues the turn without an automatic replay. Clearly mismatched argument types, including array elements, report the field path before dispatch so the model can correct the call in the same turn. (`F-176`, `C-041`, #179, #180)
+
 - Opening a long conversation no longer reads every worker prompt, worker result, stored answer, or engine protocol prompt into the first screen. The Agents list keeps identities and failure reasons; opening a worker still loads that worker's text. Context size still counts the same replay, without scanning every historical manager message. (`F-120`, `C-003`, `C-008`)
 
 - 手机打开子智能体列表或从子智能体日志返回时，从顶部显示正在运行的子智能体，不再跳到历史列表底部。 (`F-220`)
