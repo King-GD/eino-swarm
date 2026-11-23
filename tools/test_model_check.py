@@ -41,6 +41,15 @@ def family_cases(model: mc.Model) -> list[mc.Case]:
 
 
 class CaseTable(unittest.TestCase):
+    def test_easm_protocol_models_remain_in_the_full_suite(self):
+        # Removing a whole family would evade checks which only iterate MODELS.
+        for name, filename in (("panel-mcp-admission", "PanelMCPAdmission.tla"),
+                               ("easm-collection", "EASMCollection.tla"),
+                               ("easm-collection-interleaving", "EASMCollection.tla")):
+            with self.subTest(model=name):
+                self.assertIn(name, mc.MODELS)
+                self.assertEqual(mc.MODELS[name].spec.name, filename)
+
     def test_every_case_belongs_to_a_model(self):
         self.assertLessEqual({c.model for c in mc.CASES}, set(mc.MODELS))
         for model in mc.MODELS.values():
@@ -420,6 +429,17 @@ class RunningCase(unittest.TestCase):
 
 @unittest.skipUnless(available_jar(), "tla2tools.jar and java are not installed; run make model-check")
 class WithTLC(unittest.TestCase):
+    def test_easm_protocols_find_known_faults_and_reachable_scenarios(self):
+        out = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, out)
+        cases = [case for case in mc.CASES
+                 if case.model == "panel-mcp-admission" or case.model.startswith("easm-collection")]
+        self.assertTrue(cases)
+        for case in cases:
+            with self.subTest(case=case.name):
+                outcome, log = mc.run_case(case, available_jar(), out)
+                self.assertIsNone(mc.judge(case, outcome), log.read_text()[-3000:])
+
     def test_capability_composition_finds_known_crash_and_guard_removals(self):
         jar = available_jar()
         out = Path(tempfile.mkdtemp())

@@ -9579,6 +9579,18 @@ Protocol and source tests use versioned state plus actual Registry/model HTTP, C
 
 EASM producer fixtures feed one published state back into `Run` for the next batch. They cover subject changes, same-name ownership ambiguity, source relationships, detached historical clues and certificate serial deduplication. Aggregation fixtures verify concurrent progress, same-query heat-only retries with zero statistics calls, exact zero counts, partial replies, legacy incomplete summaries and query changes. The catalog tests validate current, previous and resumed snapshots against the bundled schema.
 
+`models/panels/PanelMCPAdmission.tla` and `EASMCollection.tla` add the EASM
+admission and collection refinements to `make model-check`. Both use normal,
+named-fault and `Never*` reachability cases; the collection's two bounded input
+variants each check the complete safety list. The runner registration tests
+also require these families to remain present. See `models/panels/README.md`
+for implementation mappings, historical calibration and the finite scope.
+`FuzzPortraitPublicationKeepsSavedSources` generates retained and rejected
+multi-edit publications through both actual snapshot and patch application.
+`task_panel_collection_http_test.go` checks Stop/late-result and failed-write
+behavior through the real model, Registry, MCP HTTP and SQLite boundary.
+Manager cancellation is not evidence that the source or remote service joined.
+
 `internal/engine/task_panel_easm_http_test.go` drives the real model, Registry, streamable MCP HTTP and durable panel. It checks restricted account refusal, zero HTTP contact for a server enabled after model dispatch, successful next-turn admission, restored binding identity and immediate tool disable. `internal/engine/task_panel_graph_http_test.go` exercises direct publication through the model tool. It checks that cycles, removal of a saved source or its target, and a rootless replacement leave the stored revision and original source intact. It also covers enrichment, confirmation upgrades, first sources for previously unsourced clues and a new subject. `internal/mcpclient/producer_test.go` covers exact text replies and isolation from task execution failures.
 
 `internal/engine/task_panel_worker_scope_http_test.go` exercises the actual
