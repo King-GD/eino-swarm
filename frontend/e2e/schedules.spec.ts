@@ -478,3 +478,78 @@ test("completed one-shot leaves the conversation rail and remains in completed h
     expect((await request.delete(`/api/schedules/${schedule.id}`)).ok()).toBe(true)
   }
 })
+
+test("standalone findings reuse a project row with links to the task and its origin", async ({ page, request }, info) => {
+  const createdProject = await request.post("/api/projects", { data: { name: "Schedule provenance project" } })
+  expect(createdProject.status()).toBe(201)
+  const { project } = await createdProject.json()
+  const createdOrigin = await request.post("/api/threads", { data: { title: "Original conversation", project_id: project.id } })
+  expect(createdOrigin.status()).toBe(201)
+  const { thread: origin } = await createdOrigin.json()
+  const createdSchedule = await request.post("/api/schedules", {
+    data: {
+      kind: "standalone", title: "Project monitor", prompt: "Check for changes.",
+      origin_thread_id: origin.id, project_id: project.id, every_s: 3600,
+    },
+  })
+  expect(createdSchedule.status()).toBe(201)
+  const { schedule } = await createdSchedule.json()
+  const schedulePath = `/api/schedules/${schedule.id}`
+  try {
+    const fire = async (count: number) => {
+      const started = await request.post(`${schedulePath}/run`)
+      expect(started.status()).toBe(202)
+      await expect.poll(async () => {
+        const { runs } = await (await request.get(schedulePath)).json()
+        return runs.filter((run: { status: string }) => run.status === "findings").length
+      }).toBe(count)
+      const { turn } = await started.json()
+      return turn
+    }
+    const first = await fire(1)
+    const second = await fire(2)
+    expect(second.thread_id).toBe(first.thread_id)
+    expect(second.id).not.toBe(first.id)
+
+    const { threads } = await (await request.get(`/api/threads?project=${project.id}`)).json()
+    expect(threads.map((thread: { id: string }) => thread.id).sort()).toEqual([first.thread_id, origin.id].sort())
+    const { runs } = await (await request.get(schedulePath)).json()
+    expect(runs.map((run: { turn_id: string; unread: boolean }) => [run.turn_id, run.unread])).toEqual([
+      [first.id, true], [second.id, true],
+    ])
+    for (const turn of [first, second]) {
+      const trace = await request.get(`/api/trace/${turn.id}`)
+      expect(trace.ok()).toBe(true)
+      expect((await trace.json()).turn.thread_id).toBe(first.thread_id)
+    }
+
+    await page.goto("/")
+    await page.getByTestId("dest-projects").click()
+    const projectRow = page.getByRole("button", { name: project.name, exact: true })
+    const result = page.locator(`[data-testid="thread-row"][data-id="${first.thread_id}"]`)
+    if (!(await result.isVisible())) await projectRow.click()
+    const scheduleLink = result.getByRole("button", { name: `Scheduled result · ${schedule.id}` })
+    const originLink = result.getByRole("button", { name: "Source · Original conversation" })
+    await expect(scheduleLink).toBeVisible()
+    await expect(originLink).toBeVisible()
+    await page.getByRole("button", { name: "Original conversation", exact: true }).hover()
+    await page.screenshot({ path: info.outputPath("scheduled-result-project-row.png"), animations: "disabled" })
+    await originLink.click()
+    await expect(page.getByTestId("thread-title")).toHaveText("Original conversation")
+
+    await scheduleLink.click()
+    await expect(page.getByTestId("schedule-edit-drawer")).toBeVisible()
+    await page.getByRole("button", { name: "Open findings" }).click()
+    await expect(page.getByTestId("thread-title")).toHaveText("Project monitor")
+    await expect(page.getByTestId("schedule-notice")).toHaveCount(2)
+    await expect(page.getByTestId("user-message")).toHaveCount(0)
+    await expect(result).toHaveAttribute("aria-current", "true")
+    await expect(scheduleLink).toBeVisible()
+    await expect.poll(async () => {
+      const { runs } = await (await request.get(schedulePath)).json()
+      return runs.every((run: { unread: boolean }) => !run.unread)
+    }).toBe(true)
+  } finally {
+    expect((await request.delete(schedulePath)).ok()).toBe(true)
+  }
+})

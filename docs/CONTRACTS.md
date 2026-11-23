@@ -419,6 +419,8 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 
 ## C-009 Editable configuration and scheduled waits
 
+- 独立定时任务以准确 schedule ID 和认领时 run kind 标识结果。在所选项目内复用最早仍存在的 findings 会话，保留每次检查自己的 turn、run、Trace 和 unread 以及历史重复会话。查找失败不创建替代会话。无发现时固定为 quiet，未产生过发现的会话继续归档，已有发现的会话保留原归档状态、完成水位和最近活动时间。PC HTTP 与配对手机列表按持久 run 提供来源，已删除来源保留 ID 并取消入口。同项目 wake 及来源会话继续使用原执行边界。关联 `F-150`；证据：`internal/engine/schedule_findings_thread_test.go`、`internal/store/schedule_findings_test.go`、`frontend/e2e/schedules.spec.ts`、`mobile/e2e/schedule-findings-source.spec.ts`。
+
 - 显式关闭思考使用 `reasoning_effort: none`，空值仍继承默认档位。Chat Completions 通用端点发送 `reasoning_effort: "none"`，智谱直连用 `thinking.type: "disabled"`，DashScope 用 `enable_thinking: false`，OpenRouter 用 `reasoning.enabled: false`。Responses 发送 `reasoning.effort: "none"`，省略 summary。端点拒绝或仍报告思考内容／非零推理 token 时，调用报告失败，保留模型及选择。关联 `F-130`、`F-170`、`F-220`、`F-230`；验证见 `internal/config/thinking_off_test.go`、`internal/provider/default_reasoning_test.go`、`internal/provider/thinking_off_test.go`、`mobile/src/lib/openai-wire.test.ts`。
 
 - 主管工具回合上限入口：桌面/Web 在主管工具回合暂停待决定或已停止时打开设置 → 集群并聚焦 `swarm.manager_max_iterations`。该入口不改写当前事件里已经给出的 `extend_by`；下一次暂停读取保存后的上限。已经继续的卡片不再重复入口。`workers_uncollected` 收取暂停和 `classification_deferred` 答复核对暂缓不提供该入口。核对暂缓的 `limit` 是已经用掉的轮数，`extend_by` 仍是当前配置；界面不能把已用轮数写成已经到达的上限。手机没有这项编辑；只有真正的上限事件说明电脑上的同一设置，核对暂缓、仅有 `awaiting_continue` 的暂停不声称它。关联 `F-130`、`F-150`、`F-170`、`F-220`；证据：`frontend/src/components/app/iteration-limit-card.test.tsx`、`frontend/src/components/app/settings-swarm.test.tsx`、`frontend/e2e/conversation.spec.ts`、`mobile/src/components/iteration-limit-card.test.tsx`、`mobile/e2e/iteration-limit.spec.ts`、`internal/engine/schedule_answer_deferred_test.go`；变更类型：Fixed。

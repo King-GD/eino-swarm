@@ -641,13 +641,13 @@ clock time you asked for is still honored.
 search icon. **New task** is the next row. **Upcoming** is the active list.
 The menu on that row filters **Active / Paused / Completed**. **New task**
 opens the editor in the task column: the task description, then Details
-(**Runs in**: a new conversation each run, or wake an existing one;
-**Project** is the workspace for a minted conversation) and Frequency.
+(**Runs in**: an independent results conversation, or wake an existing one;
+**Project** selects the project for an independent check) and Frequency.
 **Expand** hides the wait list so a long instruction can use the task column.
 Click a wait to edit it. Changing cadence recomputes the next run from now.
-Changing Runs in or Project does not. **Runs in** searches live conversations,
-or starts a new one each fire. **Project** is only for that new conversation.
-Pause, resume, cancel, and Run now live there too. A finished wait keeps the
+Changing Runs in or Project does not. **Runs in** searches live conversations
+and offers an independent results conversation. **Project** applies to the
+independent option. Pause, resume, cancel, and Run now live there too. A finished wait keeps the
 destination it was given. A run already in progress stays on the conversation
 it started on. A short inbox name is generated, the same namer as conversations.
 
@@ -671,9 +671,20 @@ A scheduled check can return its result directly as text. Tools remain
 optional. `report_schedule` can also report the result. Explicit empty
 findings stay quiet. Only a blank response with no tool result or report
 continues once in the same turn. A second empty response visibly fails. This
-also applies to **Run now**. Quiet standalone runs stay out of Recents.
-Findings open from the inbox: **Open findings** on a live wait, with a count
-when several fires are unread. Workers cannot schedule.
+also applies to **Run now**.
+
+An independent job keeps discoveries in its own conversation. Future checks
+use its earliest surviving findings conversation in the selected project.
+Each check has its own turn, Trace, and inbox read state. A quiet check keeps
+its run in history without adding a result or moving earlier findings up in
+Recents. A quiet conversation with no findings is archived.
+
+Conversation lists mark these rows **Scheduled result** and show the schedule
+ID and source conversation when one exists. On desktop and Web, the schedule
+ID opens the task. The source opens the original conversation on desktop, Web,
+and paired phones. Earlier result conversations keep their own history.
+**Open findings** in Scheduled still opens the corresponding result, with a
+count when several fires are unread. Workers cannot schedule.
 
 A conversation whose next turn is a parked wait keeps a clock in the list, so
 it does not look Idle. The title bar says **Waiting**. That banner is not a

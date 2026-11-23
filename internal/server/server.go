@@ -411,7 +411,11 @@ func badRequest(c *gin.Context, format string, args ...any) {
 // thread loads the conversation named in the path, answering 404 itself when
 // there is none so every handler does not repeat the check.
 func (s *Server) thread(c *gin.Context) (*store.Thread, bool) {
-	th, err := s.engine.Store().GetThread(c.Param("id"))
+	return s.lookupThread(c, s.engine.Store().GetThread)
+}
+
+func (s *Server) lookupThread(c *gin.Context, lookup func(string) (*store.Thread, error)) (*store.Thread, bool) {
+	th, err := lookup(c.Param("id"))
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			s.missingRecord(c, "thread_not_found", "This conversation no longer exists. Refresh the conversation list.",

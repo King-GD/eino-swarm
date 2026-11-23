@@ -286,7 +286,7 @@ describe("Scheduled inbox", () => {
     fireEvent.click(screen.getByRole("button", { name: "New task" }))
     const drawer = screen.getByTestId("schedule-create-drawer")
     expect(drawer).toHaveTextContent("New")
-    expect(drawer).toHaveTextContent("New conversation each run")
+    expect(drawer).toHaveTextContent("Independent results conversation")
     expect(drawer).toHaveTextContent("Details")
     expect(drawer).toHaveTextContent("Frequency")
     expect(screen.queryByLabelText("Title")).not.toBeInTheDocument()

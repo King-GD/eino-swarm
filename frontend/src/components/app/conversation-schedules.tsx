@@ -2,8 +2,6 @@ import { useEffect, useLayoutEffect, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { api } from "@/lib/api"
-import { closeClient } from "@/lib/client-open"
-import { setDeskDest } from "@/lib/desk-nav"
 import { chromeTypeClass } from "@/lib/chrome-type"
 import {
   conversationSchedules,
@@ -13,7 +11,6 @@ import type { Schedule } from "@/lib/types"
 import { useT } from "@/lib/use-t"
 import { cn } from "@/lib/utils"
 import { useApp } from "@/store/app"
-import { useScheduleInboxUI } from "@/store/schedule-inbox-ui"
 import { scheduleMetaLine } from "./schedule-inbox-row"
 
 function scheduleLinkKey(rows: Schedule[]): string {
@@ -25,18 +22,12 @@ function scheduleLinkKey(rows: Schedule[]): string {
     .join("\n")
 }
 
-function openConversationSchedule(row: Schedule) {
-  setDeskDest("scheduled")
-  closeClient()
-  useScheduleInboxUI.getState().showEdit(row)
-  useApp.getState().openScheduleInbox()
-}
-
 /** Waits aimed at this conversation, and the job that minted it.
  *  Sits above the rail tabs so it stays visible without a tab change. */
 export function ConversationSchedules({ threadId }: { threadId?: string }) {
   const t = useT()
   const schedules = useApp((s) => s.schedules)
+  const openSchedule = useApp((s) => s.openScheduleDetails)
   const linkKey = scheduleLinkKey(schedules)
   const [createdBy, setCreatedBy] = useState<string[]>([])
   const id = (threadId ?? "").trim()
@@ -84,7 +75,7 @@ export function ConversationSchedules({ threadId }: { threadId?: string }) {
                 data-testid="conversation-schedule"
                 data-schedule-id={row.id}
                 className="h-auto w-full justify-start px-2 py-1.5 text-left"
-                onClick={() => openConversationSchedule(row)}
+                onClick={() => void openSchedule(row.id)}
               >
                 <span className="block w-full min-w-0">
                   <span className="block truncate text-(length:--chrome-font-size) font-medium">{headline}</span>

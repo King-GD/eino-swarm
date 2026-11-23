@@ -250,7 +250,10 @@ func (e *Engine) resumeTurn(restoreCtx context.Context, turn *store.Turn, snapsh
 	}
 
 	e.interruptOrphanedGenerations(turn.ThreadID, e.checkpointForTurn(turn.ID, snapshot) != nil, snapshot)
-	_ = e.store.TouchThread(turn.ThreadID)
+	// Independent checks update recency only once they have findings.
+	if !e.isStandaloneTurn(turn) {
+		_ = e.store.TouchThread(turn.ThreadID)
+	}
 	go rt.run(ctx, cancel, idle, turn, reg, toolset, pc, messages, len(messages), e.imagesForTurn(turn), true, snapshot)
 	return nil
 }

@@ -112,6 +112,9 @@ func (s *Store) ListUnreadThreads() ([]Thread, error) {
 		Order("last_active_at desc, id desc").Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("store: list unread completions: %w", err)
 	}
+	if err := s.loadScheduleSources(rows); err != nil {
+		return nil, err
+	}
 	return rows, nil
 }
 

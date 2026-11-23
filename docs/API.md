@@ -3700,9 +3700,20 @@ not the filtered subset.
 ], "unread": 2}
 ```
 
-`kind` is `thread` (wake an existing conversation) or `standalone` (mint a
-conversation per fire). `status` is `active`, `paused`, `done`, or
-`cancelled`.
+`kind` is `thread` (wake an existing conversation) or `standalone` (use an
+independent results conversation). `status` is `active`, `paused`, `done`, or
+`cancelled`. A standalone fire reuses the earliest surviving conversation
+with findings for that schedule in the selected project. Each fire keeps
+distinct run and turn IDs. Quiet fires do not add unread results or bump
+that conversation's recency.
+
+`GET /api/threads` and `GET /api/threads/:id` can return
+`schedule_source: {schedule_id, origin_thread_id?, origin_title?, origin_available?}`.
+Paired-phone listings include the same optional object on conversation,
+running, and unread rows. `origin_thread_id` remains available after the
+source conversation is deleted. Only a currently resolvable origin has
+`origin_available: true`. The relation follows persisted standalone runs,
+including legacy fires with an empty run kind on a standalone schedule.
 
 ### `GET /api/threads/:id/schedules`
 
@@ -3767,7 +3778,7 @@ the destination alone. A destination edit sends `kind`:
 
 - `thread` with `thread_id` of a conversation that exists and is not archived.
   `project_id` is cleared. The row's provider and model stay, so a later
-  switch back to a minted conversation still has them.
+  switch back to standalone still has them.
 - `standalone` with `thread_id` empty and `project_id` the workspace, or
   empty for a directory of its own. If the row has no provider or model yet,
   the save copies the current default. `origin_thread_id` is not changed.

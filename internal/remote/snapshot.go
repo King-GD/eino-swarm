@@ -39,7 +39,7 @@ func listProjects(eng *engine.Engine) ([]ProjectView, error) {
 }
 
 func sortedThreads(eng *engine.Engine) ([]store.Thread, error) {
-	all, err := eng.Store().ListThreads(false, "")
+	all, err := eng.Store().ListThreadsWithScheduleSources(false, "")
 	if err != nil {
 		return nil, err
 	}
@@ -111,16 +111,17 @@ func threadView(eng *engine.Engine, th store.Thread, cfg config.RemoteConfig) Th
 	st := eng.Status(th.ID)
 	title := strings.TrimSpace(th.Title)
 	return ThreadView{
-		Unread:       th.CompletedSeq > th.ReadCompletedSeq,
-		CompletedSeq: th.CompletedSeq,
-		ID:           th.ID,
-		Title:        title,
-		ProjectID:    th.ProjectID,
-		WebExecution: th.WebExecution,
-		Running:      st.Running,
-		Waiting:      st.Waiting,
-		LastActiveAt: th.LastActiveAt,
-		Summary:      threadSummary(eng, th.ID, summaryChars(cfg)),
+		ScheduleSource: th.ScheduleSource,
+		Unread:         th.CompletedSeq > th.ReadCompletedSeq,
+		CompletedSeq:   th.CompletedSeq,
+		ID:             th.ID,
+		Title:          title,
+		ProjectID:      th.ProjectID,
+		WebExecution:   th.WebExecution,
+		Running:        st.Running,
+		Waiting:        st.Waiting,
+		LastActiveAt:   th.LastActiveAt,
+		Summary:        threadSummary(eng, th.ID, summaryChars(cfg)),
 	}
 }
 
@@ -151,7 +152,7 @@ func runningViews(eng *engine.Engine, cfg config.RemoteConfig) []RunningView {
 	seen := make(map[string]int, len(ids)+len(waiting))
 	out := make([]RunningView, 0, len(ids)+len(waiting))
 	for _, id := range ids {
-		th, err := eng.Store().GetThread(id)
+		th, err := eng.Store().GetThreadWithScheduleSource(id)
 		if err != nil {
 			continue
 		}
@@ -163,7 +164,7 @@ func runningViews(eng *engine.Engine, cfg config.RemoteConfig) []RunningView {
 			out[i].Waiting = true
 			continue
 		}
-		th, err := eng.Store().GetThread(id)
+		th, err := eng.Store().GetThreadWithScheduleSource(id)
 		if err != nil {
 			continue
 		}
@@ -177,6 +178,7 @@ func runningViews(eng *engine.Engine, cfg config.RemoteConfig) []RunningView {
 func runningView(eng *engine.Engine, th *store.Thread, chars int) RunningView {
 	st := eng.Status(th.ID)
 	v := RunningView{
+		ScheduleSource:   th.ScheduleSource,
 		ThreadID:         th.ID,
 		Title:            strings.TrimSpace(th.Title),
 		TurnID:           st.TurnID,

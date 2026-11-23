@@ -21,16 +21,17 @@ export function collectLive(running: RunningView[], threads: ThreadView[]): Runn
       thread_id: th.id,
       title: th.title,
       project_id: th.project_id,
+      schedule_source: th.schedule_source,
       waiting: th.waiting,
       action: th.summary,
       last_active_at: th.last_active_at,
     })
   }
-  const projectOf = new Map(threads.map((th) => [th.id, th.project_id]))
+  const byId = new Map(threads.map((th) => [th.id, th]))
   for (const row of out) {
-    if (row.project_id) continue
-    const id = projectOf.get(row.thread_id)
-    if (id) row.project_id = id
+    const thread = byId.get(row.thread_id)
+    row.project_id ||= thread?.project_id
+    row.schedule_source ??= thread?.schedule_source
   }
   return out
 }
@@ -64,7 +65,7 @@ export function rosterFingerprint(
   const ps = projects.map((p) => `${p.id}\0${p.name}`).join("|")
   const live = running
     .map((r) =>
-      [r.thread_id, r.title, r.action ?? "", r.waiting ? "1" : "", r.turn_id ?? "", r.ask_user ? "1" : "", r.project_id ?? ""].join(
+      [r.thread_id, r.title, r.action ?? "", r.waiting ? "1" : "", r.turn_id ?? "", r.ask_user ? "1" : "", r.project_id ?? "", JSON.stringify(r.schedule_source)].join(
         "\0",
       ),
     )
@@ -81,11 +82,12 @@ export function rosterFingerprint(
         t.last_active_at,
         t.unread ? "1" : "",
         t.completed_seq ?? 0,
+        JSON.stringify(t.schedule_source),
       ].join("\0"),
     )
     .join("|")
   const unread = attention
-    .map((t) => [t.id, t.title, t.summary, t.unread, t.completed_seq, t.running ? "1" : "", t.waiting ? "1" : ""].join("\0"))
+    .map((t) => [t.id, t.title, t.summary, t.unread, t.completed_seq, t.running ? "1" : "", t.waiting ? "1" : "", JSON.stringify(t.schedule_source)].join("\0"))
     .join("|")
   return [ps, live, th, unread, more ? "1" : "0", cursor].join("#")
 }

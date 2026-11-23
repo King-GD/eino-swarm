@@ -7092,8 +7092,8 @@ Several things are tested here, some as pure logic and some in jsdom:
   (`side-panel`). New task opens `schedule-create-drawer` so the form does not
   sit on the list; Expand hides the list (`data-expanded`, list pane `hidden`;
   Escape collapses first). The form is a Task field plus Details (Runs in:
-  new conversation each run, or wake a listed chat; Project only for a minted
-  conversation) and Frequency (Repeat + delay/every/cron). Click a row for
+  an independent results conversation, or wake a listed chat; Project only for
+  the independent option) and Frequency (Repeat + delay/every/cron). Click a row for
   `schedule-edit-drawer` (title in the header, Task + searchable Runs in +
   cadence; Save is dirty-only, including a destination-only change). A finished
   wait locks Runs in. The open conversation's side panel lists waits aimed at
@@ -7103,7 +7103,12 @@ Several things are tested here, some as pure logic and some in jsdom:
   to one Open findings control (a count when there is more than one) so
   finished reports stay off the row (`unreadFindings` newest-first; opening
   a conversation marks every unread fire on that thread; wait rows are
-  `shrink-0`). A `session_memory` event is
+  `shrink-0`). Repeated standalone findings keep one project row, both turns
+  and run receipts, separate Trace links, and a link to the exact task and
+  origin (`frontend/e2e/schedules.spec.ts`). The paired-phone project and
+  unread sections show the same origin (`mobile/e2e/schedule-findings-source.spec.ts`).
+  The engine and store tests also cover quiet runs and legacy duplicates.
+  A `session_memory` event is
   quiet on the manager like a generated title — no chat row, no extra worker.
   Finished `goal_session` / `goal_continued` turns keep every answer visible
   in `transcript-session.test.tsx`, including the live-to-finished transition

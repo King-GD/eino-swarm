@@ -169,7 +169,15 @@ export type ProjectPatch = Partial<Omit<ProjectSettings, "id" | "resolved_workdi
 
 export type ProjectView = { id: string; name: string }
 
+export type ScheduleSource = {
+  schedule_id: string
+  origin_thread_id?: string
+  origin_title?: string
+  origin_available?: boolean
+}
+
 export type ThreadView = {
+  schedule_source?: ScheduleSource
   id: string
   title: string
   project_id?: string
@@ -183,6 +191,7 @@ export type ThreadView = {
 }
 
 export type RunningView = {
+  schedule_source?: ScheduleSource
   thread_id: string
   title: string
   turn_id?: string

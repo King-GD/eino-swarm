@@ -1,5 +1,6 @@
 import { cn } from "@/lib/cn"
 import { t } from "@/lib/i18n"
+import type { ScheduleSource } from "@/lib/rpc"
 import { timeAgo } from "@/lib/when"
 
 export type RowState = "idle" | "running" | "waiting" | "ask" | "unread"
@@ -10,6 +11,7 @@ export function InboxRow({
   id,
   title,
   detail,
+  scheduleSource,
   state,
   at,
   onOpen,
@@ -17,11 +19,15 @@ export function InboxRow({
   id: string
   title: string
   detail?: string
+  scheduleSource?: ScheduleSource
   state: RowState
   at?: string
   onOpen: (id: string) => void
 }) {
   const age = timeAgo(at)
+  const origin = scheduleSource?.origin_thread_id
+  const originTitle = scheduleSource?.origin_title || origin || ""
+  const originLabel = t("home.scheduleOrigin", { title: originTitle })
   return (
     <li>
       <button
@@ -51,7 +57,20 @@ export function InboxRow({
             </span>
           ) : null}
         </span>
+        {scheduleSource ? (
+          <span className="break-all text-xs text-muted-foreground">
+            {t("home.scheduledResult", { id: scheduleSource.schedule_id })}
+          </span>
+        ) : null}
       </button>
+      {origin && (scheduleSource?.origin_available ? (
+        <button type="button" className="block w-full truncate px-3 pb-2 text-left text-xs text-primary underline"
+          aria-label={originLabel} onClick={() => onOpen(origin)}>
+          {originLabel}
+        </button>
+      ) : (
+        <span className="block truncate px-3 pb-2 text-xs text-muted-foreground">{originLabel}</span>
+      ))}
     </li>
   )
 }

@@ -274,21 +274,24 @@ func (e *Engine) startClaimedFire(c claimedFire) (*store.Turn, error) {
 
 func (e *Engine) startAdmittedFire(c claimedFire) (*store.Turn, error) {
 	threadID := c.threadID
+	var standalone *store.Schedule
 	if c.standalone {
-		th, err := e.mintStandaloneThread(c.row)
+		standalone = &c.row
+		th, err := e.standaloneFireThread(c.row)
 		if err != nil {
 			if finErr := e.store.FinishRun(c.run.ID, store.ScheduleRunError, err.Error(), true); finErr != nil {
-				e.log.Warn("could not close a mint failure", "schedule", c.row.ID, "err", finErr)
+				e.log.Warn("could not close a standalone destination failure", "schedule", c.row.ID, "err", finErr)
 			}
 			return nil, err
 		}
 		threadID = th.ID
 	}
 	turn, err := e.startTurnInput(threadID, UserInput{
-		Text:             ScheduleContinueText(c.row.Prompt),
-		ContinueSchedule: true,
-		ScheduleID:       c.row.ID,
-		ScheduleRunID:    c.run.ID,
+		Text:               ScheduleContinueText(c.row.Prompt),
+		ContinueSchedule:   true,
+		ScheduleID:         c.row.ID,
+		ScheduleRunID:      c.run.ID,
+		standaloneSchedule: standalone,
 	})
 	if err != nil {
 		status := store.ScheduleRunError
@@ -313,6 +316,14 @@ func (e *Engine) startAdmittedFire(c claimedFire) (*store.Turn, error) {
 		return nil, out
 	}
 	return turn, nil
+}
+
+func (e *Engine) standaloneFireThread(row store.Schedule) (*store.Thread, error) {
+	th, err := e.store.StandaloneFindingsThread(row.ID, row.ProjectID)
+	if err != nil || th != nil {
+		return th, err
+	}
+	return e.mintStandaloneThread(row)
 }
 
 func (e *Engine) mintStandaloneThread(row store.Schedule) (*store.Thread, error) {

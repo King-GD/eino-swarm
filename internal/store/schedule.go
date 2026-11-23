@@ -45,7 +45,7 @@ const (
 var ErrScheduleCap = errors.New("store: too many active schedules")
 
 // Schedule is a wall-clock wait: either a wake on an existing conversation
-// or a standalone job that mints a conversation each time it fires.
+// or a standalone job with its own results conversation.
 type Schedule struct {
 	ID             string `gorm:"primaryKey;size:64" json:"id"`
 	Kind           string `gorm:"size:32" json:"kind"`
@@ -417,7 +417,7 @@ func (s *Store) FinishRun(id, status, summary string, unread bool) error {
 
 // CancelSchedulesForThread marks wakes that target this conversation
 // cancelled. Standalone jobs that only originated here keep running: they
-// mint their own conversation per fire.
+// use their own results conversations.
 func (s *Store) CancelSchedulesForThread(threadID string) error {
 	if err := cancelWakesForThread(s.db, threadID); err != nil {
 		return fmt.Errorf("store: cancel schedules for thread: %w", err)

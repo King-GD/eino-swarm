@@ -58,8 +58,9 @@ type Project struct {
 // Thread is one conversation. Its ID also names its workspace directory, so it
 // must stay filesystem-safe.
 type Thread struct {
-	CompletedSeq     int64 `gorm:"not null;default:0" json:"completed_seq"`
-	ReadCompletedSeq int64 `gorm:"not null;default:0" json:"-"`
+	ScheduleSource   *ScheduleSource `gorm:"-" json:"-"`
+	CompletedSeq     int64           `gorm:"not null;default:0" json:"completed_seq"`
+	ReadCompletedSeq int64           `gorm:"not null;default:0" json:"-"`
 	// Rewind may remove the terminal row, but a delayed read still names it.
 	TerminalSeqHighWater int64 `gorm:"not null;default:0" json:"-"`
 	// TaskMessageThroughSeq is a read cursor, not peer acknowledgement.
