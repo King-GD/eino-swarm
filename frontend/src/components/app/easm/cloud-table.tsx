@@ -26,9 +26,13 @@ export function CloudTable({ clouds, loading = false, className }: {
           </div>
         ) : <p className="m-0 flex min-h-0 flex-1 items-center justify-center text-xs text-muted-foreground">{text.cloudEmpty}</p>
       ) : <div tabIndex={0} role="region" aria-label={text.cloudRegion} className="min-h-0 flex-1 overflow-auto overscroll-contain">
+        {/* Widths are shares, not pixels: in the narrow side panel the fixed
+            columns used to eat the whole row and the provider name collapsed to
+            a few pixels. Short category labels keep that column narrow so the
+            provider and its services keep the room. */}
         <table className="w-full table-fixed border-collapse text-xs" data-testid="easm-clouds">
           <caption className="sr-only">{text.cloudCaption(rows.length)}</caption>
-          <colgroup><col /><col className="w-[76px]" /><col className="w-[62px]" /><col className="w-[52px]" /><col className="w-[36%]" /></colgroup>
+          <colgroup><col className="w-[31%]" /><col className="w-[13%]" /><col className="w-[16%]" /><col className="w-[13%]" /><col /></colgroup>
           <thead>
             <tr className="sticky top-0 z-[1] bg-muted text-[11px] text-muted-foreground">
               <th scope="col" className="px-1.5 py-2 text-left font-medium">{text.cloudProvider}</th>

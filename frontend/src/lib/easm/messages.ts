@@ -39,8 +39,8 @@ const en = {
   cloudProvider: "Provider", cloudCategory: "Category", cloudAssets: "Assets", cloudIPs: "IPs", cloudServices: "Main services",
   cloudService: (name: string, count: string) => `${name} ${count}`,
   cloudCategories: {
-    cdn: "CDN", waf: "Protection", cloud: "Cloud", storage: "Object storage", mail: "Mail",
-    platform: "Hosting platform", own: "Own network", unknown: "—",
+    cdn: "CDN", waf: "WAF", cloud: "Cloud", storage: "Storage", mail: "Mail",
+    platform: "Hosting", own: "Own", unknown: "—",
   } satisfies Record<CloudCategory, string>,
   logo: (name: string) => `${name} logo`,
   filingSubject: (subject: string) => ` ${subject}'s filing record`, filingSaved: "the saved filing record",
@@ -91,8 +91,8 @@ const zh: EasmText = {
   cloudProvider: "云商", cloudCategory: "类别", cloudAssets: "资产", cloudIPs: "IP", cloudServices: "主要服务",
   cloudService: (name, count) => `${name} ${count}`,
   cloudCategories: {
-    cdn: "CDN", waf: "云防护", cloud: "云主机", storage: "对象存储", mail: "邮件",
-    platform: "托管平台", own: "自有网络", unknown: "—",
+    cdn: "CDN", waf: "防护", cloud: "主机", storage: "存储", mail: "邮件",
+    platform: "托管", own: "自有", unknown: "—",
   },
   logo: (name) => `${name}标识`,
   filingSubject: (subject) => ` ${subject} 的备案记录`, filingSaved: "已保存的备案记录",
