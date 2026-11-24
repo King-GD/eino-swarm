@@ -63,9 +63,9 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
   appear in the original turn receipt and refresh the open Knowledge panel.
   (`F-138`, `F-420`, `C-025`, `C-054`)
 
-- The right panel groups Agents, Files, Trace and agent-opened panels under
-  Task, and Memory, Collaboration and Knowledge under the project name.
-  Conversations outside projects show Shared library. (`F-138`)
+- The right panel uses a single row for task and project tabs. Hover over a
+  tab to see its scope. Shared tabs outside projects show Shared library.
+  (`F-138`)
 
 - Side chat answers from the current task's findings, project notes and recorded skills. It can search that task and open a skill, and it still cannot change the task. (`F-147`, `C-042`)
 

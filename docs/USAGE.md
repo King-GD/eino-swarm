@@ -832,7 +832,7 @@ See [Work records](WORK.md).
 
 ## Project knowledge
 
-In the right panel, open **Knowledge** under the project name and choose
+In the right panel, open **Knowledge** and choose
 **Enable knowledge base**. If the conversation is in **Shared library**,
 move it into a project to use Knowledge. **By type** groups pages by their
 schema type. Project-defined views follow named relationships. **Pending**
