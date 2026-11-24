@@ -753,7 +753,9 @@ export const zh: { [K in keyof typeof en]: string } = {
   "settings.swarm.autoTitleHint":
     "第一条发出后立刻起名，定过就不再改。关掉则一直用首条消息。你亲手起的名字不会被覆盖。可在模型页钉一个不同的模型。",
   "settings.swarm.workLedger": "工作记录",
-  "settings.swarm.workLedgerHint": "为普通会话的 Agent 提供工作记录工具，从下一回合生效。",
+  "settings.swarm.workLedgerHint": "提炼并展示工作记录。关闭后隐藏面板。",
+  "settings.swarm.knowledge": "知识库",
+  "settings.swarm.knowledgeHint": "整理项目知识。关闭后停止知识库提炼并隐藏面板。",
   "settings.swarm.predictions": "建议下一步",
   "settings.swarm.predictionsHint":
     "回复结束后，空的输入框显示一条可能的下一步。Tab 填入，回车才会发送。关闭后不再生成。",

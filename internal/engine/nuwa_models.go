@@ -76,7 +76,9 @@ func (e *Engine) wireNuwaRegistry(reg *swarm.Registry, set *tools.Set, pc *proje
 	if !turn.NuwaEnabled || pc == nil || pc.project == nil {
 		return
 	}
-	reg.VerifyAdmission = e.nuwaVerifyAdmission(turn)
+	if e.workLedgerEnabled(turn) {
+		reg.VerifyAdmission = e.nuwaVerifyAdmission(turn)
+	}
 	reg.EnableDelegation = true
 	reg.SelectableToolNames = selectableWorkerToolNames(pc.workerTools(set))
 	reg.SelectWorkerModel = func(ctx context.Context, ref string) (swarm.ModelBinding, swarm.ModelBuilder, error) {
@@ -180,7 +182,7 @@ model_ref or pass that exact ref for each new role; a different model is
 refused. When it has not, and multiple models are available, pass an exact
 model_ref from list_models. Give each executor a self-contained objective, constraints,
 inputs, expected outputs, and evidence requirements. Do not repeat its task.
-Collect results with wait_agents and inspect shared records with read_work.
+Collect results with wait_agents.
 
 Before you accept any deliverable or call complete_goal, verify it with an
 independent executor — not the one that produced it. Verification and repair
@@ -189,16 +191,17 @@ objective, constraints and acceptance criteria, then exercises the actual result
 against the hardest inputs those criteria imply: boundary and extreme values,
 empty, large, malformed or adversarial inputs, and every explicitly required
 rule or case. The producer's own passing cases are a claim, not verification;
-reuse of them does not discharge this step. Record the verification outcome and
-its evidence with record_work, so a failure marks dependent work for review.
-Pass intent "verify" and target set to that record_work id when you spawn the
+reuse of them does not discharge this step. A worker report alone is not proof
+of an external effect. Keep permissions and uncertain effects explicit.
+`
+
+const nuwaWorkVerification = `Record the verification outcome and its evidence with record_work,
+so a failure marks dependent work for review. Pass intent "verify" and target set to that record_work id when you spawn the
 check. The host allows one verify and one fix for each shared record in this
 turn and refuses another before a worker starts. If verification fails, spawn
 one repair with intent "fix" and the same target, then stop. Report the unmet
 criterion instead of retrying a refused check. Omit intent for ordinary
-implementation; that work is not part of this limit. A worker report alone is
-not proof of an external effect. Keep permissions and uncertain effects explicit.
-
+implementation; that work is not part of this limit.
 `
 
 const nuwaWorkerToolHint = "When a new worker needs only certain workspace tools, optionally discover names with list_worker_tools and pass them in spawn_agent.tool_names. Omit tool_names to inherit the available scope."

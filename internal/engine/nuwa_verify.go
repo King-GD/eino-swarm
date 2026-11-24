@@ -13,6 +13,9 @@ import (
 // that keeps spawning verifiers is refused before the next worker exists.
 func (e *Engine) nuwaVerifyAdmission(turn *store.Turn) func(context.Context, string, string, string) error {
 	return func(ctx context.Context, intent, target, callID string) error {
+		if !e.cfg.SwarmSnapshot().WorkLedger {
+			return ErrWorkDisabled
+		}
 		if turn == nil || turn.ProjectID == "" {
 			return fmt.Errorf("spawn_agent: verification has no project")
 		}

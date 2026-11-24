@@ -173,10 +173,13 @@ func (rt *runtime) runManager(ctx context.Context, turn *store.Turn, reg *swarm.
 		}
 		managerTools = append(managerTools, e.nuwaModelTool(turn))
 	}
-	if workLedgerEnabled(turn) {
+	if e.workLedgerEnabled(turn) {
 		readOnly := workLedgerReadOnly(turn)
 		managerTools = append(managerTools, e.nuwaWorkTools(toolset.WorkspaceDir, turn, readOnly)...)
 		instruction = JoinPromptSections(instruction, workLedgerInstruction(readOnly))
+		if turn.NuwaEnabled && !readOnly {
+			instruction = JoinPromptSections(instruction, nuwaWorkVerification)
+		}
 	}
 	managerTools = append(managerTools, e.knowledgeTools(pc, turn, knowledgeReadOnly)...)
 	if knowledgeReadOnly {

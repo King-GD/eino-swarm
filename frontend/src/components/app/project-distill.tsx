@@ -33,16 +33,17 @@ export function ProjectDistillMenu({ projectId, threadId, knowledgeEnabled }: Pr
   const pending = (slot?.result?.progress?.remaining ?? 0) > 0
   const refreshKey = useKnowledge((s) => s.refreshByProject[projectId])
   const [knowledge, setKnowledge] = useState<{ projectId: string; enabled: boolean }>()
+  const knowledgeAvailable = useApp((s) => s.meta?.swarm?.knowledge !== false)
   const enabled = knowledgeEnabled ?? (knowledge?.projectId === projectId ? knowledge.enabled : undefined)
 
   useEffect(() => {
-    if (knowledgeEnabled !== undefined) return
+    if (!knowledgeAvailable || knowledgeEnabled !== undefined) return
     const controller = new AbortController()
     void api.knowledgeStatus(projectId, controller.signal).then((status) => {
       if (!controller.signal.aborted) setKnowledge({ projectId, enabled: status.enabled })
     }, () => undefined)
     return () => controller.abort()
-  }, [projectId, knowledgeEnabled, refreshKey])
+  }, [projectId, knowledgeAvailable, knowledgeEnabled, refreshKey])
 
   const start = (scope: DistillScope, enableKnowledge: boolean) => {
     void useDistillation.getState().start(projectId, {
@@ -63,7 +64,7 @@ export function ProjectDistillMenu({ projectId, threadId, knowledgeEnabled }: Pr
         {scopes.map(([scope, key]) => (
           <DropdownMenuItem key={scope} disabled={scope !== "project" && !threadId} onSelect={() => start(scope, false)}>{t(key)}</DropdownMenuItem>
         ))}
-        {enabled === false ? <>
+        {knowledgeAvailable && enabled === false ? <>
           <DropdownMenuSeparator />
           <DropdownMenuLabel>{t("knowledge.enableAndDistill")}</DropdownMenuLabel>
           {scopes.map(([scope, key]) => (

@@ -37,7 +37,8 @@ type WorkRevision struct {
 
 type WorkSnapshot struct {
 	WorkRevision
-	Nodes []NuwaNode `json:"nodes"`
+	Nodes      []NuwaNode `json:"nodes"`
+	HasOwnWork bool       `json:"has_own_work,omitempty"`
 }
 
 func migrateWorkScopes(db *gorm.DB) error {
@@ -213,6 +214,12 @@ func (s *Store) workSnapshot(ctx context.Context, threadID, turnID, projectID st
 			return err
 		}
 		snapshot.Nodes, err = readAnnotatedWorkNodes(tx, thread.ID, thread.ProjectID)
+		if err != nil {
+			return err
+		}
+		if turnID == "" {
+			snapshot.HasOwnWork, err = threadHasWork(tx, thread.ID)
+		}
 		if err != nil || len(kinds) == 0 {
 			return err
 		}

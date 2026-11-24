@@ -11,7 +11,7 @@ type NodeReceipt = { ok: boolean; node: { id: string; version: number } }
 
 /** Real model HTTP → Registry tool → durable project nodes → snapshot/SSE.
  * This is protocol evidence, not a measurement of autonomous model reasoning. */
-export async function startNuwaFixture(mode?: "discussion" | "published" | "ordinary") {
+export async function startNuwaFixture(mode?: "discussion" | "published" | "ordinary" | "legacy") {
   const errors: string[] = []
   const workerModels: string[] = []
   let taskNode: { id: string; version: number } | undefined
@@ -78,6 +78,24 @@ export async function startNuwaFixture(mode?: "discussion" | "published" | "ordi
         const input = JSON.parse(raw) as Input
         if (input.messages[0]?.content?.startsWith("## Schedule answer claims")) {
           reply(response, input, { role: "assistant", content: JSON.stringify({ claims: [] }) })
+          return
+        }
+        if (mode === "legacy") {
+          if (input.tools?.some((tool) => tool.function.name === "record_work"))
+            throw new Error("Work tool appeared while creating legacy history")
+          const context = input.messages.map((message) => message.content ?? "").join("\n")
+          if (input.messages[0]?.content?.startsWith("Extract durable work records")) {
+            if (!context.includes("Historical inspection") || input.tools?.length)
+              throw new Error("Wrong legacy extraction input")
+            const source = context.match(/\[seq=(\d+) kind=user/)
+            if (!source) throw new Error("Historical source was not offered")
+            reply(response, input, { role: "assistant", content: JSON.stringify({ records: [{
+              kind: "fact", title: "Distilled inspection", status: "reported",
+              summary: "The saved inspection identified a durable finding.", evidence: [Number(source[1])],
+            }] }) })
+          } else {
+            reply(response, input, { role: "assistant", content: "Historical inspection found a durable observation." })
+          }
           return
         }
         if (!input.tools?.some((tool) => tool.function.name === "record_work"))

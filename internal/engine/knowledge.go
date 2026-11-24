@@ -37,10 +37,16 @@ func (e *Engine) ProjectKnowledge(projectID string) (*knowledge.Store, error) {
 }
 
 func (e *Engine) snapshotProjectKnowledge(pc *projectContext) {
+	if !e.cfg.SwarmSnapshot().Knowledge {
+		return
+	}
 	kb, err := e.ProjectKnowledge(pc.project.ID)
 	if err == nil {
 		var snapshot *knowledge.Snapshot
 		snapshot, err = kb.Snapshot()
+		if err == nil && !snapshot.Enabled() && !pc.planning {
+			snapshot, err = kb.Enable()
+		}
 		if err == nil && snapshot.Enabled() {
 			pc.knowledge = kb
 			pc.knowledgeSummary = snapshot.Summary(knowledgeSchemaPromptBudget)
@@ -57,6 +63,9 @@ func (pc *projectContext) hasKnowledge() bool {
 
 // EnableProjectKnowledge materializes the starter schema once for a live project.
 func (e *Engine) EnableProjectKnowledge(projectID string) (*knowledge.Snapshot, error) {
+	if !e.cfg.SwarmSnapshot().Knowledge {
+		return nil, knowledge.ErrDisabled
+	}
 	done, err := e.beginAdmission()
 	if err != nil {
 		return nil, err
@@ -73,6 +82,9 @@ func (e *Engine) EnableProjectKnowledge(projectID string) (*knowledge.Snapshot, 
 
 // ProjectKnowledgePage resolves the live status of its references for HTTP.
 func (e *Engine) ProjectKnowledgePage(ctx context.Context, projectID, id string) (*knowledge.PageDetail, error) {
+	if !e.cfg.SwarmSnapshot().Knowledge {
+		return nil, knowledge.ErrDisabled
+	}
 	kb, err := e.ProjectKnowledge(projectID)
 	if err != nil {
 		return nil, err

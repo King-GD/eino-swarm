@@ -40,8 +40,8 @@ func workLedgerInstruction(readOnly bool) string {
 	return JoinPromptSections(workLedgerReadGuidance, workLedgerWriteGuidance)
 }
 
-func workLedgerEnabled(turn *store.Turn) bool {
-	return turn != nil && (turn.WorkLedger || turn.NuwaEnabled)
+func (e *Engine) workLedgerEnabled(turn *store.Turn) bool {
+	return turn != nil && e.cfg.SwarmSnapshot().WorkLedger && (turn.WorkLedger || turn.NuwaEnabled)
 }
 
 func workLedgerReadOnly(turn *store.Turn) bool {
@@ -50,11 +50,11 @@ func workLedgerReadOnly(turn *store.Turn) bool {
 
 func (e *Engine) freezeWorkLedger(turn *store.Turn, planning bool) {
 	turn.WorkLedger = e.cfg.SwarmSnapshot().WorkLedger
-	turn.WorkLedgerReadOnly = planning && workLedgerEnabled(turn)
+	turn.WorkLedgerReadOnly = planning && turn.WorkLedger
 }
 
 func (e *Engine) wireWorkLedgerRegistry(reg *swarm.Registry, set *tools.Set, turn *store.Turn) {
-	if !workLedgerEnabled(turn) {
+	if !e.workLedgerEnabled(turn) {
 		return
 	}
 	readOnly := workLedgerReadOnly(turn)

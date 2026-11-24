@@ -74,6 +74,7 @@ export interface WorkVersion {
 }
 
 export interface ThreadWorkSnapshot extends WorkVersion {
+  has_own_work?: boolean
   nodes: NuwaNode[]
   workers: NuwaWorker[]
 }

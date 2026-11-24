@@ -13,15 +13,16 @@ func TestWorkLedgerSettingsOlderPutKeepsChoice(t *testing.T) {
 		return out["settings"].(map[string]any)["swarm"].(map[string]any)
 	}
 	before := swarm(http.MethodGet, nil)
-	if before["work_ledger"] != true {
+	if before["work_ledger"] != true || before["knowledge"] != true {
 		t.Fatalf("work records must default on: %v", before)
 	}
-	before["work_ledger"] = false
-	if off := swarm(http.MethodPut, map[string]any{"swarm": before}); off["work_ledger"] != false {
+	before["work_ledger"], before["knowledge"] = false, false
+	if off := swarm(http.MethodPut, map[string]any{"swarm": before}); off["work_ledger"] != false || off["knowledge"] != false {
 		t.Fatalf("explicit opt out was ignored: %v", off)
 	}
 	delete(before, "work_ledger")
-	if oldClient := swarm(http.MethodPut, map[string]any{"swarm": before}); oldClient["work_ledger"] != false {
+	delete(before, "knowledge")
+	if oldClient := swarm(http.MethodPut, map[string]any{"swarm": before}); oldClient["work_ledger"] != false || oldClient["knowledge"] != false {
 		t.Fatalf("an older client reset the work record choice: %v", oldClient)
 	}
 }

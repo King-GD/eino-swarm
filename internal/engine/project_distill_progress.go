@@ -210,6 +210,9 @@ func (e *Engine) validateDistillationDestinations(projectID string, kb *knowledg
 		return errors.New("Memory was disabled during distillation")
 	}
 	if result.KnowledgeEnabled {
+		if !e.cfg.SwarmSnapshot().Knowledge {
+			return knowledge.ErrDisabled
+		}
 		snapshot, err := kb.Snapshot()
 		if err != nil {
 			return err

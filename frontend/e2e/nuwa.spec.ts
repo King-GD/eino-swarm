@@ -97,6 +97,7 @@ test("Nuwa creation shares live evidence paths and preserves them after disablin
     await expect(page.getByTestId("nuwa-panel")).toHaveCount(0)
     await collaboration.click()
     await expect(page.getByTestId("nuwa-panel")).toContainText("No work records in this conversation yet.")
+    await page.getByRole("button", { name: "Entire project", exact: true }).click()
     const started = await request.post(`/api/threads/${firstThread}/turns`, {
       data: { text: "Compare the supplied evidence and prepare review notes." },
     })
@@ -111,10 +112,8 @@ test("Nuwa creation shares live evidence paths and preserves them after disablin
     await expect(graph.getByRole("button", { name: /Review notes/ })).toBeVisible()
     await expect(graph.getByTestId("nuwa-edge")).toHaveCount(2)
     await expect(graph.getByTestId("nuwa-goal-edge")).toHaveCount(1)
-    const resultRow = page
-      .getByRole("list", { name: "Shared work nodes", exact: true })
-      .getByRole("button")
-      .filter({ has: page.getByText("Review notes", { exact: true }) })
+    await expect(page.getByRole("list", { name: "Shared work nodes", exact: true })).toHaveCount(0)
+    const resultRow = graph.getByRole("button", { name: /Review notes/ })
     const statusBounds = await resultRow.getByText("Reported", { exact: true }).boundingBox()
     const panelBounds = await page.getByTestId("nuwa-panel").boundingBox()
     expect(statusBounds).not.toBeNull()
@@ -194,10 +193,10 @@ test("Nuwa creation shares live evidence paths and preserves them after disablin
     await page.reload()
     await openThread(page, projectName, second)
     await page.getByRole("tab", { name: "Work records", exact: true }).click()
-    await expect(graph.getByRole("button", { name: /Review notes/ })).toBeVisible()
     await expect(page.getByRole("button", { name: "This conversation", exact: true })).toHaveAttribute("aria-pressed", "true")
-    await expect(graph.getByRole("button", { name: /Review notes/ })).toBeVisible()
+    await expect(graph.getByRole("button", { name: /Review notes/ })).toHaveCount(0)
     await page.getByRole("button", { name: "Entire project", exact: true }).click()
+    await expect(graph.getByRole("button", { name: /Review notes/ })).toBeVisible()
     fixture.revise({ id: finding.id, version: finding.version })
     const reviewed = await request.post(`/api/threads/${second}/turns`, {
       data: { text: "Review the recorded evidence." },
@@ -274,6 +273,7 @@ test("Nuwa creation shares live evidence paths and preserves them after disablin
     await page.getByRole("tab", { name: "Work records", exact: true }).click()
     await expect(page.getByTestId("nuwa-panel")).toContainText("Nuwa collaboration is off")
     await expect(page.getByTestId("nuwa-panel")).toContainText("Current work continues")
+    await page.getByRole("button", { name: "Entire project", exact: true }).click()
     await expect(graph.getByRole("button", { name: /Measured finding/ })).toContainText(
       "Superseded"
     )
@@ -322,6 +322,7 @@ test("published artifacts retain their recorded turn and publishers after reload
     await page.goto("/")
     await openThread(page, projectName, thread)
     await page.getByRole("tab", { name: "Work records", exact: true }).click()
+    await page.getByRole("button", { name: "Entire project", exact: true }).click()
     fixture.releaseTask()
     const started = await request.post(`/api/threads/${thread}/turns`, {
       data: { text: "Publish the independently produced review artifacts." },
@@ -401,6 +402,7 @@ test("published artifacts retain their recorded turn and publishers after reload
     await page.reload()
     await openThread(page, projectName, thread)
     await page.getByRole("tab", { name: "Work records", exact: true }).click()
+    await page.getByRole("button", { name: "Entire project", exact: true }).click()
     await page.getByRole("button", { name: "Expand graph", exact: true }).click()
     const dialog = page.getByRole("dialog", { name: collaborationPaths, exact: true })
     await assertOrigins(dialog.getByRole("region", { name: collaborationPaths, exact: true }))
@@ -524,6 +526,8 @@ test("ordinary conversations merge private records across two live windows and r
       await page.getByRole("button", { name: "Merge into project", exact: true }).click()
       const peerGraph = peer.getByRole("region", { name: collaborationGraph, exact: true })
       const peerRecord = peerGraph.getByRole("button", { name: /Bounded observation/ })
+      await expect(peerRecord).toHaveCount(0)
+      await peer.getByRole("button", { name: "Entire project", exact: true }).click()
       await expect(peerRecord).toBeVisible()
       await expect(page.getByTestId("nuwa-node-detail")).toContainText("Project record")
       const [shared] = await workRecords(request, second)
@@ -563,7 +567,7 @@ test("standalone conversations record work without a project destination", async
     const tab = page.getByRole("tab", { name: "Work records", exact: true })
     await expect(tab).toHaveAttribute("aria-selected", "false")
     await tab.click()
-    await expect(page.getByRole("button", { name: "Entire project", exact: true })).toBeDisabled()
+    await expect(page.getByRole("button", { name: "Entire project", exact: true })).toHaveCount(0)
     await runWorkTurn(request, thread, "Record a standalone observation.")
     await page.getByRole("region", { name: collaborationGraph, exact: true })
       .getByRole("button", { name: /Bounded observation/ }).click()
@@ -573,6 +577,59 @@ test("standalone conversations record work without a project destination", async
     expect(await workRecords(request, thread)).toEqual([expect.objectContaining({ scope: "thread" })])
     expect(fixture.errors).toEqual([])
   } finally {
+    await fixture.close()
+  }
+})
+
+test("re-enabling work records lets an old conversation distill privately", async ({ page, request }) => {
+  test.skip(process.env.ZWAI_E2E_NUWA !== "1", "requires the real keyless work record fixture")
+  const fixture = await startNuwaFixture("legacy")
+  const { settings: before } = await (await request.get("/api/settings")).json()
+  const features = async (work_ledger: boolean, knowledge: boolean) => {
+    const { settings } = await (await request.get("/api/settings")).json()
+    const saved = await request.put("/api/settings", { data: {
+      swarm: { ...settings.swarm, work_ledger, knowledge },
+    } })
+    expect(saved.ok()).toBe(true)
+  }
+  try {
+    await configureNuwaFixture(request, fixture.url)
+    await features(false, false)
+    await freshConversation(page)
+    const thread = (await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id"))!
+    const tabs = page.getByTestId("side-panel").getByRole("tablist")
+    const work = tabs.getByRole("tab", { name: "Work records", exact: true })
+    const knowledge = tabs.getByRole("tab", { name: "Knowledge", exact: true })
+    await expect(work).toHaveCount(0)
+    await expect(knowledge).toHaveCount(0)
+    await runWorkTurn(request, thread, "Historical inspection requested.")
+    const snapshot = await request.get(`/api/threads/${thread}/work`)
+    expect((await request.post(`/api/threads/${thread}/work/distill`, {
+      headers: { "If-Match": snapshot.headers().etag },
+    })).status()).toBe(409)
+
+    await features(true, true)
+    await page.reload()
+    const row = page.locator(`[data-testid="thread-row"][data-id="${thread}"]`)
+    await row.getByTestId("row-label").click()
+    await expect(work).toHaveAttribute("data-scope", "thread")
+    await expect(knowledge).toHaveAttribute("data-scope", "project")
+    await work.click()
+    const distill = page.getByRole("button", { name: "Distill", exact: true })
+    await expect(distill).toBeEnabled()
+    await distill.click()
+    await expect(page.getByRole("button", { name: /Distilled inspection/ })).toBeVisible()
+    await expect(distill).toHaveCount(0)
+    await expect(page.getByTestId("nuwa-node-detail")).toHaveCount(0)
+    await page.getByRole("button", { name: /Distilled inspection/ }).click()
+    await expect(page.getByTestId("nuwa-node-detail")).toContainText("Conversation record")
+    expect(await workRecords(request, thread)).toEqual([expect.objectContaining({
+      scope: "thread", evidence: [expect.objectContaining({ thread_id: thread })],
+    })])
+    expect(await workRecords(request, thread)).toHaveLength(1)
+    expect(fixture.errors).toEqual([])
+  } finally {
+    await features(before.swarm.work_ledger, before.swarm.knowledge)
     await fixture.close()
   }
 })

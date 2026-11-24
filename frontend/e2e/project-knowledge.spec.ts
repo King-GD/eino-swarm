@@ -23,11 +23,10 @@ const knowledgeTab = (page: Page) => page.getByRole("tab", { name: "Knowledge", 
 
 test("a conversation outside projects keeps its shared library and explains knowledge admission", async ({ page }) => {
   await freshConversation(page)
-  const task = page.getByRole("group", { name: "Task", exact: true })
-  const shared = page.getByRole("group", { name: "Shared library", exact: true })
-  await expect(task.getByRole("tab")).toHaveText(["Agents", "Files", "Trace", "Work records"])
-  await expect(shared.getByRole("tab", { name: "Memory", exact: true })).toBeVisible()
-  await shared.getByRole("tab", { name: "Knowledge", exact: true }).click()
+  const tabs = page.getByTestId("side-panel").getByRole("tablist")
+  await expect(tabs.locator('[data-scope="thread"]')).toHaveText(["Agents", "Files", "Trace", "Work records"])
+  await expect(tabs.getByRole("tab", { name: "Memory", exact: true })).toHaveAttribute("data-scope", "project")
+  await tabs.getByRole("tab", { name: "Knowledge", exact: true }).click()
   await expect(page.getByTestId("knowledge-panel")).toContainText("Move this conversation into a project")
   await expect(page.getByTestId("knowledge-enable")).toHaveCount(0)
   await expect(page.getByTestId("knowledge-distill")).toHaveCount(0)
@@ -37,10 +36,9 @@ test("enable, browse, follow links, and return through the project wiki", async 
   const name = `Wiki navigation ${Date.now()}`
   const { projectId, threadId } = await openProjectConversation(page, name)
   const kb = `/api/projects/${projectId}/knowledge`
-  const projectGroup = page.getByRole("group", { name, exact: true })
-  await expect(projectGroup.getByText(name)).toHaveAttribute("title", name)
-  await expect(projectGroup.getByRole("tab", { name: "Memory", exact: true })).toBeVisible()
-  await projectGroup.getByRole("tab", { name: "Knowledge", exact: true }).click()
+  const tabs = page.getByTestId("side-panel").getByRole("tablist")
+  await expect(tabs.getByRole("tab", { name: "Memory", exact: true })).toHaveAttribute("data-scope", "project")
+  await tabs.getByRole("tab", { name: "Knowledge", exact: true }).click()
   const enabled = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === kb)
   await page.getByTestId("knowledge-enable").click()
   expect((await enabled).status()).toBe(200)
@@ -121,35 +119,40 @@ for (const [scope, value, tab] of [
 ] as const) {
   test(`Distill ${scope.toLowerCase()} in place and share its receipt across panels`, async ({ page }) => {
     const { projectId, threadId, title } = await openProjectConversation(page, `Distillation ${value} ${Date.now()}`, true)
-    await send(page, "Keep the observation and retain the reusable procedure.")
-    await waitForIdle(page)
-    const endpoint = `/api/projects/${projectId}/distill`
-    await page.getByRole("tab", { name: tab === "Memory" ? /^Memory/ : "Knowledge" }).click()
-    const admitted = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === endpoint)
-    await page.getByTestId("knowledge-distill").click()
-    const enable = page.getByRole("menuitem", { name: `Enable knowledge and distill · ${scope}`, exact: true })
-    await expect(enable).toBeVisible()
-    await enable.click()
-    const reply = await admitted
-    expect(reply.status()).toBe(202)
-    expect(reply.request().postDataJSON()).toEqual({
-      scope: value,
-      ...(value === "project" ? {} : { thread_id: threadId }),
-      enable_knowledge: true,
-    })
-    const job = await reply.json()
-    const status = page.getByTestId("project-distill-status")
-    await expect(status).toContainText("Distillation finished.", { timeout: 45_000 })
-    expect(await (await page.request.get(endpoint)).json()).toMatchObject({
-      review_id: job.review_id, state: "completed", thread_id: threadId,
-      knowledge: [expect.objectContaining({ action: "write_page" })],
-    })
-    await expect(page.getByTestId("thread-title")).toHaveText(title)
-    await page.getByRole("tab", { name: tab === "Memory" ? "Knowledge" : /^Memory/ }).click()
-    await expect(status).toContainText("1 knowledge changes")
-    await status.getByRole("button", { name: "Open Trace" }).click()
-    await expect(page.getByRole("tab", { name: "Trace", exact: true })).toHaveAttribute("aria-selected", "true")
-    expect((await page.request.delete(`/api/projects/${projectId}`)).status()).toBe(204)
+    const { settings } = await (await page.request.get("/api/settings")).json()
+    expect((await page.request.put("/api/settings", { data: {
+      memory: { ...settings.memory, auto_review: false },
+    } })).ok()).toBe(true)
+    try {
+      await send(page, "Keep the observation and retain the reusable procedure.")
+      await waitForIdle(page)
+      const endpoint = `/api/projects/${projectId}/distill`
+      await page.getByRole("tab", { name: tab === "Memory" ? /^Memory/ : "Knowledge" }).click()
+      const admitted = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === endpoint)
+      await page.getByTestId("knowledge-distill").click()
+      await page.getByRole("menuitem", { name: scope, exact: true }).click()
+      const reply = await admitted
+      expect(reply.status()).toBe(202)
+      expect(reply.request().postDataJSON()).toEqual({
+        scope: value,
+        ...(value === "project" ? {} : { thread_id: threadId }),
+      })
+      const job = await reply.json()
+      const status = page.getByTestId("project-distill-status")
+      await expect(status).toContainText("Distillation finished.", { timeout: 45_000 })
+      expect(await (await page.request.get(endpoint)).json()).toMatchObject({
+        review_id: job.review_id, state: "completed", thread_id: threadId,
+        knowledge: [expect.objectContaining({ action: "write_page" })],
+      })
+      await expect(page.getByTestId("thread-title")).toHaveText(title)
+      await page.getByRole("tab", { name: tab === "Memory" ? "Knowledge" : /^Memory/ }).click()
+      await expect(status).toContainText("1 knowledge changes")
+      await status.getByRole("button", { name: "Open Trace" }).click()
+      await expect(page.getByRole("tab", { name: "Trace", exact: true })).toHaveAttribute("aria-selected", "true")
+      expect((await page.request.delete(`/api/projects/${projectId}`)).status()).toBe(204)
+    } finally {
+      await page.request.put("/api/settings", { data: { memory: settings.memory } })
+    }
   })
 }
 

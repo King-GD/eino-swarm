@@ -200,6 +200,9 @@ func (b *projectDistillBatch) publish(ctx context.Context, proposal distillPropo
 		return "", false, errors.New("Memory was disabled during distillation")
 	}
 	if len(*proposal.Knowledge) > 0 {
+		if !b.e.cfg.SwarmSnapshot().Knowledge {
+			return "", false, knowledge.ErrDisabled
+		}
 		snap, err := b.work.kb.Snapshot()
 		if err != nil {
 			return "", false, err

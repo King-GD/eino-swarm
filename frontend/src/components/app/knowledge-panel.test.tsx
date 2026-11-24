@@ -28,11 +28,11 @@ describe("Knowledge panel project ownership", () => {
     const { rerender } = render(<KnowledgePanel project={project("first")} {...actions} />)
     const oldSignal = read.mock.calls[0]?.[1]
     rerender(<KnowledgePanel project={project("second")} {...actions} />)
-    expect(await screen.findByRole("button", { name: "Enable knowledge base" })).toBeTruthy()
+    expect(await screen.findByRole("button", { name: "Initialize knowledge base" })).toBeTruthy()
     expect(oldSignal?.aborted).toBe(true)
 
     await act(async () => finishFirst(status(true)))
-    expect(screen.getByRole("button", { name: "Enable knowledge base" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Initialize knowledge base" })).toBeTruthy()
     expect(readTree).not.toHaveBeenCalled()
   })
 })

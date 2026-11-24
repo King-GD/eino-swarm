@@ -1783,11 +1783,11 @@ and the conversation endpoints below provide the two read scopes. See
 ### `GET /api/threads/:id/work`
 
 Returns `thread_id`, `project_id`, `thread_revision`, `project_revision`,
-`data_generation`, `nodes`, and `workers`. A standalone thread has an empty project ID and zero
+`data_generation`, `nodes`, and `workers`. `has_own_work` is true when the conversation has already created any work records, including promoted records. A standalone thread has an empty project ID and zero
 project revision. The snapshot includes the thread's own private records and
 its current project's shared records. Workers are limited to this thread and
 come from durable lifecycle records. The response ETag identifies this snapshot
-and is the precondition for promotion.
+and is the precondition for promotion and manual extraction.
 
 ### `GET /api/threads/:id/work/events`
 
@@ -1803,6 +1803,16 @@ Body `{"ids":["nw_…"]}`, with the current work snapshot's ETag in `If-Match`.
 Moves the requested private records and their private prerequisites to the
 current project in one transaction. Returns `200` with the committed `thread_id`, `project_id`, revision pair, `data_generation`, promoted `nodes` and a new ETag. A changed snapshot or membership returns `409`. Invalid
 input or a standalone destination returns `400`.
+
+### `POST /api/threads/:id/work/distill`
+
+Extracts private work records from the saved history of a conversation that
+has no records of its own. Send its work snapshot ETag in `If-Match`. The
+request returns `200` with `{"created":n}`; zero means there was nothing to
+keep. Concurrent extraction, changed ownership or history, and records created
+during the request return `409 work_conflict`. The global Work records switch
+rejects extraction with `409 work_disabled`. The model can cite only offered
+source events, and records are published in one storage transaction.
 
 ### `DELETE /api/projects/:id` → `204`
 

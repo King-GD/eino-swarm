@@ -253,7 +253,7 @@ func TestNuwaSharedContextUsesFrozenTurnModeAtActualHTTP(t *testing.T) {
 					writeContextFlowReply(w, request.Stream, map[string]any{"content": "The current input was inspected."}, "stop")
 				})
 				e.cfg.Memory.AutoReview = false
-				e.cfg.Swarm.WorkLedger = false
+				e.cfg.Swarm.WorkLedger = nuwa
 				project, seedThread, seedTurn := nuwaContextHTTPSource(t, e, "Frozen shared-state mode")
 				node := nuwaValidationNode(t, e, project, seedThread, seedTurn, store.NewID("visible_"), "")
 				if _, err := e.UpdateProject(project.ID, nil, nil, nil, nil, &nuwa); err != nil {

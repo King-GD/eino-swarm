@@ -2,7 +2,7 @@ import { act, render, screen, within } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { RightPanel } from "./panel"
 import { emptyTranscript } from "@/lib/transcript"
-import type { Project } from "@/lib/types"
+import type { Meta, Project } from "@/lib/types"
 import { useTaskPanels } from "@/store/task-panels"
 import type { TaskPanel } from "@/task-panels/types"
 
@@ -34,9 +34,15 @@ const props = {
 }
 
 describe("Project collaboration mode", () => {
-  it("keeps ordinary projects on the existing Agents view", () => {
-    render(<RightPanel {...props} nuwaProject={project} />)
+  it("offers work records in an ordinary project and respects the global off switch", () => {
+    const knowledge = { project, onOpenThread: vi.fn(), onTrace: vi.fn() }
+    const view = render(<RightPanel {...props} nuwaProject={project} knowledge={knowledge} />)
+    expect(screen.getByRole("tab", { name: "Work records" })).toHaveAttribute("data-scope", "project")
+    expect(screen.getByRole("tab", { name: "Knowledge" })).toHaveAttribute("data-scope", "project")
+    view.rerender(<RightPanel {...props} nuwaProject={{ ...project, nuwa_enabled: true }} knowledge={knowledge}
+      meta={{ swarm: { work_ledger: false, knowledge: false } } as Meta} />)
     expect(screen.queryByRole("tab", { name: "Work records" })).toBeNull()
+    expect(screen.queryByRole("tab", { name: "Knowledge" })).toBeNull()
     expect(screen.getByRole("tab", { name: "Agents" })).toHaveAttribute("data-state", "active")
   })
 
@@ -52,7 +58,7 @@ describe("Project collaboration mode", () => {
     const onTabChange = vi.fn()
     const enabled = { ...project, nuwa_enabled: true }
     const view = render(<RightPanel {...props} onTabChange={onTabChange} tab="task-panels" threadId="first" nuwaProject={enabled} />)
-    const taskTabs = within(screen.getByRole("group", { name: "Task" }))
+    const taskTabs = within(screen.getByRole("tablist"))
     expect(taskTabs.getByRole("tab", { name: "Task panels" })).toHaveAttribute("aria-selected", "true")
     expect(taskTabs.getByRole("tab", { name: "Work records" })).toHaveAttribute("aria-selected", "false")
     const frame = screen.getByTestId("registered-frame")

@@ -594,6 +594,7 @@ export interface SwarmLimits {
   /** Missing means on. Off stops the extra next-step call. */
   composer_predictions?: boolean
   work_ledger?: boolean
+  knowledge?: boolean
   /** Empty follows this conversation's model. */
   title_provider?: string
   title_model?: string

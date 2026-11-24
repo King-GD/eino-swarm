@@ -108,8 +108,28 @@ func (s *Server) promoteThreadWork(c *gin.Context) {
 	}{promotion, version.DataGeneration})
 }
 
+func (s *Server) distillThreadWork(c *gin.Context) {
+	if s.rejectSignedOut(c) {
+		return
+	}
+	expected, err := parseWorkTag(c.GetHeader("If-Match"))
+	if err != nil {
+		s.failWork(c, err)
+		return
+	}
+	count, err := s.engine.DistillThreadWork(c.Request.Context(), c.Param("id"), expected.WorkRevision, expected.DataGeneration)
+	if err != nil {
+		s.failWork(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"created": count})
+}
+
 func (s *Server) failWork(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, engine.ErrWorkDisabled):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "work_disabled"})
 	case errors.Is(err, store.ErrNotFound):
 		s.missingRecord(c, "thread_not_found", "This conversation no longer exists. Refresh the conversation list.",
 			gin.H{"thread_id": c.Param("id")})

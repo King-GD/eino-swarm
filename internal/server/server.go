@@ -188,6 +188,7 @@ func New(opts Options) (*Server, error) {
 		api.GET("/threads/:id/work", s.getThreadWork)
 		api.GET("/threads/:id/work/events", s.streamThreadWork)
 		api.POST("/threads/:id/work/promote", s.promoteThreadWork)
+		api.POST("/threads/:id/work/distill", s.distillThreadWork)
 		api.GET("/threads/:id/log", s.listLog)
 		api.GET("/threads/:id/agents/:agent/log", s.listAgentLog)
 		api.POST("/threads/:id/turns", s.startTurn)

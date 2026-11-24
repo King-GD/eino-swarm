@@ -21,7 +21,7 @@ interface NuwaState {
   promoteError?: { id: string; message: string; conflict: boolean }
   connect: (owner: WorkOwner) => () => void
   refresh: () => Promise<void>
-  promote: (id: string) => Promise<void>
+  promote: (id: string) => Promise<boolean>
 }
 
 let visit = 0
@@ -130,7 +130,7 @@ export const useNuwa = create<NuwaState>((set, get) => {
     promote: async (id) => {
       const { owner, snapshot, tag, promoting } = get()
       if (!owner?.threadId || !snapshot?.project_id || !tag || promoting ||
-          !snapshot.nodes.some((node) => node.id === id && node.scope === "thread")) return
+          !snapshot.nodes.some((node) => node.id === id && node.scope === "thread")) return false
       const token = visit
       set({ promoting: true, promoteError: undefined })
       try {
@@ -139,12 +139,14 @@ export const useNuwa = create<NuwaState>((set, get) => {
           invalidate(revision)
           await get().refresh()
         }
+        return token === visit
       } catch (error) {
         if (token === visit) {
           const conflict = error instanceof ApiError && error.code === "work_conflict"
           set({ promoteError: { id, conflict, message: error instanceof Error ? error.message : String(error) } })
           if (conflict) await get().refresh()
         }
+        return false
       } finally {
         if (token === visit) set({ promoting: false })
       }

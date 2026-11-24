@@ -785,7 +785,9 @@ export const en = {
   "settings.swarm.autoTitleHint":
     "The first message is named once, as soon as it is sent. Off keeps that opening line. A name you type is never overwritten. Pin a different model under Models.",
   "settings.swarm.workLedger": "Work records",
-  "settings.swarm.workLedgerHint": "Give agents in ordinary conversations work record tools. Applies from the next turn.",
+  "settings.swarm.workLedgerHint": "Collect and show work records. Switch off to hide the panel.",
+  "settings.swarm.knowledge": "Knowledge",
+  "settings.swarm.knowledgeHint": "Summarize project knowledge. Switch off to stop knowledge distillation and hide the panel.",
   "settings.swarm.predictions": "Suggest a next step",
   "settings.swarm.predictionsHint":
     "After a reply, the empty composer shows one likely next message. Tab inserts it. Enter sends it. Off stops generating them.",

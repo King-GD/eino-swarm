@@ -1,5 +1,5 @@
-import { FileCheck2, Layers3, ListTodo, RefreshCw, Radio, ChevronRight } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { FileCheck2, Layers3, ListTodo, RefreshCw, Radio, ChevronRight, Sparkles } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -10,8 +10,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { MemoMarkdown } from "@/components/app/markdown"
-import { api } from "@/lib/api"
-import { partitionNuwaCollaboration, pruneNuwaNodes, type NuwaEvidence, type NuwaNode, type NuwaWorker } from "@/lib/nuwa"
+import { api, ApiError } from "@/lib/api"
+import { nuwaAPI } from "@/lib/nuwa-api"
+import { pruneNuwaNodes, type NuwaEvidence, type NuwaNode, type NuwaWorker } from "@/lib/nuwa"
 import type { Project } from "@/lib/types"
 import { useT } from "@/lib/use-t"
 import { cn } from "@/lib/utils"
@@ -19,7 +20,7 @@ import { useApp } from "@/store/app"
 import { useNuwa } from "@/store/nuwa"
 import { useTraceFocus } from "@/store/trace-focus"
 import { NuwaGraph, nuwaRecorder } from "./nuwa-graph"
-import { NuwaStatus, NuwaStale, nuwaKind, nuwaKindSurface } from "./nuwa-status"
+import { NuwaStatus, nuwaKind, nuwaKindSurface } from "./nuwa-status"
 
 export function NuwaPanel({
   project,
@@ -46,11 +47,19 @@ export function NuwaPanel({
   const [selected, setSelected] = useState<string>()
   const [graphOpen, setGraphOpen] = useState(false)
   const [showPruned, setShowPruned] = useState(false)
+  const [workersOpen, setWorkersOpen] = useState(false)
+  const distilling = useRef<AbortController | undefined>(undefined)
+  const [distillState, setDistillState] = useState<"running" | "empty" | "conflict" | "failed">()
+  useEffect(() => () => distilling.current?.abort(), [])
   useEffect(() => {
     setScope(defaultScope)
     setSelected(undefined)
     setGraphOpen(false)
     setShowPruned(false)
+    setWorkersOpen(false)
+    distilling.current?.abort()
+    distilling.current = undefined
+    setDistillState(undefined)
     if (threadId || projectId) return connect({ threadId, projectId, generation: dataGeneration })
   }, [threadId, projectId, dataGeneration, defaultScope, connect])
   const ownsProjection = owner?.threadId === threadId && owner?.projectId === projectId && owner?.generation === dataGeneration
@@ -62,21 +71,54 @@ export function NuwaPanel({
   const currentProject = currentProjectId === project?.id ? project : undefined
   const effectiveScope = currentProjectId ? scope : "thread"
   const nodes = useMemo(
-    () => effectiveScope === "thread" ? current?.nodes ?? [] : current?.nodes.filter((node) => node.scope === "project") ?? [],
+    () => current?.nodes.filter((node) => (node.scope ?? "project") === effectiveScope) ?? [],
     [current, effectiveScope],
   )
   const { active, shown, collapsed } = useMemo(() => pruneNuwaNodes(nodes), [nodes])
   const graphNodes = showPruned ? nodes : shown
-  const indexed = useMemo(() => partitionNuwaCollaboration(graphNodes).path, [graphNodes])
   const detail = nodes.find((node) => node.id === selected)
   const workers = current?.workers ?? []
   const promotion = detail?.scope === "thread" && threadId && current?.project_id && tag ? {
-    submit: () => void promote(detail.id),
+    submit: () => {
+      void promote(detail.id).then((changed) => {
+        if (changed) setScope("project")
+      })
+    },
     pending: promoting,
     error: promoteError?.id === detail.id
       ? promoteError.conflict ? t("nuwa.promoteConflict") : promoteError.message
       : undefined,
   } : undefined
+
+  const hasOwnWork = current?.has_own_work ?? current?.nodes.some((node) => node.thread_id === threadId)
+  const offerDistillation = effectiveScope === "thread" && threadId && tag && !hasOwnWork && activity &&
+    (activity.status === "done" || activity.status === "error" || activity.status === "cancelled")
+  const distill = async () => {
+    if (!threadId || !tag || distilling.current) return
+    const controller = new AbortController()
+    distilling.current = controller
+    setDistillState("running")
+    try {
+      const { created } = await nuwaAPI.distill(threadId, tag, controller.signal)
+      if (controller.signal.aborted) return
+      await refresh()
+      if (!controller.signal.aborted) setDistillState(created ? undefined : "empty")
+    } catch (error) {
+      if (controller.signal.aborted) return
+      const conflict = error instanceof ApiError && error.code === "work_conflict"
+      setDistillState(conflict ? "conflict" : "failed")
+      if (conflict) await refresh()
+    } finally {
+      if (distilling.current === controller) distilling.current = undefined
+    }
+  }
+
+  const openNode = (id: string) => {
+    const target = current?.nodes.find((node) => node.id === id)
+    if (!target) return
+    setScope(target.scope ?? "project")
+    setSelected(id)
+  }
 
   const openSource = async (source: Pick<NuwaEvidence, "thread_id" | "turn_id">) => {
     if (!source.thread_id) return
@@ -133,32 +175,34 @@ export function NuwaPanel({
       <div
         role="group"
         aria-label={t("nuwa.scope")}
-        className="mb-3 grid grid-cols-2 gap-1 rounded-md bg-muted p-1"
+        className={cn("mb-3 grid gap-1 rounded-md bg-muted p-1", threadId && currentProjectId && "grid-cols-2")}
       >
-        <Button
-          size="sm"
-          variant={effectiveScope === "project" ? "secondary" : "ghost"}
-          aria-pressed={effectiveScope === "project"}
-          disabled={!currentProjectId}
-          onClick={() => {
-            setScope("project")
-            setSelected(undefined)
-          }}
-        >
-          {t("nuwa.project")}
-        </Button>
-        <Button
-          size="sm"
-          variant={effectiveScope === "thread" ? "secondary" : "ghost"}
-          disabled={!threadId}
-          aria-pressed={effectiveScope === "thread"}
-          onClick={() => {
-            setScope("thread")
-            setSelected(undefined)
-          }}
-        >
-          {t("nuwa.thread")}
-        </Button>
+        {threadId ? (
+          <Button
+            size="sm"
+            variant={effectiveScope === "thread" ? "secondary" : "ghost"}
+            aria-pressed={effectiveScope === "thread"}
+            onClick={() => {
+              setScope("thread")
+              setSelected(undefined)
+            }}
+          >
+            {t("nuwa.thread")}
+          </Button>
+        ) : null}
+        {currentProjectId ? (
+          <Button
+            size="sm"
+            variant={effectiveScope === "project" ? "secondary" : "ghost"}
+            aria-pressed={effectiveScope === "project"}
+            onClick={() => {
+              setScope("project")
+              setSelected(undefined)
+            }}
+          >
+            {t("nuwa.project")}
+          </Button>
+        ) : null}
       </div>
       {error ? (
         <div role="alert" className="mb-3 rounded-md border border-destructive/30 p-2 text-xs">
@@ -223,7 +267,21 @@ export function NuwaPanel({
               <p className="py-6 text-center text-xs text-muted-foreground">
                 {t(effectiveScope === "thread" ? "nuwa.threadEmpty" : "nuwa.empty")}
               </p>
-              {threadId && activity && !workers.length ? (
+              {offerDistillation ? (
+                <div className="mb-3 flex flex-col items-center gap-2 text-center">
+                  <Button size="sm" variant="outline" disabled={distillState === "running"} onClick={() => void distill()}>
+                    <Sparkles />
+                    {t(distillState === "running" ? "nuwa.distilling" : "nuwa.distill")}
+                  </Button>
+                  {distillState && distillState !== "running" ? (
+                    <p className="text-xs" role={distillState === "empty" ? "status" : "alert"}>
+                      {t(distillState === "empty" ? "nuwa.distillEmpty" :
+                        distillState === "conflict" ? "nuwa.promoteConflict" : "nuwa.distillFailed")}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              {threadId && activity && effectiveScope === "thread" ? (
                 <section aria-label={t("nuwa.lastTurn")} className="rounded-md border border-border p-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-medium">{t("nuwa.lastTurn")}</span>
@@ -250,51 +308,30 @@ export function NuwaPanel({
               nodes={current.nodes}
               workers={workers}
               promotion={promotion}
-              onSelect={setSelected}
+              onSelect={openNode}
               onSource={openSource}
               onWorker={openWorker}
             />
           ) : null}
-          {indexed.length ? (
-            <div role="list" aria-label={t("nuwa.list")} className="mt-4 grid gap-1">
-              {indexed.map((node) => (
-                <div role="listitem" key={node.id} className="min-w-0">
-                  <button
-                    type="button"
-                    onClick={() => setSelected(node.id)}
-                    aria-pressed={selected === node.id}
-                    className={cn(
-                      "flex w-full min-w-0 items-center gap-2 rounded-md border px-2 py-2 text-left hover:bg-accent/50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
-                      nuwaKindSurface(node.kind),
-                      selected === node.id ? "border-primary" : "border-transparent"
-                    )}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs font-medium">{node.title}</span>
-                      <span className="block truncate text-[11px] text-muted-foreground">
-                        {node.summary}
-                      </span>
-                      <NuwaStale node={node} />
-                    </span>
-                    <NuwaStatus status={node.status} kind={node.kind} />
-                    <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : null}
           {workers.length ? (
-            <section className="mt-4 border-t border-border pt-3">
-              <h3 className="mb-2 text-xs font-medium text-muted-foreground">
+            <section className="mt-4 border-t border-border pt-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="w-full justify-start px-1 text-xs text-muted-foreground"
+                aria-expanded={workersOpen}
+                onClick={() => setWorkersOpen(!workersOpen)}
+              >
+                <ChevronRight className={cn("size-3 transition-transform", workersOpen && "rotate-90")} />
                 {t("nuwa.workers")}
-              </h3>
-              {workers.map((worker) => (
+              </Button>
+              {workersOpen ? workers.map((worker) => (
                 <WorkerRow
                   key={`${worker.thread_id}:${worker.agent_id}:${worker.generation ?? 0}`}
                   worker={worker}
                   onOpen={() => void openWorker(worker)}
                 />
-              ))}
+              )) : null}
             </section>
           ) : null}
           <Dialog open={graphOpen} onOpenChange={setGraphOpen}>
@@ -323,7 +360,7 @@ export function NuwaPanel({
                       nodes={current.nodes}
                       workers={workers}
                       promotion={promotion}
-                      onSelect={setSelected}
+                      onSelect={openNode}
                       onSource={async (source) => {
                         setGraphOpen(false)
                         await openSource(source)
@@ -397,7 +434,8 @@ function NodeDetail({
   const t = useT()
   const [expanded, setExpanded] = useState(false)
   const recorder = nuwaRecorder(node, workers)
-  const author = recorder.manager ? t("nuwa.originManager") : recorder.name
+  const author = node.agent_id === "work-distiller" ? t("nuwa.distill") :
+    recorder.manager ? t("nuwa.originManager") : recorder.name
   const model = recorder.model
   return (
     <section
@@ -472,7 +510,7 @@ function NodeDetail({
           </a>
         </div>
       ) : null}
-      {node.agent_id ? (
+      {node.agent_id && node.agent_id !== "work-distiller" ? (
         <Button
           variant="link"
           size="sm"

@@ -198,20 +198,26 @@ func (e *Engine) StartProjectDistillation(ctx context.Context, projectID string,
 	if err != nil {
 		return DistillationResult{}, err
 	}
-	snap, err := kb.Snapshot()
-	if err != nil {
-		return DistillationResult{}, err
-	}
-	if req.EnableKnowledge && !snap.Enabled() {
-		snap, err = kb.Enable()
+	var knowledgeEnabled bool
+	if e.cfg.SwarmSnapshot().Knowledge {
+		snap, err := kb.Snapshot()
 		if err != nil {
 			return DistillationResult{}, err
 		}
+		if req.EnableKnowledge && !snap.Enabled() {
+			snap, err = kb.Enable()
+			if err != nil {
+				return DistillationResult{}, err
+			}
+		}
+		knowledgeEnabled = snap.Enabled()
+	} else if req.EnableKnowledge {
+		return DistillationResult{}, ErrDistillationTargets
 	}
 	result := DistillationResult{
 		ReviewID: store.NewID("distill_"), State: "running", Scope: req.Scope,
 		ThreadID: anchor.ThreadID, TurnID: anchor.ID, HistoryOmitted: input.omitted,
-		MemoryEnabled: e.MemoryEnabled(p), KnowledgeEnabled: snap.Enabled(),
+		MemoryEnabled: e.MemoryEnabled(p), KnowledgeEnabled: knowledgeEnabled,
 	}
 	if !result.MemoryEnabled && !result.KnowledgeEnabled {
 		return DistillationResult{}, ErrDistillationTargets

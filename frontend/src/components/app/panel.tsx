@@ -1,5 +1,5 @@
 import { useTaskPanels } from "@/store/task-panels"
-import { ArrowDownNarrowWide, ArrowLeft, ArrowUpNarrowWide, ChevronDown, FolderKanban, MessageSquare } from "lucide-react"
+import { ArrowDownNarrowWide, ArrowLeft, ArrowUpNarrowWide, ChevronDown } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
 import { AgentPromptButton } from "@/components/app/agent-prompt"
@@ -36,7 +36,7 @@ import {
 } from "@/lib/agent-roster-sort"
 import { useT, type Translate } from "@/lib/use-t"
 import { chromeTypeClass } from "@/lib/chrome-type"
-import { builtinInspectorScopes, groupInspectorTabs, projectScopeLabel } from "@/lib/inspector-scopes"
+import { builtinInspectorScopes } from "@/lib/inspector-scopes"
 import { cn } from "@/lib/utils"
 import { useTraceFocus } from "@/store/trace-focus"
 import { useApp } from "@/store/app"
@@ -60,7 +60,7 @@ export function RightPanel({
   meta,
   threadId,
   memory,
-  knowledge,
+  knowledge: projectKnowledge,
   onUpload,
   onDeleteFile,
   onRefreshFiles,
@@ -103,6 +103,7 @@ export function RightPanel({
   threadProjectId?: string
 }) {
   const t = useT()
+  const knowledge = meta?.swarm?.knowledge === false ? undefined : projectKnowledge
   const storedTaskPanels = useTaskPanels((state) => state.panels)
   const taskPanelThread = useTaskPanels((state) => state.threadId)
   const registeredPanels = resolveInspectorPanels({
@@ -110,27 +111,19 @@ export function RightPanel({
     project: nuwaProject,
     threadProjectId,
     dataGeneration: meta?.data_generation,
+    workLedger: meta?.swarm?.work_ledger,
     taskPanels: { threadId: taskPanelThread, panels: storedTaskPanels },
   })
-  const tabs = groupInspectorTabs([
+  const tabs = [
     { id: "agents", scope: builtinInspectorScopes.agents, label: t("panel.agents") },
     { id: "files", scope: builtinInspectorScopes.files, label: t("panel.files") },
     { id: "trace", scope: builtinInspectorScopes.trace, label: t("panel.trace") },
     ...(memory ? [{ id: "memory", scope: builtinInspectorScopes.memory, label: t("panel.memory") }] : []),
     ...registeredPanels.map(({ id, scope, label }) => ({ id, scope, label: label(t) })),
     ...(knowledge ? [{ id: "knowledge", scope: builtinInspectorScopes.knowledge, label: t("panel.knowledge") }] : []),
-  ])
+  ]
   const visibleTab = ((isRegisteredInspectorTab(tab) && !registeredPanels.some((panel) => panel.id === tab)) ||
     (tab === "knowledge" && !knowledge)) ? "agents" : tab
-  const groups = [
-    { scope: "thread", label: t("panel.scopeThread"), icon: MessageSquare, tabs: tabs.thread },
-    {
-      scope: "project",
-      label: projectScopeLabel(knowledge?.project?.name ?? nuwaProject?.name, t("panel.scopeShared")),
-      icon: FolderKanban,
-      tabs: tabs.project,
-    },
-  ]
   const traceFocus = useTraceFocus()
   const previousThread = useRef(threadId)
   const changeTab = useRef(onTabChange)
@@ -170,33 +163,28 @@ export function RightPanel({
         className="flex min-h-0 flex-1 flex-col"
       >
         <div className="thin-scrollbar overflow-x-auto border-b border-border px-2 py-1.5">
-          <TabsList className="h-auto min-w-full justify-start gap-2 bg-transparent p-0">
-            {groups.filter((group) => group.tabs.length > 0).map(({ scope, label, icon: Icon, tabs }) => (
-              <div
-                key={scope}
-                role="group"
-                aria-label={label}
-                data-testid={`inspector-${scope}-scope`}
-                className={cn("space-y-0.5", scope === "project" && "border-l border-border pl-2")}
+          <TabsList className="h-auto min-w-full justify-start gap-1 bg-transparent p-0">
+            {tabs.map(({ id, scope, label }) => (
+              <TabsTrigger
+                key={id}
+                value={id}
+                data-scope={scope}
+                title={scope === "thread" ? t("panel.scopeThread") :
+                  knowledge?.project?.name ?? nuwaProject?.name ?? t("panel.scopeShared")}
+                className={cn(
+                  chromeTypeClass, "px-1.5",
+                  scope === "thread" ? "bg-muted/55 data-[state=active]:bg-muted" :
+                    "bg-primary/5 data-[state=active]:bg-primary/12",
+                )}
               >
-                <div className={cn("flex items-center gap-1 px-1 text-muted-foreground", chromeTypeClass)}>
-                  <Icon aria-hidden="true" className="size-3 shrink-0" />
-                  <span className="max-w-32 truncate" title={label}>{label}</span>
-                </div>
-                <div className="flex rounded-md bg-muted p-0.5">
-                  {tabs.map(({ id, label: tabLabel }) => (
-                    <TabsTrigger key={id} value={id} className={cn(chromeTypeClass, "px-1.5")}>
-                      {tabLabel}
-                      {id === "agents" && running > 0 ? (
-                        <Badge variant="warning" className="px-1 py-0">{running}</Badge>
-                      ) : null}
-                      {id === "memory" && memory?.unread ? (
-                        <Badge variant="warning" className="px-1 py-0">{t("panel.memoryNew")}</Badge>
-                      ) : null}
-                    </TabsTrigger>
-                  ))}
-                </div>
-              </div>
+                {label}
+                {id === "agents" && running > 0 ? (
+                  <Badge variant="warning" className="px-1 py-0">{running}</Badge>
+                ) : null}
+                {id === "memory" && memory?.unread ? (
+                  <Badge variant="warning" className="px-1 py-0">{t("panel.memoryNew")}</Badge>
+                ) : null}
+              </TabsTrigger>
             ))}
           </TabsList>
         </div>

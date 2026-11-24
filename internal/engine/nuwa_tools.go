@@ -110,6 +110,9 @@ func (e *Engine) nuwaWorkTools(workspace string, turn *store.Turn, readOnly bool
 		params: map[string]*schema.ParameterInfo{
 			"id": {Type: schema.String}, "kind": {Type: schema.String}, "offset": {Type: schema.Integer}, "limit": {Type: schema.Integer},
 		}, run: func(ctx context.Context, args string) (string, error) {
+			if !e.workLedgerEnabled(turn) {
+				return "", ErrWorkDisabled
+			}
 			owner, ok := ctx.Value(historyReadOwnerKey{}).(historyReadOwner)
 			if !ok || turn == nil || owner.ThreadID != turn.ThreadID || owner.TurnID != turn.ID {
 				return "", fmt.Errorf("work record read has no matching trusted turn owner")
@@ -165,7 +168,7 @@ func (e *Engine) recordNuwaWork(ctx context.Context, workspace string, turn *sto
 		return "", err
 	}
 	caller, ok := swarm.ToolCaller(ctx)
-	if !ok || caller.AgentID == "" || !workLedgerEnabled(turn) || workLedgerReadOnly(turn) {
+	if !ok || caller.AgentID == "" || !e.workLedgerEnabled(turn) || workLedgerReadOnly(turn) {
 		return "", fmt.Errorf("work record writes require an actual agent invocation authorized for this turn")
 	}
 	owner, ok := ctx.Value(historyReadOwnerKey{}).(historyReadOwner)
@@ -296,16 +299,25 @@ func (e *Engine) recordNuwaWork(ctx context.Context, workspace string, turn *sto
 // The mutation and turn removal share ownership. Artifact resolution and the
 // snapshot used to prepare a patch do not hold the event writer lock.
 func (e *Engine) lockWorkRecordWrite(ctx context.Context, turnID string) (func(), error) {
+	e.configUpdateMu.Lock()
+	if !e.cfg.SwarmSnapshot().WorkLedger {
+		e.configUpdateMu.Unlock()
+		return nil, ErrWorkDisabled
+	}
 	e.recordMu.Lock()
-	if _, dropped := e.droppedTurns[turnID]; dropped {
+	unlock := func() {
 		e.recordMu.Unlock()
+		e.configUpdateMu.Unlock()
+	}
+	if _, dropped := e.droppedTurns[turnID]; dropped {
+		unlock()
 		return nil, store.ErrNotFound
 	}
 	if err := context.Cause(ctx); err != nil {
-		e.recordMu.Unlock()
+		unlock()
 		return nil, err
 	}
-	return e.recordMu.Unlock, nil
+	return unlock, nil
 }
 
 func applyWorkPatch(node *store.NuwaNode, previous store.NuwaNode, fields map[string]json.RawMessage, evidenceSupplied bool) {

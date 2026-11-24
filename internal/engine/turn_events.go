@@ -15,7 +15,7 @@ import (
 
 func isAuxiliaryAgent(id string) bool {
 	switch id {
-	case TitleAgentID, CompactAgentID, SessionMemoryAgentID, ComposerPredictionAgentID:
+	case TitleAgentID, CompactAgentID, SessionMemoryAgentID, ComposerPredictionAgentID, workDistiller:
 		return true
 	default:
 		return false

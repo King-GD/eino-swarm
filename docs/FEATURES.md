@@ -233,14 +233,14 @@ This is the current user-facing capability map. The code and tests named below a
 ### F-139 Conversation work records
 
 - 入口：PC／Web 右侧工作记录、宿主 `read_work`／`record_work` 与会话工作接口展示并保存任务、事实、成果及可核验来源。新记录默认归会话，可单向合并到所属项目并保留身份、历史和依赖。规划回合只读。非法共享、版本冲突和存储故障有明确反馈。见 `C-055` 和 [工作记录](WORK.md)。
-- 面板保留共享工作、worker、Trace 和文件入口。可展开发现已剪枝记录，状态恢复时自动回显，仍需要重新确认的依赖有独立提示。实现证据：`internal/store/nuwa.go`、`internal/engine/nuwa_tools.go`、`internal/server/nuwa.go`、`frontend/src/components/app/nuwa-panel.tsx` 和 `frontend/e2e/nuwa.spec.ts`。
+- 面板默认展示会话私有记录，可切换至项目共享记录。没有自有工作记录的历史会话可提炼。Agent 与模型默认折叠，选择节点打开单独详情。保留 worker、Trace 和文件入口。可展开发现已剪枝记录，状态恢复时自动回显，仍需要重新确认的依赖有独立提示。实现证据：`internal/store/nuwa.go`、`internal/engine/nuwa_tools.go`、`internal/server/nuwa.go`、`frontend/src/components/app/nuwa-panel.tsx` 和 `frontend/e2e/nuwa.spec.ts`。
 
 ### F-138 Project Markdown knowledge base
 
 - 目的：在一个项目内用可编辑的 Markdown 页面积累、查找和追溯跨对话的知识。
-- 入口：PC／Web 右侧 Knowledge 标签、提炼菜单、对话 wikilink、项目回合的 `read_knowledge`／`record_knowledge` 和项目知识库 HTTP 路由。Agents、Files、Trace、工作记录和任务面板可绑定当前会话，Memory 和 Knowledge 归项目组。
+- 入口：PC／Web 右侧 Knowledge 标签、提炼菜单、对话 wikilink、项目回合的 `read_knowledge`／`record_knowledge` 和项目知识库 HTTP 路由。Agents、Files、Trace、工作记录和任务面板可绑定当前会话，Memory 和 Knowledge 属项目范围，所有标签共用一条标签栏并用浅底色区分。
 - 输入与输出：项目 schema、稳定页面 ID、Markdown、历史引用；提供类型或关系树、待处理项、单页、反链、来源、Trace 和宽幅预览。Knowledge 的「关系图」按标题显示项目内的全部页面，通过已解析的关系和 Wiki 链接连线，可搜索、缩放并打开对应页面。Memory 与 Knowledge 共用一次后台提炼，支持最近成功回合、当前任务和当前项目。启用项目记忆、自动复盘和知识库后，成功非计划回合的自动复盘也可写入知识库。当前任务和当前项目按保存的历史范围分批合并笔记、Skills 与知识库变更，可暂停和继续。两个面板显示已处理数、剩余数、同一回执与 Trace。
-- 前置与失败：未启用时可在 Knowledge 显式启用，或在任一提炼入口显式启用并提炼。部分提交保留实际写入回执。无项目对话提示移动到项目。相同名称、旧 revision 和错误来源拒绝写入；已保存来源失效时给出提示。
+- 前置与失败：Settings 中的全局开关默认开启。首次非计划回合可初始化项目知识库，也可在面板先手动初始化。关闭后隐藏面板并停止知识库提炼。部分提交保留实际写入回执。无项目对话提示移动到项目。相同名称、旧 revision 和错误来源拒绝写入；已保存来源失效时给出提示。
 - 契约：`C-053`、`C-054`、`C-036`、`C-044`。
 - 实现证据：`internal/knowledge`、`internal/engine/knowledge.go`、`internal/server/project_knowledge.go`、`frontend/src/components/app/knowledge-panel.tsx`、`frontend/e2e/project-knowledge.spec.ts`。
 

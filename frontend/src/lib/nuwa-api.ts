@@ -18,6 +18,12 @@ export const nuwaAPI = {
     const response = await checked(await fetch(`/api/threads/${encodeURIComponent(threadId)}/work`))
     return { view: await response.json() as ThreadWorkSnapshot, tag: response.headers.get("ETag") ?? undefined }
   },
+  async distill(threadId: string, tag: string, signal: AbortSignal): Promise<{ created: number }> {
+    const response = await checked(await fetch(`/api/threads/${encodeURIComponent(threadId)}/work/distill`, {
+      method: "POST", headers: { "If-Match": tag }, signal,
+    }))
+    return response.json()
+  },
   async promote(threadId: string, ids: string[], tag: string): Promise<WorkVersion> {
     const response = await checked(await fetch(`/api/threads/${encodeURIComponent(threadId)}/work/promote`, {
       method: "POST",

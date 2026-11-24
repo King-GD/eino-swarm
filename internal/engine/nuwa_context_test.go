@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	swarm "github.com/LubyRuffy/eino-swarm"
+	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/model"
@@ -550,7 +551,7 @@ func TestNuwaContextMiddlewareHandlesSnapshotFailuresAtActualADKModel(t *testing
 }
 
 func TestNuwaContextCancellationAndDisabledModesDoNotReadOrCallModel(t *testing.T) {
-	e := &Engine{}
+	e := &Engine{cfg: &config.Config{Swarm: config.SwarmConfig{WorkLedger: true}}}
 	for _, turn := range []*store.Turn{nil, {}, {ProjectID: "project"}, {NuwaEnabled: true}} {
 		if handlers := e.nuwaContextHandlers(turn); len(handlers) != 0 {
 			t.Fatalf("disabled/standalone turn gained a shared-state middleware: %+v", turn)

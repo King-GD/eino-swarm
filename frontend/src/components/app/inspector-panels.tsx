@@ -17,6 +17,7 @@ interface InspectorContext {
   project?: Project
   threadProjectId?: string
   dataGeneration?: number
+  workLedger?: boolean
   taskPanels: TaskPanelProjection
 }
 
@@ -64,8 +65,8 @@ const registrations = [
     renderer: "react",
     mount: "active",
     label: (t) => t("nuwa.tab"),
-    bind: ({ project, threadId, threadProjectId, dataGeneration }) => {
-      if (!threadId && (!project || !(project.nuwa_enabled || (project.nuwa_revision ?? 0) > 0))) return
+    bind: ({ project, threadId, threadProjectId, dataGeneration, workLedger }) => {
+      if (workLedger === false || (!threadId && !project)) return
       const projectId = threadId ? threadProjectId ?? project?.id : project?.id
       return {
         ownerId: threadId ?? project!.id,

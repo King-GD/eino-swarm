@@ -37,7 +37,7 @@ type nuwaContext struct {
 }
 
 func (e *Engine) nuwaContextHandlers(turn *store.Turn) []adk.ChatModelAgentMiddleware {
-	if !workLedgerEnabled(turn) || turn.ThreadID == "" || turn.ID == "" {
+	if !e.workLedgerEnabled(turn) || turn.ThreadID == "" || turn.ID == "" {
 		return nil
 	}
 	return []adk.ChatModelAgentMiddleware{&nuwaContext{
@@ -59,6 +59,9 @@ func (m *nuwaContextModel) input(ctx context.Context, messages []*schema.Message
 		return nil, err
 	}
 	owner := m.context
+	if !owner.engine.cfg.SwarmSnapshot().WorkLedger {
+		return messages, nil
+	}
 	view, err := owner.engine.store.WorkSnapshotForTurn(ctx, owner.projectID, owner.threadID, owner.turnID)
 	if cause := ctx.Err(); cause != nil {
 		return nil, cause

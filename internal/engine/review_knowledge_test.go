@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/knowledge"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 )
@@ -110,11 +111,10 @@ func TestAutomaticKnowledgeReviewNeedsAnEnabledWikiAndAnEligibleTurn(t *testing.
 			if err != nil {
 				t.Fatal(err)
 			}
-			if tc.enable {
-				if _, err := e.EnableProjectKnowledge(p.ID); err != nil {
-					t.Fatal(err)
-				}
+			if _, err := e.EnableProjectKnowledge(p.ID); err != nil {
+				t.Fatal(err)
 			}
+			e.cfg.Swarm.Knowledge = tc.enable
 			th := knowledgeFixtureThread(t, e, p.ID, "Source")
 			th.PlanMode = tc.plan
 			pc, err := e.projectContextFor(th)
@@ -156,7 +156,7 @@ func automaticKnowledgeWriteFixture(t *testing.T) (*projectDistillBatch, store.E
 }
 
 func TestAutomaticKnowledgeReviewRechecksAuthorityBeforeSaving(t *testing.T) {
-	for _, name := range []string{"unknown-source", "moved-thread", "planning", "disabled-wiki", "invalid-schema", "backup"} {
+	for _, name := range []string{"unknown-source", "moved-thread", "planning", "disabled-wiki", "global-off", "invalid-schema", "backup"} {
 		t.Run(name, func(t *testing.T) {
 			batch, ev := automaticKnowledgeWriteFixture(t)
 			e := batch.e
@@ -173,6 +173,12 @@ func TestAutomaticKnowledgeReviewRechecksAuthorityBeforeSaving(t *testing.T) {
 				changeErr = e.SetPlanMode(ev.ThreadID, true)
 			case "disabled-wiki":
 				changeErr = os.Remove(filepath.Join(batch.work.kb.Dir(), "schema.yaml"))
+				wantErr = knowledge.ErrDisabled
+			case "global-off":
+				changeErr = e.UpdateConfig(func(cfg *config.Config) error {
+					cfg.Swarm.Knowledge = false
+					return nil
+				})
 				wantErr = knowledge.ErrDisabled
 			case "invalid-schema":
 				changeErr = os.WriteFile(filepath.Join(batch.work.kb.Dir(), "schema.yaml"), []byte("types: ["), 0o600)

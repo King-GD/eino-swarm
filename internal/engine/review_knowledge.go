@@ -14,7 +14,7 @@ import (
 const automaticKnowledgeReviewPrompt = `This project's Knowledge base is enabled. In the same final apply_memory_review call, use the knowledge array for durable findings about the project's subject. Consider Knowledge before finishing with empty changes. Use read_knowledge to find an existing page or inspect its revision and schema. Preserve known page IDs and prior citations. Cite exact excerpts from the supplied original human messages or successful paired tool results. Assistant statements can support only tentative analysis. Briefings, synthesized summaries, and knowledge or memory tool receipts are not evidence. Use an empty knowledge array for no durable findings, or when deferring a Dream decision. If the audit request restricts tools and you need to inspect related Knowledge, defer with both arrays empty and use the ordinary review tools on the next request.`
 
 func (e *Engine) automaticReviewKnowledge(turn *store.Turn, pc *projectContext, events []store.Event, visible map[int64]store.Event) *projectDistillBatch {
-	if turn.Status != store.TurnDone || turn.NuwaReadOnly || !pc.hasKnowledge() || pc.planning || pc.project == nil || turn.ProjectID != pc.project.ID {
+	if !e.cfg.SwarmSnapshot().Knowledge || turn.Status != store.TurnDone || turn.NuwaReadOnly || !pc.hasKnowledge() || pc.planning || pc.project == nil || turn.ProjectID != pc.project.ID {
 		return nil
 	}
 	original := distillOriginalEvents(events)
@@ -85,6 +85,9 @@ func (b *projectDistillBatch) checkAutomaticKnowledgeWrite(ctx context.Context, 
 	}
 	if thread.PlanMode || !e.MemoryEnabled(project) || !e.cfg.Snapshot().Memory.AutoReview {
 		return nil, errors.New("automatic knowledge review is no longer writable")
+	}
+	if !e.cfg.SwarmSnapshot().Knowledge {
+		return nil, knowledge.ErrDisabled
 	}
 	snapshot, err := b.work.kb.Snapshot()
 	if err != nil {

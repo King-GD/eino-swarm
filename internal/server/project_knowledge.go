@@ -19,6 +19,9 @@ func (s *Server) registerProjectKnowledge(api *gin.RouterGroup) {
 }
 
 func (s *Server) projectKnowledgeSnapshot(c *gin.Context) (*knowledge.Snapshot, error) {
+	if !s.engine.Config().SwarmSnapshot().Knowledge {
+		return nil, knowledge.ErrDisabled
+	}
 	kb, err := s.engine.ProjectKnowledge(c.Param("id"))
 	if err != nil {
 		return nil, err

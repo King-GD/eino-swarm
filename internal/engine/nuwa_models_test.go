@@ -14,7 +14,7 @@ import (
 // acceptance criteria. The wording stays task-agnostic: no sample request,
 // domain, file or rule may leak into a prompt (see rule 2 in AGENTS.md).
 func TestNuwaPlannerInstructionMandatesIndependentVerification(t *testing.T) {
-	instruction := strings.Join(strings.Fields(nuwaPlannerInstruction), " ")
+	instruction := strings.Join(strings.Fields(nuwaPlannerInstruction+"\n"+nuwaWorkVerification), " ")
 
 	for _, want := range []string{
 		"verify it with an independent executor",

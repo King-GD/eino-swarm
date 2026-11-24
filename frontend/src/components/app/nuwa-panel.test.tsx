@@ -9,7 +9,7 @@ import { nuwaLooseGroupID, NUWA_GOAL_ID, type NuwaNode, type NuwaSnapshot } from
 import type { Project } from "@/lib/types"
 import { publishWorkEvent } from "@/lib/nuwa-events"
 
-vi.mock("@/lib/nuwa-api", () => ({ nuwaAPI: { snapshot: vi.fn(), threadSnapshot: vi.fn(), promote: vi.fn() }, subscribeNuwa: vi.fn() }))
+vi.mock("@/lib/nuwa-api", () => ({ nuwaAPI: { snapshot: vi.fn(), threadSnapshot: vi.fn(), promote: vi.fn(), distill: vi.fn() }, subscribeNuwa: vi.fn() }))
 const project: Project = {
   id: "p", name: "Shared project", system_prompt: "", workdir: "", resolved_workdir: "",
   memory_enabled: false, memory_dir: "", nuwa_enabled: true, created_at: "", updated_at: "",
@@ -66,6 +66,7 @@ describe("Nuwa shared work", () => {
       workers: snapshot.workers.map((worker) => ({ ...worker, generation: 1 })),
     })
     render(<NuwaPanel project={project} threadId="a" onSelectAgent={vi.fn()} />)
+    fireEvent.click(screen.getByRole("button", { name: "Entire project" }))
     const path = await screen.findByRole("region", { name: "Collaboration paths" })
     const graph = within(path).getByRole("region", { name: "Shared work collaboration graph" })
     // Four isolated results share one row and one dashed arrow, not a card each.
@@ -116,6 +117,7 @@ describe("Nuwa shared work", () => {
 
   it("paints facts and results on different backgrounds", async () => {
     render(<NuwaPanel project={project} threadId="a" onSelectAgent={vi.fn()} />)
+    fireEvent.click(screen.getByRole("button", { name: "Entire project" }))
     const graph = await screen.findByRole("region", { name: "Shared work collaboration graph" })
     const card = (name: RegExp) => within(graph).getByRole("button", { name }).className
     // A shared fill made a reported fact look like a finished result.
@@ -136,9 +138,10 @@ describe("Nuwa shared work", () => {
 
   it("shows reported facts separately from completed work and opens source evidence on demand", async () => {
     render(<NuwaPanel project={project} threadId="a" onSelectAgent={vi.fn()} />)
+    fireEvent.click(screen.getByRole("button", { name: "Entire project" }))
     const graph = await screen.findByRole("region", { name: "Shared work collaboration graph" })
     expect(within(graph).getAllByTestId("nuwa-edge")).toHaveLength(2)
-    expect(screen.getByText("chosen-model · high")).toBeInTheDocument()
+    expect(screen.queryByText("chosen-model · high")).toBeNull()
     fireEvent.click(within(graph).getByRole("button", { name: /Node finding/ }))
     const detail = screen.getByTestId("nuwa-node-detail")
     expect(within(detail).getByText("Reported")).toBeInTheDocument()
@@ -150,10 +153,11 @@ describe("Nuwa shared work", () => {
     expect(useApp.getState().loadUntilTurn).toHaveBeenCalledWith("turn1")
   })
 
-  it("filters a thread without discarding the other thread's prerequisite", async () => {
+  it("shows the complete shared prerequisite chain in project scope", async () => {
     render(<NuwaPanel project={project} threadId="b" onSelectAgent={vi.fn()} />)
+    fireEvent.click(screen.getByRole("button", { name: "Entire project" }))
     await screen.findByRole("region", { name: "Shared work collaboration graph" })
-    fireEvent.click(screen.getByRole("button", { name: "This conversation" }))
+
     const graph = screen.getByRole("region", { name: "Shared work collaboration graph" })
     expect(within(graph).getAllByRole("button")).toHaveLength(3)
     expect(screen.queryByText("chosen-model · high")).toBeNull()
@@ -163,6 +167,7 @@ describe("Nuwa shared work", () => {
 
   it("updates a selected node when a newer project revision arrives", async () => {
     render(<NuwaPanel project={project} threadId="a" onSelectAgent={vi.fn()} />)
+    fireEvent.click(screen.getByRole("button", { name: "Entire project" }))
     const graph = await screen.findByRole("region", { name: "Shared work collaboration graph" })
     fireEvent.click(within(graph).getByRole("button", { name: /Node plan/ }))
     mockNuwaSnapshot({ ...snapshot, revision: 2, nodes: snapshot.nodes.map((n) => n.id === "plan" ? { ...n, status: "blocked", summary: "Needs new evidence", version: 2 } : n) })
@@ -176,6 +181,10 @@ describe("Nuwa shared work", () => {
   it("opens the actual worker without inferring its model from its role", async () => {
     const select = vi.fn()
     render(<NuwaPanel project={project} threadId="a" onSelectAgent={select} />)
+    const workers = await screen.findByRole("button", { name: "Workers and models" })
+    expect(workers).toHaveAttribute("aria-expanded", "false")
+    expect(screen.queryByRole("button", { name: /Open agent.*researcher/ })).toBeNull()
+    fireEvent.click(workers)
     const worker = await screen.findByRole("button", { name: /Open agent.*researcher/ })
     expect(worker).toHaveAccessibleName(/chosen-model/)
     expect(worker).toHaveAccessibleName(/high/)
@@ -192,6 +201,7 @@ describe("Nuwa shared work", () => {
     })
     const select = vi.fn()
     render(<NuwaPanel project={project} threadId="a" onSelectAgent={select} />)
+    fireEvent.click(await screen.findByRole("button", { name: "Workers and models" }))
     const worker = await screen.findByRole("button", { name: /Open agent.*unconfigured-model-role/ })
     expect(worker).toHaveAccessibleName(/Model not recorded/)
     expect(worker).toHaveAccessibleName(/Blocked/)
@@ -203,6 +213,7 @@ describe("Nuwa shared work", () => {
   it("keeps a deleted source explicit instead of offering a broken evidence jump", async () => {
     mockNuwaSnapshot({ ...snapshot, nodes: snapshot.nodes.map((n) => n.id === "finding" ? { ...n, unavailable_evidence: n.evidence } : n) })
     render(<NuwaPanel project={project} threadId="a" onSelectAgent={vi.fn()} />)
+    fireEvent.click(screen.getByRole("button", { name: "Entire project" }))
     const graph = await screen.findByRole("region", { name: "Shared work collaboration graph" })
     fireEvent.click(within(graph).getByRole("button", { name: /Node finding/ }))
     fireEvent.click(within(screen.getByTestId("nuwa-node-detail")).getByRole("button", { name: "Details and evidence" }))
@@ -279,6 +290,7 @@ describe("Nuwa shared work", () => {
   it("marks a result for review when its dependency has been revised", async () => {
     mockNuwaSnapshot({ ...snapshot, nodes: snapshot.nodes.map((n) => n.id === "output" ? { ...n, stale_dependencies: ["finding"], dependency_versions: { finding: 1 } } : n) })
     render(<NuwaPanel project={project} threadId="a" onSelectAgent={vi.fn()} />)
+    fireEvent.click(screen.getByRole("button", { name: "Entire project" }))
     const graph = await screen.findByRole("region", { name: "Shared work collaboration graph" })
     const result = within(graph).getByRole("button", { name: /Node output/ })
     expect(within(result).getByText("Needs review")).toBeInTheDocument()
@@ -289,6 +301,7 @@ describe("Nuwa shared work", () => {
 
   it("opens an expanded graph with selectable node details", async () => {
     render(<NuwaPanel project={project} threadId="a" onSelectAgent={vi.fn()} />)
+    fireEvent.click(screen.getByRole("button", { name: "Entire project" }))
     fireEvent.click(await screen.findByRole("button", { name: "Expand graph" }))
     const dialog = screen.getByRole("dialog", { name: "Collaboration paths" })
     const graph = within(dialog).getByRole("region", { name: "Shared work collaboration graph" })
@@ -319,15 +332,17 @@ describe("Conversation work controls", () => {
     expect(detail).toHaveTextContent("Conversation record")
     fireEvent.click(within(detail).getByRole("button", { name: "Merge into project" }))
     expect(nuwaAPI.promote).toHaveBeenCalledWith("a", ["private"], '"tag"')
-    await waitFor(() => expect(detail).toHaveTextContent("Project record"))
-    expect(within(detail).queryByRole("button", { name: "Merge into project" })).toBeNull()
+    await waitFor(() => expect(screen.getByTestId("nuwa-node-detail")).toHaveTextContent("Project record"))
+    expect(within(screen.getByTestId("nuwa-node-detail")).queryByRole("button", { name: "Merge into project" })).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "This conversation" }))
+    expect(screen.queryByRole("button", { name: /Node private/ })).toBeNull()
   })
 
   it("has no project action in a standalone conversation and restores a pruned record on a new revision", async () => {
     const fact = node("private", { kind: "fact", scope: "thread", status: "retracted" })
     mockNuwaSnapshot({ ...snapshot, project_id: "", revision: 0, nodes: [fact], workers: [] })
     render(<NuwaPanel threadId="a" onSelectAgent={vi.fn()} />)
-    expect(screen.getByRole("button", { name: "Entire project" })).toBeDisabled()
+    expect(screen.queryByRole("button", { name: "Entire project" })).toBeNull()
     const group = await screen.findByRole("button", { name: "Invalidated: 1" })
     expect(screen.queryByRole("region", { name: "Shared work collaboration graph" })).toBeNull()
     expect(screen.getByText("Pruned 1")).toBeInTheDocument()

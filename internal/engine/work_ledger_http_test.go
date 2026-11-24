@@ -188,7 +188,7 @@ func TestStandaloneWorkPlanningAndFrozenRecoveryAtModelHTTP(t *testing.T) {
 		{"fresh enabled", true, false, false, false, true, true},
 		{"fresh disabled", false, false, false, false, false, false},
 		{"fresh planning", true, true, true, false, true, false},
-		{"frozen enabled after switch-off", false, false, false, true, true, true},
+		{"switch-off overrides frozen catalog", false, false, false, true, false, false},
 		{"frozen read-only after leaving plan", true, true, false, true, true, false},
 		{"frozen catalog after entering plan", true, false, true, true, true, true},
 	} {
