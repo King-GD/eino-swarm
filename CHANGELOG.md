@@ -77,6 +77,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Engine replacement gives workers up to three seconds to summarize, leaving
+  time for the final durable checkpoints. An in-flight tool keeps its unknown
+  outcome, and completed workers keep their results. (`F-110`, `C-027`)
+
 - The phone shows the sub-agent entry and the running count as soon as a task opens, while workers are still running outside the first history page. Earlier history is no longer required to reveal them. A sub-agent that hits its lifetime limit leaves that count and stays failed; a later parent error or retain receipt does not put that run back. (`F-222`, `C-006`, `C-019`)
 - The expanded phone composer keeps the selected model name and puts the microphone, Send and Stop on the same row as the settings controls. Thinking levels appear in their picker. (`F-220`, `C-017`)
 - Opening PC or Web Models and Speech settings no longer prompts for microphone access. The microphone picker can request access when opened explicitly. (`F-148`, `C-048`)

@@ -324,10 +324,10 @@ MODELS = {
         Model(
             "lifecycle", ROOT / "models" / "lifecycle" / "EngineLifecycle.tla",
             ("DeadlineKillsChild", "RestoreBeforeListen", "StopRacesRestore", "PresenceAfterWindow", "HeadlessWaiterUnheld",
-             "IdleCommitNonAtomic", "FinishUngated", "ParkedNotCheckpointed", "IdleCountsOnlyManagers",
+             "IdleCommitNonAtomic", "FinishUngated", "SummaryUsesWriteBudget", "ParkedNotCheckpointed", "IdleCountsOnlyManagers",
              "ParkedAdmissionNonAtomic", "ParkedOwnerCheckedLate", "RestoreOwnerCheckedLate"),
             ("TypeOK", "WorkHasLiveOwner", "CheckpointHasOwner", "StopIsFinal", "WindowHasEngine",
-             "RegistryAlwaysAccounted", "RestoreOwnsProject", "ParkedSuccessorOwnsProject"),
+             "RegistryAlwaysAccounted", "RestoreOwnsProject", "ParkedSuccessorOwnsProject", "SummaryLeavesWriteBudget"),
             (("MaxTurns", 2),),
         ),
         Model(
@@ -1225,6 +1225,8 @@ CASES: tuple[Case, ...] = (
           ("StopRacesRestore",), "StopIsFinal"),
     _case("finish-ungated", "guard from 5d7b305: handoff waits for a normal finalization "
           "(lockFinish)", ("FinishUngated",), "WorkHasLiveOwner"),
+    _case("summary-uses-write-budget", "observed blocked tools leave too little of the request budget for final persistence",
+          ("SummaryUsesWriteBudget",), "SummaryLeavesWriteBudget"),
     _case("parked-not-checkpointed", "guard from 5d7b305: the checkpoint covers parked registries",
           ("ParkedNotCheckpointed",), "WorkHasLiveOwner"),
     _case("idle-counts-only-managers", "guard required by f341e05: idle load includes parked "
@@ -1246,6 +1248,7 @@ CASES: tuple[Case, ...] = (
     _case("reach-idle-exit-after-close", "witness", witness="NeverIdleExitAfterClose"),
     _case("reach-relaunch-after-idle-commit", "witness", witness="NeverRelaunchAfterIdleCommit"),
     _case("reach-finish-waits-for-handoff", "witness", witness="NeverFinishWaitsForHandoff"),
+    _case("reach-ack-with-unknown-tool", "witness", witness="NeverAckWithUnknownTool"),
     # C-037 refinement: a saved project read is not an owner claim.
     _case("project-move-current", "serialize Move with claim and explicit goal resume", model="project-move"),
     _case("project-move-stale-claim", "Move commits after tagged owner lookup, before Registry occupation",

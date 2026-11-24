@@ -194,7 +194,7 @@ func TestManagerMidturnRecoverySafetyBoundariesOverHTTP(t *testing.T) {
 					t.Fatal("later generation never reached cap fixture")
 				}
 				target := &restartTarget{rt: e.runtimeFor(thread.ID), turnID: turn.ID}
-				if err := e.writeRestartEvent(target, KindUserStopRequested, "Stop requested by the user."); err != nil {
+				if err := e.writeRestartEvent(t.Context(), target, KindUserStopRequested, "Stop requested by the user."); err != nil {
 					t.Fatal(err)
 				}
 				release()

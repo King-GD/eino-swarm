@@ -9,9 +9,10 @@ or a binary whose file identity is not the one `engine.json` published,
 requests an automatic, bounded handoff from the old engine, stops it and
 starts its replacement listener within a 30-second handoff/listen target after
 checkout frontend preparation. The old engine
-freezes new work, checkpoints every active or parked registry, gives workers
-a shared opportunity to summarize, and preserves uncertain tool effects for
-verification after recovery. It never treats a handoff summary as completion. Clients attach over loopback HTTP: they list, watch, send,
+freezes new work and checkpoints every active or parked registry. Workers share
+up to three seconds to summarize before the final writes within the 19-second
+request deadline. The final checkpoints retain completed workers and record
+uncertain tool effects for verification after recovery. Clients attach over loopback HTTP: they list, watch, send,
 steer, interrupt and answer. They do not open the database. Closing a window
 or leaving the terminal only drops that client's presence connection. The
 engine exits after the idle grace once no presence connection is held, the

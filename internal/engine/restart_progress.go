@@ -2,6 +2,13 @@ package engine
 
 import "time"
 
+func restartSummaryDeadline(started, parent time.Time) time.Time {
+	remaining := parent.Sub(started)
+	// A short parent budget still needs some time for the final writes.
+	reserve := min(max(0, remaining/5), time.Second)
+	return started.Add(min(restartSummaryLimit, remaining-reserve))
+}
+
 // Summary progress is read without copying multi-megabyte worker checkpoints.
 // The live stage remains distinct from the count of durable checkpoint writes.
 func restartSummaryProgress(targets []*restartTarget) int {
@@ -23,7 +30,7 @@ func (e *Engine) observeRestartSummaries(targets []*restartTarget, done <-chan s
 	for _, target := range targets {
 		progress := target.reg.HandoffProgress()
 		if len(progress.Pending) != 0 {
-			e.log.Warn("engine restart handoff exceeded half its budget", "thread_id", target.rt.threadID,
+			e.log.Warn("engine restart handoff exceeded half its summary window", "thread_id", target.rt.threadID,
 				"turn_id", target.turnID, "settled", progress.Settled, "total", progress.Total, "pending_workers", progress.Pending)
 		}
 	}
