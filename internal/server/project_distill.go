@@ -32,6 +32,8 @@ func (s *Server) startProjectDistillation(c *gin.Context) {
 		badRequest(c, "%s", err)
 	case errors.Is(err, engine.ErrDistillationTargets):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "distillation_disabled"})
+	case errors.Is(err, engine.ErrDistillationPending):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "distillation_pending"})
 	case err != nil:
 		s.fail(c, err)
 	case result.State == "running":

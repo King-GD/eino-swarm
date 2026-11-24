@@ -64,3 +64,14 @@ The corresponding real adapter tests include
 in `internal/engine/knowledge_http_test.go`. The store races and malformed-file
 regressions live in `internal/knowledge`. The model checks the protocol within
 the stated bounds, while these tests check the Go and HTTP wiring.
+
+## Manual distillation checkpoints
+
+`DistillationProgress.tla` models two successive batches in a frozen scope.
+`Commit` represents acceptance of a batch and the atomic SQLite receipt and
+cursor update in `CheckpointDistillation`. An interruption preserves that
+cursor. The injected faults advance without acceptance, complete after the
+first batch or reset the cursor on resume. The reachability case completes
+both batches across an interruption. The model treats acceptance as one
+step. The engine and backup tests check the persisted queue and the uncertain
+interval between file publication and the SQLite checkpoint.

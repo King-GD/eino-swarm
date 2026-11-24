@@ -102,7 +102,7 @@ type Engine struct {
 	reviews reviewPool
 
 	distillMu  sync.Mutex
-	distilling map[string]string
+	distilling map[string]activeDistillation
 	// titles tracks the conversation namers still running, for the same
 	// reason: a title call that is cut off just leaves the placeholder, and
 	// one that never finishes must not keep the window open.

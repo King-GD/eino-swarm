@@ -990,7 +990,13 @@ native macOS acceptance in `ci-macOS`.
 exercises the provider and HTTP tool boundaries, distinct conversation sources
 with the same event sequence, partial storage conflicts and interrupted
 receipts. The Playwright project knowledge suite walks all three scopes,
-switches between both panels and follows the Trace receipt. The
+switches between both panels and follows the Trace receipt.
+The long-history regression checks that every batch reaches the reviewer.
+The pause and restart regression saves all three destinations, interrupts the
+next batch, reopens the same SQLite store, and checks that resuming neither
+repeats the committed batch nor admits history added after the snapshot.
+`distillation-progress-*` TLC cases cover completion only at the end of the
+scope, acceptance before advancing and retaining the cursor across resume.
 `distillation-*` TLC cases cover exclusive admission, scoped publication,
 committed receipts, and a reachable run that saves all three targets.
 `TestCompletedTurnAutomaticallyKeepsNotesSkillsAndKnowledgeInOneReviewerBatch`
@@ -1001,6 +1007,11 @@ Knowledge is enabled. The offline browser regression keeps Knowledge visible
 and verifies its automatic refresh before reading Trace.
 
 ## Project Markdown knowledge (`F-138`, `C-053`)
+
+`TestKnowledgeGraphRetainsOneNodePerPageAcrossTitleChanges` checks stable IDs,
+merged evidence from reciprocal links, isolated pages and aliases. The HTTP route
+test checks project scoping and missing targets. The knowledge Playwright suite
+opens the full graph and locates and opens a titled page via its alias.
 
 - `go test -race -cover ./internal/knowledge ./internal/engine ./internal/server ./internal/backup`
   exercises schema and file validation, graph derivation, revision conflicts,

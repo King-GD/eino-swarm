@@ -5,15 +5,16 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 ## C-054 Unified project distillation
 
 - 范围涵盖 PC／Web 的 Memory 与 Knowledge、`F-138`、`F-420`、`C-025` 和 `C-053`。宿主在一个项目内合并重复的运行请求，根据范围读取最近成功回合、当前对话或当前项目已保留的历史。后两种范围允许失败回合中的明确人类要求作为笔记依据。运行和取消回合不参与提炼。
-- 一个 SQLite 读快照固定当前归属和输入范围。原始对话与事件 seq 绑定唯一的复查引用。来源以 2,000 rune 为单项上限，24,000 rune 为共享上限，并采用有界的扫描。宿主检查引文和来源归属，再以真实记录身份验证来源仍可用。助手文字只能用于带未核实归属的知识库分析。
-- 一份提案提交启用目标的操作。显式授权可以幂等启用知识库。笔记沿用一次 revision 比对提交，Skills 和知识库按各自的原子写入边界保存。保存失败可留下已提交项，回执仅列已实际保存的操作。
+- 当前任务与当前项目固定启动时已结束回合的候选记录身份，不纳入后来结束的回合。按历史顺序分批，每批保持原始工具调用和结果配对。来源以 2,000 rune 为单项上限，24,000 rune 为每批上限。原始对话与事件 seq 绑定唯一的复查引用。宿主检查引文和来源归属，再以真实记录身份验证来源仍可用。助手文字只能用于带未核实归属的知识库分析。
+- 每批用一份提案提交启用目标的操作。显式授权可以幂等启用知识库。笔记沿用一次 revision 比对提交，Skills 和知识库按各自的原子写入边界保存。保存失败可留下已提交项，回执仅列已实际保存的操作。
 - 自动复盘与项目记忆开启时，已启用知识库的成功非计划回合在现有 `apply_memory_review` 提案中也可提交 wiki 更新。回合当前归属、设置和来源身份在写入前复核。回执以同一个 `memory_review` 事件列出已落盘页面与 schema revision，刷新笔记、Skills 和 Knowledge；普通复盘与 Dream 的原请求预算适用。
-- 两个面板读取同一项目的最新手动提炼回执，原始回合仍是 Trace 锚点。进程退出且没有终态回执时显示中断并要求核实可能已保存的内容。项目删除清除关联回执。
-- 实现 `internal/engine/project_distill.go`、`internal/engine/project_distill_batch.go`、`internal/engine/review_knowledge.go` 和 `internal/store/distillation.go`。验证见 `internal/engine/project_distill_test.go`、`internal/engine/review_knowledge_test.go`、`internal/engine/dream_http_test.go`、`internal/server/project_distill_test.go`、`frontend/e2e/project-knowledge.spec.ts` 和 `models/knowledge/ProjectDistillation.tla`。
+- 两个面板显示同一份已处理、剩余及跳过记录计数。已接受批次的进度、游标和回执同一次提交。范围耗尽才标为完成。暂停或进程退出后可继续同一个任务，已提交批次不重跑。文件写入开始前记录未确认状态，若中途退出则提示核实当前内容，继续时复查未提交批次。失效或不具证据资格的候选记录单独计数。仍有剩余记录时拒绝以新范围覆盖原进度。Trace 使用正在复查或最近处理的原始回合。项目删除清除关联回执和候选记录。
+- 实现 `internal/engine/project_distill.go`、`internal/engine/project_distill_batch.go`、`internal/engine/review_knowledge.go` 和 `internal/store/distillation.go`。验证见 `internal/engine/project_distill_test.go`、`internal/engine/review_knowledge_test.go`、`internal/engine/dream_http_test.go`、`internal/server/project_distill_test.go`、`frontend/e2e/project-knowledge.spec.ts` 和 `models/knowledge/ProjectDistillation.tla` 和 `models/knowledge/DistillationProgress.tla`。
 
 ## C-053 Project knowledge keeps stable pages and attributable sources
 
 - 范围：`F-138`，项目知识工具、PC／Web 浏览、备份与删除。一个项目一份 schema，文件为事实来源。启用幂等，普通状态读取不会创建 schema。
+- 图谱：每个已加载页面对应一个节点，显示标题，以页面 ID 定位。已解析的 Wiki 链接和有效类型关系按无向页面对合并，孤立页面保留，缺页仍列在待处理。改标题不改变连线。
 - 文件身份：页面 ID 为项目内唯一稳定 slug。创建与更新校验规范化后的标题和别名；修改标题保留 ID。结构化关系按 schema 校验，缺少必填关系进入待处理。视图按路径截断环路，允许多父节点。正文 wikilink 与反链可从文件重建。
 - 写入：宿主从可信回合身份盖章。引擎内更新、删除和增量 schema 共用项目写入锁，以 revision 为前置条件，验证后原子发布文件。直接改文件不参与引擎锁。代理的知识工具只可新增 schema 定义。计划模式只读，Nuwa 与共享协作记录使用同样的写权限。知识工具按项目和回合绑定。
 - 证据：工具写入的历史引用必须是本项目中存在的可引用记录。时间、来源分类和持久身份由宿主确定。读时复核可用性，删除、倒带或项目归属变化后保留引用和页面，并拒绝将复用的 seq 当作原记录。可编辑的引导消息绑定保存时的正文指纹，改写同一消息后旧引用显示不可用。直接编辑的无盖章定位符按当前历史解析。可追溯引用仍需检查语义支持。外部 URI 不会触发宿主请求。

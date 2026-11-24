@@ -20,6 +20,8 @@ type DistillationRequest struct {
 	Scope           string `json:"scope"`
 	ThreadID        string `json:"thread_id"`
 	EnableKnowledge bool   `json:"enable_knowledge"`
+	ResumeReviewID  string `json:"resume_review_id"`
+	PauseReviewID   string `json:"pause_review_id"`
 }
 
 // ErrDistillationScope reports an invalid combination of scope and conversation.
@@ -28,20 +30,24 @@ var ErrDistillationScope = errors.New("invalid distillation scope or conversatio
 // ErrDistillationTargets reports that none of the requested project's stores is enabled.
 var ErrDistillationTargets = errors.New("enable Memory or Knowledge before distilling")
 
+// ErrDistillationPending protects the existing checkpoint from a new scope.
+var ErrDistillationPending = errors.New("continue the incomplete distillation before starting another")
+
 // DistillationResult is the durable status shared by both project panels.
 type DistillationResult struct {
-	ReviewID         string          `json:"review_id,omitempty"`
-	State            string          `json:"state"`
-	Scope            string          `json:"scope,omitempty"`
-	ThreadID         string          `json:"thread_id,omitempty"`
-	TurnID           string          `json:"turn_id,omitempty"`
-	HistoryOmitted   bool            `json:"history_omitted,omitempty"`
-	MemoryEnabled    bool            `json:"memory_enabled,omitempty"`
-	KnowledgeEnabled bool            `json:"knowledge_enabled,omitempty"`
-	Changes          []memory.Change `json:"changes,omitempty"`
-	Knowledge        []distillChange `json:"knowledge,omitempty"`
-	Error            string          `json:"error,omitempty"`
-	Uncertain        bool            `json:"uncertain,omitempty"`
+	ReviewID         string                `json:"review_id,omitempty"`
+	State            string                `json:"state"`
+	Scope            string                `json:"scope,omitempty"`
+	ThreadID         string                `json:"thread_id,omitempty"`
+	TurnID           string                `json:"turn_id,omitempty"`
+	Progress         *DistillationProgress `json:"progress,omitempty"`
+	HistoryOmitted   bool                  `json:"history_omitted,omitempty"`
+	MemoryEnabled    bool                  `json:"memory_enabled,omitempty"`
+	KnowledgeEnabled bool                  `json:"knowledge_enabled,omitempty"`
+	Changes          []memory.Change       `json:"changes,omitempty"`
+	Knowledge        []distillChange       `json:"knowledge,omitempty"`
+	Error            string                `json:"error,omitempty"`
+	Uncertain        bool                  `json:"uncertain,omitempty"`
 }
 
 type distillChange struct {
@@ -52,11 +58,13 @@ type distillChange struct {
 }
 
 type projectDistillWork struct {
-	projectID string
-	result    DistillationResult
-	anchor    store.Turn
-	sources   distillInput
-	kb        *knowledge.Store
+	projectID  string
+	result     DistillationResult
+	anchor     store.Turn
+	route      distillationRoute
+	sources    distillInput
+	kb         *knowledge.Store
+	checkpoint *distillCheckpoint
 }
 
 // ProjectDistillationStatus reads the last explicit review without starting work.
@@ -81,8 +89,9 @@ func (e *Engine) projectDistillationStatus(ctx context.Context, projectID string
 	if err := json.Unmarshal(row.Receipt, &result); err != nil {
 		return DistillationResult{}, err
 	}
-	if result.State == "running" && e.distilling[projectID] != row.ID {
-		result.State, result.Uncertain = "interrupted", true
+	if result.State == "running" && e.distilling[projectID].id != row.ID {
+		result.State = "interrupted"
+		result.Uncertain = result.Uncertain || result.Progress == nil
 	}
 	if result.ThreadID != "" {
 		thread, err := e.store.GetThreadContext(ctx, result.ThreadID)
@@ -102,6 +111,12 @@ func (e *Engine) projectDistillationStatus(ctx context.Context, projectID string
 
 // StartProjectDistillation admits at most one manual review per project.
 func (e *Engine) StartProjectDistillation(ctx context.Context, projectID string, req DistillationRequest) (DistillationResult, error) {
+	if req.ResumeReviewID != "" || req.PauseReviewID != "" {
+		if req.Scope != "" || req.ThreadID != "" || req.EnableKnowledge || (req.ResumeReviewID != "" && req.PauseReviewID != "") {
+			return DistillationResult{}, ErrDistillationScope
+		}
+		return e.controlDistillation(ctx, projectID, req)
+	}
 	switch req.Scope {
 	case "latest_turn", "thread":
 		if req.ThreadID == "" {
@@ -137,16 +152,47 @@ func (e *Engine) StartProjectDistillation(ctx context.Context, projectID string,
 			return DistillationResult{}, store.ErrNotFound
 		}
 	}
-	if e.distilling[projectID] != "" {
+	if e.distilling[projectID].id != "" {
 		return e.projectDistillationStatus(ctx, projectID)
 	}
-	turns, omitted, err := e.store.ProjectDistillationHistory(ctx, projectID, req.ThreadID, req.Scope == "latest_turn", distillEventKinds)
+	gate := e.reviews.begin(projectID)
+	if gate == nil {
+		return DistillationResult{}, ErrRestarting
+	}
+	launched := false
+	defer func() {
+		if !launched {
+			e.reviews.done()
+		}
+	}()
+	last, err := e.projectDistillationStatus(ctx, projectID)
 	if err != nil {
 		return DistillationResult{}, err
 	}
-	input := selectDistillationSources(turns, omitted)
-	if len(input.sources) == 0 {
-		return DistillationResult{State: "no_work", Scope: req.Scope, HistoryOmitted: input.omitted}, nil
+	if last.Progress != nil && last.Progress.Remaining > 0 {
+		return DistillationResult{}, ErrDistillationPending
+	}
+
+	var anchor store.Turn
+	var input distillInput
+	if req.Scope == "latest_turn" {
+		turns, omitted, err := e.store.ProjectDistillationHistory(ctx, projectID, req.ThreadID, true, distillEventKinds)
+		if err != nil {
+			return DistillationResult{}, err
+		}
+		input = selectDistillationSources(turns, omitted)
+		if len(input.sources) == 0 {
+			return DistillationResult{State: "no_work", Scope: req.Scope, HistoryOmitted: input.omitted}, nil
+		}
+		anchor = turns[0].Turn
+	} else {
+		anchor, err = e.store.ProjectDistillationAnchor(ctx, projectID, req.ThreadID)
+		if err != nil {
+			return DistillationResult{}, err
+		}
+		if anchor.ID == "" {
+			return DistillationResult{State: "no_work", Scope: req.Scope}, nil
+		}
 	}
 	kb, err := e.ProjectKnowledge(projectID)
 	if err != nil {
@@ -162,7 +208,6 @@ func (e *Engine) StartProjectDistillation(ctx context.Context, projectID string,
 			return DistillationResult{}, err
 		}
 	}
-	anchor := turns[0].Turn
 	result := DistillationResult{
 		ReviewID: store.NewID("distill_"), State: "running", Scope: req.Scope,
 		ThreadID: anchor.ThreadID, TurnID: anchor.ID, HistoryOmitted: input.omitted,
@@ -171,24 +216,42 @@ func (e *Engine) StartProjectDistillation(ctx context.Context, projectID string,
 	if !result.MemoryEnabled && !result.KnowledgeEnabled {
 		return DistillationResult{}, ErrDistillationTargets
 	}
-	gate := e.reviews.begin(projectID)
-	if gate == nil {
-		return DistillationResult{}, ErrRestarting
+	work := projectDistillWork{projectID: projectID, result: result, anchor: anchor, route: distillationRoute{anchor.ProviderID, anchor.Model, anchor.ReasoningEffort}, sources: input, kb: kb}
+	if req.Scope == "latest_turn" {
+		row, err := result.row(projectID)
+		if err == nil {
+			err = e.store.StartProjectDistillation(ctx, row)
+		}
+		if err != nil {
+			return DistillationResult{}, err
+		}
+	} else {
+		row := store.ProjectDistillation{ProjectID: projectID, ID: result.ReviewID, State: result.State,
+			ProviderID: anchor.ProviderID, Model: anchor.Model, ReasoningEffort: anchor.ReasoningEffort}
+		_, err := e.store.StartDistillationQueue(ctx, row, req.ThreadID, func(total int) ([]byte, error) {
+			result.Progress = &DistillationProgress{Total: total, Remaining: total}
+			return json.Marshal(result)
+		})
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				return DistillationResult{State: "no_work", Scope: req.Scope}, nil
+			}
+			return DistillationResult{}, err
+		}
+		work.result = result
 	}
-	row, err := result.row(projectID)
-	if err == nil {
-		err = e.store.StartProjectDistillation(ctx, row)
-	}
-	if err != nil {
-		e.reviews.done()
-		return DistillationResult{}, err
-	}
-	if e.distilling == nil {
-		e.distilling = make(map[string]string)
-	}
-	e.distilling[projectID] = result.ReviewID
-	go e.runProjectDistillation(gate, projectDistillWork{projectID, result, anchor, input, kb})
+	launched = true
+	e.launchDistillation(gate, work, 0)
 	return result, nil
+}
+
+func (e *Engine) launchDistillation(gate chan struct{}, work projectDistillWork, cursor uint) {
+	ctx, cancel := context.WithCancel(e.reviews.dreamCtx)
+	if e.distilling == nil {
+		e.distilling = make(map[string]activeDistillation)
+	}
+	e.distilling[work.projectID] = activeDistillation{work.result.ReviewID, cancel}
+	go e.runProjectDistillation(ctx, cancel, gate, work, cursor)
 }
 
 func (r DistillationResult) row(projectID string) (store.ProjectDistillation, error) {
@@ -196,8 +259,9 @@ func (r DistillationResult) row(projectID string) (store.ProjectDistillation, er
 	return store.ProjectDistillation{ProjectID: projectID, ID: r.ReviewID, State: r.State, Receipt: body}, err
 }
 
-func (e *Engine) runProjectDistillation(gate chan struct{}, work projectDistillWork) {
+func (e *Engine) runProjectDistillation(ctx context.Context, cancel context.CancelFunc, gate chan struct{}, work projectDistillWork, cursor uint) {
 	defer e.reviews.done()
+	defer cancel()
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			e.log.Error("project distillation panicked", "review", work.result.ReviewID, "panic", recovered)
@@ -216,7 +280,10 @@ func (e *Engine) runProjectDistillation(gate chan struct{}, work projectDistillW
 			e.log.Error("could not retain project distillation receipt", "review", work.result.ReviewID, "err", err)
 		}
 	}()
-	ctx := e.reviews.dreamCtx
+	if work.result.Progress != nil {
+		e.runDistillationQueue(ctx, gate, &work, cursor)
+		return
+	}
 	select {
 	case gate <- struct{}{}:
 		defer func() { <-gate }()
@@ -250,6 +317,12 @@ func (e *Engine) reviewProjectDistillation(ctx context.Context, work *projectDis
 		tools = memory.ViewTools(pc.memory)
 	}
 	instruction := projectDistillPrompt
+	if work.checkpoint != nil {
+		instruction += "\nThis is one batch of a larger history review. Judge only the sources in this batch. Read current destinations before proposing an update because earlier batches may already have recorded related material."
+		if work.result.Uncertain {
+			instruction += "\nA previous attempt may have saved part of this batch. Inspect all enabled destinations before writing and propose only the changes still needed."
+		}
+	}
 	if work.result.MemoryEnabled {
 		instruction += "\nMemory is enabled. Use \"changes\" for both notes and Skills."
 		if work.result.KnowledgeEnabled {
@@ -261,10 +334,10 @@ func (e *Engine) reviewProjectDistillation(ctx context.Context, work *projectDis
 		tools = append(tools, batch.knowledgeReader())
 	}
 	settings := e.cfg.Snapshot().Memory
-	effort, optional := settings.ReviewEffort(work.anchor.ReasoningEffort)
+	effort, optional := settings.ReviewEffort(work.route.effort)
 	e.driveReviewer(reviewRun{
 		ctx: ctx, threadID: work.anchor.ThreadID, turnID: work.anchor.ID, recorder: e.distillationRecorder(work),
-		providerID: work.anchor.ProviderID, model: work.anchor.Model, effort: effort, optionalEffort: optional,
+		providerID: work.route.provider, model: work.route.model, effort: effort, optionalEffort: optional,
 		description: "distills saved project history", instruction: instruction,
 		userMsg: e.reviewUserMessageWithNotes(pc, work.sources.transcript, notes),
 		maxIter: settings.ReviewIterations(), tools: append(tools, batch), sequential: true,
@@ -274,6 +347,11 @@ func (e *Engine) reviewProjectDistillation(ctx context.Context, work *projectDis
 			return outcome.Note, batch.complete
 		},
 	}, &mu, &outcome)
+	// A cancelled model iterator can return while its tool is still unwinding.
+	// Join the publisher before completing or allowing the job to resume.
+	batch.publishMu.Lock()
+	batch.closed = true
+	batch.publishMu.Unlock()
 	mu.Lock()
 	defer mu.Unlock()
 	work.result.Changes = outcome.Changes

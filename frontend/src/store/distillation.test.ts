@@ -32,6 +32,22 @@ describe("project distillation panel state", () => {
     expect(useDistillation.getState().projects.two).toBeUndefined()
   })
 
+  it("keeps checkpoint counts when the other panel's older poll arrives late", async () => {
+    const old = deferred<DistillResult>()
+    const latest: DistillResult = {
+      state: "running", review_id: "saved",
+      progress: { total: 10, processed: 4, remaining: 6, skipped: 0, batches: 1 },
+    }
+    vi.mocked(api.distillStatus).mockReturnValueOnce(old.promise).mockResolvedValueOnce(latest)
+    const signal = new AbortController().signal
+    const { refresh } = useDistillation.getState()
+    const pending = refresh("one", signal)
+    await refresh("one", signal)
+    old.resolve({ ...latest, progress: { total: 10, processed: 0, remaining: 10, skipped: 0, batches: 0 } })
+    await pending
+    expect(useDistillation.getState().projects.one.result).toEqual(latest)
+  })
+
   it("shares one request across panels while admission is pending and retains the terminal receipt", async () => {
     const post = deferred<DistillResult>()
     vi.mocked(api.startDistillation).mockReturnValueOnce(post.promise)

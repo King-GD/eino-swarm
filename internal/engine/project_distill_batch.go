@@ -43,6 +43,8 @@ type projectDistillBatch struct {
 	work        *projectDistillWork
 	mu          *sync.Mutex
 	outcome     *reviewOutcome
+	publishMu   sync.Mutex
+	closed      bool
 	memory      *reviewBatchTool
 	complete    bool
 	lastRefusal string
@@ -75,6 +77,11 @@ func distillKnowledgeParameter(required bool) *schema.ParameterInfo {
 }
 
 func (b *projectDistillBatch) InvokableRun(ctx context.Context, raw string, _ ...tool.Option) (string, error) {
+	b.publishMu.Lock()
+	defer b.publishMu.Unlock()
+	if b.closed {
+		return "", context.Canceled
+	}
 	b.mu.Lock()
 	complete := b.complete
 	b.mu.Unlock()
@@ -107,6 +114,9 @@ func (b *projectDistillBatch) InvokableRun(ctx context.Context, raw string, _ ..
 		return response, nil
 	}
 	b.mu.Lock()
+	if err == nil && b.work.checkpoint != nil {
+		err = b.work.checkpoint.accept(b.work.result, b.outcome.Changes, true)
+	}
 	b.complete = true
 	b.outcome.StopReason = "completed"
 	b.outcome.Note = "Project distillation finished."
@@ -204,6 +214,11 @@ func (b *projectDistillBatch) publish(ctx context.Context, proposal distillPropo
 	}
 	if err := context.Cause(ctx); err != nil {
 		return "", false, err
+	}
+	if b.work.checkpoint != nil && len(*proposal.Changes)+len(*proposal.Knowledge) > 0 {
+		if err := b.work.checkpoint.beforeWrite(); err != nil {
+			return "", false, &reviewTerminalError{cause: err}
+		}
 	}
 	if len(*proposal.Changes) > 0 {
 		body, err := json.Marshal(map[string]any{"changes": proposal.Changes})

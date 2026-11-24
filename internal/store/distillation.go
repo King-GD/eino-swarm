@@ -13,10 +13,12 @@ import (
 // ProjectDistillation stores the latest manual review receipt for one project.
 // It contains no transcript and is replaced only by the next explicit run.
 type ProjectDistillation struct {
-	ProjectID string `gorm:"primaryKey;size:64"`
-	ID        string `gorm:"size:64;not null"`
-	State     string `gorm:"size:24;not null"`
-	Receipt   []byte
+	ProjectID                          string `gorm:"primaryKey;size:64"`
+	ID                                 string `gorm:"size:64;not null"`
+	State                              string `gorm:"size:24;not null"`
+	Receipt                            []byte
+	CursorEventID                      uint `gorm:"not null;default:0"`
+	ProviderID, Model, ReasoningEffort string
 }
 
 // ProjectDistillationReceipt reads the latest run, if any.
@@ -31,7 +33,11 @@ func (s *Store) ProjectDistillationReceipt(ctx context.Context, projectID string
 
 // StartProjectDistillation replaces the latest receipt before a reviewer can run.
 func (s *Store) StartProjectDistillation(ctx context.Context, row ProjectDistillation) error {
-	return s.db.WithContext(ctx).Clauses(clause.OnConflict{
+	return startProjectDistillation(s.db.WithContext(ctx), row)
+}
+
+func startProjectDistillation(db *gorm.DB, row ProjectDistillation) error {
+	return db.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "project_id"}}, UpdateAll: true,
 	}).Create(&row).Error
 }

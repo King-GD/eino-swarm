@@ -29,7 +29,8 @@ const scopes = [
 export function ProjectDistillMenu({ projectId, threadId, knowledgeEnabled }: ProjectDistillProps) {
   const t = useT()
   const slot = useDistillation((s) => s.projects[projectId])
-  const busy = slot?.starting || slot?.result?.state === "running"
+  const busy = slot?.starting || slot?.controlling || slot?.result?.state === "running"
+  const pending = (slot?.result?.progress?.remaining ?? 0) > 0
   const refreshKey = useKnowledge((s) => s.refreshByProject[projectId])
   const [knowledge, setKnowledge] = useState<{ projectId: string; enabled: boolean }>()
   const enabled = knowledgeEnabled ?? (knowledge?.projectId === projectId ? knowledge.enabled : undefined)
@@ -54,7 +55,7 @@ export function ProjectDistillMenu({ projectId, threadId, knowledgeEnabled }: Pr
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button data-testid="knowledge-distill" variant="outline" size="sm" disabled={busy} aria-busy={busy}>
+        <Button data-testid="knowledge-distill" variant="outline" size="sm" disabled={busy || pending} aria-busy={busy}>
           {t("knowledge.distill")}<ChevronDown aria-hidden />
         </Button>
       </DropdownMenuTrigger>
@@ -109,6 +110,12 @@ export function ProjectDistillStatus({ projectId }: { projectId: string }) {
   const trace = result?.thread_id && result.turn_id ? { thread: result.thread_id, turn: result.turn_id } : undefined
   const error = slot?.error ?? result?.error
   const historyOmitted = result?.history_omitted
+  const progress = result?.progress
+  const canControl = (progress?.remaining ?? 0) > 0 && result?.review_id !== undefined
+  const control = () => {
+    const id = result?.review_id
+    if (id) void useDistillation.getState().start(projectId, running ? { pause_review_id: id } : { resume_review_id: id })
+  }
   const hasChanges = changes.length + pages.length > 0
   const status = state === "completed" && !hasChanges
     ? t("knowledge.distillNoChanges")
@@ -124,8 +131,21 @@ export function ProjectDistillStatus({ projectId }: { projectId: string }) {
           </Button>
         ) : null}
       </div>
-      {historyOmitted ? <p>{t("knowledge.distillOmitted")}</p> : null}
-      {result?.uncertain ? <p>{t("knowledge.distillUncertain")}</p> : null}
+      {progress ? (
+        <div className="flex flex-wrap items-center gap-x-2">
+          <p aria-live="polite" data-testid="project-distill-progress">
+            {t("knowledge.distillProgress", { done: progress.processed, total: progress.total, remaining: progress.remaining })}
+          </p>
+          {canControl ? (
+            <Button type="button" variant="link" size="sm" className="h-auto p-0" disabled={slot?.controlling} onClick={control}>
+              {t(running ? "knowledge.distillPause" : "knowledge.distillResume")}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      {progress?.skipped ? <p>{t("knowledge.distillSkipped", { count: progress.skipped })}</p> : null}
+      {historyOmitted ? <p>{t(progress ? "knowledge.distillClipped" : "knowledge.distillOmitted")}</p> : null}
+      {result?.uncertain && !running ? <p>{t("knowledge.distillUncertain")}</p> : null}
       {error ? <p role="alert" className="text-destructive">{error}</p> : null}
       {hasChanges ? (
         <details>

@@ -2659,7 +2659,12 @@ existing stores. Manual runs share one SQLite receipt between the two panels.
 For a successful turn with project memory, auto-review and Knowledge enabled,
 the existing reviewer applies wiki updates in the same batch as notes and
 Skills. It publishes their committed revisions in the original turn's
-`memory_review` event, which refreshes the open Knowledge panel. See [the distillation design](docs/plans/2026-11-23-unified-project-distillation.md)
+`memory_review` event, which refreshes the open Knowledge panel. Current-task
+and current-project manual distillation freeze source identities in SQLite,
+read bounded batches in order and commit a cursor with each accepted receipt.
+Interrupted jobs resume from that cursor when requested. The Knowledge graph projects the
+same in-memory wiki index as the tree and page views. Page IDs remain stable
+across title edits, and the client lays out the scoped nodes and edges. See [the distillation design](docs/plans/2026-11-23-unified-project-distillation.md)
 and [the wiki design](docs/plans/2026-11-23-project-knowledge-design.md).
 
 ## Integrated terminal

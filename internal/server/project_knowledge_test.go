@@ -30,6 +30,7 @@ func TestProjectKnowledgeRoutesKeepPageAndProjectIdentity(t *testing.T) {
 	}
 	assertKnowledgeAbsent(t, dir)
 	get("/tree", http.StatusNotFound)
+	get("/graph", http.StatusNotFound)
 	get("/pages/first", http.StatusNotFound)
 	h.json(http.MethodPost, "/api/projects/pj_missing/knowledge", nil, http.StatusNotFound)
 	h.json(http.MethodGet, "/api/projects/pj_missing/knowledge", nil, http.StatusNotFound)
@@ -58,7 +59,7 @@ func TestProjectKnowledgeRoutesKeepPageAndProjectIdentity(t *testing.T) {
 	}
 	for id, markdown := range map[string]string{
 		"first":  "---\nid: first\ntype: entry\ntitle: First\nlinks:\n  - rel: related\n    to: second\n---\nBody with [[missing]] and [[second]].\n",
-		"second": "---\nid: second\ntype: entry\ntitle: Second\n---\nSecond body.\n",
+		"second": "---\nid: second\ntype: entry\ntitle: Second\n---\nSecond body with [[first]].\n",
 	} {
 		if err := os.WriteFile(filepath.Join(entryDir, id+".md"), []byte(markdown), 0o600); err != nil {
 			t.Fatal(err)
@@ -73,10 +74,21 @@ func TestProjectKnowledgeRoutesKeepPageAndProjectIdentity(t *testing.T) {
 	if tree := get("/tree?view=pending", http.StatusOK); !strings.Contains(fmt.Sprint(tree["issues"]), "missing") {
 		t.Fatalf("pending view omitted the red link: %v", tree)
 	}
+	graph := get("/graph", http.StatusOK)
+	nodes, edges := graph["nodes"].([]any), graph["edges"].([]any)
+	if len(nodes) != 2 || len(edges) != 1 {
+		t.Fatalf("graph included a dangling endpoint or lost a page: %v", graph)
+	}
+	edge := edges[0].(map[string]any)
+	if edge["source"] != "first" || edge["target"] != "second" || edge["wikilink"] != true ||
+		fmt.Sprint(edge["relations"]) != "[related]" || nodes[0].(map[string]any)["title"] != "First" {
+		t.Fatalf("graph lost the title or merged evidence: %v", graph)
+	}
 	get("/tree?view=other", http.StatusBadRequest)
 	if page := get("/pages/first", http.StatusOK); page["id"] != "first" ||
 		!strings.Contains(fmt.Sprint(page["body"]), "[[missing]]") ||
-		!strings.Contains(fmt.Sprint(page["outgoing"]), "second") {
+		!strings.Contains(fmt.Sprint(page["outgoing"]), "second") ||
+		!strings.Contains(fmt.Sprint(page["mentions"]), "second") {
 		t.Fatalf("source page: %v", page)
 	}
 	if page := get("/pages/second", http.StatusOK); page["id"] != "second" ||
@@ -98,11 +110,16 @@ func TestProjectKnowledgeRoutesKeepPageAndProjectIdentity(t *testing.T) {
 	other := h.newProject(map[string]any{"name": "Other knowledge"})
 	otherBase := "/api/projects/" + other["id"].(string) + "/knowledge"
 	h.json(http.MethodPost, otherBase, nil, http.StatusOK)
+	otherGraph := h.json(http.MethodGet, otherBase+"/graph", nil, http.StatusOK)
+	if len(otherGraph["nodes"].([]any)) != 0 || len(otherGraph["edges"].([]any)) != 0 {
+		t.Fatalf("the other project's graph leaked evidence: %v", otherGraph)
+	}
 	h.json(http.MethodGet, otherBase+"/pages/first", nil, http.StatusNotFound)
 	if err := os.WriteFile(schemaPath, []byte("version: wrong\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	get("/tree", http.StatusBadRequest)
+	get("/graph", http.StatusBadRequest)
 	h.json(http.MethodPost, base, nil, http.StatusBadRequest)
 	if got, err := os.ReadFile(schemaPath); err != nil || string(got) != "version: wrong\n" {
 		t.Fatalf("re-enabling a malformed schema changed the file: %q, %v", got, err)

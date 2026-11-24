@@ -1,6 +1,7 @@
 import { ArrowLeft, ChevronDown, ChevronRight, FileText, FolderOpen, RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
+import { KnowledgeNetwork } from "@/components/app/knowledge-network"
 import { KnowledgePageView, type KnowledgePageActions } from "@/components/app/knowledge-page"
 import { Button } from "@/components/ui/button"
 import { ProjectDistillMenu, ProjectDistillStatus } from "@/components/app/project-distill"
@@ -133,6 +134,7 @@ function ProjectKnowledge({ project, thread, onOpenThread, onTrace }: KnowledgeP
               <SelectItem value={KNOWLEDGE_PENDING_VIEW}>{t("knowledge.pending")}</SelectItem>
             </SelectContent>
           </Select>
+          <KnowledgeNetwork projectId={project.id} refresh={refresh} onPage={current} />
           {distillMenu}
           {canReveal ? (
             <Button

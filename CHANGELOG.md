@@ -12,6 +12,9 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Added
 
+- The Knowledge panel opens a full project graph with page titles as nodes,
+  one undirected line per connected pair, zoom and search by title or alias. (`F-138`, `C-053`)
+
 - Task panels can show an enterprise asset portrait (EASM). The agent confirms the subject, performs the discovery lookups itself, and pushes each finished batch of companies, domains and certificates into the panel, which merges the batches into one graph; on the batch that carries the final asset query the panel collects the asset totals, attention trend and components itself. Each aggregation shows its own progress and a failure never stops the others. The panel follows the app language on PC, Web and paired phones.
 
 - PC and Web projects can keep a Markdown knowledge base with linked pages,
@@ -33,6 +36,11 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - PC and Web voice settings can choose a preferred microphone or follow the operating-system input. Phones use their own microphone. (`F-148`, `C-048`)
 
 ### Changed
+
+- Current-task and current-project distillation process history in saved
+  batches for notes, Skills and Knowledge. Both panels show processed and
+  remaining records, and interrupted runs can resume after an app restart.
+  (`F-138`, `F-420`, `C-054`)
 
 - Local verification starts with the affected tests. Full suites run when the
   impact cannot be bounded or the integration or release workflow requires them.

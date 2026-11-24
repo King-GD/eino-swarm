@@ -139,6 +139,9 @@ func (s *Store) DeleteProject(id string) error {
 				return err
 			}
 		}
+		if err := tx.Delete(&ProjectDistillationSource{}, "project_id = ?", id).Error; err != nil {
+			return err
+		}
 		if err := tx.Delete(&ProjectDistillation{}, "project_id = ?", id).Error; err != nil {
 			return err
 		}

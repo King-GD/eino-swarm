@@ -12,6 +12,9 @@ import (
 func TestModelPickerHTTPListsOnlyThirdPartyConversationBinding(t *testing.T) {
 	ah := newAccountHarness(t, false)
 	ah.waitAccount(remote.AccountSignedOut)
+	// This test publishes the catalog itself. Join the initial account
+	// refresh before injecting it so a signed-out publication cannot erase it.
+	ah.app.Remote.Stop()
 	if err := ah.app.Config.Update(func(c *config.Config) error {
 		c.Product.Mode = config.ProductModeLocal
 		return nil
@@ -29,8 +32,12 @@ func TestModelPickerHTTPListsOnlyThirdPartyConversationBinding(t *testing.T) {
 	src.SetCatalogGroup("third_party")
 	ah.app.Engine.Providers().SetLocalAccountSources([]*provider.AccountSource{src})
 	got := ah.json(http.MethodGet, "/api/models", nil, http.StatusOK)
+	models, ok := got["models"].([]any)
+	if !ok {
+		t.Fatalf("expected the model picker to return a catalog, got %v", got)
+	}
 	var names []string
-	for _, value := range got["models"].([]any) {
+	for _, value := range models {
 		row := value.(map[string]any)
 		if row["provider_id"] != accountSourceID {
 			continue

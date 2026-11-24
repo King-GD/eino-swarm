@@ -9,6 +9,7 @@ import { errorMessage } from "./toasts"
 interface DistillationSlot {
   generation: number
   starting?: boolean
+  controlling?: boolean
   result?: DistillResult
   error?: string
 }
@@ -20,16 +21,20 @@ interface DistillationState {
 }
 
 export const useDistillation = create<DistillationState>((set, get) => {
+  let nextRefresh = 0
+  const appliedRefresh = new Map<string, number>()
   const read = (projectId: string): DistillationSlot => get().projects[projectId] ?? { generation: 0 }
   const save = (projectId: string, slot: DistillationSlot) => set((s) => ({
     projects: { ...s.projects, [projectId]: slot },
   }))
   const report = (projectId: string, slot: DistillationSlot, result: DistillResult) => {
     const changed = slot.result?.review_id !== result.review_id || slot.result?.state !== result.state
+    const knowledgeChanged = slot.result?.knowledge?.length !== result.knowledge?.length
+    const memoryChanged = slot.result?.changes?.length !== result.changes?.length
     save(projectId, { generation: slot.generation, result })
-    if (!changed || !result.review_id) return
-    if (result.knowledge_enabled) useKnowledge.getState().invalidate(projectId)
-    if (result.changes?.length || result.uncertain) {
+    if (!result.review_id) return
+    if (result.knowledge_enabled && (changed || knowledgeChanged)) useKnowledge.getState().invalidate(projectId)
+    if (memoryChanged || (changed && (result.changes?.length || result.uncertain))) {
       const projects = useProjects.getState()
       if (projects.memoryProjectId === projectId) void projects.loadMemory(projectId)
     }
@@ -39,26 +44,30 @@ export const useDistillation = create<DistillationState>((set, get) => {
     projects: {},
     refresh: async (projectId, signal) => {
       const slot = read(projectId)
-      if (slot.starting) return
+      if (slot.starting || slot.controlling) return
+      const request = ++nextRefresh
       try {
         const result = await api.distillStatus(projectId, signal)
         const current = read(projectId)
-        if (signal.aborted || current.generation !== slot.generation) return
+        if (signal.aborted || current.generation !== slot.generation || request < (appliedRefresh.get(projectId) ?? 0)) return
+        appliedRefresh.set(projectId, request)
         // no_work is an immediate response, not a replacement for the last
         // durable receipt. Keep it visible when switching between the panels.
         if (current.result?.state === "no_work" && sourceIsPrevious(current.result, result)) return
         report(projectId, current, result)
       } catch (error) {
-        if (!signal.aborted && read(projectId).generation === slot.generation) {
+        if (!signal.aborted && read(projectId).generation === slot.generation && request >= (appliedRefresh.get(projectId) ?? 0)) {
           save(projectId, { ...read(projectId), error: errorMessage(error) })
         }
       }
     },
     start: async (projectId, request) => {
       const slot = read(projectId)
-      if (slot.starting || slot.result?.state === "running") return
+      const pause = "pause_review_id" in request
+      const resume = "resume_review_id" in request
+      if (slot.starting || slot.controlling || (!pause && slot.result?.state === "running")) return
       const current = { ...slot, generation: slot.generation + 1 }
-      save(projectId, { ...current, starting: true, error: undefined })
+      save(projectId, { ...current, starting: !pause && !resume, controlling: pause || resume, error: undefined })
       try {
         const result = await api.startDistillation(projectId, request)
         report(projectId, current, result.state === "no_work" ? { ...result, review_id: slot.result?.review_id } : result)

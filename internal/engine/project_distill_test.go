@@ -86,8 +86,17 @@ func TestDistillationKeepsPeerSequenceIdentityAndReportsActualPartialWrites(t *t
 			strings.Contains(source, foreign) || strings.Count(source, "event_seq=1 ") != 2 {
 			t.Errorf("wrong captured scope: %s", source)
 		}
+		if step == 2 {
+			if !strings.Contains(req.Messages[0].Content, "A previous attempt may have saved part of this batch.") {
+				t.Error("resuming a partially published batch did not ask the reviewer to inspect the saved destinations")
+			}
+			nuwaValidationTool(w, req, "resume", distillBatchName, `{"changes":[],"knowledge":[
+				{"action":"write_page","id":"peer","type":"entry","title":"Peer","body":"Peer observed distinct material.","evidence":[{"seq":2,"quote":"Peer observed distinct material."}]}
+			]}`)
+			return
+		}
 		if step != 1 {
-			t.Errorf("partial commit ran another model call: %d", step)
+			t.Errorf("unexpected additional model call: %d", step)
 		}
 		nuwaValidationTool(w, req, "distill", distillBatchName, `{
 		  "changes":[{"target":"memory","action":"add","content":"Preserve the working convention.","evidence":[{"seq":1,"quote":"Preserve the working convention."}]}],
@@ -149,6 +158,17 @@ func TestDistillationKeepsPeerSequenceIdentityAndReportsActualPartialWrites(t *t
 	page, err := e.ProjectKnowledgePage(t.Context(), project.ID, "hypothesis")
 	if err != nil || len(page.Sources) != 1 || page.Sources[0].Classification != "analysis" || page.Sources[0].ThreadID != b.ID {
 		t.Fatalf("analysis did not retain its precise origin: %+v / %v", page, err)
+	}
+	if result.Progress.Processed != 0 || !result.Uncertain {
+		t.Fatalf("partial file writes advanced the cursor: %+v", result)
+	}
+	if _, err := e.StartProjectDistillation(t.Context(), project.ID, DistillationRequest{ResumeReviewID: result.ReviewID}); err != nil {
+		t.Fatal(err)
+	}
+	repaired := waitDistill(t, e, project.ID)
+	if repaired.State != "completed" || repaired.Uncertain || repaired.Progress.Processed != 3 ||
+		len(repaired.Changes) != 1 || len(repaired.Knowledge) != 2 || calls.Load() != 2 {
+		t.Fatalf("resume lost saved work or counted it again: %+v", repaired)
 	}
 }
 
@@ -551,5 +571,12 @@ func TestDistillationDropsADeletedTraceAnchorBeforeModelInput(t *testing.T) {
 	result := waitDistill(t, e, p.ID)
 	if result.State != "failed" || result.TurnID != "" || calls.Load() != 0 {
 		t.Fatalf("deleted turn still has reviewer work or a Trace: %+v requests=%d", result, calls.Load())
+	}
+	if _, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{ResumeReviewID: result.ReviewID}); err != nil {
+		t.Fatal(err)
+	}
+	finished := waitDistill(t, e, p.ID)
+	if finished.State != "completed" || finished.Progress.Remaining != 0 || finished.Progress.Skipped != 1 || calls.Load() != 0 {
+		t.Fatalf("resume did not account for the vanished source: %+v %+v", finished, finished.Progress)
 	}
 }

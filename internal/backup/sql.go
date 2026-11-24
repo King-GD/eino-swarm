@@ -22,6 +22,7 @@ var copyOrder = []string{
 	"threads",
 	"turns",
 	"events",
+	"project_distillation_sources",
 	"messages",
 	"attachments",
 	"followups",
@@ -284,7 +285,7 @@ func projectFilter(table, projectID string) (string, []any, bool, error) {
 	case "schedule_runs":
 		return `thread_id IN (` + threads + `) OR schedule_id IN (SELECT id FROM main.schedules WHERE project_id = ? OR thread_id IN (` + threads + `))`,
 			[]any{projectID, projectID, projectID}, false, nil
-	case "nuwa_nodes", "nuwa_revisions", "nuwa_verify_slots", "project_distillations":
+	case "nuwa_nodes", "nuwa_revisions", "nuwa_verify_slots", "project_distillations", "project_distillation_sources":
 		return `project_id = ?`, []any{projectID}, false, nil
 	case "composer_drafts", "composer_draft_blobs":
 		return `draft_key = ? OR draft_key IN (SELECT 'thread:' || id FROM main.threads WHERE project_id = ?)`,
@@ -373,7 +374,7 @@ func exportProjectRows(ctx context.Context, conn *sql.Conn, projectID, dest stri
 		return err
 	}
 	for _, table := range copyOrder {
-		if table == "project_distillations" && !rollbackSnapshot {
+		if (table == "project_distillations" || table == "project_distillation_sources") && !rollbackSnapshot {
 			continue
 		}
 		where, args, skip, err := projectFilter(table, projectID)
@@ -507,7 +508,7 @@ func applyProject(ctx context.Context, conn *sql.Conn, incomingPath, projectID s
 				}
 			}
 			for _, table := range copyOrder {
-				if table == "remote_devices" || table == "project_distillations" {
+				if table == "remote_devices" || table == "project_distillations" || table == "project_distillation_sources" {
 					continue
 				}
 				if err := copyTable(ctx, tx, "incoming", "main", table, "", nil, offset); err != nil {

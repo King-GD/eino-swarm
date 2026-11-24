@@ -245,3 +245,55 @@ func TestExternalEditsRebuildIndexAndByteCheckRefusesWithoutStatChange(t *testin
 		t.Fatalf("stale page survived malformed replacement: %v", err)
 	}
 }
+
+func TestKnowledgeGraphRetainsOneNodePerPageAcrossTitleChanges(t *testing.T) {
+	store := newWiki(t)
+	_, err := snapshotWiki(t, store).Graph()
+	assertError(t, err, ErrDisabled)
+	enableWiki(t, store)
+	empty, err := snapshotWiki(t, store).Graph()
+	if err != nil || len(empty.Nodes) != 0 || len(empty.Edges) != 0 {
+		t.Fatalf("empty graph: %+v, %v", empty, err)
+	}
+	appendWiki(t, store, SchemaAppend{
+		Relations: []Relation{{ID: "uses", From: []string{"entry"}, To: []string{"entry"}}},
+	})
+	writePage(t, store, Page{ID: "source", Type: "entry", Title: "Original title", Aliases: []string{"Source alias"},
+		Links: []Link{{Rel: "related", To: "target"}, {Rel: "uses", To: "unfinished"}},
+		Body:  "[[target]] and [[target|title variant]]. [[unfinished]]"})
+	writePage(t, store, Page{ID: "target", Type: "entry", Title: "Target", Body: "[[source]] and [[target]].",
+		Links: []Link{{Rel: "related", To: "source"}, {Rel: "uses", To: "source"}}})
+	writePage(t, store, Page{ID: "isolated", Type: "entry", Title: "Isolated"})
+
+	snap := snapshotWiki(t, store)
+	graph, err := snap.Graph()
+	if err != nil || len(graph.Nodes) != 3 || len(graph.Edges) != 2 {
+		t.Fatalf("wrong graph: %+v, %v", graph, err)
+	}
+	if graph.Nodes[1].ID != "source" || graph.Nodes[1].Title != "Original title" || !slices.Equal(graph.Nodes[1].Aliases, []string{"Source alias"}) {
+		t.Fatalf("title and identity: %+v", graph.Nodes)
+	}
+	if graph.Edges[0].Source != "source" || graph.Edges[0].Target != "target" || !graph.Edges[0].Wikilink ||
+		!slices.Equal(graph.Edges[0].Relations, []string{"related", "uses"}) ||
+		graph.Edges[1].Source != "target" || graph.Edges[1].Target != "target" || !graph.Edges[1].Wikilink {
+		t.Fatalf("reciprocal links should share one edge: %+v", graph.Edges)
+	}
+	graph.Nodes[1].Aliases[0] = "mutated"
+	graph.Edges[0].Relations[0] = "mutated"
+	again, err := snap.Graph()
+	if err != nil || again.Nodes[1].Aliases[0] != "Source alias" || again.Edges[0].Relations[0] != "related" {
+		t.Fatalf("graph exposed its snapshot: %+v, %v", again, err)
+	}
+
+	page, err := snap.Page("source")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page.Title = "New title"
+	writePage(t, store, page.Page)
+	renamed, err := snapshotWiki(t, store).Graph()
+	if err != nil || renamed.Nodes[1].ID != "source" || renamed.Nodes[1].Title != "New title" ||
+		renamed.Edges[0].Source != "source" || renamed.Edges[0].Target != "target" || len(renamed.Edges) != 2 {
+		t.Fatalf("rename broke the network: %+v, %v", renamed, err)
+	}
+}

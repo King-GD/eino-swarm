@@ -40,6 +40,28 @@ export interface KnowledgePageRef {
   type: string
 }
 
+export interface KnowledgeGraphNode extends KnowledgePageRef {
+  aliases?: string[]
+}
+
+export interface KnowledgeGraphEdge {
+  source: string
+  target: string
+  relations?: string[]
+  wikilink?: boolean
+}
+
+export interface KnowledgeGraph {
+  nodes: KnowledgeGraphNode[]
+  edges: KnowledgeGraphEdge[]
+}
+
+export function matchKnowledgeGraphNodes(nodes: readonly KnowledgeGraphNode[], query: string) {
+  const search = query.trim().toLowerCase()
+  return nodes.filter((node) => [node.title, node.id, ...(node.aliases ?? [])]
+    .some((name) => name.toLowerCase().includes(search)))
+}
+
 export interface KnowledgeConnection {
   relation: string
   label: string

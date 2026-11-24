@@ -241,6 +241,11 @@ MODELS = {
             (),
         ),
         Model(
+            "distillation-progress", ROOT / "models" / "knowledge" / "DistillationProgress.tla",
+            ("FinishAfterFirstBatch", "AdvanceBeforeAcceptance", "ForgetCursorOnResume"),
+            ("TypeOK", "AcceptBeforeAdvance", "KeepCheckpoint", "CompleteCoversScope"), (),
+        ),
+        Model(
             "project-distillation", ROOT / "models" / "knowledge" / "ProjectDistillation.tla",
             ("AllowConcurrent", "AllowForeignSource", "ReceiptWithoutWrite"),
             ("TypeOK", "OneManualRun", "ScopedWrites", "RealReceipts"),
@@ -478,6 +483,15 @@ def _askpub(name: str, source: str, switches: tuple[str, ...] = (), violates: st
 
 
 CASES: tuple[Case, ...] = (
+    _case("distillation-progress-current", "accepted batches cover the whole frozen history",
+          model="distillation-progress"),
+    *(_case("distillation-progress-" + guard, "seeded: " + guard, (guard,), invariant,
+            model="distillation-progress")
+      for guard, invariant in (("FinishAfterFirstBatch", "CompleteCoversScope"),
+                               ("AdvanceBeforeAcceptance", "AcceptBeforeAdvance"),
+                               ("ForgetCursorOnResume", "KeepCheckpoint"))),
+    _case("distillation-progress-resumed", "interrupt between batches, resume and complete",
+          witness="NeverCompleteAfterResume", model="distillation-progress"),
     _case("distillation-current", "exclusive manual review and scoped publication receipts",
           model="project-distillation"),
     *(_case("distillation-fault-" + guard, "seeded: " + guard, (guard,), invariant,

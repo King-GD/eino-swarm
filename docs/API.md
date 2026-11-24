@@ -1799,7 +1799,11 @@ Start one background review of retained project history. The JSON request
 contains `scope: "latest_turn" | "thread" | "project"`. Supply `thread_id`
 for the first two scopes. The conversation must currently belong to the
 project. Supply `enable_knowledge: true` to explicitly initialize Knowledge
-if needed. Both panels use the same project endpoint.
+if needed. Both panels use the same project endpoint. For an existing batch
+job, send only `{"pause_review_id":"…"}` to request a pause or
+`{"resume_review_id":"…"}` to resume from its saved checkpoint. An unknown
+review ID returns `404`. Starting a different review while a previous batch
+job still has pending records returns `409 distillation_pending`.
 
 An admitted request returns `202` with `review_id`, `state: "running"`,
 `scope` and, while the original anchor is available, `thread_id` and
@@ -1812,8 +1816,12 @@ GET returns the latest durable receipt, or `state: "idle"`. Terminal states
 are `completed`, `partial`, `failed` and `interrupted`. Optional fields
 include `changes` for committed notes and Skills, `knowledge` for committed
 pages or schema revisions, `error`, `history_omitted` and `uncertain` for
-possible unconfirmed writes following interruption. Partial success retains
-its committed items. The browser polls this endpoint while showing a run.
+possible unconfirmed writes following interruption. For `thread` and
+`project`, `progress` has `total`, `processed`, `remaining`, `skipped` and
+`batches`. Counts refer to candidate records frozen when the job starts.
+Skipped records were evaluated for eligibility and are included in processed.
+A job reaches `completed` when its remaining count reaches zero. Partial
+success retains its committed items. Both panels poll this endpoint.
 
 ### `GET /api/projects/:id/knowledge` · `POST /api/projects/:id/knowledge`
 
@@ -1833,6 +1841,16 @@ view ID defined in the project schema. The response contains `view`,
 and `cycle`. A bounded graph view can set `truncated`. Lint can report
 `broken_link`, `stale`, `missing_relation` and `invalid_page`. An unknown
 view is `400`; a disabled knowledge base is `404` with `knowledge_disabled`.
+
+### `GET /api/projects/:id/knowledge/graph`
+
+Return the project's read-only relationship graph. `nodes` contains one
+entry per page, including unlinked pages, with its stable `id`, display
+`title`, `type` and optional `aliases`. Each `edges` entry connects one pair
+of pages. The `source` and `target` fields give the endpoint IDs in lexical
+order. The optional `relations` and `wikilink` flag combine the evidence
+from both pages. Missing targets remain in the pending view. A disabled
+knowledge base returns `404 knowledge_disabled`.
 
 ### `GET /api/projects/:id/knowledge/pages/:page`
 

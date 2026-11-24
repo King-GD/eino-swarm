@@ -44,7 +44,7 @@ import type { ClientCatalog } from "./local-clients"
 import type { SendImage } from "./paste-image"
 import type { ThreadLog } from "./thread-log"
 import { distillationPath, type DistillRequest, type DistillResult } from "./distillation"
-import { knowledgePath, type KnowledgePage, type KnowledgeStatus, type KnowledgeTree } from "./knowledge"
+import { knowledgePath, type KnowledgeGraph, type KnowledgePage, type KnowledgeStatus, type KnowledgeTree } from "./knowledge"
 import type { ComposerDraftRecord } from "./composer-draft"
 import type { MCPServerInput, MCPServerView, MCPToolCatalog } from "./mcp-settings"
 
@@ -594,6 +594,8 @@ export const api = {
     request<KnowledgeStatus>(knowledgePath(projectId), { method: "POST" }),
   knowledgeTree: (projectId: string, view: string, signal?: AbortSignal) =>
     request<KnowledgeTree>(`${knowledgePath(projectId)}/tree?view=${encodeURIComponent(view)}`, { signal, cache: "no-store" }),
+  knowledgeGraph: (projectId: string, signal?: AbortSignal) =>
+    request<KnowledgeGraph>(`${knowledgePath(projectId)}/graph`, { signal, cache: "no-store" }),
   knowledgePage: (projectId: string, page: string, signal?: AbortSignal) =>
     request<KnowledgePage>(`${knowledgePath(projectId)}/pages/${encodeURIComponent(page)}`, { signal, cache: "no-store" }),
   revealKnowledge: (projectId: string) =>

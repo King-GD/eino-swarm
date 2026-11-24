@@ -828,13 +828,26 @@ Page sources distinguish primary material, unverified analysis and external
 links. Removed or rewound history remains listed as unavailable. An available
 last-update link opens its conversation or Trace.
 
+Open **Graph** for the whole project wiki. Each node shows a page title.
+Each pair of pages shares one undirected line. A solid line shows a defined
+relationship. A dashed line shows a Wiki link with no defined relationship.
+Search by title or alias to focus a page. Select any node to open it, or
+use the open button beside the search field. **Fit the whole knowledge
+graph** restores the overview.
+
 Open **Distill** from **Memory** or **Knowledge**. Choose **Latest turn** for
 the most recent successful turn, **Current task** for this conversation or
 **Current project** for the project's retained conversations, including archived
 ones. A single background review can save notes, Skills and wiki pages.
-Both panels show the same result and a link to the original Trace. A larger
-scope can exceed the history budget; the result indicates omitted history.
-Failed turns can contribute explicit human requirements to notes.
+Both panels show the same result and a link to an original Trace. Failed
+turns can contribute explicit human requirements to notes.
+
+For **Current task** and **Current project**, the panel shows how many
+historical records it has processed and how many remain. You can pause and
+continue from the last saved batch, including after restarting the app.
+The review covers the completed history at the time you started it. Individual
+records can be excerpted or skipped, and the panel reports these limits.
+Long histories can require many model requests.
 
 **Distill** uses enabled destinations. Choose **Enable knowledge and distill**
 to initialize a wiki and include it in the same review. An interrupted run

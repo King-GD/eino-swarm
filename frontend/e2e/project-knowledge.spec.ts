@@ -185,3 +185,129 @@ test("automatic review updates the open knowledge panel and the original Trace",
     await page.request.delete(`/api/projects/${projectId}`)
   }
 })
+
+test("Distillation shows the saved batch progress and continues after reopening", async ({ page }) => {
+  const name = `Distillation progress ${Date.now()}`
+  const { projectId, threadId } = await openProjectConversation(page, name, true)
+  const path = `/api/projects/${projectId}/distill`
+  const reviewId = "saved-review"
+  let state = "idle"
+  let processed = 0
+  const requests: unknown[] = []
+  await page.route(path, async (route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON()
+      requests.push(body)
+      if (body.scope === "thread") {
+        state = "running"
+        processed = 4
+      } else if (body.pause_review_id === reviewId) {
+        state = "interrupted"
+      } else if (body.resume_review_id === reviewId) {
+        state = "running"
+      }
+    }
+    await route.fulfill({
+      json: state === "idle" ? { state } : {
+        state, review_id: reviewId, scope: "thread",
+        progress: { total: 9, processed, remaining: 9 - processed, skipped: 0, batches: processed === 9 ? 2 : 1 },
+      },
+    })
+  })
+  const status = page.getByTestId("project-distill-status")
+  const progress = page.getByTestId("project-distill-progress")
+  try {
+    await knowledgeTab(page).click()
+    await page.getByTestId("knowledge-distill").click()
+    await page.getByRole("menuitem", { name: "Current task", exact: true }).click()
+    await expect(progress).toHaveText("4 of 9 history records processed · 5 remaining")
+    await expect(status).not.toContainText("Distillation finished")
+    await status.getByRole("button", { name: "Pause distillation" }).click()
+    await expect(status).toContainText("Distillation was interrupted")
+    await page.reload()
+    const row = page.locator(`[data-testid="thread-row"][data-id="${threadId}"]`)
+    if (!await row.isVisible()) await page.getByRole("button", { name, exact: true }).click()
+    await row.getByTestId("row-label").click()
+    if (await knowledgeTab(page).getAttribute("aria-selected") !== "true") await knowledgeTab(page).click()
+    await expect(progress).toHaveText("4 of 9 history records processed · 5 remaining")
+    await status.getByRole("button", { name: "Resume distillation" }).click()
+    await expect(status).toContainText("Distilling project history")
+    await expect(progress).toHaveText("4 of 9 history records processed · 5 remaining")
+    processed = 9
+    state = "completed"
+    await expect(progress).toHaveText("9 of 9 history records processed · 0 remaining")
+    await expect(status).toContainText("Distillation finished")
+    expect(requests).toEqual([{ scope: "thread", thread_id: threadId }, { pause_review_id: reviewId }, { resume_review_id: reviewId }])
+  } finally {
+    await page.unroute(path)
+    await page.request.delete(`/api/projects/${projectId}`)
+  }
+})
+
+test("The project graph connects titled pages and opens a node found by alias", async ({ page }) => {
+  const titles = ["Release checklist", "Review criteria", "Standalone note"]
+  await page.addInitScript((labels) => {
+    const visible: Record<string, boolean> = {}
+    Object.assign(window, { visibleKnowledgeLabels: visible })
+    const fill = CanvasRenderingContext2D.prototype.fillText
+    CanvasRenderingContext2D.prototype.fillText = function (text, x, y, maxWidth) {
+      if (maxWidth === undefined) fill.call(this, text, x, y)
+      else fill.call(this, text, x, y, maxWidth)
+      if (!labels.includes(text) || !this.canvas.closest('[data-testid="knowledge-graph-canvas"]')) return
+      const { a, d, e, f } = this.getTransform()
+      const textWidth = this.measureText(text).width * a
+      const left = x * a + e - (this.textAlign === "right" ? textWidth : 0)
+      visible[text] = left >= 0 && left + textWidth <= this.canvas.width && y * d + f > 0 && y * d + f < this.canvas.height
+    }
+  }, titles)
+  const { projectId } = await openProjectConversation(page, `Wiki graph ${Date.now()}`)
+  const base = `/api/projects/${projectId}/knowledge`
+  try {
+    expect((await page.request.post(base)).ok()).toBe(true)
+    const { data_dir: dataDir } = await (await page.request.get("/api/meta")).json() as { data_dir: string }
+    const entries = join(dataDir, "projects", projectId, "knowledge", "pages", "entries")
+    await mkdir(entries, { recursive: true })
+    await Promise.all([
+      writeFile(join(entries, "first.md"), "---\nid: first\ntype: entry\ntitle: Release checklist\naliases: [Ready list]\nlinks:\n  - rel: related\n    to: second\n---\n[[second]] and [[missing]].\n"),
+      writeFile(join(entries, "second.md"), "---\nid: second\ntype: entry\ntitle: Review criteria\n---\n[[first]]\n"),
+      writeFile(join(entries, "isolated.md"), "---\nid: isolated\ntype: entry\ntitle: Standalone note\n---\nAn independent page.\n"),
+    ])
+    await knowledgeTab(page).click()
+    const response = page.waitForResponse((reply) => new URL(reply.url()).pathname === base + "/graph")
+    await page.getByRole("button", { name: "Graph", exact: true }).click()
+    const { nodes, edges } = await (await response).json()
+    expect(nodes.map((node: { title: string }) => node.title).sort()).toEqual(titles)
+    expect(edges).toEqual([
+      { source: "first", target: "second", relations: ["related"], wikilink: true },
+    ])
+    const dialog = page.getByRole("dialog", { name: "Knowledge graph" })
+    await expect(dialog).toContainText("Pages 3 · Connections 1")
+    const host = dialog.getByTestId("knowledge-graph-canvas")
+    await expect(host.locator("canvas")).toBeVisible()
+    await dialog.getByRole("button", { name: "Fit the whole knowledge graph" }).click()
+    await expect.poll(() => page.evaluate((labels) => {
+      const shown = (window as Window & { visibleKnowledgeLabels?: Record<string, boolean> }).visibleKnowledgeLabels
+      return labels.every((label) => shown?.[label])
+    }, titles)).toBe(true)
+    await dialog.screenshot({ path: test.info().outputPath("knowledge-graph.png"), animations: "disabled" })
+
+    await dialog.getByRole("searchbox", { name: "Find a page in the graph" }).fill("ready list")
+    await dialog.getByRole("button", { name: /Release checklist.*entry/ }).click()
+    await expect(dialog.getByRole("button", { name: "Open Release checklist" })).toBeVisible()
+
+    const box = await host.boundingBox()
+    if (!box) throw new Error("graph canvas has no layout bounds")
+    const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    await expect.poll(async () => {
+      await page.mouse.move(center.x - 4, center.y)
+      await page.mouse.move(center.x, center.y)
+      return host.evaluate((element) => element.style.cursor)
+    }).toBe("pointer")
+    await page.mouse.click(center.x, center.y)
+
+    await expect(dialog).toBeHidden()
+    await expect(page.getByTestId("knowledge-page").getByRole("heading", { name: "Release checklist" })).toBeVisible()
+  } finally {
+    await page.request.delete(`/api/projects/${projectId}`)
+  }
+})
