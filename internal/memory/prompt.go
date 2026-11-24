@@ -6,10 +6,8 @@ import (
 	"strings"
 )
 
-// PressurePercent is when the prompt stops implying that replace will make
-// room and says a growing write will be refused. Below this, the general
-// budget rule is enough; at this fill, a longer replacement is the next
-// refusal waiting to happen.
+// PressurePercent adds an advisory capacity warning. Writes still use the
+// same total and per-note limits; this percentage is not another write gate.
 const PressurePercent = 80
 
 // The same decision rule reaches live agents, reviews, catalog tidy and tool
@@ -76,14 +74,16 @@ func PromptSections(systemPrompt string, snap Snapshot, skills []SkillInfo, inde
 keep it true and remove anything that has gone stale. Leave out anything
 specific to this request, a remaining count or other status that will change
 again. A pointer must name an existing skill without restating its body.
-A note that restates a recorded skill is refused. A replace that grows
-a note still has to fit the budget and the per-note cap; when usage is high,
-the only write that lands is one that reduces the character count.
+A note that restates a recorded skill is refused. Any increase in total
+note length must fit the remaining total budget, and each added or
+replacement note must fit the per-note cap.
+An addition to a nonempty store also uses two separator characters.
+Replacing a note does not necessarily free space.
 
 `)
 	if snap.Percent() >= PressurePercent {
-		fmt.Fprintf(&b, "The store is at %d%% of its budget (%d/%d). A write that increases the character count will be refused, including replacing a note with a longer one. Shorten or drop notes before storing anything new.\n\n",
-			snap.Percent(), snap.Chars, snap.Limit)
+		fmt.Fprintf(&b, "The store is at %d%% of its budget (%d/%d). Free characters: %d. This is a capacity warning, not an additional write restriction. Count separator costs and respect the per-note cap. If a useful change cannot fit, shorten or consolidate only related notes while preserving their meaning; preserve unrelated notes.\n\n",
+			snap.Percent(), snap.Chars, snap.Limit, max(0, snap.Limit-snap.Chars))
 	}
 
 	b.WriteString("## Skills\n\n")
