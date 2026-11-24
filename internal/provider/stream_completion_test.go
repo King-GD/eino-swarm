@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"io"
 	"strings"
 	"testing"
@@ -34,7 +35,7 @@ func TestStreamCompletionObservesOnlyTheSSETerminatorWithoutChangingBytes(t *tes
 					reader = iotest.DataErrReader(reader)
 				}
 				completion := &streamCompletion{}
-				body := &streamCompletionBody{ReadCloser: io.NopCloser(reader), completion: completion}
+				body := &streamCompletionBody{ReadCloser: io.NopCloser(reader), completion: completion, ctx: context.Background()}
 				got, err := io.ReadAll(body)
 				if err != nil || string(got) != tc.body {
 					t.Fatalf("observer changed response bytes: oneByte=%v got=%q err=%v", oneByte, got, err)

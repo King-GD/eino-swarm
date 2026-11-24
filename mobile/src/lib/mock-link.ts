@@ -9,7 +9,7 @@ export { wantsMock, mockTickMs, mockPauseOpenMs } from "./mock-link-timing"
 import { mockFileChunk, mockListedFiles, mockOutputFiles, mockScopedFiles } from "./mock-files"
 import { iterationLimitHistory, iterationSnapshotOnly, mockAwaitingContinue, mockContinueIteration } from "./mock-iteration-limit"
 import { restartAskHistory } from "./mock-ask-restart"
-import { generationHistory } from "./mock-generation"
+import { generationHistory, modelFailureHistory } from "./mock-generation"
 import { backoffHistory } from "./mock-backoff"
 import { longAgentRosterHistory } from "./mock-agent-roster"
 import { workerCollectionHistory, workerCollectionStopHistory, workerCollectionPaged } from "./mock-worker-collection"
@@ -282,15 +282,11 @@ export class MockHost {
     }
     const done = this.find("t-recent")
     if (done) {
-      if (new URLSearchParams(location.search).get("history") === "reasoning-only") {
+      const history = new URLSearchParams(location.search).get("history")
+      if (history === "reasoning-only") {
         this.seed(done, reasoningOnlyTurn(false), false)
-      } else if (new URLSearchParams(location.search).get("history") === "model-response-error") {
-        this.seed(done, [
-          { kind: "model_retry", agentID: "manager", text: JSON.stringify({ attempt: 1, cap: 2, reason: "model_response_invalid" }) },
-          { kind: "model_retry", agentID: "manager", text: JSON.stringify({ attempt: 2, cap: 2, reason: "model_response_invalid" }) },
-          { kind: "error", agentID: "manager", err: "the model service returned a response that could not be decoded" },
-          { kind: "done" },
-        ], false)
+      } else if (history === "model-response-error" || history === "model-read-timeout") {
+        this.seed(done, modelFailureHistory(history === "model-read-timeout"), false)
       } else if (new URLSearchParams(location.search).get("history") === "api-error") {
         this.seed(done, [
           { kind: "error", agentID: "manager", err: "model API request failed: HTTP 502 Bad Gateway: unexpected end of JSON input" },

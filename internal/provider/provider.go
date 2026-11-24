@@ -650,7 +650,7 @@ func (r *recordingModel) streamOnce(ctx context.Context, in []*schema.Message, o
 	if err != nil {
 		rec := r.base(ctx, in, start)
 		rec.BuiltinTools = builtin.snapshot()
-		rec.Err = err
+		rec.Err = completion.traceError(ctx, err)
 		recorder(rec)
 		return nil, modelCallError(err)
 	}
@@ -687,7 +687,7 @@ func (r *recordingModel) streamOnce(ctx context.Context, in []*schema.Message, o
 				rec.OutputChars = chars
 				applyUsage(&rec, usage)
 				if !isStreamEnd(recvErr) {
-					rec.Err = recvErr
+					rec.Err = completion.traceError(ctx, recvErr)
 				}
 				// The consumer may shut down storage after this terminal result.
 				// Finish recording the call before allowing that shutdown to race it.

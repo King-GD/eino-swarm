@@ -8759,6 +8759,17 @@ then return to the original manager transcript. Retain screenshots and the
 accessibility tree alongside the test result and packaged asset hashes.
 ## Model API failure evidence (#71)
 
+`TestStreamReadDiagnosticsOverHTTP2` streams through a loopback HTTP/2 server
+and imposes a real TCP read deadline after Chat Completions and Responses have
+both delivered content. It verifies trace attribution, premature EOF, idle
+timeout, cancellation and valid completion. The partial-frame test ensures
+Responses carries the transport error through an unfinished SSE line.
+`TestTruncatedModelStreamKeepsPerRequestDiagnosticsInTrace` checks three real
+HTTP attempts against the saved turn and its model-call rows.
+`frontend/e2e/model-read-timeout.spec.ts` exercises the named SSE event and
+reload rendering. Phone `history=model-read-timeout` covers the same notices
+through paired history playback on Chromium and iPhone WebKit.
+
 `go test -race ./internal/engine -run 'TestPublic|TestEmptyGatewayResponse|TestAPIAuthenticationFailure'` covers wrapped SDK/Eino errors, HTTP 502 empty-body decode failure, 400/401/403/429/5xx causes, bounded credential-masked public text and preserved context/first-byte advice. The integration test uses a local `httptest` HTTP server through the real SDK and engine: 502 yields three HTTP/model calls and two retries on the same failed turn; 401/403 yield one call and no retry. Stored turn/error text, original LLM errors, retry events and no-goal turn count are asserted independently. No network or real model is used.
 
 `cd frontend && ZWAI_E2E_MODEL_API_ERROR=1 npm run e2e -- api-error.spec.ts` runs the desktop Web path against a local empty-502 HTTP endpoint through the real SDK. The flag selects the API-error test group and starts the app without `--mock`. The regular offline-provider suite skips these tests. Check Chat, the same-turn Trace and Full log, return/reload persistence, three HTTP calls and two retries, and the retained screenshots/Trace JSON.

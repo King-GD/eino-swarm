@@ -2200,6 +2200,14 @@ first-byte and context overflow errors keep their existing recovery guidance;
 the original model-call records and bounded retry events remain tied to the same
 turn for API, CLI and desktop Trace diagnosis.
 
+The model HTTP stream records decoded response-body bytes and the last positive
+read time. A receive timeout stays typed through the model adapter and maps to
+`model_read_timeout`. For a failed read or premature EOF, the existing model-call
+Trace error stores the byte count, last-read UTC time when available and a
+validated Gateway request ID. No response content or socket address is copied
+into the diagnostic. Normal completion and caller cancellation keep their
+existing handling.
+
 The UI must survive a refresh, a reconnect and a slow client without losing an
 event or showing a duplicate:
 

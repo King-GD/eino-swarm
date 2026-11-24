@@ -69,6 +69,11 @@ func readResponsesStream(resp *http.Response, state *responsesStreamState) error
 	eventType := ""
 	for {
 		line, readErr := reader.ReadString('\n')
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			// ReadString returns an unfinished line with a read failure.
+			// Parsing that fragment would turn a transport error into invalid JSON.
+			return readErr
+		}
 		line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
 		if strings.HasPrefix(line, "data:") {
 			data = append(data, strings.TrimPrefix(strings.TrimPrefix(line, "data:"), " "))
@@ -96,10 +101,7 @@ func readResponsesStream(resp *http.Response, state *responsesStreamState) error
 			}
 		}
 		if readErr != nil {
-			if errors.Is(readErr, io.EOF) {
-				return io.ErrUnexpectedEOF
-			}
-			return readErr
+			return io.ErrUnexpectedEOF
 		}
 	}
 }

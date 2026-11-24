@@ -202,6 +202,7 @@ This is the current user-facing capability map. The code and tests named below a
 - 有界 worker 超时恢复：同一 worker 连续三次 watchdog 失败后停止 manager 的 resume／同角色 spawn，持续目标停止自动推进，失败周期计划暂停；成功或显式人类重试恢复预算。错误、worker ID 和次数保留在 Trace 与手机/桌面对话；普通 provider 超时和取消不计入。关联契约：`C-019`、`C-009`；实现／测试：`worker_timeout.go`、`internal/engine/worker_timeout.go`、`internal/engine/worker_timeout_test.go`、`frontend/e2e/worker-timeout.spec.ts`。
 
 - 错误提示：模型 HTTP/流响应无法解析时，桌面和手机区分响应解码与真实工具参数错误，并保留同 turn Trace 和最多两次重试；证据：`internal/engine/api_error_integration_test.go`, `frontend/e2e/api-error.spec.ts`。
+- 流式接收诊断：桌面、Web 和配对手机将已收到响应头后的传输层读取超时显示为“接收模型响应超时”。中途读失败或截断时，Trace 按实际请求保留已接收的响应体字节数、最后收到数据的 UTC 时间及可用的 Gateway 请求 ID。关联契约：`C-012`、`C-029`；证据：`internal/provider/stream_read_test.go`、`internal/engine/api_error_integration_test.go`、`frontend/e2e/model-read-timeout.spec.ts`、`mobile/e2e/api-error.spec.ts`。
 - 首字节超时恢复：错误保留实际等待时长；桌面/Web 建议到设置 → 模型调大首字节等待时间，可从错误直接打开失败轮次的提供商并聚焦字段。设置能力和提供商缺失时的行为见 `F-170`；关联契约：`C-009`、`C-012`。
 - 请求前工具参数检查：压缩 middleware 返回状态后检查当前尾部调用的非空 JSON 参数；无效参数在实际模型 HTTP 前拒绝，沿既有有界重试清理，不清除人类 steer 或伪造 worker 创建。不是全历史 JSON 扫描。关联契约：`C-012`；证据：`internal/engine/autocompact.go`、`internal/engine/model_retry.go`、`internal/engine/model_retry_http_test.go`。
 

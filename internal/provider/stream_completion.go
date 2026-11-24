@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"io"
 	"sync/atomic"
 )
@@ -10,6 +11,7 @@ type streamCompletionKey struct{}
 type streamCompletion struct {
 	http atomic.Bool
 	done atomic.Bool
+	streamReadTrace
 }
 
 // The SDK maps both a protocol terminator and a truncated HTTP body to EOF.
@@ -17,12 +19,14 @@ type streamCompletion struct {
 type streamCompletionBody struct {
 	io.ReadCloser
 	completion *streamCompletion
+	ctx        context.Context
 	offset     int
 	invalid    bool
 }
 
 func (b *streamCompletionBody) Read(p []byte) (int, error) {
 	n, err := b.ReadCloser.Read(p)
+	err = b.completion.observeRead(b.ctx, n, err)
 	const marker = "data:[DONE]"
 	for _, ch := range p[:n] {
 		if ch == '\n' {

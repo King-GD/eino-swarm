@@ -50,6 +50,7 @@ const NOTICE_EXACT: Record<string, MessageKey> = {
   "the model service returned a response that could not be decoded": "notice.modelServiceResponse",
   "The connection to the model service dropped. Retrying.":
     "notice.modelRetryTransport",
+  "Model response read timed out. Retrying.": "notice.modelRetryReadTimeout",
   "The model service stopped sending data. Retrying.": "notice.modelRetryIdle",
   "Checking the schedule before reporting it as arranged.": "notice.scheduleClaimCheck",
   "The previous answer contained an unverified schedule claim. One correction was requested.": "notice.scheduleClaimCheck",
@@ -61,6 +62,7 @@ const NOTICE_EXACT: Record<string, MessageKey> = {
   "the model service is rate limiting requests": "notice.modelServiceRateLimited",
   "the model service is unavailable": "notice.modelServiceUnavailable",
   "the connection to the model service dropped": "notice.modelServiceTransport",
+  "model response read timed out": "notice.modelServiceReadTimeout",
   "The prompt exceeds the model window. Compressing and trying once.":
     "notice.contextOverflowRetry",
   "the prompt plus the requested output exceeds this model's context window; automatic compact could not free enough space. Lower Max completion tokens in Settings → Swarm, or shorten the request, then retry":

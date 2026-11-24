@@ -127,6 +127,33 @@ func TestMalformedSuccessfulStreamIsAModelResponseFailure(t *testing.T) {
 	}
 }
 
+func TestTruncatedModelStreamKeepsPerRequestDiagnosticsInTrace(t *testing.T) {
+	body := "data: " + `{"choices":[{"index":0,"delta":{"role":"assistant","content":"private partial"}}]}` + "\n\n"
+	e, requests := newAPIErrorEngine(t, http.StatusOK, body)
+	thread, err := e.CreateThread("Truncated stream", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn, err := e.StartTurn(thread.ID, "Check the available findings.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	finished := waitForTurn(t, e, turn.ID)
+	if finished.Status != store.TurnError || finished.Error != publicModelTransport || requests.Load() != 3 {
+		t.Fatalf("truncation changed the public outcome or retry count: %+v, calls=%d", finished, requests.Load())
+	}
+	calls, err := e.Store().ListLLMCalls(turn.ID)
+	if err != nil || len(calls) != 3 {
+		t.Fatalf("trace calls=%d err=%v", len(calls), err)
+	}
+	for i, call := range calls {
+		want := fmt.Sprintf("unexpected EOF request_id=%032x received_bytes=%d last_received_at=", i+1, len(body))
+		if call.OutputChars != len("private partial") || !strings.HasPrefix(call.Err, want) || strings.Contains(call.Err, "private") {
+			t.Fatalf("trace lost or leaked stream evidence: %+v", call)
+		}
+	}
+}
+
 func newAPIErrorEngine(t *testing.T, status int, body string) (*Engine, *atomic.Int32) {
 	t.Helper()
 	e, requests := newAPIErrorEngineWithBackoffClock(t, status, body, nil)
@@ -143,7 +170,10 @@ func newAPIErrorEngineWithBackoffClock(t *testing.T, status int, body string, cl
 			http.NotFound(w, r)
 			return
 		}
-		requests.Add(1)
+		sequence := requests.Add(1)
+		if status == http.StatusOK {
+			w.Header().Set("X-Request-ID", fmt.Sprintf("%032x", sequence))
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		_, _ = io.WriteString(w, body)

@@ -558,6 +558,8 @@ export const zh: { [K in keyof typeof en]: string } = {
   "notice.modelServiceRateLimited": "模型服务正在限流。",
   "notice.modelServiceUnavailable": "模型服务不可用。",
   "notice.modelServiceTransport": "与模型服务的连接中断。",
+  "notice.modelRetryReadTimeout": "接收模型响应超时，正在重试。",
+  "notice.modelServiceReadTimeout": "接收模型响应超时。",
   "notice.contextOverflowRetry": "上下文超过模型窗口。先压缩，再试一次。",
   "notice.contextOverflow":
     "上下文超限：输入加上请求的输出超过了模型窗口。自动压缩腾不出足够空间。请到设置 → Swarm 降低最大补全 token，或缩短请求后再试。",

@@ -20,6 +20,8 @@ const publicModelUnavailable = "the model service is unavailable"
 
 const publicModelTransport = "the connection to the model service dropped"
 
+const publicModelReadTimeout = "model response read timed out"
+
 const publicModelResponseInvalid = "the model service returned a response that could not be decoded"
 
 // publicContextOverflow is the transcript line when the endpoint rejects
@@ -75,6 +77,8 @@ func publicTurnError(err error) string {
 		return publicModelUnavailable
 	case modelRetryReasonTransport:
 		return publicModelTransport
+	case modelRetryReasonReadTimeout:
+		return publicModelReadTimeout
 	case modelRetryReasonResponse:
 		return publicModelResponseInvalid
 	}

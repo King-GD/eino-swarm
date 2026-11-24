@@ -548,6 +548,8 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 
 ## C-012 One-ID troubleshooting
 
+- 流式读失败或缺少结束事件的 EOF，在已取得成功响应头时，将响应体累计字节、最后一次正长度读取的 UTC 时间（若已收到数据）、单个合法 Gateway `X-Request-ID`（若存在）记录到同一次模型调用的 `llm_calls.err`。保留原错因的内部链，诊断文本不记录提示词、响应片段、凭据或套接字地址。正常完成与调用者取消不写入这类失败诊断。证据：`internal/provider/stream_read.go`、`internal/provider/stream_read_test.go`、`internal/engine/api_error_integration_test.go`。
+
 - 跨轮 worker 账单：保留的 Registry 在成功占用新 turn 后更新 worker 归属；每条被记录的模型请求在共享退避准入完成、调用底层模型前冻结当时 turn_id，流结束、错误、取消及 SDK 内部重连均沿用它，不按完成时刻迁移。可选推理档位拒绝后的显式 fallback 保持既有独立请求计数，辅助模型的这些请求仍归原轮。停泊空窗仍归最近关联轮；退避观察按实际发生时的归属记录，不能增加 llm_calls。manager、后台 session-memory／memory-reviewer 等辅助调用仍绑定原轮。历史账单不静默重写。证据：`internal/engine/worker_accounting.go`、`internal/provider/call_recording.go`、`internal/engine/worker_accounting_test.go`；关联 `F-130`、`F-150`；变更类型：Fixed。
 - 请求代次：`llm_calls` 保存可信 worker invocation 的正 `worker_generation`，Trace JSON 以可选 `generation` 返回；只在实际模型 AgentID 匹配时采用该 context 身份。流式完成、失败及后续同 ID resume 不改写已发请求的代次，原 turn 准入冻结语义保持。manager／辅助调用及旧未知行保持 0 并省略 wire 字段，不按时间、事件顺序或最新 roster 猜代次，也不将 worker 执行代次当作模型输出 `message_id`。该字段仅补观测，不改变派工、claim、Stop、事件 seq／持久化／广播顺序或结清规则。证据：`internal/provider/provider.go`、`internal/engine/call_record.go`、`internal/store/models.go`、`internal/server/model_call_generation_test.go`；关联 `F-130`、`F-150`；变更类型：Added。
 
@@ -752,6 +754,7 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 
 - 状态：active；类型：lifecycle / consistency / compatibility；作用范围：provider pool、manager、subagent、目标续轮及 title／review／compact 等模型调用；关联功能：`F-130`、`F-150`、`F-160`、`F-170`。
 - 契约内容：同一进程的 chat pool 按 URL origin 共享故障状态，跨 provider ID、模型、角色和轮次；健康请求保持原并发。暂态服务故障（408、429、5xx）、连接失败、流空闲／中途断流和成功响应解码错误触发 5→10→20→30 秒封顶指数冷却。故障前同代并发请求只计首次失败，过期结果不能改变较新故障。
+- 成功响应头之后的传输层读取超时记为 `model_read_timeout`，沿普通模型失败的有界重试和同源冷却处理。首字节、配置的流空闲和调用者取消分别保留各自语义。接收证据见 `C-012`。
 - 冷却结束仅允许一个恢复探测。探测流首次交出已解码的非空正文、推理或工具调用增量时，即使流仍未结束，也恢复同 origin 其他请求的并发；响应头、仅 role、空 delta、仅 usage 或错误帧不算有效内容。在此之前其他请求继续等待。非流式 Generate 没有此中间放行点，仍等完整结果。
 - 并发放行不清零故障档位；只有这条探测完整 Generate 成功或正常读完模型流才清零。探测未结束前，其他并行请求的成功或失败均不能清零或增加故障次数，其迟到结果也不能改变后继故障代。探测随后发生截断、空闲超时或其他按现有规则计数的失败时，保留并推进故障档位，重新进入 5→10→20→30 秒封顶冷却；已放行请求不取消。Chat Completions HTTP 模型流必须读到 SSE `[DONE]` 行或显式 finish reason；缺少两者的 EOF 返回 `io.ErrUnexpectedEOF`，保留已收到的 usage，不能因先前内容放行而降低故障档位。Responses 适配器只在合法 `response.completed` 后输出显式 finish reason，原始 `[DONE]` 不是该协议的完成事件。鉴权、已解析参数错误、context overflow 不新增服务失败次数；取消和非暂态探测错误释放许可但保留故障档位并再次冷却。清客户端缓存不清故障状态；重启不保留进程内冷却。
 - 网关选路拒绝独立恢复：HTTP 层确认在提供商首字节预算内完整返回的 503，完整 JSON 错误体至多 4096 字节，且 `error.code` 精确为 `provider_unavailable`、`error.message` 精确为 `no healthy provider can serve this model` 时，主管／worker 在同一次逻辑 Generate／Stream 建立阶段沿共享门继续等待和探测，不消耗 `modelErrorRetries` 的两次模型重试，也不产生生成中断／恢复事件。未达上限时不因此结束回合。每次真正发出的拒绝请求仍单独记录原始模型调用；冷却期间不发 HTTP 请求。恢复探测使用原模型请求，成功响应直接交给原调用者，不丢弃后重发，也不新增健康检查端点。

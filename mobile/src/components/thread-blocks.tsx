@@ -246,6 +246,8 @@ function localizeNotice(text: string): string {
       return t("notice.modelRetryUnavailable")
     case "The connection to the model service dropped. Retrying.":
       return t("notice.modelRetryTransport")
+    case "Model response read timed out. Retrying.":
+      return t("notice.modelRetryReadTimeout")
     case "The model service stopped sending data. Retrying.":
       return t("notice.modelRetryIdle")
     case "Continuing from the failed step.":
@@ -263,6 +265,8 @@ function localizeNotice(text: string): string {
       return t("notice.modelServiceUnavailable")
     case "the connection to the model service dropped":
       return t("notice.modelServiceTransport")
+    case "model response read timed out":
+      return t("notice.modelServiceReadTimeout")
     case "the prompt plus the requested output exceeds this model's context window; automatic compact could not free enough space. Lower Max completion tokens in Settings → Swarm, or shorten the request, then retry":
       return t("notice.contextOverflow")
     case "the prompt plus the requested output exceeds this model's context window; automatic compact could not free enough space. Lower Max completion tokens in Settings → Swarm, or shorten the request, then retry. The scheduled check is paused":

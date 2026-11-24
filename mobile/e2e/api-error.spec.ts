@@ -3,6 +3,21 @@ import { writeFile } from "node:fs/promises"
 
 const API_ERROR = "model API request failed: HTTP 502 Bad Gateway: unexpected end of JSON input"
 
+test("phone localizes an interrupted model response and its retries after reload", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("zwai.phone.locale", "zh"))
+  await page.goto("/?mock=1&tick=0&history=model-read-timeout")
+  for (const stage of ["initial", "replayed"]) {
+    await page.getByRole("button", { name: "返回", exact: true }).click()
+    await page.getByRole("button", { name: "打开 Sweep the unused exports", exact: true }).click()
+    const transcript = page.getByTestId("transcript")
+    await expect(transcript.getByTestId("generation-notice")).toContainText("接收模型响应超时。")
+    await expect(transcript.getByText("接收模型响应超时，正在重试。", { exact: true })).toHaveCount(2)
+    await expect(transcript.locator("p.text-destructive")).toHaveText("接收模型响应超时。")
+    await expect(transcript).not.toContainText("model response read timed out")
+    if (stage === "initial") await page.reload()
+  }
+})
+
 for (const language of [
   { locale: "en", service: "Waiting 5s before retrying the model request.", next: "Waiting 10s before retrying the model request.", candidate: "Waiting 5s before checking the unpublished answer again.", deferred: "Answer verification is unavailable. The unpublished answer is retained.", unknown: "Waiting before retrying the model request.", details: "Retry details", invalid: "Waiting 10s before checking the unpublished answer again.", invalidReason: "The verification response is not valid JSON in the required format.", deferredReason: "This candidate reached the total verification attempt limit. Verification was deferred." },
   { locale: "zh", service: "等待 5 秒后重试模型请求。", next: "等待 10 秒后重试模型请求。", candidate: "等待 5 秒后重试未发布答复的核对。", deferred: "答复核对暂不可用，未发布候选已保留。", unknown: "等待后重试模型请求。", details: "重试说明", invalid: "等待 10 秒后重试未发布答复的核对。", invalidReason: "核对响应不是符合要求的 JSON。", deferredReason: "这份候选答复的核对总尝试次数达到上限，已暂缓。" },

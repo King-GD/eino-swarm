@@ -565,7 +565,9 @@ and retain each turn's error. Ordinary messages still leave that pause in
 place. **Start** explicitly resumes it. Truncated tool JSON, a `429`, a
 dropped stream, or a mid-stream TCP read timeout retries in-turn. The
 transcript names the model service for a rate limit, an outage, or a dropped
-connection. A concrete API rejection stays as that status and cause. Three
+connection. A TCP read timeout during a response has its own notice. For
+the received bytes, last-read time and Gateway request ID when present, use
+`zwai trace <turn>`. A concrete API rejection stays as that status and cause. Three
 consecutive worker lifetime watchdog failures stop automatic resume: the turn
 errors, its goal blocks, and its recurring check pauses. Inspect the worker
 trace, model, and task before an explicit new message or **Start** retries.

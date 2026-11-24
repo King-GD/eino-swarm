@@ -334,6 +334,8 @@ export const zh: Record<MessageKey, string> = {
   "notice.modelServiceRateLimited": "模型服务正在限流。",
   "notice.modelServiceUnavailable": "模型服务不可用。",
   "notice.modelServiceTransport": "与模型服务的连接中断。",
+  "notice.modelRetryReadTimeout": "接收模型响应超时，正在重试。",
+  "notice.modelServiceReadTimeout": "接收模型响应超时。",
 
   "notice.goalCompleted": "目标已完成。",
 

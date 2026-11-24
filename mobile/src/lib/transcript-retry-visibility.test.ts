@@ -5,7 +5,7 @@ import { applyEvent } from "./transcript"
 // The PC's Earlier-page filter must use this same visible wire protocol.
 it.each([
   "workers_uncollected", "schedule_claim_unverified", "context_overflow", "invalid_tool_json", "rate_limited",
-  "model_unavailable", "model_response_invalid", "model_transport", "model_idle",
+  "model_unavailable", "model_response_invalid", "model_transport", "model_read_timeout", "model_idle",
 ])("renders the %s retry protocol reason as a phone notice", (reason) => {
   const blocks = applyEvent([], {
     thread_id: "thread", seq: 1, kind: "model_retry", created_at: "2026-01-01T00:00:00Z",

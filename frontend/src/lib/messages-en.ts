@@ -579,6 +579,8 @@ export const en = {
   "notice.modelServiceRateLimited": "the model service is rate limiting requests",
   "notice.modelServiceUnavailable": "the model service is unavailable",
   "notice.modelServiceTransport": "the connection to the model service dropped",
+  "notice.modelRetryReadTimeout": "Model response read timed out. Retrying.",
+  "notice.modelServiceReadTimeout": "Model response read timed out.",
   "notice.contextOverflowRetry":
     "The prompt exceeds the model window. Compressing and trying once.",
   "notice.contextOverflow":

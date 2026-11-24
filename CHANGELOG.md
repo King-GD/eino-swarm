@@ -88,6 +88,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Desktop, Web and paired phone chats identify model response read timeouts.
+  The failed model-call Trace records received bytes, the last read time and
+  a Gateway request ID when available. (`F-130`, `C-012`, `C-029`)
+
 - Wiki graph builds use a smaller first batch for earlier publication. Large
   failed batches can retry with smaller source segments, and the panel shows
   verified batch counts while a long record is still in progress. (`F-138`, `C-054`)
