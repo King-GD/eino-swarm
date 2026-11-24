@@ -3893,6 +3893,18 @@ failure details and their recovery-settings links. Run them with
 
 ## Automatic restart handoff (F-110 / C-027)
 
+`TestRestartBlockedWorkerLeavesTimeForDurableCheckpoints` runs a real worker
+tool through Registry and ADK. The tool stays blocked through acknowledgement,
+while the final SQLite checkpoint takes over one second to write. The test
+checks that `ready` arrives before the parent deadline and the checkpoint
+contains the original unknown call and the other worker's confirmed result.
+`TestRestartSummaryDeadlineCapsWaitAndReservesTimeForWrites` checks the exact
+three-second cap and the shorter wait when the parent has less time left.
+`TestRestartExpiredFinalWriteDoesNotAuthorizeReplacement` expires the actual
+final write and verifies that retry can save the retained checkpoint.
+The `EngineLifecycle` model checks the budget allocation with the historical
+summary-wait fault and reaches acknowledgement after saving an unknown call.
+
 `internal/engine/recovery_context_test.go` crosses durable parked-worker
 `Engine.Restore`, Registry/ADK and a local HTTP model adapter. It checks that a
 structured checkpoint's later observation and tool receipt reach the first

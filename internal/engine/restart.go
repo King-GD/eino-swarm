@@ -27,6 +27,8 @@ const (
 	KindRestartReady      = "restart_ready"
 	KindRestartResumed    = "restart_resumed"
 	KindUserStopRequested = "user_stop_requested"
+
+	restartSummaryLimit = 3 * time.Second
 )
 
 // RestartStatus describes durable handoff progress, not process readiness.
@@ -177,7 +179,7 @@ func (e *Engine) PrepareRestart(ctx context.Context) (RestartStatus, error) {
 }
 
 func (e *Engine) prepareRestart(ctx context.Context, drained <-chan struct{}, retry bool) {
-	started := time.Now()
+	deadline, _ := ctx.Deadline()
 	var failure error
 	defer func() {
 		if failure != nil {
@@ -217,10 +219,10 @@ func (e *Engine) prepareRestart(ctx context.Context, drained <-chan struct{}, re
 			e.mu.Unlock()
 		}
 		for _, target := range targets {
-			if err := e.writeRestartEvent(target, KindRestartPreparing, "Preparing task handoff before restarting."); err != nil {
+			if err := e.writeRestartEvent(ctx, target, KindRestartPreparing, "Preparing task handoff before restarting."); err != nil {
 				e.log.Warn("initial restart notice failed", "err", err)
 			}
-			if err := e.writeCheckpoint(target); err != nil {
+			if err := e.writeCheckpoint(ctx, target); err != nil {
 				e.log.Warn("initial restart checkpoint failed; final checkpoint is still required", "err", err)
 			}
 		}
@@ -230,12 +232,9 @@ func (e *Engine) prepareRestart(ctx context.Context, drained <-chan struct{}, re
 				target.cancel()
 			}
 		}
-		deadline, _ := ctx.Deadline()
-		reserve := time.Until(deadline) / 5
-		if reserve > time.Second {
-			reserve = time.Second
-		}
-		workerCtx, cancel := context.WithDeadline(context.WithoutCancel(ctx), deadline.Add(-reserve))
+		summaryStarted := time.Now()
+		summaryDeadline := restartSummaryDeadline(summaryStarted, deadline)
+		workerCtx, cancel := context.WithDeadline(ctx, summaryDeadline)
 		var wg sync.WaitGroup
 		e.mu.Lock()
 		e.restart.status.Stage = "summarizing"
@@ -249,7 +248,7 @@ func (e *Engine) prepareRestart(ctx context.Context, drained <-chan struct{}, re
 		}
 		summariesDone := make(chan struct{})
 		go func() { wg.Wait(); close(summariesDone) }()
-		e.observeRestartSummaries(targets, summariesDone, started.Add(deadline.Sub(started)/2))
+		e.observeRestartSummaries(targets, summariesDone, summaryStarted.Add(summaryDeadline.Sub(summaryStarted)/2))
 		for _, target := range targets {
 			select {
 			case <-target.idle:
@@ -272,11 +271,11 @@ func (e *Engine) prepareRestart(ctx context.Context, drained <-chan struct{}, re
 	e.restart.status.Workers = 0
 	e.mu.Unlock()
 	for _, target := range targets {
-		if err := e.writeCheckpoint(target); err != nil {
+		if err := e.writeCheckpoint(ctx, target); err != nil {
 			failure = err
 			return
 		}
-		if err := e.writeRestartEvent(target, KindRestartReady, "Task handoff saved; waiting for the replacement engine."); err != nil {
+		if err := e.writeRestartEvent(ctx, target, KindRestartReady, "Task handoff saved; waiting for the replacement engine."); err != nil {
 			failure = err
 			return
 		}
@@ -287,6 +286,11 @@ func (e *Engine) prepareRestart(ctx context.Context, drained <-chan struct{}, re
 		e.mu.Unlock()
 	}
 	e.mu.Lock()
+	if !time.Now().Before(deadline) {
+		failure = context.DeadlineExceeded
+		e.mu.Unlock()
+		return
+	}
 	e.restart.status.Settled = e.restart.status.Workers
 	e.restart.status.Stage, e.restart.status.Ready = "ready", true
 	e.mu.Unlock()
@@ -377,7 +381,7 @@ func (e *Engine) restartTargets(ctx context.Context) ([]*restartTarget, error) {
 	return out, nil
 }
 
-func (e *Engine) writeCheckpoint(target *restartTarget) error {
+func (e *Engine) writeCheckpoint(ctx context.Context, target *restartTarget) error {
 	checkpoint := target.checkpoint
 	checkpoint.ManagerHistory = withoutPendingManagerProse(checkpoint.ManagerHistory)
 	markBackgroundExecUnknown(checkpoint.ManagerHistory)
@@ -385,14 +389,14 @@ func (e *Engine) writeCheckpoint(target *restartTarget) error {
 	if err != nil {
 		return fmt.Errorf("marshal restart checkpoint: %w", err)
 	}
-	return e.writeRestartEvent(target, KindRestartCheckpoint, string(body))
+	return e.writeRestartEvent(ctx, target, KindRestartCheckpoint, string(body))
 }
 
-func (e *Engine) writeRestartEvent(target *restartTarget, kind, text string) error {
+func (e *Engine) writeRestartEvent(ctx context.Context, target *restartTarget, kind, text string) error {
 	e.recordMu.Lock()
 	defer e.recordMu.Unlock()
 	ev := store.Event{ThreadID: target.rt.threadID, TurnID: target.turnID, AgentID: swarm.DefaultManagerID, Kind: kind, Text: text}
-	if err := e.store.AppendEvent(&ev); err != nil {
+	if err := e.store.AppendEventContext(ctx, &ev); err != nil {
 		return fmt.Errorf("save restart handoff for %s: %w", target.turnID, err)
 	}
 	e.broadcast(ev)

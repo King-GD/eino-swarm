@@ -1,6 +1,9 @@
 package engine
 
-import "errors"
+import (
+	"context"
+	"errors"
+)
 
 // ErrRestoring means the engine is serving history while restoring its owners.
 var ErrRestoring = errors.New("engine: restoring unfinished tasks")
@@ -78,7 +81,7 @@ func (e *Engine) stopBeforeRestore(threadID string) error {
 	}
 	turn := turns[len(turns)-1]
 	rt := e.runtimeFor(threadID)
-	if err := e.writeRestartEvent(&restartTarget{rt: rt, turnID: turn.ID}, KindUserStopRequested, "Stop requested by the user."); err != nil {
+	if err := e.writeRestartEvent(context.Background(), &restartTarget{rt: rt, turnID: turn.ID}, KindUserStopRequested, "Stop requested by the user."); err != nil {
 		return err
 	}
 	rt.mu.Lock()

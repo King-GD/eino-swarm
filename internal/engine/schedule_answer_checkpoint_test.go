@@ -28,7 +28,7 @@ func TestCheckpointAnswerFilteringPreservesPrivateStateAndVerifiedHistory(t *tes
 	target := &restartTarget{rt: e.runtimeFor(th.ID), turnID: turn.ID, checkpoint: checkpoint}
 	sub := e.Subscribe(th.ID)
 	defer sub.Close()
-	if err := e.writeCheckpoint(target); err != nil {
+	if err := e.writeCheckpoint(t.Context(), target); err != nil {
 		t.Fatal(err)
 	}
 	after, err := json.Marshal(target.checkpoint)
@@ -71,7 +71,7 @@ func TestCheckpointPrivacyDoesNotHideSerializationFailure(t *testing.T) {
 	message := schema.AssistantMessage("Previously accepted output.", nil)
 	message.Extra = map[string]any{"unsupported": make(chan struct{})}
 	target := &restartTarget{rt: e.runtimeFor(th.ID), turnID: turn.ID, checkpoint: restartCheckpoint{Version: 1, ManagerHistory: []*schema.Message{message}}}
-	if err := e.writeCheckpoint(target); err == nil || !strings.Contains(err.Error(), "marshal restart checkpoint") {
+	if err := e.writeCheckpoint(t.Context(), target); err == nil || !strings.Contains(err.Error(), "marshal restart checkpoint") {
 		t.Fatalf("unserializable checkpoint became a successful handoff: %v", err)
 	}
 	if events, _ := e.store.ListTurnEvents(turn.ID); len(events) != 0 {

@@ -4084,12 +4084,14 @@ A `200` acknowledgement is returned only after durable checkpoints:
 `stage` is initially empty, then `preparing`, `summarizing`, `checkpointing`,
 `ready`, or `failed`. The endpoint
 is safe to read while handoff runs. `checkpointed` counts worker checkpoints;
-`threads_checkpointed` counts conversation checkpoints. During `summarizing`,
+`threads_checkpointed` counts conversation checkpoints. The shared
+`summarizing` wait lasts up to three seconds and can end earlier to leave time
+for final writes. During `summarizing`,
 `settled` counts workers that finished or whose handoff stop was requested; it is
 not task completion or durable checkpoint confirmation. A single warning after
-half the shared handoff budget lists pending worker IDs/roles per conversation.
-A failed save returns
-an error; retry reuses the frozen recovery state rather than granting another
+half the summary window lists pending worker IDs/roles per conversation. Final
+writes retain completed workers and mark still-pending tool calls as unknown.
+A failed save or expired deadline returns an error. A save retry reuses the frozen recovery state rather than granting another
 summary period. A disconnected caller cannot turn an incomplete save into a
 positive acknowledgement.
 

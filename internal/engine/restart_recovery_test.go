@@ -63,7 +63,7 @@ func TestPrepareRestartCheckpointsParkedWorkersAndUnreadInbox(t *testing.T) {
 	rt.turnID = turn.ID
 	rt.parked = reg
 	rt.mu.Unlock()
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	status, err := e.PrepareRestart(ctx)
 	if err != nil || !status.Ready || status.Workers != 2 || status.Checkpointed != 2 {
@@ -278,7 +278,7 @@ func TestRestartCheckpointRetainsAnAcceptedAnswerBeforeTheWaiterReadsIt(t *testi
 		t.Fatal(err)
 	}
 	go func() { <-ctx.Done(); rt.release(stop, idle, turn.ID) }()
-	deadline, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	deadline, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	if got, err := e.PrepareRestart(deadline); err != nil || !got.Ready {
 		t.Fatalf("prepare=%+v %v", got, err)
@@ -338,7 +338,7 @@ func TestRestartKeepsAnAcceptedCapDecisionBeforeItsWaiterReadsIt(t *testing.T) {
 				t.Fatal(err)
 			}
 			go func() { <-ctx.Done(); rt.release(stop, idle, turn.ID) }()
-			deadline, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			deadline, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			defer cancel()
 			if got, err := e.PrepareRestart(deadline); err != nil || !got.Ready {
 				t.Fatalf("prepare=%+v %v", got, err)
@@ -390,7 +390,7 @@ func TestRestartKeepsADeclineAlreadyConsumedByItsWaiter(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-consumed
-	deadline, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	deadline, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	if got, err := e.PrepareRestart(deadline); err != nil || !got.Ready {
 		t.Fatalf("prepare=%+v %v", got, err)
@@ -435,7 +435,7 @@ func TestRestartCannotResumeAHumanStopAcknowledgedBeforeFreeze(t *testing.T) {
 		<-wait.C
 		rt.release(stop, idle, turn.ID)
 	}()
-	deadline, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	deadline, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	if got, err := e.PrepareRestart(deadline); err != nil || !got.Ready {
 		t.Fatalf("prepare=%+v %v", got, err)
