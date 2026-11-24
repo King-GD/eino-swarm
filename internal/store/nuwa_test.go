@@ -289,7 +289,7 @@ func TestNuwaDeletionKeepsUnavailableReferencesExplicitAndIsProjectScoped(t *tes
 	if err := f.s.CreateTurn(&otherTurn); err != nil {
 		t.Fatal(err)
 	}
-	other := f.node("artifact")
+	other := f.node("task")
 	other.ProjectID = otherProject.ID
 	other.ThreadID = otherThread.ID
 	other.TurnID = otherTurn.ID
@@ -674,7 +674,12 @@ func TestNuwaWriteReceiptLookupFailureAndCorruptPayloadFailClosed(t *testing.T) 
 
 func TestNuwaDependencyCorrectionsRequireExplicitRevalidation(t *testing.T) {
 	f := newNuwaFixture(t)
+	task := f.node("task")
+	if err := f.s.UpsertNuwaNode(context.Background(), &task, 0); err != nil {
+		t.Fatal(err)
+	}
 	source := f.node("fact")
+	source.DependsOn = []string{task.ID}
 	if err := f.s.UpsertNuwaNode(context.Background(), &source, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -718,15 +723,15 @@ func TestNuwaDependencyCorrectionsRequireExplicitRevalidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	result.DependencyVersions = nil
-	if err := f.s.UpsertNuwaNode(context.Background(), &result, 3); err != nil {
-		t.Fatal(err)
+	if err := f.s.UpsertNuwaNode(context.Background(), &result, 3); !errors.Is(err, ErrInvalidNuwaNode) {
+		t.Fatalf("retracted fact must not revalidate the reported artifact: %v", err)
 	}
 	_, nodes, err = f.s.NuwaSnapshot(context.Background(), f.project.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, node := range nodes {
-		if node.ID == result.ID && len(node.StaleDependencies) != 1 {
+		if node.ID == result.ID && (len(node.StaleDependencies) != 1 || !node.IncompleteBasis || node.Version != 3) {
 			t.Fatalf("retracted source accepted as current %+v", node)
 		}
 	}

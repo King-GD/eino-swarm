@@ -1789,6 +1789,10 @@ its current project's shared records. Workers are limited to this thread and
 come from durable lifecycle records. The response ETag identifies this snapshot
 and is the precondition for promotion and manual extraction.
 
+Both work snapshot endpoints set `incomplete_basis` on a reported artifact
+whose visible prerequisite chain lacks an active task or a reported fact.
+New writes of reported artifacts require both prerequisites.
+
 ### `GET /api/threads/:id/work/events`
 
 Sends a named `nuwa_updated` frame for the current thread, project, revision pair

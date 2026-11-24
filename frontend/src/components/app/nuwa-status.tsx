@@ -21,14 +21,14 @@ export function nuwaKindSurface(kind: string): string | undefined {
 
 export function NuwaStale({ node }: { node: NuwaNode }) {
   const t = useT()
-  if (!node.stale_dependencies?.length) return null
+  if (!node.incomplete_basis && !node.stale_dependencies?.length) return null
   return (
     <span
       className="inline-flex items-center gap-1 text-[10px] text-running"
-      title={t("nuwa.stale")}
+      title={t(node.incomplete_basis ? "nuwa.incompleteBasis" : "nuwa.stale")}
     >
       <AlertTriangle className="size-3 shrink-0" />
-      {t("nuwa.staleShort")}
+      {t(node.incomplete_basis ? "nuwa.incompleteBasisShort" : "nuwa.staleShort")}
     </span>
   )
 }

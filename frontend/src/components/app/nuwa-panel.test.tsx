@@ -47,6 +47,43 @@ beforeEach(() => {
 })
 
 describe("Nuwa shared work", () => {
+  it("shows a shared prerequisite in the conversation graph without importing unrelated project work", async () => {
+    mockNuwaSnapshot({
+      ...snapshot,
+      nodes: [...snapshot.nodes, node("private-output", {
+        scope: "thread", kind: "artifact", status: "reported", depends_on: ["finding"],
+      })],
+    })
+    render(<NuwaPanel project={project} threadId="a" onSelectAgent={vi.fn()} />)
+    const graph = await screen.findByRole("region", { name: "Shared work collaboration graph" })
+    expect(within(graph).getByRole("button", { name: /Node plan/ })).toBeInTheDocument()
+    const prerequisite = within(graph).getByRole("button", { name: /Node finding/ })
+    expect(prerequisite).toHaveTextContent("Project prerequisite")
+    expect(within(graph).queryByRole("button", { name: /Node output/ })).toBeNull()
+    expect(screen.queryByText("Unavailable dependency: finding")).toBeNull()
+    fireEvent.click(prerequisite)
+    const detail = within(screen.getByTestId("nuwa-node-detail"))
+    expect(detail.getByRole("heading", { name: "Node finding" })).toBeInTheDocument()
+    fireEvent.click(detail.getByRole("button", { name: "Details and evidence" }))
+    expect(detail.getByText("Full source evidence")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "This conversation" })).toHaveAttribute("aria-pressed", "true")
+    fireEvent.click(screen.getByRole("button", { name: "Entire project" }))
+    expect(within(graph).queryByRole("button", { name: /Node private-output/ })).toBeNull()
+  })
+
+  it("keeps a historical artifact visible and marks the missing basis", async () => {
+    mockNuwaSnapshot({
+      ...snapshot,
+      nodes: [node("legacy", { kind: "artifact", scope: "thread", status: "reported", incomplete_basis: true })],
+    })
+    render(<NuwaPanel project={project} threadId="a" onSelectAgent={vi.fn()} />)
+    const card = await screen.findByRole("button", { name: /Node legacy/ })
+    expect(card).toHaveTextContent("Incomplete basis")
+    expect(screen.queryByTestId("nuwa-goal-edge")).toBeNull()
+    fireEvent.click(card)
+    expect(within(screen.getByTestId("nuwa-node-detail")).getByText("This result is missing a linked active task or reported fact.")).toBeInTheDocument()
+  })
+
   it("shows the project executor without inventing one for an older project", async () => {
     const { rerender } = render(<NuwaPanel project={project} threadId="a" onSelectAgent={vi.fn()} />)
     expect(await screen.findByText("Executor model is not saved yet.")).toBeInTheDocument()

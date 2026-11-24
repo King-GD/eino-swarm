@@ -21,8 +21,19 @@ func TestSaveDistilledWorkRollsBackAnInvalidBatchAndRejectsChangedHistory(t *tes
 	good.Evidence = []NuwaEvidence{{ThreadID: thread.ID, TurnID: turn.ID, Seq: source.Seq}}
 	invalid := good
 	invalid.Evidence = []NuwaEvidence{{ThreadID: thread.ID, TurnID: turn.ID, Seq: source.Seq + 100}}
-	if err := s.SaveDistilledWork(ctx, state, []NuwaNode{good, invalid}); !errors.Is(err, ErrInvalidNuwaNode) {
+	if err := s.SaveDistilledWork(ctx, state, []DistilledWorkRecord{{Key: "good", Node: good}, {Key: "invalid", Node: invalid}}); !errors.Is(err, ErrInvalidNuwaNode) {
 		t.Fatalf("missing evidence did not reject the entire batch: %v", err)
+	}
+	orphan := good
+	orphan.Kind, orphan.ArtifactPath = "artifact", "results/report.md"
+	for name, record := range map[string]DistilledWorkRecord{
+		"duplicate key":         {Key: "good", Node: good},
+		"unresolved key":        {Key: "second", Node: good, DependsOn: []string{"unknown"}},
+		"artifact with no task": {Key: "result", Node: orphan, DependsOn: []string{"good"}},
+	} {
+		if err := s.SaveDistilledWork(ctx, state, []DistilledWorkRecord{{Key: "good", Node: good}, record}); !errors.Is(err, ErrInvalidNuwaNode) {
+			t.Fatalf("%s did not reject the entire batch: %v", name, err)
+		}
 	}
 	if view := mustWorkSnapshot(t, s, thread.ID); len(view.Nodes) != 0 || view.ThreadRevision != state.ThreadRevision {
 		t.Fatalf("invalid batch left records or advanced the revision: %+v", view)
@@ -31,7 +42,7 @@ func TestSaveDistilledWorkRollsBackAnInvalidBatchAndRejectsChangedHistory(t *tes
 	if err := s.AppendEvent(&later); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SaveDistilledWork(ctx, state, []NuwaNode{good}); !errors.Is(err, ErrNuwaConflict) {
+	if err := s.SaveDistilledWork(ctx, state, []DistilledWorkRecord{{Key: "good", Node: good}}); !errors.Is(err, ErrNuwaConflict) {
 		t.Fatalf("changed history accepted an old extraction: %v", err)
 	}
 }

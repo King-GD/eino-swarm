@@ -47,10 +47,10 @@ func TestWorkDistillationUsesPrivateSavedEvidenceAndHonorsGlobalSwitch(t *testin
 			}
 		}
 		writeContextFlowReply(w, req.Stream, map[string]any{"content": `{"records":[
-			{"kind":"fact","title":"Observed behavior","summary":"The source reports a repeatable result.","status":"reported","evidence":[1]},
-			{"kind":"task","title":"Repeat the measurement","summary":"The source asks for another measurement.","status":"pending","evidence":[1]},
-			{"kind":"artifact","title":"Saved report","summary":"This output still exists.","status":"reported","artifact_path":"results/report.md","evidence":[1]},
-			{"kind":"artifact","title":"Missing report","summary":"This output was removed.","status":"reported","artifact_path":"results/missing.md","evidence":[1]}
+			{"key":"task","kind":"task","title":"Measure behavior","summary":"The source records a measurement task.","status":"done","evidence":[1]},
+			{"key":"fact","kind":"fact","title":"Observed behavior","summary":"The source reports a repeatable result.","status":"reported","depends_on":["task"],"evidence":[1]},
+			{"key":"saved","kind":"artifact","title":"Saved report","summary":"This output still exists.","status":"reported","depends_on":["fact"],"artifact_path":"results/report.md","evidence":[1]},
+			{"key":"missing","kind":"artifact","title":"Missing report","summary":"This output was removed.","status":"reported","depends_on":["fact"],"artifact_path":"results/missing.md","evidence":[1]}
 		]}`}, "stop")
 	}))
 	defer endpoint.Close()
@@ -109,7 +109,9 @@ func TestWorkDistillationUsesPrivateSavedEvidenceAndHonorsGlobalSwitch(t *testin
 	if err != nil || len(view.Nodes) != 3 || !view.HasOwnWork || view.ThreadRevision != version.ThreadRevision+3 {
 		t.Fatalf("missing committed extraction: %+v, err=%v", view, err)
 	}
+	byKind := map[string]store.NuwaNode{}
 	for _, node := range view.Nodes {
+		byKind[node.Kind] = node
 		if node.Kind == "artifact" && node.ArtifactPath != "results/report.md" {
 			t.Fatalf("extraction kept an unavailable artifact: %+v", node)
 		}
@@ -117,6 +119,11 @@ func TestWorkDistillationUsesPrivateSavedEvidenceAndHonorsGlobalSwitch(t *testin
 			len(node.Evidence) != 1 || node.Evidence[0].Seq != evidence.Seq || node.Evidence[0].TurnID != evidence.TurnID {
 			t.Fatalf("wrong extraction provenance: %+v", node)
 		}
+	}
+	task, fact, artifact := byKind["task"], byKind["fact"], byKind["artifact"]
+	if len(fact.DependsOn) != 1 || fact.DependsOn[0] != task.ID ||
+		len(artifact.DependsOn) != 1 || artifact.DependsOn[0] != fact.ID || artifact.IncompleteBasis {
+		t.Fatalf("extraction failed to preserve the actual prerequisite chain: %+v", view)
 	}
 	if _, err := e.DistillThreadWork(ctx, thread.ID, view.WorkRevision, generation); !errors.Is(err, store.ErrNuwaConflict) || calls.Load() != 1 {
 		t.Fatalf("repeat extraction was not refused: %v; calls=%d", err, calls.Load())

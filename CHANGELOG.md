@@ -97,6 +97,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
   resumable full-text option for current-task and current-project history.
   (`F-138`, `C-054`)
 
+- Work results now require a saved task and fact in their prerequisite chain.
+  Conversation graphs show referenced project prerequisites and flag older
+  results with an incomplete basis. (`F-139`, `C-055`)
+
 - Engine replacement gives workers up to three seconds to summarize, leaving
   time for the final durable checkpoints. An in-flight tool keeps its unknown
   outcome, and completed workers keep their results. (`F-110`, `C-027`)

@@ -12,7 +12,7 @@ import {
 import { MemoMarkdown } from "@/components/app/markdown"
 import { api, ApiError } from "@/lib/api"
 import { nuwaAPI } from "@/lib/nuwa-api"
-import { pruneNuwaNodes, type NuwaEvidence, type NuwaNode, type NuwaWorker } from "@/lib/nuwa"
+import { includeNuwaProjectPrerequisites, pruneNuwaNodes, type NuwaEvidence, type NuwaNode, type NuwaWorker } from "@/lib/nuwa"
 import type { Project } from "@/lib/types"
 import { useT } from "@/lib/use-t"
 import { cn } from "@/lib/utils"
@@ -75,8 +75,11 @@ export function NuwaPanel({
     [current, effectiveScope],
   )
   const { active, shown, collapsed } = useMemo(() => pruneNuwaNodes(nodes), [nodes])
-  const graphNodes = showPruned ? nodes : shown
-  const detail = nodes.find((node) => node.id === selected)
+  const scopeGraph = showPruned ? nodes : shown
+  const graphNodes = useMemo(() => effectiveScope === "thread" && current
+    ? includeNuwaProjectPrerequisites(scopeGraph, current.nodes)
+    : scopeGraph, [current, effectiveScope, scopeGraph])
+  const detail = (effectiveScope === "thread" ? current?.nodes : nodes)?.find((node) => node.id === selected)
   const workers = current?.workers ?? []
   const promotion = detail?.scope === "thread" && threadId && current?.project_id && tag ? {
     submit: () => {
@@ -116,7 +119,7 @@ export function NuwaPanel({
   const openNode = (id: string) => {
     const target = current?.nodes.find((node) => node.id === id)
     if (!target) return
-    setScope(target.scope ?? "project")
+    if (!graphNodes.some((node) => node.id === id)) setScope(target.scope ?? "project")
     setSelected(id)
   }
 
@@ -461,6 +464,7 @@ function NodeDetail({
         ) : null}
       </div>
       {promotion?.error ? <p role="alert" className="mt-2 text-xs text-destructive">{promotion.error}</p> : null}
+      {node.incomplete_basis ? <p className="mt-2 text-xs text-running">{t("nuwa.incompleteBasis")}</p> : null}
       {node.stale_dependencies?.length ? (
         <p className="mt-2 text-xs text-running">{t("nuwa.stale")}</p>
       ) : null}

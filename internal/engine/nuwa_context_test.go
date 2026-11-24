@@ -197,11 +197,12 @@ func nuwaContextUnitFixture(t *testing.T) (*Engine, *store.Project, *store.Threa
 
 func TestNuwaContextPreviewKeepsPathFieldsAndSkipsARepeatedSnapshot(t *testing.T) {
 	recorded := store.NuwaNode{
-		ID: "path-node", Kind: "fact", Title: "stage", Status: "reported",
+		ID: "path-node", Kind: "artifact", Title: "stage", Status: "reported",
 		Summary: "carried-summary", DependsOn: []string{"earlier-step"}, Version: 4,
 		Detail: "private-detail", ThreadID: "thread-secret", TurnID: "turn-secret",
 		ProjectID: "project-secret", AgentID: "agent-secret",
 		StaleDependencies: []string{"earlier-step"},
+		IncompleteBasis:   true,
 		CreatedAt:         time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
 	}
 	text, err := renderNuwaContext(store.WorkRevision{ProjectID: "project", ProjectRevision: 4}, []store.NuwaNode{recorded}, "", 1<<20)
@@ -218,11 +219,14 @@ func TestNuwaContextPreviewKeepsPathFieldsAndSkipsARepeatedSnapshot(t *testing.T
 	if err := json.Unmarshal(preview.Nodes[0], &keys); err != nil {
 		t.Fatal(err)
 	}
-	allowed := map[string]bool{"id": true, "kind": true, "title": true, "status": true, "summary": true, "depends_on": true, "version": true, "stale_dependencies": true}
+	allowed := map[string]bool{"id": true, "kind": true, "title": true, "status": true, "summary": true, "depends_on": true, "version": true, "stale_dependencies": true, "incomplete_basis": true}
 	for key := range keys {
 		if !allowed[key] {
 			t.Fatalf("prompt node kept storage field %s", key)
 		}
+	}
+	if string(keys["incomplete_basis"]) != "true" {
+		t.Fatal("the model preview hid the missing artifact prerequisites")
 	}
 	for _, forbidden := range []string{"private-detail", "thread-secret", "turn-secret", "project-secret", "agent-secret", "created_at"} {
 		if strings.Contains(string(preview.Nodes[0]), forbidden) {

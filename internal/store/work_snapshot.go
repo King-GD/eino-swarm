@@ -154,6 +154,9 @@ func readAnnotatedWorkNodes(tx *gorm.DB, threadID, projectID string) ([]NuwaNode
 	}
 	for i := range nodes {
 		node := &nodes[i]
+		if node.Kind == "artifact" && node.Status == "reported" {
+			node.IncompleteBasis = !artifactHasBasis(*node, present)
+		}
 		for _, dependency := range node.DependsOn {
 			source, exists := present[dependency]
 			if !exists || (node.Scope == WorkScopeProject && source.Scope != WorkScopeProject) {

@@ -159,6 +159,7 @@ type nuwaPromptNode struct {
 	Version             int64    `json:"version"`
 	MissingDependencies []string `json:"missing_dependencies,omitempty"`
 	StaleDependencies   []string `json:"stale_dependencies,omitempty"`
+	IncompleteBasis     bool     `json:"incomplete_basis,omitempty"`
 }
 
 func nuwaPromptNodeFrom(node store.NuwaNode) nuwaPromptNode {
@@ -168,6 +169,7 @@ func nuwaPromptNodeFrom(node store.NuwaNode) nuwaPromptNode {
 		record.DependsOn = node.DependsOn
 		record.MissingDependencies = node.MissingDependencies
 		record.StaleDependencies = node.StaleDependencies
+		record.IncompleteBasis = node.IncompleteBasis
 	}
 	return record
 }
