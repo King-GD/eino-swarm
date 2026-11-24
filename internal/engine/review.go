@@ -272,6 +272,7 @@ type reviewOutcome struct {
 	Knowledge []distillChange `json:"knowledge,omitempty"`
 	Note      string          `json:"note,omitempty"`
 	Err       string          `json:"err,omitempty"`
+	failure   error
 	// Notify is how chatty this review should be in the transcript, stamped
 	// at record time so a later settings change does not rewrite history.
 	Notify       string           `json:"notify,omitempty"`
@@ -493,6 +494,7 @@ func (e *Engine) driveReviewer(run reviewRun, mu *sync.Mutex, outcome *reviewOut
 	reviewer, err := e.reviewerModel(ctx, run)
 	if err != nil {
 		mu.Lock()
+		outcome.failure = err
 		outcome.Err = publicTurnError(err)
 		outcome.StopReason = "error"
 		mu.Unlock()
@@ -510,6 +512,7 @@ func (e *Engine) driveReviewer(run reviewRun, mu *sync.Mutex, outcome *reviewOut
 	})
 	if err != nil {
 		mu.Lock()
+		outcome.failure = err
 		outcome.Err = publicTurnError(err)
 		outcome.StopReason = "error"
 		mu.Unlock()
@@ -540,6 +543,7 @@ func (e *Engine) driveReviewer(run reviewRun, mu *sync.Mutex, outcome *reviewOut
 				break
 			}
 			mu.Lock()
+			outcome.failure = ev.Err
 			outcome.Err = publicTurnError(ev.Err)
 			outcome.StopReason = "error"
 			mu.Unlock()

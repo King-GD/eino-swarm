@@ -3,6 +3,16 @@ import { join } from "node:path"
 import { expect, test, type Page } from "@playwright/test"
 import { freshConversation, send, waitForIdle } from "./session"
 
+async function selectProjectConversation(page: Page, name: string, threadId: string) {
+  const folder = page.getByRole("button", { name, exact: true })
+  await expect(folder).toBeVisible()
+  // On reload the folder may already be expanded while its rows are loading.
+  if (await folder.getAttribute("aria-expanded") === "false") await folder.click()
+  const row = page.locator(`[data-testid="thread-row"][data-id="${threadId}"]`)
+  await expect(row).toBeVisible()
+  await row.getByTestId("row-label").click()
+}
+
 async function openProjectConversation(page: Page, name: string, memoryEnabled = false) {
   const projectResponse = await page.request.post("/api/projects", { data: { name, memory_enabled: memoryEnabled } })
   expect(projectResponse.status()).toBe(201)
@@ -12,9 +22,7 @@ async function openProjectConversation(page: Page, name: string, memoryEnabled =
   expect(threadResponse.status()).toBe(201)
   const { thread } = await threadResponse.json() as { thread: { id: string } }
   await page.goto("/")
-  const row = page.locator(`[data-testid="thread-row"][data-id="${thread.id}"]`)
-  if (!await row.isVisible()) await page.getByRole("button", { name, exact: true }).click()
-  await row.getByTestId("row-label").click()
+  await selectProjectConversation(page, name, thread.id)
   await expect(page.getByTestId("thread-title")).toHaveText(title)
   return { projectId: project.id, threadId: thread.id, title }
 }
@@ -112,10 +120,12 @@ test("enable, browse, follow links, and return through the project wiki", async 
 })
 
 
-for (const [scope, value, tab] of [
-  ["Latest turn", "latest_turn", "Memory"],
-  ["Current task", "thread", "Knowledge"],
-  ["Current project", "project", "Knowledge"],
+for (const [scope, value, tab, fullText] of [
+  ["Latest turn", "latest_turn", "Memory", false],
+  ["Current task", "thread", "Knowledge", false],
+  ["Current project", "project", "Knowledge", false],
+  ["Current task · Full text", "thread", "Knowledge", true],
+  ["Current project · Full text", "project", "Knowledge", true],
 ] as const) {
   test(`Distill ${scope.toLowerCase()} in place and share its receipt across panels`, async ({ page }) => {
     const { projectId, threadId, title } = await openProjectConversation(page, `Distillation ${value} ${Date.now()}`, true)
@@ -136,10 +146,12 @@ for (const [scope, value, tab] of [
       expect(reply.request().postDataJSON()).toEqual({
         scope: value,
         ...(value === "project" ? {} : { thread_id: threadId }),
+        ...(fullText ? { full_text: true } : {}),
       })
       const job = await reply.json()
       const status = page.getByTestId("project-distill-status")
       await expect(status).toContainText("Distillation finished.", { timeout: 45_000 })
+      if (fullText) await expect(status.getByRole("status")).toContainText("Full text")
       expect(await (await page.request.get(endpoint)).json()).toMatchObject({
         review_id: job.review_id, state: "completed", thread_id: threadId,
         knowledge: [expect.objectContaining({ action: "write_page" })],
@@ -155,6 +167,73 @@ for (const [scope, value, tab] of [
     }
   })
 }
+
+test("Full-text progress shows a partially reviewed record without counting it as complete", async ({ page }) => {
+  const { projectId, threadId } = await openProjectConversation(page, `Segment progress ${Date.now()}`, true)
+  const path = `/api/projects/${projectId}/distill`
+  let started = false
+  await page.route(path, async (route) => {
+    if (route.request().method() === "POST") {
+      expect(route.request().postDataJSON()).toEqual({ scope: "thread", thread_id: threadId, full_text: true })
+      started = true
+    }
+    await route.fulfill({
+      json: started ? {
+        state: "running", review_id: "saved-full-text", scope: "thread", full_text: true,
+        progress: { total: 1, processed: 0, remaining: 1, skipped: 0, batches: 1,
+          coverage_known: true, segment_bytes: 24000, segment_total_bytes: 96000 },
+      } : { state: "idle" },
+    })
+  })
+  try {
+    await knowledgeTab(page).click()
+    await page.getByTestId("knowledge-distill").click()
+    await page.getByRole("menuitem", { name: "Current task · Full text", exact: true }).click()
+    const status = page.getByTestId("project-distill-status")
+    await expect(status.getByRole("status")).toHaveText("Distilling history… · Task scope · Full text")
+    await expect(status).toContainText("Current record · 23 KB of 94 KB reviewed")
+    await expect(status.getByTestId("project-distill-progress")).toHaveText("0 of 1 history records processed · 1 remaining")
+    await expect(status.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "0")
+  } finally {
+    await page.request.delete(`/api/projects/${projectId}`)
+  }
+})
+
+test("Wiki build publishes its graph, documents, and sources independently of distillation", async ({ page }) => {
+  const { projectId, threadId } = await openProjectConversation(page, `Wiki build ${Date.now()}`, true)
+  const endpoint = `/api/projects/${projectId}/distill`
+  const original = "Retained observation for the graph."
+  try {
+    await send(page, original)
+    await waitForIdle(page)
+    await knowledgeTab(page).click()
+    const admitted = page.waitForResponse((response) => response.request().method() === "POST" &&
+      new URL(response.url()).pathname === endpoint)
+    await page.getByTestId("knowledge-build").click()
+    await page.getByRole("menuitem", { name: "Current task", exact: true }).click()
+    const response = await admitted
+    expect(response.status()).toBe(202)
+    expect(response.request().postDataJSON()).toEqual({ scope: "thread", thread_id: threadId, wiki_graph: true })
+    const status = page.getByTestId("project-wiki-build-status")
+    await expect(status.getByRole("status")).toContainText("Wiki graph and documents are ready.")
+    await expect(status.getByRole("progressbar", { name: "Wiki document progress" })).toHaveAttribute("aria-valuenow", "100")
+    const graph = await (await page.request.get(`/api/projects/${projectId}/knowledge/graph`)).json()
+    // An automatic review may already own the unqualified title. The
+    // graph build preserves that page and gives its own node a distinct ID.
+    const node = graph.nodes.find((entry: { title: string; type: string }) =>
+      entry.type === "wiki-node" && (entry.title === original || entry.title.startsWith(`${original} (`)))
+    expect(node).toBeTruthy()
+    const article = await (await page.request.get(`/api/projects/${projectId}/knowledge/pages/${node.id}`)).json()
+    expect(article).toMatchObject({
+      wiki: { kind: "entity", document_pending: false },
+      body: expect.stringContaining(original),
+      sources: [expect.objectContaining({ available: true, thread_id: threadId })],
+    })
+    expect(await (await page.request.get(endpoint)).json()).toEqual({ state: "idle" })
+  } finally {
+    await page.request.delete(`/api/projects/${projectId}`)
+  }
+})
 
 test("automatic review updates the open knowledge panel and the original Trace", async ({ page }) => {
   const { settings } = await (await page.request.get("/api/settings")).json()
@@ -205,7 +284,7 @@ test("Distillation shows the saved batch progress and continues after reopening"
         state = "running"
         processed = 4
       } else if (body.pause_review_id === reviewId) {
-        state = "interrupted"
+        state = "pausing"
       } else if (body.resume_review_id === reviewId) {
         state = "running"
       }
@@ -213,34 +292,59 @@ test("Distillation shows the saved batch progress and continues after reopening"
     await route.fulfill({
       json: state === "idle" ? { state } : {
         state, review_id: reviewId, scope: "thread",
-        progress: { total: 9, processed, remaining: 9 - processed, skipped: 0, batches: processed === 9 ? 2 : 1 },
+        ...(state === "failed" ? { error: "the model sent no first byte within 30s", error_code: "first_byte_timeout" } : {}),
+        progress: { total: 9, processed, remaining: 9 - processed, skipped: 2, batches: processed === 9 ? 2 : 1,
+          coverage_known: true, excerpted: 1, oversized_skipped: 1 },
       },
     })
   })
   const status = page.getByTestId("project-distill-status")
+  const panelAction = page.getByTestId("knowledge-distill")
   const progress = page.getByTestId("project-distill-progress")
+  const bar = status.getByRole("progressbar", { name: "Distillation progress" })
   try {
     await knowledgeTab(page).click()
     await page.getByTestId("knowledge-distill").click()
     await page.getByRole("menuitem", { name: "Current task", exact: true }).click()
     await expect(progress).toHaveText("4 of 9 history records processed · 5 remaining")
+    await expect(status.getByRole("status")).toHaveText("Distilling history… · Task scope")
+    await expect(status).toContainText("Records reviewed as excerpts only · 1")
+    await expect(status).toContainText("Records skipped above the excerpt mode read limit · 1")
+    await expect(status).toContainText("1 processed records were unavailable or ineligible as evidence.")
+    await expect(bar).toHaveAttribute("aria-valuenow", "44.44")
     await expect(status).not.toContainText("Distillation finished")
     await status.getByRole("button", { name: "Pause distillation" }).click()
-    await expect(status).toContainText("Distillation was interrupted")
+    await expect(status.getByRole("status")).toHaveText("Pausing distillation… · Task scope")
+    await expect(panelAction).toBeDisabled()
+    state = "paused"
+    await expect(status.getByRole("status")).toHaveText("Distillation paused. · Task scope")
+    await expect(panelAction).toBeEnabled()
     await page.reload()
-    const row = page.locator(`[data-testid="thread-row"][data-id="${threadId}"]`)
-    if (!await row.isVisible()) await page.getByRole("button", { name, exact: true }).click()
-    await row.getByTestId("row-label").click()
+    await selectProjectConversation(page, name, threadId)
     if (await knowledgeTab(page).getAttribute("aria-selected") !== "true") await knowledgeTab(page).click()
     await expect(progress).toHaveText("4 of 9 history records processed · 5 remaining")
-    await status.getByRole("button", { name: "Resume distillation" }).click()
-    await expect(status).toContainText("Distilling project history")
+    await expect(panelAction).toHaveText("Resume distillation")
+    await panelAction.click()
+    await expect(status.getByRole("status")).toHaveText("Distilling history… · Task scope")
     await expect(progress).toHaveText("4 of 9 history records processed · 5 remaining")
+    state = "failed"
+    await expect(status.getByRole("alert")).toContainText("Increase the provider’s first-byte timeout")
+    await expect(bar).toHaveAttribute("aria-valuenow", "44.44")
+    await status.getByRole("button", { name: "Configure first-byte timeout" }).click()
+    await page.getByRole("dialog").getByRole("button", { name: "Back to app" }).click()
+    await status.getByRole("button", { name: "Resume distillation" }).click()
+    await expect(status.getByRole("status")).toHaveText("Distilling history… · Task scope")
     processed = 9
     state = "completed"
     await expect(progress).toHaveText("9 of 9 history records processed · 0 remaining")
     await expect(status).toContainText("Distillation finished")
-    expect(requests).toEqual([{ scope: "thread", thread_id: threadId }, { pause_review_id: reviewId }, { resume_review_id: reviewId }])
+    await expect(bar).toHaveAttribute("aria-valuenow", "100")
+    expect(requests).toEqual([
+      { scope: "thread", thread_id: threadId },
+      { pause_review_id: reviewId },
+      { resume_review_id: reviewId },
+      { resume_review_id: reviewId },
+    ])
   } finally {
     await page.unroute(path)
     await page.request.delete(`/api/projects/${projectId}`)

@@ -848,12 +848,33 @@ ones. A single background review can save notes, Skills and wiki pages.
 Both panels show the same result and a link to an original Trace. Failed
 turns can contribute explicit human requirements to notes.
 
-For **Current task** and **Current project**, the panel shows how many
+For **Current task** and **Current project**, the progress bar shows how many
 historical records it has processed and how many remain. You can pause and
 continue from the last saved batch, including after restarting the app.
-The review covers the completed history at the time you started it. Individual
-records can be excerpted or skipped, and the panel reports these limits.
-Long histories can require many model requests.
+Both panels show the saved scope. When a batch stops with records remaining,
+the toolbar offers **Resume distillation** for that same scope.
+The review covers the completed history at the time you started it. By
+default, long records are reviewed as excerpts or skipped when they exceed
+the read limit. The panel shows those counts separately. Choose
+**Current task · Full text** or **Current project · Full text** to read
+eligible long records in segments. This can require more model requests.
+The panel tracks the current record's segment progress and counts the
+record as processed when its last segment commits. Resuming keeps the saved
+reading mode and segment position. Unavailable or ineligible sources can
+still be skipped.
+If a citation remains invalid or a temporary model failure ends a batch
+before a write is attempted, the reviewer retries that batch once. For a
+failure that needs a settings change, follow the message in either panel,
+then choose **Resume distillation** to keep the progress already saved.
+
+In **Knowledge → Build wiki graph**, choose **Current task** or **Current project**
+to build a graph from retained history. The builder reads eligible sources in
+full and extracts entities and events across subjects. It saves nodes, links
+and original sources as batches finish, so you can open a node before its
+document is ready. After extraction, it appends source observations to the
+documents and preserves existing prose. The two progress bars show the
+source review and the document updates. Pause and resume use the saved
+positions. The graph build has its own receipt alongside **Distill**.
 
 **Distill** uses enabled destinations. Choose **Enable knowledge and distill**
 to initialize a wiki and include it in the same review. An interrupted run

@@ -583,10 +583,12 @@ export const api = {
       body: JSON.stringify({ ids }),
     }).then((r) => r.projects),
 
-  distillStatus: (projectId: string, signal?: AbortSignal) =>
-    request<DistillResult>(distillationPath(projectId), { signal, cache: "no-store" }),
-  startDistillation: (projectId: string, input: DistillRequest) =>
-    request<DistillResult>(distillationPath(projectId), { method: "POST", body: JSON.stringify(input) }),
+  distillStatus: (projectId: string, signal?: AbortSignal, wikiGraph = false) =>
+    request<DistillResult>(distillationPath(projectId, wikiGraph), { signal, cache: "no-store" }),
+  startDistillation: (projectId: string, input: DistillRequest, wikiGraph = false) =>
+    request<DistillResult>(distillationPath(projectId), {
+      method: "POST", body: JSON.stringify(wikiGraph ? { ...input, wiki_graph: true } : input),
+    }),
 
   knowledgeStatus: (projectId: string, signal?: AbortSignal) =>
     request<KnowledgeStatus>(knowledgePath(projectId), { signal, cache: "no-store" }),

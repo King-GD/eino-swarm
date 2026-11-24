@@ -83,6 +83,7 @@ export interface KnowledgeSource {
 
 export interface KnowledgePage extends KnowledgePageRef {
   body: string
+  wiki?: { kind: "entity" | "event"; category: string; document_pending: boolean }
   fields?: Record<string, unknown>
   as_of?: string
   updated_at?: string

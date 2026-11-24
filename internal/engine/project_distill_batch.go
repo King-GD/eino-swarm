@@ -39,15 +39,17 @@ type distillProposal struct {
 }
 
 type projectDistillBatch struct {
-	e           *Engine
-	work        *projectDistillWork
-	mu          *sync.Mutex
-	outcome     *reviewOutcome
-	publishMu   sync.Mutex
-	closed      bool
-	memory      *reviewBatchTool
-	complete    bool
-	lastRefusal string
+	e               *Engine
+	work            *projectDistillWork
+	mu              *sync.Mutex
+	outcome         *reviewOutcome
+	publishMu       sync.Mutex
+	closed          bool
+	memory          *reviewBatchTool
+	complete        bool
+	startedWrite    bool
+	lastRefusal     string
+	citationRefused bool
 }
 
 func (b *projectDistillBatch) Info(context.Context) (*schema.ToolInfo, error) {
@@ -135,6 +137,17 @@ func (b *projectDistillBatch) InvokableRun(ctx context.Context, raw string, _ ..
 
 func (b *projectDistillBatch) refuse(err error) string {
 	b.lastRefusal = err.Error()
+	var repair *reviewRepairError
+	b.citationRefused = errors.As(err, &repair)
+	if b.citationRefused {
+		// These excerpts were already admitted into this batch. Return them
+		// only to the reviewer, keeping the receipt limited to its summary.
+		result := maps.Clone(repair.feedback)
+		result["success"], result["note"] = false, b.lastRefusal
+		result["instruction"] = "Repair the identified operation using the listed citable review sequences and exact quotes from visible source text. Omit an unsupported operation only when there is no admissible supporting evidence. Keep the other supported operations and resubmit both the changes and knowledge arrays. This proposal saved nothing."
+		raw, _ := json.Marshal(result)
+		return string(raw)
+	}
 	return reviewBatchResult(false, err.Error())
 }
 
@@ -218,6 +231,7 @@ func (b *projectDistillBatch) publish(ctx context.Context, proposal distillPropo
 	if err := context.Cause(ctx); err != nil {
 		return "", false, err
 	}
+	b.startedWrite = b.startedWrite || len(*proposal.Changes)+len(*proposal.Knowledge) > 0
 	if b.work.checkpoint != nil && len(*proposal.Changes)+len(*proposal.Knowledge) > 0 {
 		if err := b.work.checkpoint.beforeWrite(); err != nil {
 			return "", false, &reviewTerminalError{cause: err}
@@ -243,6 +257,7 @@ func (b *projectDistillBatch) publish(ctx context.Context, proposal distillPropo
 		if !reply.Success {
 			if !committed {
 				b.lastRefusal = reply.Error
+				b.citationRefused = false
 				return result, false, nil
 			}
 			return "", true, fmt.Errorf("Memory partially saved: %s; Knowledge operations skipped: %d", reply.Error, len(*proposal.Knowledge))

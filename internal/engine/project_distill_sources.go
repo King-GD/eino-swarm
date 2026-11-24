@@ -16,8 +16,10 @@ var distillEventKinds = []string{
 }
 
 type distillSource struct {
-	event  store.Event
-	failed bool
+	event    store.Event
+	failed   bool
+	offset   int
+	steerSeq int64
 }
 
 type distillInput struct {
@@ -56,7 +58,7 @@ func selectDistillationSources(turns []store.DistillationTurn, omitted bool) dis
 			handle := int64(len(items) + j + 1)
 			ev := item.event
 			handles[ev.Seq] = handle
-			out.sources[handle] = distillSource{ev, failed}
+			out.sources[handle] = distillSource{event: ev, failed: failed}
 			item.event.Seq = handle
 			status := "done"
 			if failed {
@@ -117,8 +119,7 @@ func distillOriginalEvents(events []store.Event) []store.Event {
 		key := reviewToolKey{ev.AgentID, ev.ToolCallID}
 		if ev.Kind == swarm.NotifyToolCall.String() && ev.ToolCallID != "" {
 			name := toolCallName(ev.Text)
-			derived[key] = memoryWriteTool(name) || name == ToolReadKnowledge || name == ToolRecordKnowledge ||
-				name == reviewBatchToolName || name == distillBatchName || name == ToolQueryHistory
+			derived[key] = derivedDistillationTool(name)
 			if derived[key] {
 				continue
 			}
@@ -132,6 +133,11 @@ func distillOriginalEvents(events []store.Event) []store.Event {
 		selected = append(selected, ev)
 	}
 	return selected
+}
+
+func derivedDistillationTool(name string) bool {
+	return memoryWriteTool(name) || name == ToolReadKnowledge || name == ToolRecordKnowledge ||
+		name == reviewBatchToolName || name == distillBatchName || name == wikiExtractTool || name == ToolQueryHistory
 }
 
 func (e *Engine) verifyDistillationSources(ctx context.Context, work *projectDistillWork, handles []int64) (map[int64]knowledgeSourceRef, error) {
@@ -153,7 +159,16 @@ func (e *Engine) verifyDistillationSources(ctx context.Context, work *projectDis
 			return nil, fmt.Errorf("%w: source %d changed or left the project", store.ErrHistorySourceUnavailable, key)
 		}
 		ref := knowledgeSourceRef{Kind: "event", ThreadID: ev.ThreadID, Seq: ev.Seq}
-		if ev.Kind == KindSteer {
+		if source.steerSeq != 0 {
+			part, err := e.store.ReadDistillationText(ctx, work.result.ReviewID, ev.ID, source.offset, len(ev.Text))
+			if err != nil {
+				return nil, err
+			}
+			if part.MessageSeq != source.steerSeq || part.Text != ev.Text {
+				return nil, fmt.Errorf("%w: steer source %d changed", store.ErrHistorySourceUnavailable, key)
+			}
+			ref.Kind, ref.Seq = "message", source.steerSeq
+		} else if ev.Kind == KindSteer {
 			msg, err := e.store.DistillationSteerMessage(ctx, ev)
 			if err != nil {
 				return nil, err

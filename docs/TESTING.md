@@ -1047,12 +1047,35 @@ exercises the provider and HTTP tool boundaries, distinct conversation sources
 with the same event sequence, partial storage conflicts and interrupted
 receipts. The Playwright project knowledge suite walks all three scopes,
 switches between both panels and follows the Trace receipt.
+The real reviewer receives the exact allowed quote and source number on a
+wiki citation refusal. An exhausted unwritten batch or transient outage
+can retry once without counting progress twice. The browser test checks
+that a failed request retains the progress bar and opens the relevant
+model settings before continuing.
 The long-history regression checks that every batch reaches the reviewer.
+Full-text coverage reconstructs the admitted UTF-8 bytes from model inputs,
+pauses inside a record, resumes after reopening the store and checks that a
+quote from the tail can update notes, Skills and Knowledge with the original
+source identity. The excerpt regression distinguishes excerpts, oversized
+skips and other ineligible records. The browser exercises both full-text
+scope actions and the progress within a record.
 The pause and restart regression saves all three destinations, interrupts the
 next batch, reopens the same SQLite store, and checks that resuming neither
 repeats the committed batch nor admits history added after the snapshot.
+The pause response stays pending until the reviewer exits. Browser coverage
+checks the toolbar resumes the original task after reopening, and the real
+reviewer checks that an explicit resume after failure still excludes peers.
+The wiki build loopback test holds a later segment while the first nodes and
+their undirected edge become visible. It checks the original attribution,
+pauses and resumes inside the source, and checks article completion without
+overwriting a separate distillation receipt. The store test covers article
+edits, replay and untrusted excerpt markup. The browser follows the Knowledge
+entry through the generated graph and article endpoints. `wiki-build-*`
+TLC cases catch early document publication, early completion and a lost
+document checkpoint on resume.
 `distillation-progress-*` TLC cases cover completion only at the end of the
-scope, acceptance before advancing and retaining the cursor across resume.
+scope, acceptance before advancing, counting a record after its final segment,
+and retaining both checkpoint positions across resume.
 `distillation-*` TLC cases cover exclusive admission, scoped publication,
 committed receipts, and a reachable run that saves all three targets.
 `TestCompletedTurnAutomaticallyKeepsNotesSkillsAndKnowledgeInOneReviewerBatch`

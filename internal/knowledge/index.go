@@ -87,8 +87,12 @@ func (s *Snapshot) Page(id string) (*PageDetail, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: page %q", ErrNotFound, id)
 	}
+	page := clonePage(item.page)
+	if page.Wiki != nil {
+		page.Wiki.Pending = page.Wiki.Written < len(page.Wiki.Evidence)
+	}
 	return &PageDetail{
-		Page: clonePage(item.page), Outgoing: cloneConnections(s.outgoing[id]), Incoming: cloneConnections(s.incoming[id]),
+		Page: page, Outgoing: cloneConnections(s.outgoing[id]), Incoming: cloneConnections(s.incoming[id]),
 		Mentions: append([]PageRef{}, s.mentions[id]...), Unresolved: append([]string{}, s.unresolved[id]...),
 	}, nil
 }

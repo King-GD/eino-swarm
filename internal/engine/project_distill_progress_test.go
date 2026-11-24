@@ -147,11 +147,12 @@ func TestDistillationResumesAfterPauseAndEngineRestart(t *testing.T) {
 		if _, err := e.StartProjectDistillation(t.Context(), projectID, DistillationRequest{PauseReviewID: "wrong"}); !errors.Is(err, store.ErrNotFound) {
 			t.Fatalf("pause affected a different review: %v", err)
 		}
-		if _, err := e.StartProjectDistillation(t.Context(), projectID, DistillationRequest{PauseReviewID: reviewID}); err != nil {
-			t.Fatal(err)
+		stopping, err := e.StartProjectDistillation(t.Context(), projectID, DistillationRequest{PauseReviewID: reviewID})
+		if err != nil || stopping.State != "pausing" || stopping.Scope != "project" {
+			t.Fatalf("pause was not acknowledged for the saved project scope: %+v %v", stopping, err)
 		}
 		before = waitDistill(t, e, projectID)
-		if before.State != "interrupted" || before.Uncertain || *before.Progress != *current.Progress {
+		if before.State != "paused" || before.Error != "" || before.Uncertain || *before.Progress != *current.Progress {
 			t.Fatalf("pause changed the committed checkpoint: before=%+v after=%+v", current, before)
 		}
 		if _, err := e.StartProjectDistillation(t.Context(), projectID, DistillationRequest{Scope: "thread", ThreadID: other.ID}); !errors.Is(err, ErrDistillationPending) {
@@ -162,7 +163,8 @@ func TestDistillationResumesAfterPauseAndEngineRestart(t *testing.T) {
 	t.Run("reopen and finish the same scope", func(t *testing.T) {
 		e := configure(t, dir)
 		restored, err := e.ProjectDistillationStatus(t.Context(), projectID)
-		if err != nil || restored.ReviewID != reviewID || *restored.Progress != *before.Progress {
+		if err != nil || restored.ReviewID != reviewID || restored.State != "paused" || restored.Scope != "project" ||
+			*restored.Progress != *before.Progress {
 			t.Fatalf("restart lost saved progress: %+v %v", restored, err)
 		}
 		if _, err := e.StartProjectDistillation(t.Context(), projectID, DistillationRequest{ResumeReviewID: reviewID}); err != nil {

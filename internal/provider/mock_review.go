@@ -13,6 +13,9 @@ import (
 // reviewer tool, persistence and trace without a hosted model. It does not judge
 // whether the source contains useful long-term knowledge.
 func reviewerScript(turn int, msgs []*schema.Message) *schema.Message {
+	if systemContains(msgs, "submit_wiki_graph") {
+		return mockWikiBuild(turn, msgs)
+	}
 	if systemContains(msgs, "apply_project_distillation") {
 		return mockProjectDistillation(turn, msgs)
 	}

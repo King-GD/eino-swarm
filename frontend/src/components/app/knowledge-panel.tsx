@@ -80,6 +80,8 @@ function ProjectKnowledge({ project, thread, onOpenThread, onTrace }: KnowledgeP
     invalidate()
   }
   const distillMenu = <ProjectDistillMenu projectId={project.id} threadId={thread?.id} knowledgeEnabled={status.data?.enabled} />
+  const wikiMenu = <ProjectDistillMenu projectId={project.id} threadId={thread?.id} wikiGraph />
+  const wikiStatus = <ProjectDistillStatus projectId={project.id} wikiGraph />
   const error = actionError ?? (status.error ? errorMessage(status.error) : undefined)
   if (!status.data) {
     if (!error) return <KnowledgeLoading />
@@ -97,8 +99,10 @@ function ProjectKnowledge({ project, thread, onOpenThread, onTrace }: KnowledgeP
         <div className="flex flex-wrap items-center gap-2">
           <Button data-testid="knowledge-enable" size="sm" disabled={busy} onClick={() => void act(enable)}>{t("knowledge.enable")}</Button>
           {distillMenu}
+          {wikiMenu}
         </div>
         <ProjectDistillStatus projectId={project.id} />
+        {wikiStatus}
         {error ? <KnowledgeError error={error} /> : null}
       </div>
     )
@@ -106,7 +110,7 @@ function ProjectKnowledge({ project, thread, onOpenThread, onTrace }: KnowledgeP
   if (page) {
     return (
       <>
-        <div className="px-3"><ProjectDistillStatus projectId={project.id} /></div>
+        <div className="px-3"><ProjectDistillStatus projectId={project.id} />{wikiStatus}</div>
         <PageDrilldown
           key={page}
           page={page}
@@ -136,6 +140,7 @@ function ProjectKnowledge({ project, thread, onOpenThread, onTrace }: KnowledgeP
           </Select>
           <KnowledgeNetwork projectId={project.id} refresh={refresh} onPage={current} />
           {distillMenu}
+          {wikiMenu}
           {canReveal ? (
             <Button
               size="icon-sm"
@@ -165,6 +170,7 @@ function ProjectKnowledge({ project, thread, onOpenThread, onTrace }: KnowledgeP
           >{t("knowledge.pendingCount", { count: status.data.pending_count })}</Button>
         </div>
         <ProjectDistillStatus projectId={project.id} />
+        {wikiStatus}
         {error ? <KnowledgeError error={error} /> : null}
       </div>
       <div data-testid="knowledge-tree" className="thin-scrollbar min-h-0 flex-1 overflow-y-auto p-2">

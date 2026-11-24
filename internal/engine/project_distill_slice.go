@@ -11,31 +11,42 @@ import (
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 )
 
-func (e *Engine) distillationSliceFromRows(ctx context.Context, job *projectDistillWork, cursor uint, rows []store.DistillationSourceRow) (*projectDistillWork, error) {
-	var callIDs []uint
-	for _, row := range rows {
-		if row.CallID != 0 {
-			callIDs = append(callIDs, row.CallID)
-		}
-	}
-	calls, err := e.store.DistillationToolCalls(ctx, callIDs)
-	if err != nil {
-		return nil, err
-	}
-	checkpoint := &distillCheckpoint{e: e, current: &job.result, projectID: job.projectID, from: cursor}
-	batch := &projectDistillWork{
-		projectID: job.projectID, kb: job.kb, route: job.route, checkpoint: checkpoint,
+func newDistillationBatch(e *Engine, job *projectDistillWork, cursor uint) *projectDistillWork {
+	return &projectDistillWork{
+		projectID: job.projectID, kb: job.kb, route: job.route,
+		checkpoint: &distillCheckpoint{e: e, current: &job.result, projectID: job.projectID, from: cursor, to: cursor},
 		result: DistillationResult{
 			ReviewID: job.result.ReviewID, Scope: job.result.Scope, Uncertain: job.result.Uncertain,
+			FullText: job.result.FullText, WikiGraph: job.result.WikiGraph,
 			MemoryEnabled: job.result.MemoryEnabled, KnowledgeEnabled: job.result.KnowledgeEnabled,
 			ThreadID: job.result.ThreadID, TurnID: job.result.TurnID,
 		},
 	}
+}
+
+func distillationCallIDs(rows []store.DistillationSourceRow) []uint {
+	var ids []uint
+	for _, row := range rows {
+		if row.CallID != 0 {
+			ids = append(ids, row.CallID)
+		}
+	}
+	return ids
+}
+
+func (e *Engine) distillationSliceFromRows(ctx context.Context, job *projectDistillWork, cursor uint, rows []store.DistillationSourceRow) (*projectDistillWork, error) {
+	calls, err := e.store.DistillationToolCalls(ctx, distillationCallIDs(rows))
+	if err != nil {
+		return nil, err
+	}
+	batch := newDistillationBatch(e, job, cursor)
+	checkpoint := batch.checkpoint
 	var turns []store.DistillationTurn
 	turnIndex := make(map[string]int)
 	included := make(map[uint]bool)
 	budget := reviewMaxChars - len(reviewSourceHeader+reviewSourceOmitted)
-	for _, row := range rows {
+	for i := range rows {
+		row := &rows[i]
 		events, err := e.distillationPrimaryEvents(ctx, row, calls)
 		if err != nil {
 			return nil, err
@@ -52,6 +63,9 @@ func (e *Engine) distillationSliceFromRows(ctx context.Context, job *projectDist
 		budget -= cost
 		checkpoint.to = row.Position
 		checkpoint.count++
+		if row.Oversize {
+			checkpoint.oversizedSkipped++
+		}
 		batch.result.HistoryOmitted = batch.result.HistoryOmitted || row.Oversize
 		if len(events) == 0 {
 			continue
@@ -77,12 +91,19 @@ func (e *Engine) distillationSliceFromRows(ctx context.Context, job *projectDist
 	batch.sources = selectDistillationSources(turns, batch.result.HistoryOmitted)
 	batch.result.HistoryOmitted = batch.sources.omitted
 	visible := make(map[uint]bool, len(batch.sources.sources))
-	for _, source := range batch.sources.sources {
-		visible[source.event.ID] = true
+	for handle, source := range batch.sources.sources {
+		ev, ok := batch.sources.memory[handle]
+		if !ok {
+			ev = batch.sources.wiki[handle]
+		}
+		visible[source.event.ID] = len(ev.Text) < len(strings.TrimSpace(source.event.Text))
 	}
 	for _, row := range rows[:checkpoint.count] {
-		if !visible[row.Position] {
+		clipped, ok := visible[row.Position]
+		if !ok {
 			checkpoint.skipped++
+		} else if clipped {
+			checkpoint.excerpted++
 		}
 	}
 	if batch.anchor.ID != "" {
@@ -91,7 +112,7 @@ func (e *Engine) distillationSliceFromRows(ctx context.Context, job *projectDist
 	return batch, nil
 }
 
-func (e *Engine) distillationPrimaryEvents(ctx context.Context, row store.DistillationSourceRow, calls map[uint]store.Event) ([]store.Event, error) {
+func (e *Engine) distillationPrimaryEvents(ctx context.Context, row *store.DistillationSourceRow, calls map[uint]store.Event) ([]store.Event, error) {
 	if row.ID == 0 || row.Oversize {
 		return nil, nil
 	}
@@ -106,7 +127,11 @@ func (e *Engine) distillationPrimaryEvents(ctx context.Context, row store.Distil
 			return nil, err
 		}
 		text, ok := strings.CutPrefix(message.Content, "[steer] ")
-		if !ok || len(text) > 64<<10 {
+		if !ok {
+			return nil, nil
+		}
+		if len(text) > 64<<10 {
+			row.Oversize = true
 			return nil, nil
 		}
 		ev.Text = text

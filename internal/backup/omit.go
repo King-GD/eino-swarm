@@ -48,6 +48,8 @@ func omitThreads(ctx context.Context, q queryer, schema string, ids []string) er
 			prefix + `threads WHERE ` + in("id") + `)`, args},
 		{"project_distillations", `DELETE FROM ` + prefix + `project_distillations WHERE project_id IN (SELECT project_id FROM ` +
 			prefix + `threads WHERE ` + in("id") + `)`, args},
+		{"project_wiki_builds", `DELETE FROM ` + prefix + `project_wiki_builds WHERE project_id IN (SELECT project_id FROM ` +
+			prefix + `threads WHERE ` + in("id") + `)`, args},
 		{"nuwa_verify_slots", `DELETE FROM ` + prefix + `nuwa_verify_slots WHERE ` + in("thread_id"), args},
 		{"nuwa_revisions", `DELETE FROM ` + prefix + `nuwa_revisions WHERE project_id = '' AND ` + in("thread_id"), args},
 		{"nuwa_nodes", `DELETE FROM ` + prefix + `nuwa_nodes WHERE scope = 'thread' AND ` + in("thread_id"), args},

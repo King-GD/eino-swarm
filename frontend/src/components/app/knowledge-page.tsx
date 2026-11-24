@@ -40,7 +40,9 @@ export function KnowledgePageView({ page, onPage, onOpenThread, onTrace }: Knowl
       <div className="flex items-start gap-2 border-b p-3">
         <div className="min-w-0 flex-1 space-y-1">
           <h2 className="wrap-break-word font-semibold">{page.title}</h2>
-          <Badge variant="outline">{page.type}</Badge>
+          <Badge variant="outline">
+            {page.wiki ? `${t(page.wiki.kind === "event" ? "knowledge.wikiEvent" : "knowledge.wikiEntity")} · ${page.wiki.category}` : page.type}
+          </Badge>
         </div>
         <Button
           ref={expand}
@@ -52,6 +54,7 @@ export function KnowledgePageView({ page, onPage, onOpenThread, onTrace }: Knowl
         ><Maximize2 /></Button>
       </div>
       <div className="space-y-4 p-3 text-sm">
+        {page.wiki?.document_pending ? <p role="status">{t("knowledge.wikiDocumentPending")}</p> : null}
         {fields.length || page.as_of ? (
           <div className="space-y-1">
             {fields.length ? (

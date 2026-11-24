@@ -19,6 +19,7 @@ import (
 var copyOrder = []string{
 	"projects",
 	"project_distillations",
+	"project_wiki_builds",
 	"threads",
 	"turns",
 	"events",
@@ -289,7 +290,7 @@ func projectFilter(table, projectID string) (string, []any, bool, error) {
 		return `project_id = ? OR (scope = 'thread' AND thread_id IN (` + threads + `))`, []any{projectID, projectID}, false, nil
 	case "nuwa_revisions":
 		return `project_id = ? OR (project_id = '' AND thread_id IN (` + threads + `))`, []any{projectID, projectID}, false, nil
-	case "nuwa_verify_slots", "project_distillations", "project_distillation_sources":
+	case "nuwa_verify_slots", "project_distillations", "project_wiki_builds", "project_distillation_sources":
 		return `project_id = ?`, []any{projectID}, false, nil
 	case "composer_drafts", "composer_draft_blobs":
 		return `draft_key = ? OR draft_key IN (SELECT 'thread:' || id FROM main.threads WHERE project_id = ?)`,
@@ -378,7 +379,7 @@ func exportProjectRows(ctx context.Context, conn *sql.Conn, projectID, dest stri
 		return err
 	}
 	for _, table := range copyOrder {
-		if (table == "project_distillations" || table == "project_distillation_sources") && !rollbackSnapshot {
+		if (table == "project_distillations" || table == "project_wiki_builds" || table == "project_distillation_sources") && !rollbackSnapshot {
 			continue
 		}
 		where, args, skip, err := projectFilter(table, projectID)
@@ -512,7 +513,7 @@ func applyProject(ctx context.Context, conn *sql.Conn, incomingPath, projectID s
 				}
 			}
 			for _, table := range copyOrder {
-				if table == "remote_devices" || table == "project_distillations" || table == "project_distillation_sources" {
+				if table == "remote_devices" || table == "project_distillations" || table == "project_wiki_builds" || table == "project_distillation_sources" {
 					continue
 				}
 				if err := copyTable(ctx, tx, "incoming", "main", table, "", nil, offset); err != nil {

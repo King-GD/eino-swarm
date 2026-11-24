@@ -14,6 +14,9 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 - The Knowledge panel opens a full project graph with page titles as nodes,
   one undirected line per connected pair, zoom and search by title or alias. (`F-138`, `C-053`)
+- Build a wiki graph from a task or project's retained history. Entities,
+  events, and evidence links appear first, then the builder fills in the
+  documents in a separately tracked pass. (`F-138`, `C-054`)
 
 - Desktop and Web conversations have a Work records tab. Agents can keep
   private tasks, facts and results, then explicitly share records and their
@@ -84,6 +87,15 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - 网关模式下，普通网关和第三方接入会根据可用的识别、朗读模型分别默认开启语音。语音设置仅显示网关允许编辑的参数，录音格式和超时等设置默认折叠。(`F-148`, `C-048`)
 
 ### Fixed
+
+- Project distillation gives the reviewer actionable citation feedback,
+  retries an unwritten batch once for recoverable failures, and shows
+  saved progress and timeout settings guidance in both panels. (`F-138`, `C-054`)
+- Distillation displays its saved scope and enables the toolbar resume
+  action when the original run has paused or failed. (`F-138`, `C-054`)
+- Distillation counts excerpts and oversized skips separately and offers a
+  resumable full-text option for current-task and current-project history.
+  (`F-138`, `C-054`)
 
 - Engine replacement gives workers up to three seconds to summarize, leaving
   time for the final durable checkpoints. An in-flight tool keeps its unknown

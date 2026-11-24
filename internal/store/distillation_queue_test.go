@@ -99,6 +99,23 @@ func TestDistillationQueueFreezesIdentityAndKeepsAResultWithItsOriginalCall(t *t
 		window[0].Text != "" || window[1].Position != failedHuman.ID || window[1].ID != 0 {
 		t.Fatalf("snapshot hid missing evidence or read oversized payload: %+v, %v", window, err)
 	}
+	meta, err := st.DistillationMetadataWindow(ctx, record.ID, 0, 4)
+	if err != nil || len(meta) != 4 || meta[0].Text != "" || meta[1].CallID != call.ID || meta[2].Position != large.ID || meta[3].ID != 0 {
+		t.Fatalf("metadata window lost identities or returned source text: %+v %v", meta, err)
+	}
+	part, err := st.ReadDistillationText(ctx, record.ID, large.ID, 65530, 4)
+	if err != nil || part.Text != "zzzz" || part.TotalBytes != 65537 {
+		t.Fatalf("bounded read lost a long source's tail: %+v %v", part, err)
+	}
+	if _, err := st.ReadDistillationText(ctx, record.ID, failedHuman.ID, 0, 16); !errors.Is(err, ErrHistorySourceUnavailable) {
+		t.Fatalf("removed source became readable: %v", err)
+	}
+	if _, err := st.ReadDistillationText(ctx, record.ID, peerEvidence.ID, 0, 16); !errors.Is(err, ErrHistorySourceUnavailable) {
+		t.Fatalf("task segment read crossed its frozen scope: %v", err)
+	}
+	if _, err := st.ReadDistillationText(cancelled, record.ID, large.ID, 0, 16); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation was masked as an absent segment: %v", err)
+	}
 	record.CursorEventID, record.State = result.ID, "interrupted"
 	if err := st.DB().Exec(`CREATE TRIGGER reject_review_update BEFORE UPDATE ON project_distillations
 		BEGIN SELECT RAISE(ABORT,'fixture rejected transaction'); END`).Error; err != nil {
@@ -203,5 +220,11 @@ func TestDistillationQueueExcludesWorkRecordPayloadsFromNewAndResumedReviews(t *
 	}
 	if calls, err := st.DistillationToolCalls(ctx, []uint{privateCall, call}); err != nil || len(calls) != 0 {
 		t.Fatalf("work payload was read as supporting evidence: %+v, %v", calls, err)
+	}
+	if calls, err := st.DistillationCallHeads(ctx, []uint{privateCall, call}); err != nil || len(calls) != 0 {
+		t.Fatalf("full-text review loaded a private call head: %+v %v", calls, err)
+	}
+	if _, err := st.ReadDistillationText(ctx, job.ID, human, 0, 16); !errors.Is(err, ErrHistorySourceUnavailable) {
+		t.Fatalf("full-text review loaded a private segment: %v", err)
 	}
 }

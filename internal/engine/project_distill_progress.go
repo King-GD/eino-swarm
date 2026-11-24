@@ -16,20 +16,38 @@ import (
 // DistillationProgress counts candidate historical records in the admitted
 // snapshot. Support records such as tool calls do not count twice.
 type DistillationProgress struct {
-	Total     int `json:"total"`
-	Processed int `json:"processed"`
-	Remaining int `json:"remaining"`
-	Skipped   int `json:"skipped"`
-	Batches   int `json:"batches"`
+	Total             int  `json:"total"`
+	Processed         int  `json:"processed"`
+	Remaining         int  `json:"remaining"`
+	Skipped           int  `json:"skipped"`
+	Batches           int  `json:"batches"`
+	CoverageKnown     bool `json:"coverage_known,omitempty"`
+	Excerpted         int  `json:"excerpted,omitempty"`
+	OversizedSkipped  int  `json:"oversized_skipped,omitempty"`
+	SegmentBytes      int  `json:"segment_bytes,omitempty"`
+	SegmentTotalBytes int  `json:"segment_total_bytes,omitempty"`
 }
 
 type distillationRoute struct {
 	provider, model, effort string
 }
 
+var errDistillationPaused = errors.New("distillation paused by user")
+
+func (r DistillationResult) hasPending() bool {
+	return r.Progress != nil && (r.Progress.Remaining > 0 || (r.WikiGraph && r.State != "completed"))
+}
+
 type activeDistillation struct {
 	id     string
-	cancel context.CancelFunc
+	ctx    context.Context
+	cancel context.CancelCauseFunc
+}
+
+func (a activeDistillation) showPause(result *DistillationResult) {
+	if result.State == "running" && errors.Is(context.Cause(a.ctx), errDistillationPaused) {
+		result.State = "pausing"
+	}
 }
 
 func (e *Engine) controlDistillation(ctx context.Context, projectID string, req DistillationRequest) (DistillationResult, error) {
@@ -43,7 +61,7 @@ func (e *Engine) controlDistillation(ctx context.Context, projectID string, req 
 	if _, err := e.store.GetProject(projectID); err != nil {
 		return DistillationResult{}, err
 	}
-	row, err := e.store.ProjectDistillationReceipt(ctx, projectID)
+	row, err := e.distillationReceipt(ctx, projectID, req.WikiGraph)
 	if err != nil {
 		return DistillationResult{}, err
 	}
@@ -54,15 +72,19 @@ func (e *Engine) controlDistillation(ctx context.Context, projectID string, req 
 	if err := json.Unmarshal(row.Receipt, &result); err != nil {
 		return DistillationResult{}, err
 	}
-	active := e.distilling[projectID]
+	active := e.distilling[distillationKey(projectID, req.WikiGraph)]
 	if active.id == row.ID {
-		if req.PauseReviewID != "" {
-			active.cancel()
+		if req.PauseReviewID != "" && result.State == "running" {
+			active.cancel(errDistillationPaused)
 		}
+		active.showPause(&result)
 		return result, nil
 	}
-	if req.PauseReviewID != "" || result.Progress == nil || result.Progress.Remaining == 0 {
-		return e.projectDistillationStatus(ctx, projectID)
+	if req.PauseReviewID != "" || !result.hasPending() {
+		return e.projectDistillationStatus(ctx, projectID, req.WikiGraph)
+	}
+	if req.WikiGraph && !e.cfg.SwarmSnapshot().Knowledge {
+		return DistillationResult{}, ErrDistillationTargets
 	}
 	kb, err := e.ProjectKnowledge(projectID)
 	if err != nil {
@@ -73,6 +95,7 @@ func (e *Engine) controlDistillation(ctx context.Context, projectID string, req 
 		return DistillationResult{}, ErrRestarting
 	}
 	result.State, result.Error = "running", ""
+	result.ErrorCode, result.ErrorProviderID = "", ""
 	row.Receipt, err = json.Marshal(result)
 	if err == nil {
 		err = e.store.ResumeDistillation(ctx, *row, row.State)
@@ -90,13 +113,15 @@ func (e *Engine) controlDistillation(ctx context.Context, projectID string, req 
 // file write the receipt records the unresolved attempt, so a process loss
 // between filesystem publication and SQLite commit is visible on resumption.
 type distillCheckpoint struct {
-	e         *Engine
-	current   *DistillationResult
-	projectID string
-	from, to  uint
-	count     int
-	skipped   int
-	accepted  bool
+	e                               *Engine
+	current                         *DistillationResult
+	projectID                       string
+	from, to                        uint
+	count                           int
+	skipped                         int
+	excerpted, oversizedSkipped     int
+	segmentBytes, segmentTotalBytes int
+	accepted                        bool
 }
 
 func (c *distillCheckpoint) save(result DistillationResult, cursor uint) error {
@@ -126,6 +151,11 @@ func (c *distillCheckpoint) accept(batch DistillationResult, changes []memory.Ch
 	progress.Processed += c.count
 	progress.Remaining -= c.count
 	progress.Skipped += c.skipped
+	if progress.CoverageKnown {
+		progress.Excerpted += c.excerpted
+		progress.OversizedSkipped += c.oversizedSkipped
+	}
+	progress.SegmentBytes, progress.SegmentTotalBytes = c.segmentBytes, c.segmentTotalBytes
 	progress.Batches++
 	result.Progress = &progress
 	result.ThreadID, result.TurnID = batch.ThreadID, batch.TurnID
@@ -133,7 +163,7 @@ func (c *distillCheckpoint) accept(batch DistillationResult, changes []memory.Ch
 	result.Uncertain = result.Uncertain && !reviewed
 	result.Changes = append(slices.Clone(result.Changes), changes...)
 	result.Knowledge = append(slices.Clone(result.Knowledge), batch.Knowledge...)
-	if progress.Remaining == 0 {
+	if progress.Remaining == 0 && !result.WikiGraph {
 		result.State = "completed"
 	}
 	if err := c.save(result, c.to); err != nil {
@@ -193,6 +223,7 @@ func (e *Engine) runDistillationSlice(ctx context.Context, job *projectDistillWo
 		return checkpoint.to, true
 	}
 	job.result.State, job.result.Error = batch.result.State, batch.result.Error
+	job.result.ErrorCode, job.result.ErrorProviderID = batch.result.ErrorCode, batch.result.ErrorProviderID
 	job.result.Changes = append(job.result.Changes, batch.result.Changes...)
 	job.result.Knowledge = append(job.result.Knowledge, batch.result.Knowledge...)
 	if len(batch.result.Changes)+len(batch.result.Knowledge) > 0 {
@@ -233,12 +264,19 @@ func stopDistillation(ctx context.Context, result *DistillationResult, err error
 }
 
 func (e *Engine) loadDistillationSlice(ctx context.Context, job *projectDistillWork, cursor uint) (*projectDistillWork, error) {
-	rows, err := e.store.DistillationWindow(ctx, job.result.ReviewID, cursor, 128)
+	load := e.store.DistillationWindow
+	if job.result.FullText {
+		load = e.store.DistillationMetadataWindow
+	}
+	rows, err := load(ctx, job.result.ReviewID, cursor, 128)
 	if err != nil {
 		return nil, err
 	}
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("distillation history checkpoint has %d records remaining but no saved source", job.result.Progress.Remaining)
+	}
+	if job.result.FullText {
+		return e.distillationFullSlice(ctx, job, cursor, rows)
 	}
 	return e.distillationSliceFromRows(ctx, job, cursor, rows)
 }

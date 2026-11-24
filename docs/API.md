@@ -1832,11 +1832,26 @@ Start one background review of retained project history. The JSON request
 contains `scope: "latest_turn" | "thread" | "project"`. Supply `thread_id`
 for the first two scopes. The conversation must currently belong to the
 project. Supply `enable_knowledge: true` to explicitly initialize Knowledge
-if needed. Both panels use the same project endpoint. For an existing batch
+if needed. For `thread` or `project`, supply `full_text: true` to review the
+full text of eligible records in bounded segments. Omit it to use excerpts.
+Both panels use the same project endpoint. For an existing batch
 job, send only `{"pause_review_id":"…"}` to request a pause or
-`{"resume_review_id":"…"}` to resume from its saved checkpoint. An unknown
+`{"resume_review_id":"…"}` to resume from its saved checkpoint and original
+scope and reading mode. The request to pause reports `202` with `state: "pausing"` while
+the reviewer is stopping. An unknown
 review ID returns `404`. Starting a different review while a previous batch
 job still has pending records returns `409 distillation_pending`.
+
+Use `wiki_graph: true` on POST to start a graph build with `thread` or
+`project` scope, or to pause or resume that graph build with its review ID.
+With the global Knowledge setting enabled, the build initializes the project
+wiki if needed and uses an independent checkpoint.
+Use `GET /api/projects/:id/distill?wiki_graph=true` for its status. A wiki
+receipt reports `wiki_phase: "graph" | "documents"`. During document
+publication, `wiki_documents` and `wiki_documented` count its pages and
+written documents. The existing progress object still counts history
+records, including skips. A generated page exposes `wiki.kind`,
+`wiki.category` and `wiki.document_pending` through the page endpoint.
 
 An admitted request returns `202` with `review_id`, `state: "running"`,
 `scope` and, while the original anchor is available, `thread_id` and
@@ -1845,14 +1860,23 @@ evidence returns `200` with `state: "no_work"`. Invalid scope arguments,
 foreign conversations and all destinations disabled return `400`, `404`
 and `409 distillation_disabled`, respectively.
 
-GET returns the latest durable receipt, or `state: "idle"`. Terminal states
-are `completed`, `partial`, `failed` and `interrupted`. Optional fields
+GET returns the latest durable receipt, or `state: "idle"`. It reports
+`pausing` while an acknowledged pause is still waiting on the reviewer.
+Settled states are `paused`, `completed`, `partial`, `failed` and
+`interrupted`. Optional fields
 include `changes` for committed notes and Skills, `knowledge` for committed
 pages or schema revisions, `error`, `history_omitted` and `uncertain` for
-possible unconfirmed writes following interruption. For `thread` and
+possible unconfirmed writes following interruption, plus `full_text: true`
+for a job started in full-text mode. For `thread` and
 `project`, `progress` has `total`, `processed`, `remaining`, `skipped` and
 `batches`. Counts refer to candidate records frozen when the job starts.
-Skipped records were evaluated for eligibility and are included in processed.
+Classified failures include `error_code` and, when available,
+`error_provider_id` for the settings action. These fields clear on resume.
+New queue receipts set `progress.coverage_known` and include nonzero counts in
+`progress.excerpted` and `progress.oversized_skipped`. The latter is a subset of
+`skipped`. Skipped records are included in `processed`. A partially reviewed
+full-text record stays in `remaining` and exposes `progress.segment_bytes` and
+`progress.segment_total_bytes` until its final segment commits.
 A job reaches `completed` when its remaining count reaches zero. Partial
 success retains its committed items. Both panels poll this endpoint.
 

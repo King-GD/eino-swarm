@@ -243,8 +243,14 @@ MODELS = {
         ),
         Model(
             "distillation-progress", ROOT / "models" / "knowledge" / "DistillationProgress.tla",
-            ("FinishAfterFirstBatch", "AdvanceBeforeAcceptance", "ForgetCursorOnResume"),
+            ("FinishAfterFirstBatch", "AdvanceBeforeAcceptance", "ForgetCursorOnResume",
+             "CountIncompleteRecord", "ForgetSegmentOnResume"),
             ("TypeOK", "AcceptBeforeAdvance", "KeepCheckpoint", "CompleteCoversScope"), (),
+        ),
+        Model(
+            "wiki-build", ROOT / "models" / "knowledge" / "WikiBuild.tla",
+            ("DocumentBeforeGraph", "CompleteBeforeDocuments", "LoseDocumentCheckpoint"),
+            ("TypeOK", "GraphFirst", "DocumentsCovered", "KeepPublished"), (),
         ),
         Model(
             "project-distillation", ROOT / "models" / "knowledge" / "ProjectDistillation.tla",
@@ -499,14 +505,23 @@ def _askpub(name: str, source: str, switches: tuple[str, ...] = (), violates: st
 
 
 CASES: tuple[Case, ...] = (
+    _case("wiki-build-current", "extract all source windows, then finish all documents", model="wiki-build"),
+    *(_case("wiki-build-" + guard, "seeded: " + guard, (guard,), invariant, model="wiki-build")
+      for guard, invariant in (("DocumentBeforeGraph", "GraphFirst"),
+                               ("CompleteBeforeDocuments", "DocumentsCovered"),
+                               ("LoseDocumentCheckpoint", "KeepPublished"))),
+    _case("wiki-build-paused-documents", "pause after publishing only part of the article queue",
+          witness="NeverPausedPartwayThroughDocuments", model="wiki-build"),
     _case("distillation-progress-current", "accepted batches cover the whole frozen history",
           model="distillation-progress"),
     *(_case("distillation-progress-" + guard, "seeded: " + guard, (guard,), invariant,
             model="distillation-progress")
       for guard, invariant in (("FinishAfterFirstBatch", "CompleteCoversScope"),
                                ("AdvanceBeforeAcceptance", "AcceptBeforeAdvance"),
-                               ("ForgetCursorOnResume", "KeepCheckpoint"))),
-    _case("distillation-progress-resumed", "interrupt between batches, resume and complete",
+                               ("ForgetCursorOnResume", "KeepCheckpoint"),
+                               ("CountIncompleteRecord", "AcceptBeforeAdvance"),
+                               ("ForgetSegmentOnResume", "KeepCheckpoint"))),
+    _case("distillation-progress-resumed", "interrupt inside a record, resume and complete",
           witness="NeverCompleteAfterResume", model="distillation-progress"),
     _case("distillation-current", "exclusive manual review and scoped publication receipts",
           model="project-distillation"),

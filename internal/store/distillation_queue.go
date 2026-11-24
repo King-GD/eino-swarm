@@ -54,7 +54,8 @@ func (s *Store) ProjectDistillationAnchor(ctx context.Context, projectID, thread
 func (s *Store) StartDistillationQueue(ctx context.Context, row ProjectDistillation, threadID string, receipt func(int) ([]byte, error)) (int, error) {
 	total := 0
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Delete(&ProjectDistillationSource{}, "project_id = ?", row.ProjectID).Error; err != nil {
+		previous := tx.Table(row.table()).Select("id").Where("project_id = ?", row.ProjectID)
+		if err := tx.Delete(&ProjectDistillationSource{}, "project_id = ? AND review_id IN (?)", row.ProjectID, previous).Error; err != nil {
 			return err
 		}
 		query := distillationSources(tx, row.ProjectID, threadID).
@@ -88,15 +89,31 @@ type DistillationSourceRow struct {
 	Oversize bool
 }
 
-const distillationEventProjection = `e.id,e.thread_id,e.turn_id,e.seq,e.kind,e.agent_id,e.role,e.tool_call_id,e.created_at,
+const distillationEventIdentity = "e.id,e.thread_id,e.turn_id,e.seq,e.kind,e.agent_id,e.role,e.tool_call_id,e.created_at"
+
+const distillationEventProjection = distillationEventIdentity + `,
 	CASE WHEN length(CAST(e.text AS BLOB)) <= 65536 THEN e.text END AS text,
 	CASE WHEN length(CAST(e.err AS BLOB)) <= 65536 THEN e.err END AS err,
 	COALESCE(length(CAST(e.text AS BLOB)),0) > 65536 OR COALESCE(length(CAST(e.err AS BLOB)),0) > 65536 AS oversize`
 
+const distillationQueueJoins = `
+	FROM project_distillation_sources q
+	LEFT JOIN threads h ON h.id=q.thread_id AND h.project_id=q.project_id
+	LEFT JOIN turns t ON t.id=q.turn_id AND t.thread_id=h.id AND t.status=q.turn_status
+	LEFT JOIN events e ON e.id=q.event_id AND e.turn_id=t.id AND e.thread_id=h.id AND e.seq=q.seq AND e.kind=q.kind AND e.work_record_payload=0`
+
 func (s *Store) DistillationWindow(ctx context.Context, reviewID string, after uint, limit int) ([]DistillationSourceRow, error) {
+	return s.distillationWindow(ctx, reviewID, after, limit, distillationEventProjection)
+}
+
+func (s *Store) DistillationMetadataWindow(ctx context.Context, reviewID string, after uint, limit int) ([]DistillationSourceRow, error) {
+	return s.distillationWindow(ctx, reviewID, after, limit, distillationEventIdentity)
+}
+
+func (s *Store) distillationWindow(ctx context.Context, reviewID string, after uint, limit int, projection string) ([]DistillationSourceRow, error) {
 	var rows []DistillationSourceRow
 	err := s.db.WithContext(ctx).Raw(`
-		SELECT q.event_id AS position, `+distillationEventProjection+`,
+		SELECT q.event_id AS position, `+projection+`,
 			t.id AS origin_id, t.thread_id AS origin_thread_id, t.status AS origin_status,
 			CASE WHEN e.kind='tool_result' AND e.tool_call_id<>'' THEN (
 				SELECT c.id FROM events c
@@ -104,21 +121,31 @@ func (s *Store) DistillationWindow(ctx context.Context, reviewID string, after u
 					AND c.tool_call_id=e.tool_call_id AND c.agent_id=e.agent_id AND c.seq<e.seq AND c.id<e.id
 				ORDER BY c.seq DESC LIMIT 1
 			) END AS call_id
-		FROM project_distillation_sources q
-		LEFT JOIN threads h ON h.id=q.thread_id AND h.project_id=q.project_id
-		LEFT JOIN turns t ON t.id=q.turn_id AND t.thread_id=h.id AND t.status=q.turn_status
-		LEFT JOIN events e ON e.id=q.event_id AND e.turn_id=t.id AND e.thread_id=h.id AND e.seq=q.seq AND e.kind=q.kind AND e.work_record_payload=0
+		`+distillationQueueJoins+`
 		WHERE q.review_id=? AND q.event_id>? ORDER BY q.event_id LIMIT ?`, reviewID, after, limit).Scan(&rows).Error
 	return rows, err
 }
 
 func (s *Store) DistillationToolCalls(ctx context.Context, ids []uint) (map[uint]Event, error) {
+	return s.distillationToolCalls(ctx, ids, distillationEventProjection)
+}
+
+// DistillationCallHeads returns enough of a paired call to identify the tool
+// without loading its arguments. When clipped, only a name followed by "("
+// within the prefix is identifiable.
+func (s *Store) DistillationCallHeads(ctx context.Context, ids []uint) (map[uint]Event, error) {
+	return s.distillationToolCalls(ctx, ids, distillationEventIdentity+`,
+		CASE WHEN length(CAST(e.text AS BLOB)) <= 512 THEN e.text
+			WHEN instr(substr(e.text,1,128), '(') > 0 THEN substr(e.text,1,128) END AS text`)
+}
+
+func (s *Store) distillationToolCalls(ctx context.Context, ids []uint, projection string) (map[uint]Event, error) {
 	calls := make(map[uint]Event, len(ids))
 	if len(ids) == 0 {
 		return calls, nil
 	}
 	var rows []DistillationSourceRow
-	if err := s.db.WithContext(ctx).Table("events e").Select(distillationEventProjection).
+	if err := s.db.WithContext(ctx).Table("events e").Select(projection).
 		Where("e.id IN ? AND e.kind = ? AND e.work_record_payload = 0", ids, "tool_call").Scan(&rows).Error; err != nil {
 		return nil, err
 	}
@@ -134,7 +161,7 @@ func (s *Store) DistillationToolCalls(ctx context.Context, ids []uint) (map[uint
 // cursor and owner must still match even after a cancellation or restart.
 func (s *Store) CheckpointDistillation(ctx context.Context, row ProjectDistillation, previous uint) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(&ProjectDistillation{}).
+		result := tx.Table(row.table()).
 			Where("project_id=? AND id=? AND state=? AND cursor_event_id=?", row.ProjectID, row.ID, "running", previous).
 			Updates(map[string]any{"state": row.State, "receipt": row.Receipt, "cursor_event_id": row.CursorEventID})
 		if result.Error != nil {
@@ -152,7 +179,7 @@ func (s *Store) CheckpointDistillation(ctx context.Context, row ProjectDistillat
 
 // ResumeDistillation claims the same receipt without changing its checkpoint.
 func (s *Store) ResumeDistillation(ctx context.Context, row ProjectDistillation, previousState string) error {
-	result := s.db.WithContext(ctx).Model(&ProjectDistillation{}).
+	result := s.db.WithContext(ctx).Table(row.table()).
 		Where("project_id=? AND id=? AND state=? AND cursor_event_id=?", row.ProjectID, row.ID, previousState, row.CursorEventID).
 		Updates(map[string]any{"state": "running", "receipt": row.Receipt})
 	if result.Error != nil {

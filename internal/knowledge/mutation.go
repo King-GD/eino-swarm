@@ -21,6 +21,9 @@ func (s *Store) WritePage(change PageWrite, stamp Stamp) (*Page, error) {
 	defer root.Close()
 
 	page := clonePage(change.Page)
+	// The graph builder owns the document checkpoint. Ordinary article edits
+	// retain it alongside the user's replacement prose.
+	page.Wiki = clonePage(snap.pages[page.ID].page).Wiki
 	page.Title = strings.TrimSpace(page.Title)
 	page.UpdatedAt = stamp.UpdatedAt.UTC()
 	page.UpdatedTurn = stamp.UpdatedTurn

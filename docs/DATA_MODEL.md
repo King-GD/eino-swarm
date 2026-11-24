@@ -250,6 +250,16 @@ project removes the row. Full database backups include the receipt unless a conv
 is omitted. Portable project bundles carry notes, Skills and knowledge files.
 Their restore resets the latest receipt for the replaced project.
 
+## `project_wiki_builds` — independent wiki build receipt (`C-054`)
+
+This per-project row keeps the source cursor, route and JSON receipt for a
+wiki build. It shares the frozen `project_distillation_sources` queue by
+review ID. Full database backup, omitted conversations and project deletion
+follow the same receipt policy as manual reviews. The Markdown files hold
+node kind, category, verified observations and the number of observations
+already written to the article. This lets the document pass recover its
+position from the published files.
+
 ## `nuwa_nodes` / `nuwa_revisions` — work records (`C-055`)
 
 `nuwa_nodes` stores task/fact/artifact records. It is separate from memory files

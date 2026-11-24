@@ -83,7 +83,7 @@ func Open(path string) (*Store, error) {
 	if err := s.dropThreadOwnership(); err != nil {
 		return nil, err
 	}
-	if err := db.AutoMigrate(&Project{}, &Thread{}, &Message{}, &Turn{}, &Event{}, &LLMCall{}, &Attachment{}, &Followup{}, &Schedule{}, &ScheduleRun{}, &RemoteDevice{}, &ThreadWakeDecision{}, &ComposerDraft{}, &ComposerDraftBlob{}, &PendingScheduleAnswer{}, &NuwaNode{}, &NuwaRevision{}, &NuwaVerifySlot{}, &TaskPanelRow{}, &TaskPanelMutation{}, &TaskPanelChangeRow{}, &ProjectDistillation{}, &ProjectDistillationSource{}); err != nil {
+	if err := db.AutoMigrate(&Project{}, &Thread{}, &Message{}, &Turn{}, &Event{}, &LLMCall{}, &Attachment{}, &Followup{}, &Schedule{}, &ScheduleRun{}, &RemoteDevice{}, &ThreadWakeDecision{}, &ComposerDraft{}, &ComposerDraftBlob{}, &PendingScheduleAnswer{}, &NuwaNode{}, &NuwaRevision{}, &NuwaVerifySlot{}, &TaskPanelRow{}, &TaskPanelMutation{}, &TaskPanelChangeRow{}, &ProjectDistillation{}, &ProjectWikiBuild{}, &ProjectDistillationSource{}); err != nil {
 		return nil, fmt.Errorf("store: migrate: %w", err)
 	}
 	if err := backfillTaskPanelObservations(db); err != nil {

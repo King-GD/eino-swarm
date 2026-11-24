@@ -9,7 +9,11 @@ import (
 )
 
 func (s *Server) getProjectDistillation(c *gin.Context) {
-	result, err := s.engine.ProjectDistillationStatus(c.Request.Context(), c.Param("id"))
+	status := s.engine.ProjectDistillationStatus
+	if c.Query("wiki_graph") == "true" {
+		status = s.engine.ProjectWikiBuildStatus
+	}
+	result, err := status(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		s.fail(c, err)
 		return
@@ -36,7 +40,7 @@ func (s *Server) startProjectDistillation(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "distillation_pending"})
 	case err != nil:
 		s.fail(c, err)
-	case result.State == "running":
+	case result.State == "running" || result.State == "pausing":
 		c.JSON(http.StatusAccepted, result)
 	default:
 		c.JSON(http.StatusOK, result)

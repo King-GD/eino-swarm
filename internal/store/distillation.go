@@ -19,12 +19,34 @@ type ProjectDistillation struct {
 	Receipt                            []byte
 	CursorEventID                      uint `gorm:"not null;default:0"`
 	ProviderID, Model, ReasoningEffort string
+	WikiGraph                          bool `gorm:"-"`
+}
+
+// ProjectWikiBuild keeps a graph build and its resume position independent of
+// the project's last Memory review.
+type ProjectWikiBuild struct {
+	ProjectDistillation `gorm:"embedded"`
+}
+
+func (r ProjectDistillation) table() string {
+	if r.WikiGraph {
+		return "project_wiki_builds"
+	}
+	return "project_distillations"
 }
 
 // ProjectDistillationReceipt reads the latest run, if any.
 func (s *Store) ProjectDistillationReceipt(ctx context.Context, projectID string) (*ProjectDistillation, error) {
-	var row ProjectDistillation
-	err := s.db.WithContext(ctx).Take(&row, "project_id = ?", projectID).Error
+	return s.distillationReceipt(ctx, projectID, false)
+}
+
+func (s *Store) ProjectWikiBuildReceipt(ctx context.Context, projectID string) (*ProjectDistillation, error) {
+	return s.distillationReceipt(ctx, projectID, true)
+}
+
+func (s *Store) distillationReceipt(ctx context.Context, projectID string, wikiGraph bool) (*ProjectDistillation, error) {
+	row := ProjectDistillation{WikiGraph: wikiGraph}
+	err := s.db.WithContext(ctx).Table(row.table()).Take(&row, "project_id = ?", projectID).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -37,14 +59,14 @@ func (s *Store) StartProjectDistillation(ctx context.Context, row ProjectDistill
 }
 
 func startProjectDistillation(db *gorm.DB, row ProjectDistillation) error {
-	return db.Clauses(clause.OnConflict{
+	return db.Table(row.table()).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "project_id"}}, UpdateAll: true,
 	}).Create(&row).Error
 }
 
 // FinishProjectDistillation updates only the running receipt it owns.
 func (s *Store) FinishProjectDistillation(ctx context.Context, row ProjectDistillation) error {
-	result := s.db.WithContext(ctx).Model(&ProjectDistillation{}).
+	result := s.db.WithContext(ctx).Table(row.table()).
 		Where("project_id = ? AND id = ? AND state = ?", row.ProjectID, row.ID, "running").
 		Updates(map[string]any{"state": row.State, "receipt": row.Receipt})
 	if result.Error != nil {
