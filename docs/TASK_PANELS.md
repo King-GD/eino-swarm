@@ -109,10 +109,15 @@ Batches are cumulative for the confirmed subject. Use its full name for every ba
 
 Each clue retains its first source edge. A later observation can enrich the clue and upgrade confirmation for a relationship reachable from the subject. Both the registered source and direct updates check new relationships for reachability from the single subject root. Older graph records and detached clues stay in stored state, and their detached sources are skipped on follow-up batches. Desktop and phone render only the portion reachable from the subject. Domains use one IDNA normalization. Node evidence is structured as `detail.basis[] = {source, via?, date?}`; the renderer words it in the user's language and shows unrecognized tool names as stored.
 
-Updates to the same subject must preserve saved first-source edges and their
-target clues. A previously unsourced clue can receive its first valid source.
-Replacing a portrait uses a valid root for the new subject. An empty snapshot
-is accepted while the portrait has no saved sources.
+Updates to the same subject must preserve saved first-source edges, their
+target clues and any recorded confirmation. Ordinary snapshot and patch
+publication cannot change `confirmed: true` to `false` or omit it; the whole
+update is refused before state, revision, mutation or delivery writes. The same
+rule applies to newly confirmed relationships in later batches. Confirmation
+upgrades and detail enrichment remain allowed. A previously unsourced clue can
+receive its first valid source. Replacing a portrait uses a valid root for the
+new subject. An empty snapshot is accepted while the portrait has no saved
+sources.
 
 - Companies take the reporting tool's `registry_id` as their identity when it gives one, otherwise their name. `relation` and `share` are shown on the card as reported.
 - Domains hang under their company, or under the subject when none is named or the named one is not on the graph.

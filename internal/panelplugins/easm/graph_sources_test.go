@@ -186,3 +186,54 @@ func TestPublishCannotRewriteFirstSourcesOrCreateLegacyDuplicateCertificates(t *
 		}
 	}
 }
+
+// Snapshot and patch producers share this check: an ordinary refresh must not
+// turn an already confirmed relationship into a guess.
+func TestPublishCannotDowngradeConfirmedRelationships(t *testing.T) {
+	for _, tc := range []struct {
+		name                            string
+		beforeConfirmed, afterConfirmed bool
+		registry, label                 string
+		detached, enrich                bool
+		wantError                       bool
+	}{
+		{name: "confirmed retained", beforeConfirmed: true, afterConfirmed: true},
+		{name: "unconfirmed retained"},
+		{name: "confirmation upgraded", afterConfirmed: true},
+		{name: "confirmation downgraded", beforeConfirmed: true, wantError: true},
+		{name: "enrichment retains confirmation", beforeConfirmed: true, afterConfirmed: true, enrich: true},
+		{name: "enrichment cannot hide downgrade", beforeConfirmed: true, enrich: true, wantError: true},
+		{name: "same registry alias cannot hide downgrade", beforeConfirmed: true, label: "Subject alias", wantError: true},
+		{name: "different registry starts another portrait", beforeConfirmed: true, registry: "different-registry"},
+		{name: "saved detached confirmation retained", beforeConfirmed: true, afterConfirmed: true, detached: true},
+		{name: "saved detached confirmation downgraded", beforeConfirmed: true, detached: true, wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before := State{Title: "Subject", Nodes: []Node{
+				{ID: RootID, Kind: "root", Label: "Subject", Detail: &Detail{RegistryID: "subject-registry"}},
+				{ID: "domain:observed.test", Kind: "domain", Label: "observed.test"},
+			}, Edges: []Edge{{Source: RootID, Target: "domain:observed.test", Confirmed: tc.beforeConfirmed}}}
+			if tc.detached {
+				before.Edges[0].Source = "company:missing-parent"
+			}
+			previous := stateJSON(t, before)
+			after := before
+			after.Edges[0].Confirmed = tc.afterConfirmed
+			if tc.registry != "" {
+				after.Nodes[0].Detail.RegistryID = tc.registry
+			}
+			if tc.label != "" {
+				after.Title, after.Nodes[0].Label = tc.label, tc.label
+			}
+			if tc.enrich {
+				after.Nodes[1].Detail = &Detail{Description: "Additional observation"}
+				after.Nodes = append(after.Nodes, Node{ID: "domain:new.test", Kind: "domain", Label: "new.test"})
+				after.Edges = append(after.Edges, Edge{Source: RootID, Target: "domain:new.test"})
+			}
+			err := ValidateGraphUpdate(previous, stateJSON(t, after))
+			if (err != nil) != tc.wantError {
+				t.Fatalf("validation error = %v, want refusal = %v", err, tc.wantError)
+			}
+		})
+	}
+}

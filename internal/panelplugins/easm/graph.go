@@ -123,7 +123,7 @@ func (g *Graph) keepRootedSources(savedEdges int) {
 }
 
 // ValidateGraphUpdate checks new relations and preserves the first sources of
-// the same subject, including historical detached links.
+// the same subject and their confirmation, including historical detached links.
 func ValidateGraphUpdate(previous, state json.RawMessage) error {
 	var before, after State
 	if err := json.Unmarshal(previous, &before); err != nil {
@@ -168,6 +168,9 @@ func ValidateGraphUpdate(previous, state json.RawMessage) error {
 			current := graph.parent[prior.Target]
 			if current == nil || current.Source != prior.Source {
 				return fmt.Errorf("panel state must retain the first source of %q", prior.Target)
+			}
+			if prior.Confirmed && !current.Confirmed {
+				return fmt.Errorf("panel state must retain confirmation of %q", prior.Target)
 			}
 		}
 	} else {

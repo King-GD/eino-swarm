@@ -76,25 +76,44 @@ func TestEASMDirectPublishRefusesNewCycleAtomically(t *testing.T) {
 }
 
 // Read the panel back through the model's tools after one attempted publication.
-// A rejected edit must leave both the first source and the delivery cursor intact.
+// A rejected edit must leave saved relationships, mutations and delivery intact.
 func TestEASMDirectPublishPreservesSavedFirstSources(t *testing.T) {
 	const original = `{"schema_version":1,"title":"Subject","collection":{"status":"idle","steps":[]},"nodes":[{"id":"root","kind":"root","label":"Subject"},{"id":"domain:observed.test","kind":"domain","label":"observed.test"},{"id":"domain:unlinked.test","kind":"domain","label":"unlinked.test"}],"edges":[{"source":"root","target":"domain:observed.test","confirmed":false}],"heat":[],"components":[]}`
 	for _, tc := range []struct {
-		name    string
-		update  taskpanel.Update
-		refusal string
+		name             string
+		update           taskpanel.Update
+		refusal          string
+		initialConfirmed bool
 	}{
-		{"remove_edge", taskpanel.Update{Kind: "patch", Operations: json.RawMessage(`[{"op":"remove","path":"/edges/0"}]`)}, "retain the first source"},
-		{"remove_clue_and_edge", taskpanel.Update{Kind: "patch", Operations: json.RawMessage(`[{"op":"remove","path":"/edges/0"},{"op":"remove","path":"/nodes/1"}]`)}, "retain the first source"},
-		{"clear_snapshot", taskpanel.Update{Kind: "snapshot", State: json.RawMessage(`{"schema_version":1,"title":"Subject","collection":{"status":"idle","steps":[]},"nodes":[],"edges":[],"heat":[],"components":[]}`)}, "saved sources requires a subject root"},
+		{"remove_edge", taskpanel.Update{Kind: "patch", Operations: json.RawMessage(`[{"op":"remove","path":"/edges/0"}]`)}, "retain the first source", false},
+		{"remove_clue_and_edge", taskpanel.Update{Kind: "patch", Operations: json.RawMessage(`[{"op":"remove","path":"/edges/0"},{"op":"remove","path":"/nodes/1"}]`)}, "retain the first source", false},
+		{"clear_snapshot", taskpanel.Update{Kind: "snapshot", State: json.RawMessage(`{"schema_version":1,"title":"Subject","collection":{"status":"idle","steps":[]},"nodes":[],"edges":[],"heat":[],"components":[]}`)}, "saved sources requires a subject root", false},
 		{"enrich_confirm_and_link", taskpanel.Update{Kind: "patch", Operations: json.RawMessage(`[
 			{"op":"add","path":"/nodes/1/detail","value":{"description":"Registry observation"}},
 			{"op":"replace","path":"/edges/0/confirmed","value":true},
 			{"op":"add","path":"/edges/-","value":{"source":"root","target":"domain:unlinked.test","confirmed":true}}
-		]`)}, ""},
-		{"switch_subject", taskpanel.Update{Kind: "snapshot", State: json.RawMessage(`{"schema_version":1,"title":"Other Subject","collection":{"status":"idle","steps":[]},"nodes":[{"id":"root","kind":"root","label":"Other Subject"},{"id":"domain:other.test","kind":"domain","label":"other.test"}],"edges":[{"source":"root","target":"domain:other.test","confirmed":true}],"heat":[],"components":[]}`)}, ""},
+		]`)}, "", false},
+		{"switch_subject", taskpanel.Update{Kind: "snapshot", State: json.RawMessage(`{"schema_version":1,"title":"Other Subject","collection":{"status":"idle","steps":[]},"nodes":[{"id":"root","kind":"root","label":"Other Subject"},{"id":"domain:other.test","kind":"domain","label":"other.test"}],"edges":[{"source":"root","target":"domain:other.test","confirmed":true}],"heat":[],"components":[]}`)}, "", false},
+		{"downgrade_patch", taskpanel.Update{Kind: "patch", Operations: json.RawMessage(`[{"op":"replace","path":"/edges/0/confirmed","value":false}]`)}, "retain confirmation", true},
+		{"omit_confirmation_patch", taskpanel.Update{Kind: "patch", Operations: json.RawMessage(`[{"op":"remove","path":"/edges/0/confirmed"}]`)}, "retain confirmation", true},
+		{"replace_confirmed_edge", taskpanel.Update{Kind: "patch", Operations: json.RawMessage(`[{"op":"replace","path":"/edges/0","value":{"source":"root","target":"domain:observed.test"}}]`)}, "retain confirmation", true},
+		{"downgrade_snapshot", taskpanel.Update{Kind: "snapshot", State: json.RawMessage(original)}, "retain confirmation", true},
+		{"omit_confirmation_snapshot", taskpanel.Update{Kind: "snapshot", State: json.RawMessage(strings.Replace(original, `,"confirmed":false`, "", 1))}, "retain confirmation", true},
+		{"enrichment_cannot_hide_downgrade", taskpanel.Update{Kind: "patch", Operations: json.RawMessage(`[
+			{"op":"add","path":"/nodes/1/detail","value":{"description":"Registry observation"}},
+			{"op":"replace","path":"/edges/0/confirmed","value":false},
+			{"op":"add","path":"/edges/-","value":{"source":"root","target":"domain:unlinked.test","confirmed":true}}
+		]`)}, "retain confirmation", true},
+		{"retain_confirmation_with_enrichment", taskpanel.Update{Kind: "patch", Operations: json.RawMessage(`[
+			{"op":"add","path":"/nodes/1/detail","value":{"description":"Registry observation"}},
+			{"op":"add","path":"/edges/-","value":{"source":"root","target":"domain:unlinked.test","confirmed":true}}
+		]`)}, "", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			initial := original
+			if tc.initialConfirmed {
+				initial = strings.Replace(initial, `"confirmed":false`, `"confirmed":true`, 1)
+			}
 			e, fixture := newScheduleCompletionHTTPEngine(t, func(w http.ResponseWriter, _ *http.Request, step int, request scheduleCompletionRequest) {
 				switch step {
 				case 1:
@@ -115,7 +134,7 @@ func TestEASMDirectPublishPreservesSavedFirstSources(t *testing.T) {
 					}
 					callID, update := "publish-candidate", tc.update
 					if step == 2 {
-						callID, update = "publish-original", taskpanel.Update{Kind: "snapshot", State: json.RawMessage(original)}
+						callID, update = "publish-original", taskpanel.Update{Kind: "snapshot", State: json.RawMessage(initial)}
 					}
 					update.ProtocolVersion, update.PanelID = taskpanel.ProtocolVersion, panel.ID
 					update.OperationID, update.BaseRevision = callID, panel.Revision
@@ -150,7 +169,7 @@ func TestEASMDirectPublishPreservesSavedFirstSources(t *testing.T) {
 			attempt := tc.update
 			attempt.ProtocolVersion, attempt.PanelID = taskpanel.ProtocolVersion, panel.ID
 			attempt.OperationID, attempt.BaseRevision = "publish-candidate", 2
-			wantState, err := taskpanel.Apply(panel.Definition, json.RawMessage(original), attempt)
+			wantState, err := taskpanel.Apply(panel.Definition, json.RawMessage(initial), attempt)
 			if err != nil {
 				t.Fatalf("candidate must pass the panel schema: %v", err)
 			}
@@ -167,7 +186,7 @@ func TestEASMDirectPublishPreservesSavedFirstSources(t *testing.T) {
 				if !strings.Contains(receipt.Error, tc.refusal) {
 					t.Errorf("first publication should be refused: %s", result)
 				}
-				wantState, wantRevision, wantSource = json.RawMessage(original), 2, "publish-original"
+				wantState, wantRevision, wantSource = json.RawMessage(initial), 2, "publish-original"
 			} else if receipt.Error != "" || receipt.Revision != wantRevision {
 				t.Errorf("legitimate publication should succeed: %s", result)
 			}
@@ -175,6 +194,13 @@ func TestEASMDirectPublishPreservesSavedFirstSources(t *testing.T) {
 			wantDigest, wantErr := taskpanel.Digest(wantState)
 			if err != nil || wantErr != nil || gotDigest != wantDigest || panel.Revision != wantRevision || panel.Source.ToolCallID != wantSource {
 				t.Errorf("readback revision=%d, source=%q, state=%s, errors=%v/%v; want revision=%d, source=%q, state=%s", panel.Revision, panel.Source.ToolCallID, panel.State, err, wantErr, wantRevision, wantSource, wantState)
+			}
+			var mutations []store.TaskPanelMutation
+			if err := e.store.DB().Where("panel_id = ?", panel.ID).Order("revision").Find(&mutations).Error; err != nil {
+				t.Fatal(err)
+			}
+			if len(mutations) != int(wantRevision) || mutations[len(mutations)-1].OperationID != wantSource {
+				t.Errorf("durable mutations changed after publication: %+v", mutations)
 			}
 			changes, err := e.store.TaskPanelChanges(t.Context(), thread.ID, 0)
 			if err != nil || len(changes) != int(wantRevision) || changes[len(changes)-1].Revision != wantRevision {

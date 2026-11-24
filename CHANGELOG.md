@@ -78,7 +78,7 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 - The EASM graph shows clues reachable from the confirmed subject and keeps ambiguous ownership unconfirmed. Shared certificates appear only under their first discovery domain. On Android, Back closes supply-chain detail before closing the task panel.
 
-- EASM updates for the same subject preserve saved clues and their first source relationships across revisions.
+- EASM updates for the same subject preserve saved clues, their first source relationships and confirmed status across revisions. Direct snapshots and patches that downgrade or omit a saved confirmation are refused atomically.
 
 - The phone app builds from a clean install: its TypeScript paths resolve the shared frontend packages from `mobile/node_modules` instead of requiring `frontend/node_modules`.
 

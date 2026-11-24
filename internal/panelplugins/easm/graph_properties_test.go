@@ -14,11 +14,12 @@ import (
 // formats. The generator retains old detached records: requiring all stored
 // nodes to be rooted would hide the compatibility boundary this rule protects.
 func FuzzPortraitPublicationKeepsSavedSources(f *testing.F) {
-	for edit := byte(0); edit < 10; edit++ {
+	for edit := byte(0); edit < 11; edit++ {
 		f.Add([]byte{edit, 3, 1, 4}, []byte{edit})
 	}
 	f.Add([]byte{1, 2, 3}, []byte{2, 4}) // Deleting first, then reparenting cannot bypass retention.
 	f.Add([]byte{1, 2, 3}, []byte{0, 1, 6, 9, 2, 7, 6, 8})
+	f.Add([]byte{0}, []byte{1, 10, 0, 10}) // Rejected downgrades cannot erase an earlier confirmation.
 	f.Fuzz(func(t *testing.T, shape, edits []byte) {
 		if len(edits) == 0 {
 			return
@@ -93,7 +94,8 @@ func generatedPortrait(shape []byte) State {
 			parent = int(shape[i%len(shape)]) % len(state.Nodes)
 		}
 		node := Node{ID: fmt.Sprintf("company:clue-%d", i), Kind: "company", Label: fmt.Sprintf("Clue %d", i)}
-		state.Edges = append(state.Edges, Edge{Source: state.Nodes[parent].ID, Target: node.ID})
+		confirmed := len(shape) != 0 && shape[i%len(shape)]&2 != 0
+		state.Edges = append(state.Edges, Edge{Source: state.Nodes[parent].ID, Target: node.ID, Confirmed: confirmed})
 		state.Nodes = append(state.Nodes, node)
 	}
 	state.Nodes = append(state.Nodes, Node{ID: "company:unsourced", Kind: "company", Label: "Unsourced"})
@@ -102,10 +104,11 @@ func generatedPortrait(shape []byte) State {
 			Node{ID: "company:detached-a", Kind: "company", Label: "Detached A"},
 			Node{ID: "company:detached-b", Kind: "company", Label: "Detached B"},
 			Node{ID: "company:missing-parent", Kind: "company", Label: "Missing parent"})
+		confirmed := shape[0]&4 != 0
 		state.Edges = append(state.Edges,
-			Edge{Source: "company:detached-a", Target: "company:detached-b"},
-			Edge{Source: "company:detached-b", Target: "company:detached-a"},
-			Edge{Source: "company:absent", Target: "company:missing-parent"})
+			Edge{Source: "company:detached-a", Target: "company:detached-b", Confirmed: confirmed},
+			Edge{Source: "company:detached-b", Target: "company:detached-a", Confirmed: confirmed},
+			Edge{Source: "company:absent", Target: "company:missing-parent", Confirmed: confirmed})
 	}
 	return state
 }
@@ -117,8 +120,8 @@ func portraitEdit(t *testing.T, before State, edit byte, step int) (State, bool)
 		t.Fatal(err)
 	}
 	root := slices.IndexFunc(after.Nodes, func(node Node) bool { return node.ID == RootID })
-	index := int(edit/10) % len(after.Edges)
-	switch edit % 10 {
+	index := int(edit/11) % len(after.Edges)
+	switch edit % 11 {
 	case 0: // Adding detail does not change the clue's original source.
 		after.Nodes[1].Detail = &Detail{Description: fmt.Sprintf("Observation %d", step)}
 	case 1: // A rooted edge may upgrade confirmation without changing identity.
@@ -162,6 +165,10 @@ func portraitEdit(t *testing.T, before State, edit byte, step int) (State, bool)
 		slices.Reverse(after.Nodes)
 		// Keep the first edge rooted so a following confirmation edit remains legal.
 		slices.Reverse(after.Edges[1:])
+	case 10:
+		wasConfirmed := after.Edges[index].Confirmed
+		after.Edges[index].Confirmed = false
+		return after, !wasConfirmed
 	}
 	return after, true
 }

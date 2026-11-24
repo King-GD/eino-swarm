@@ -75,10 +75,12 @@ requires every step to have succeeded.
 
 `FuzzPortraitPublicationKeepsSavedSources` generates bounded portraits and
 sequences of edits through the catalog and actual snapshot/patch application.
-It checks saved source/target retention, legal enrichment and subject changes,
-including retained historical detached records. Its seeds re-find the deletion
-gap fixed by `0cf63642`; `TestEASMDirectPublishPreservesSavedFirstSources` checks
-the same refusal through real model tools and SQLite revision/delivery readback.
+It checks saved source/target and confirmation retention, legal enrichment and
+subject changes, including retained historical detached records. Its seeds
+re-find the deletion gap fixed by `0cf63642` and the confirmation downgrade gap,
+including an upgrade followed by a refused downgrade.
+`TestEASMDirectPublishPreservesSavedFirstSources` checks refusal through real
+model tools and SQLite state, revision, mutation and delivery readback.
 These data-space properties remain implementation tests rather than another
 protocol model.
 
