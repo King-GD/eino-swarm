@@ -260,7 +260,10 @@ export function NuwaGraph({
                 )}
                 style={style}
               >
-                <span className="text-[10px] text-muted-foreground">{nuwaKind(record.kind, t)}</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {nuwaKind(record.kind, t)}
+                  {conversation && (record.scope ?? "project") === "project" ? ` · ${t("nuwa.projectPrerequisite")}` : ""}
+                </span>
                 <span className="w-full truncate text-xs font-medium" title={record.title}>
                   {record.title}
                 </span>

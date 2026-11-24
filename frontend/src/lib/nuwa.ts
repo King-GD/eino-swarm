@@ -38,6 +38,7 @@ export interface NuwaNode {
   missing_dependencies?: string[]
   unavailable_evidence?: NuwaEvidence[]
   stale_dependencies?: string[]
+  incomplete_basis?: boolean
   dependency_versions?: Record<string, number>
   updated_by?: string
   updated_thread_id?: string
@@ -121,6 +122,23 @@ export function pruneNuwaNodes(nodes: NuwaNode[]) {
     shown: nodes.filter((node) => keep.has(node.id)),
     collapsed: nodes.filter((node) => !keep.has(node.id)),
   }
+}
+
+/** Add only the shared prerequisites that the conversation graph refers to. */
+export function includeNuwaProjectPrerequisites(nodes: NuwaNode[], available: NuwaNode[]) {
+  const shared = new Map(available.filter((node) => (node.scope ?? "project") === "project").map((node) => [node.id, node]))
+  const graph = [...nodes]
+  const seen = new Set(graph.map((node) => node.id))
+  for (const node of graph) {
+    for (const id of node.depends_on ?? []) {
+      const prerequisite = shared.get(id)
+      if (prerequisite && !seen.has(id)) {
+        graph.push(prerequisite)
+        seen.add(id)
+      }
+    }
+  }
+  return graph
 }
 
 type NuwaPathNode = Pick<NuwaNode, "id" | "created_at"> & { depends_on: string[] | null }
@@ -310,12 +328,15 @@ export function layoutNuwaCollaboration(nodes: NuwaNode[]) {
   })
   const graph: CollaborationNode[] = [...entries]
   if (entries.length) {
-    const terminals = partitioned.path.filter(({ id }) => !dependedUpon.has(id)).map(({ id }) => id)
+    const terminals = partitioned.path
+      .filter(({ id, incomplete_basis }) => !dependedUpon.has(id) && !incomplete_basis)
+      .map(({ id }) => id)
+    const readyGroups = partitioned.groups.filter(({ records }) => records.some((record) => !record.incomplete_basis))
     const created = entries.reduce((latest, node) =>
       node.created_at > latest ? node.created_at : latest, entries[0].created_at)
     graph.push({
       type: "goal", id: NUWA_GOAL_ID, created_at: created,
-      depends_on: [...terminals, ...partitioned.groups.map(({ id }) => id)],
+      depends_on: [...terminals, ...readyGroups.map(({ id }) => id)],
     })
   }
   const laid = layoutNuwa(graph)

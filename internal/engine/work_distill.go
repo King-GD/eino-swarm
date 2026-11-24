@@ -20,6 +20,10 @@ the conversation's language. Return one JSON object with a "records" array, up t
 Each record requires "kind" (task, fact or artifact), "title", a short "summary", "status"
 (task: pending, done, blocked or cancelled; fact or artifact: reported, superseded or retracted),
 and "evidence" (1–8 distinct positive seq handles from the supplied records supporting the claim).
+Give each record a unique short "key". Use "depends_on" to list the keys of earlier tasks
+and facts it actually relies on. Report an artifact only if its prerequisite chain includes
+the real task and a reported fact supported by the transcript. Omit the artifact when either
+is missing. Do not invent tasks or observations just to fill the chain.
 A failed turn's human messages can support requirements, but not claims that work succeeded.
 Use artifact_path only for an artifact whose actual output path is supported by the evidence.
 Use its absolute path or a path relative to this conversation's file root.
@@ -28,12 +32,14 @@ Do not guess paths, results or evidence. Return {"records":[]} when nothing shou
 var ErrWorkDisabled = errors.New("work records are disabled in settings")
 
 type distilledWork struct {
-	Kind         string  `json:"kind"`
-	Title        string  `json:"title"`
-	Summary      string  `json:"summary"`
-	Status       string  `json:"status"`
-	ArtifactPath string  `json:"artifact_path"`
-	Evidence     []int64 `json:"evidence"`
+	Key          string   `json:"key"`
+	DependsOn    []string `json:"depends_on"`
+	Kind         string   `json:"kind"`
+	Title        string   `json:"title"`
+	Summary      string   `json:"summary"`
+	Status       string   `json:"status"`
+	ArtifactPath string   `json:"artifact_path"`
+	Evidence     []int64  `json:"evidence"`
 }
 
 // DistillThreadWork builds private records from bounded original history. The
@@ -94,18 +100,18 @@ func (e *Engine) DistillThreadWork(ctx context.Context, threadID string, expecte
 	// recorded paths relative to the task file root, including results/.
 	root := e.TaskFileDir(threadID)
 	kept := nodes[:0]
-	for _, node := range nodes {
-		if node.Kind == "artifact" {
-			path := node.ArtifactPath
+	for _, record := range nodes {
+		if record.Node.Kind == "artifact" {
+			path := record.Node.ArtifactPath
 			if path == "" {
 				continue
 			}
-			node.ArtifactPath, err = nuwaArtifactPath(root, path)
+			record.Node.ArtifactPath, err = nuwaArtifactPath(root, path)
 			if err != nil {
 				continue
 			}
 		}
-		kept = append(kept, node)
+		kept = append(kept, record)
 	}
 	if err := e.store.SaveDistilledWork(ctx, state, kept); err != nil {
 		return 0, err
@@ -168,14 +174,14 @@ func (e *Engine) workDistillSources(ctx context.Context, threadID string, expect
 	return state, selectDistillationSources(turns, omitted), turns[0].Turn, nil
 }
 
-func distilledWorkNodes(raw, threadID string, sources map[int64]distillSource) ([]store.NuwaNode, error) {
+func distilledWorkNodes(raw, threadID string, sources map[int64]distillSource) ([]store.DistilledWorkRecord, error) {
 	var reply struct {
 		Records []distilledWork `json:"records"`
 	}
 	if len(raw) > 64<<10 || decodeNuwaArgs(raw, &reply) != nil || reply.Records == nil || len(reply.Records) > 16 {
 		return nil, errors.New("work distillation returned invalid records")
 	}
-	nodes := make([]store.NuwaNode, 0, len(reply.Records))
+	nodes := make([]store.DistilledWorkRecord, 0, len(reply.Records))
 	for _, row := range reply.Records {
 		if strings.TrimSpace(row.Title) == "" || len(row.Title) > 320 || len(row.Summary) > 2400 ||
 			len(row.Evidence) == 0 || len(row.Evidence) > 8 {
@@ -201,7 +207,7 @@ func distilledWorkNodes(raw, threadID string, sources map[int64]distillSource) (
 		if allFailed && (row.Kind == "artifact" || row.Status == "done") {
 			return nil, errors.New("work distillation cannot report a result from failed work")
 		}
-		nodes = append(nodes, node)
+		nodes = append(nodes, store.DistilledWorkRecord{Key: row.Key, DependsOn: row.DependsOn, Node: node})
 	}
 	return nodes, nil
 }

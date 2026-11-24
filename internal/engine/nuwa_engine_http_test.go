@@ -90,7 +90,7 @@ func assertNuwaRecordWorkGuidance(t *testing.T, request scheduleCompletionReques
 		}
 	}
 	prompt := strings.Join(strings.Fields(system.String()), " ")
-	for _, term := range []string{"as you work", "material prerequisites", "returned node IDs", "Independent work can remain unlinked"} {
+	for _, term := range []string{"Record each material task when starting it", "observations backed by", "its actual task and factual basis", "returned record IDs", "facts can remain unlinked"} {
 		if !strings.Contains(prompt, term) {
 			t.Errorf("%s system prompt is missing shared-work guidance %q", actor, term)
 		}

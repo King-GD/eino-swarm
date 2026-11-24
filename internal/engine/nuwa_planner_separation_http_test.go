@@ -99,11 +99,41 @@ func TestNuwaPlannerDelegatesExecutionToolsAtModelHTTP(t *testing.T) {
 				if !strings.Contains(nuwaValidationReceipt(request, "separation-worker-mcp"), "mcp-protocol-evidence") {
 					t.Error("worker did not receive actual MCP evidence")
 				}
-				call("separation-worker-record", "record_work", map[string]any{
+				call("separation-orphan-artifact", "record_work", map[string]any{
 					"scope": "project", "kind": "artifact", "title": "Worker deliverable", "summary": value,
 					"artifact_path": artifact, "evidence": []any{},
 				})
 			case 6:
+				if receipt := nuwaValidationReceipt(request, "separation-orphan-artifact"); !strings.Contains(receipt, "must link to an active task and a reported fact") {
+					t.Errorf("the worker could report an artifact without a basis: %s", receipt)
+				}
+				call("separation-task", "record_work", map[string]any{
+					"kind": "task", "title": "Inspect the source", "status": "done",
+				})
+			case 7, 8:
+				step := workerCalls.Load()
+				id := "separation-task"
+				if step == 8 {
+					id = "separation-fact"
+				}
+				var source struct{ Node store.NuwaNode }
+				if err := json.Unmarshal([]byte(nuwaValidationReceipt(request, id)), &source); err != nil || source.Node.ID == "" {
+					t.Errorf("missing prerequisite %s: %+v, err=%v", id, source, err)
+					answer("Work record prerequisite failed.")
+					return
+				}
+				if step == 7 {
+					call("separation-fact", "record_work", map[string]any{
+						"kind": "fact", "title": "The source value was observed",
+						"depends_on": []string{source.Node.ID}, "own_tool_call_ids": []string{"separation-worker-read"},
+					})
+				} else {
+					call("separation-worker-record", "record_work", map[string]any{
+						"scope": "project", "kind": "artifact", "title": "Worker deliverable", "summary": value,
+						"artifact_path": artifact, "depends_on": []string{source.Node.ID},
+					})
+				}
+			case 9:
 				var receipt struct {
 					OK   bool           `json:"ok"`
 					Node store.NuwaNode `json:"node"`
@@ -213,7 +243,7 @@ func TestNuwaPlannerDelegatesExecutionToolsAtModelHTTP(t *testing.T) {
 	}
 	finished := waitForTurn(t, e, turn.ID)
 	waitSettled(t, e, thread.ID)
-	if finished.Status != store.TurnDone || managerCalls.Load() != 6 || workerCalls.Load() != 6 || remoteCalls.Load() != 1 {
+	if finished.Status != store.TurnDone || managerCalls.Load() != 6 || workerCalls.Load() != 9 || remoteCalls.Load() != 1 {
 		t.Fatalf("delegated execution: turn=%+v manager=%d worker=%d remote=%d", finished, managerCalls.Load(), workerCalls.Load(), remoteCalls.Load())
 	}
 	bytes, err := os.ReadFile(filepath.Join(e.WorkspaceDir(thread.ID), artifact))
@@ -221,10 +251,16 @@ func TestNuwaPlannerDelegatesExecutionToolsAtModelHTTP(t *testing.T) {
 		t.Fatalf("selected worker did not create the actual artifact: bytes=%q err=%v", bytes, err)
 	}
 	view, err := e.ProjectNuwaSnapshot(t.Context(), project.ID)
-	if err != nil || len(view.Workers) != 1 || len(view.Nodes) != 1 {
+	if err != nil || len(view.Workers) != 1 || len(view.Nodes) != 3 {
 		t.Fatalf("missing durable worker result: %+v err=%v", view, err)
 	}
-	worker, node := view.Workers[0], view.Nodes[0]
+	worker := view.Workers[0]
+	var node store.NuwaNode
+	for _, record := range view.Nodes {
+		if record.Kind == "artifact" {
+			node = record
+		}
+	}
 	if worker.Status != "done" || worker.ModelBinding == nil || worker.ModelBinding.Ref != provider.ChoiceID(account, executor) || node.AgentID != worker.AgentID || node.Generation != worker.Generation || node.ArtifactPath != "work/"+artifact {
 		t.Fatalf("artifact lost worker execution identity: worker=%+v node=%+v", worker, node)
 	}

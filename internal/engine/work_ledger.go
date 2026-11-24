@@ -18,9 +18,13 @@ work. Use read_work for details, evidence, current versions, and omitted records
 `
 
 const workLedgerWriteGuidance = `
-Record material tasks, observations, and deliverables with record_work as you
-work. Link only material prerequisites the result actually relied on in
-depends_on, using returned node IDs. Independent work can remain unlinked.
+Record each material task when starting it, then record observations backed by
+the original evidence. Before reporting a deliverable, link it through
+depends_on to its actual task and factual basis using returned record IDs.
+The task and fact can be upstream through another prerequisite. If the basis
+is missing, gather the evidence or leave the artifact unreported. Independent
+tasks and facts can remain unlinked. Repair an older artifact's missing basis
+on the same record once its actual prerequisites are known.
 Records start within this conversation. Share explicitly when appropriate:
 scope "project" publishes to the current project together with the private
 prerequisites needed by the shared work. A standalone conversation stays

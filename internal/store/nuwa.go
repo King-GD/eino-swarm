@@ -57,6 +57,7 @@ type NuwaNode struct {
 	MissingDependencies []string       `gorm:"-" json:"missing_dependencies,omitempty"`
 	StaleDependencies   []string       `gorm:"-" json:"stale_dependencies,omitempty"`
 	UnavailableEvidence []NuwaEvidence `gorm:"-" json:"unavailable_evidence,omitempty"`
+	IncompleteBasis     bool           `gorm:"-" json:"incomplete_basis,omitempty"`
 }
 
 // NuwaRevision preserves every committed full node version. An empty NodeID

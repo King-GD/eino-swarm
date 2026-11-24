@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test"
 import { writeFile } from "node:fs/promises"
-import { nuwaLooseGroupID, NUWA_GOAL_ID, type NuwaSnapshot, type ThreadWorkSnapshot } from "../src/lib/nuwa"
+import { NUWA_GOAL_ID, type NuwaNode, type NuwaSnapshot, type ThreadWorkSnapshot } from "../src/lib/nuwa"
 import { startNuwaFixture } from "./nuwa-fixture"
 import { composer, freshConversation, waitForDraftSaved } from "./session"
 
@@ -207,8 +207,9 @@ test("Nuwa creation shares live evidence paths and preserves them after disablin
       "Superseded"
     )
     await expect(graph.getByTestId("nuwa-edge")).toHaveCount(2)
-    await expect(graph.getByRole("button", { name: /Review notes/ })).toContainText("Needs review")
+    await expect(graph.getByRole("button", { name: /Review notes/ })).toContainText("Incomplete basis")
     await graph.getByRole("button", { name: /Review notes/ }).click()
+    await expect(detail).toContainText("This result is missing a linked active task or reported fact.")
     await expect(detail).toContainText("Source changed; review this result.")
     await graph.getByRole("button", { name: /Measured finding/ }).click()
     await expect(detail).toContainText("A later check superseded the initial result")
@@ -335,28 +336,29 @@ test("published artifacts retain their recorded turn and publishers after reload
     const persisted = await request.get(`/api/projects/${project.id}/nuwa`)
     expect(persisted.ok()).toBe(true)
     const snapshot = (await persisted.json()) as NuwaSnapshot
-    expect(snapshot.nodes).toHaveLength(2)
+    expect(snapshot.nodes).toHaveLength(3)
+    const threadWork = (await (await request.get(`/api/threads/${thread}/work`)).json()) as ThreadWorkSnapshot
+    expect(threadWork.nodes).toHaveLength(4)
+    const task = snapshot.nodes.find((node) => node.kind === "task")
+    const fact = snapshot.nodes.find((node) => node.kind === "fact")
     const managerResult = snapshot.nodes.find((node) => node.title === "Review notes")
-    const workerResult = snapshot.nodes.find((node) => node.title === "Field observations")
+    const workerResult = threadWork.nodes.find((node) => node.title === "Field observations")
     const worker = snapshot.workers.find((entry) => entry.role === "independent-review")
-    if (!managerResult || !workerResult || !worker) throw new Error("Recorded publishers are missing")
+    if (!managerResult || !workerResult || !worker || !task || !fact) throw new Error("Recorded work or publishers are missing")
     expect(managerResult.agent_id).toBe("manager")
     expect(workerResult).toMatchObject({ agent_id: worker.agent_id, generation: worker.generation })
     expect(worker.agent_id).not.toBe(managerResult.agent_id)
     for (const node of [managerResult, workerResult]) {
       expect(node).toMatchObject({ kind: "artifact", thread_id: thread, turn_id: turn.id })
-      expect(node.depends_on ?? []).toEqual([])
+      expect(node.depends_on).toEqual([fact.id])
+      expect(node.incomplete_basis).toBeUndefined()
     }
+    expect(fact.depends_on).toEqual([task.id])
 
-    const assertOrigins = async (graph: Locator) => {
-      // Two independently published results share no dependency. They collapse
-      // into one result row and one dashed arrow instead of a card each.
-      await expect(graph.getByTestId("nuwa-edge")).toHaveCount(0)
+    const assertPath = async (graph: Locator, result: NuwaNode, author: string) => {
+      await expect(graph.getByTestId("nuwa-edge")).toHaveCount(2)
       await expect(graph.getByTestId("nuwa-origin")).toHaveCount(0)
       await expect(graph.getByTestId("nuwa-goal")).toHaveCount(1)
-      const group = graph.getByTestId("nuwa-loose-group")
-      await expect(group).toHaveAttribute("data-kind", "artifact")
-      await expect(group).toHaveAttribute("data-count", "2")
       const edges = graph.getByTestId("nuwa-goal-edge")
       await expect(edges).toHaveCount(1)
       const routed = await edges.evaluateAll((paths) => paths.map((path) => [
@@ -364,31 +366,25 @@ test("published artifacts retain their recorded turn and publishers after reload
         path.getAttribute("data-to"),
         getComputedStyle(path).strokeDasharray !== "none",
       ]))
-      expect(routed).toEqual([[nuwaLooseGroupID("artifact"), NUWA_GOAL_ID, true]])
-      await group.click()
-      for (const [node, author] of [
-        [managerResult, "Manager"],
-        [workerResult, worker.role],
-      ] as const) {
-        const card = graph.getByRole("button", { name: new RegExp(node.title) })
-        await expect(card).toHaveAttribute("data-node-id", node.id)
-        await expect(card).toHaveAccessibleDescription(new RegExp(author))
-        await expect(card).toHaveAccessibleDescription(new RegExp(`in turn ${turn.id}`))
-      }
+      expect(routed).toEqual([[result.id, NUWA_GOAL_ID, true]])
+      const card = graph.getByRole("button", { name: new RegExp(result.title) })
+      await expect(card).toHaveAttribute("data-node-id", result.id)
+      await expect(card).toHaveAccessibleDescription(new RegExp(author))
+      await expect(card).toHaveAccessibleDescription(new RegExp(`in turn ${turn.id}`))
     }
 
     const sidebarPath = page.getByRole("region", { name: collaborationPaths, exact: true })
-    await assertOrigins(sidebarPath)
-    const group = sidebarPath.getByTestId("nuwa-loose-group")
-    await expect(group).toBeInViewport({ ratio: 1 })
-    for (const result of [managerResult, workerResult]) {
-      const card = sidebarPath.getByRole("button", { name: new RegExp(result.title) })
-      await expect(card).toBeInViewport({ ratio: 1 })
-    }
-    for (const [result, contents] of [
-      [managerResult, "# Review notes\n\nThe conclusion is limited to the measured input.\n"],
-      [workerResult, "# Field observations\n\nObserved facts were recorded.\n"],
+    for (const [scope, result, author, contents] of [
+      ["Entire project", managerResult, "Manager", "# Review notes\n\nThe conclusion is limited to the measured input.\n"],
+      ["This conversation", workerResult, worker.role, "# Field observations\n\nObserved facts were recorded.\n"],
     ] as const) {
+      await page.getByRole("button", { name: scope, exact: true }).click()
+      await assertPath(sidebarPath, result, author)
+      if (scope === "This conversation") {
+        await expect(sidebarPath.getByRole("button", { name: new RegExp(fact.title) })).toHaveText(/Project prerequisite/)
+        await expect(sidebarPath.getByRole("button", { name: new RegExp(managerResult.title) })).toHaveCount(0)
+        await expect(sidebarPath.getByText(/Unavailable dependency/)).toHaveCount(0)
+      }
       const card = sidebarPath.getByRole("button", { name: new RegExp(result.title) })
       await card.click()
       const output = await request.get(
@@ -402,10 +398,9 @@ test("published artifacts retain their recorded turn and publishers after reload
     await page.reload()
     await openThread(page, projectName, thread)
     await page.getByRole("tab", { name: "Work records", exact: true }).click()
-    await page.getByRole("button", { name: "Entire project", exact: true }).click()
     await page.getByRole("button", { name: "Expand graph", exact: true }).click()
     const dialog = page.getByRole("dialog", { name: collaborationPaths, exact: true })
-    await assertOrigins(dialog.getByRole("region", { name: collaborationPaths, exact: true }))
+    await assertPath(dialog.getByRole("region", { name: collaborationPaths, exact: true }), workerResult, worker.role)
     await expect(dialog.getByText("Converges to goal", { exact: true })).toBeVisible()
     await writeFile(
       info.outputPath("nuwa-published-artifact-origins.png"),

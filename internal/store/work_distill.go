@@ -44,9 +44,17 @@ func threadHasWork(tx *gorm.DB, threadID string) (bool, error) {
 	return exists, err
 }
 
+// DistilledWorkRecord uses batch-local keys rather than taking record IDs from
+// the model. The transaction resolves each reference to a record it created.
+type DistilledWorkRecord struct {
+	Key       string
+	DependsOn []string
+	Node      NuwaNode
+}
+
 // SaveDistilledWork commits one historical extraction without allowing a
 // partial batch, a second extraction, or a write after its source changes.
-func (s *Store) SaveDistilledWork(ctx context.Context, expected WorkDistillationState, nodes []NuwaNode) error {
+func (s *Store) SaveDistilledWork(ctx context.Context, expected WorkDistillationState, records []DistilledWorkRecord) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		current, err := readWorkDistillationState(tx, expected.ThreadID)
 		if err != nil {
@@ -56,9 +64,22 @@ func (s *Store) SaveDistilledWork(ctx context.Context, expected WorkDistillation
 			return ErrNuwaConflict
 		}
 		thread := Thread{ID: current.ThreadID, ProjectID: current.ProjectID, WorkRevision: current.ThreadRevision}
-		for _, node := range nodes {
-			if node.ThreadID != thread.ID || node.Scope != WorkScopeThread || node.ID != "" || len(node.Evidence) == 0 {
+		saved := make(map[string]NuwaNode, len(records))
+		for _, record := range records {
+			node := record.Node
+			if node.ThreadID != thread.ID || node.Scope != WorkScopeThread || node.ID != "" || len(node.Evidence) == 0 || len(node.DependsOn) != 0 {
 				return invalidNuwa("distillation requires new conversation records with source evidence")
+			}
+			if _, exists := saved[record.Key]; exists || len(record.Key) == 0 || len(record.Key) > 64 {
+				return invalidNuwa("distillation requires unique short record keys")
+			}
+			node.DependsOn = make([]string, 0, len(record.DependsOn))
+			for _, key := range record.DependsOn {
+				source, ok := saved[key]
+				if !ok || source.Kind == "artifact" {
+					return invalidNuwa("distillation dependencies must reference an earlier task or fact")
+				}
+				node.DependsOn = append(node.DependsOn, source.ID)
 			}
 			if err := validateNuwaNode(&node); err != nil {
 				return err
@@ -66,6 +87,7 @@ func (s *Store) SaveDistilledWork(ctx context.Context, expected WorkDistillation
 			if err := writeWorkNode(tx, thread, &node, 0, NuwaWriteReceipt{}); err != nil {
 				return err
 			}
+			saved[record.Key] = node
 		}
 		return nil
 	})

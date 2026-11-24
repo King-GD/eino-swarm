@@ -122,7 +122,7 @@ func (e *Engine) nuwaWorkTools(workspace string, turn *store.Turn, readOnly bool
 	if readOnly {
 		return []tool.BaseTool{read}
 	}
-	record := &nuwaTool{name: "record_work", description: "Record a task, reported fact, or existing workspace artifact. Creates require kind/title and default to this conversation. Updates require id/current version and patch only supplied fields. When evidence disproves a record, update its status and evidence on the same ID. Restore a supported fact or artifact to reported with its current version; review downstream records and confirm or correct their dependencies. Origin and correction identity come from the runtime.",
+	record := &nuwaTool{name: "record_work", description: "Record a task, reported fact, or existing workspace artifact. A reported artifact requires an actual task and reported fact in its depends_on chain. Creates require kind/title and default to this conversation. Updates require id/current version and patch only supplied fields. When evidence disproves a record, update its status and evidence on the same ID. Restore a supported fact or artifact to reported with its current version; review downstream records and confirm or correct their dependencies. Origin and correction identity come from the runtime.",
 		params: map[string]*schema.ParameterInfo{
 			"scope": {Type: schema.String, Desc: "On creation, thread (default) or project. Project scope also shares the private prerequisites. To share an existing record, send only id, current version, and scope project. Sharing is one-way and requires membership in the project."},
 			"id":    {Type: schema.String}, "version": {Type: schema.Integer}, "title": {Type: schema.String},

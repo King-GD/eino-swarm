@@ -186,6 +186,15 @@ func writeWorkNode(tx *gorm.DB, thread Thread, candidate *NuwaNode, expectedVers
 	if err := validateNuwaDependencies(nodes, candidate); err != nil {
 		return err
 	}
+	if candidate.Kind == "artifact" && candidate.Status == "reported" {
+		records := make(map[string]NuwaNode, len(nodes))
+		for _, node := range nodes {
+			records[node.ID] = node
+		}
+		if !artifactHasBasis(*candidate, records) {
+			return invalidNuwa("a reported artifact must link to an active task and a reported fact through depends_on")
+		}
+	}
 	return saveWorkVersion(tx, candidate, previous, stamp, receipt)
 }
 
@@ -199,6 +208,7 @@ func saveWorkVersion(tx *gorm.DB, candidate, previous *NuwaNode, updater workUpd
 	candidate.UpdatedBy, candidate.UpdatedThreadID, candidate.UpdatedTurnID = updater.by, updater.threadID, updater.turnID
 	candidate.UpdatedGeneration, candidate.UpdatedAt = updater.generation, now
 	candidate.MissingDependencies, candidate.UnavailableEvidence, candidate.StaleDependencies = nil, nil, nil
+	candidate.IncompleteBasis = false
 	if previous == nil {
 		candidate.Version, candidate.CreatedAt = 1, now
 		if err := tx.Create(candidate).Error; err != nil {

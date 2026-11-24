@@ -447,7 +447,7 @@ func TestNuwaValidationActualManagerPreservesAndClearsCASPatchFields(t *testing.
 			if len(result.Node.DependsOn) != 0 || len(result.Node.Evidence) != 0 || result.Node.Title != "Rechecked observation" {
 				t.Errorf("explicit patch fields were ignored: %+v", result.Node)
 			}
-			args = map[string]any{"scope": "project", "kind": "artifact", "title": "Reviewable file", "artifact_path": selected, "depends_on": []string{factID}}
+			args = map[string]any{"scope": "project", "kind": "artifact", "title": "Reviewable file", "artifact_path": selected, "depends_on": []string{taskID, factID}}
 		case 7:
 			if result.Node.ArtifactPath != "work/"+selected || result.Node.Kind != "artifact" {
 				t.Errorf("published artifact lost exact selected path: %+v", result.Node)
