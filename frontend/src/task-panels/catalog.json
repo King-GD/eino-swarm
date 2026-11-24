@@ -220,7 +220,7 @@
     "id": "easm-asset-portrait",
     "version": "1",
     "name": "EASM",
-    "description": "Show an enterprise asset portrait: the confirmed organization, its related companies, domains and certificates as a graph, with asset totals, attention trend and component distribution. Confirm the task subject first and ask the user when it is ambiguous. Open this panel and use the same full subject for every batch unless the task explicitly changes subject. Run the source per finished batch of the agent's own lookups. Include the subject's exact registry row as a confirmed company when available. Pass the findings with their first source and confirm ownership only when the evidence identifies the parent. Include the final asset query on the last batch. The panel collects the totals, trend and components for that query.",
+    "description": "Show an enterprise asset portrait: the confirmed organization, its related companies, domains and certificates as a graph, with asset totals, attention trend, component distribution and hosting providers. Confirm the task subject first and ask the user when it is ambiguous. Open this panel and use the same full subject for every batch unless the task explicitly changes subject. Run the source per finished batch of the agent's own lookups. Include the subject's exact registry row as a confirmed company when available. Pass the findings with their first source and confirm ownership only when the evidence identifies the parent. Include the final asset query on the last batch. The panel collects the totals, trend, components and hosting providers for that query.",
     "entry": "",
     "renderer": "native",
     "schema": {
@@ -279,7 +279,8 @@
                       "certificates",
                       "summary",
                       "heat",
-                      "components"
+                      "components",
+                      "clouds"
                     ]
                   },
                   "status": {
@@ -430,6 +431,65 @@
                         },
                         "additionalProperties": false
                       }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "clouds": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "category",
+              "assets",
+              "ips",
+              "services"
+            ],
+            "properties": {
+              "name": {
+                "$ref": "#/$defs/nonempty"
+              },
+              "display_name": {
+                "type": "string"
+              },
+              "category": {
+                "enum": [
+                  "cdn",
+                  "waf",
+                  "cloud",
+                  "storage",
+                  "mail",
+                  "platform",
+                  "own",
+                  "unknown"
+                ]
+              },
+              "assets": {
+                "$ref": "#/$defs/nonnegative"
+              },
+              "ips": {
+                "$ref": "#/$defs/nonnegative"
+              },
+              "services": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "count"
+                  ],
+                  "properties": {
+                    "name": {
+                      "$ref": "#/$defs/nonempty"
+                    },
+                    "count": {
+                      "$ref": "#/$defs/nonnegative"
                     }
                   },
                   "additionalProperties": false
@@ -696,7 +756,8 @@
       "nodes": [],
       "edges": [],
       "heat": [],
-      "components": []
+      "components": [],
+      "clouds": []
     },
     "source": {
       "id": "easm-asset-portrait",

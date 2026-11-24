@@ -127,14 +127,20 @@ func (r *run) heat(ctx context.Context) error {
 	return nil
 }
 
-// sameQuery rejects a reply that echoes a different query than the one sent:
-// its numbers describe another asset range.
+// sameQuery rejects a reply that echoes a different query than the run's own.
 func (r *run) sameQuery(raw json.RawMessage) error {
+	return queryMatches(raw, r.input.Query)
+}
+
+// queryMatches rejects a reply that echoes a query other than the one sent: its
+// numbers describe another asset range. Cloud rows send a filtered query, so
+// they compare against that instead of the run's.
+func queryMatches(raw json.RawMessage, sent string) error {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil
 	}
 	var echoed string
-	if json.Unmarshal(raw, &echoed) != nil || echoed != r.input.Query {
+	if json.Unmarshal(raw, &echoed) != nil || echoed != sent {
 		return fmt.Errorf("reply describes another query")
 	}
 	return nil

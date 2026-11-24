@@ -171,10 +171,14 @@ func TestHeatRefusesPointsTheChartCannotPlot(t *testing.T) {
 func componentCaller(products string, rules func(map[string]any) (string, error)) *fakeCaller {
 	return &fakeCaller{replies: metricReplies{
 		RoleStats: func(arguments map[string]any) (string, error) {
-			if arguments["fields"] == "ip" {
+			switch arguments["fields"] {
+			case "ip":
 				return `{"size":1,"distinct":{"ip":1}}`, nil
+			case "cloud_name":
+				return `{"aggs":{"cloud_name":[]}}`, nil
+			default:
+				return products, nil
 			}
-			return products, nil
 		},
 		RoleProductRules: rules,
 	}}

@@ -50,6 +50,13 @@ export function isEasmResult(value: unknown): value is EasmResult {
       types.add(tag.type)
     }
   }
+  // A panel stored before the cloud table existed has no clouds field at all.
+  if (result.clouds !== undefined) {
+    if (!Array.isArray(result.clouds)) return false
+    for (const cloud of result.clouds) {
+      if (!cloud || typeof cloud.name !== "string" || !cloud.name || !Array.isArray(cloud.services)) return false
+    }
+  }
   return true
 }
 

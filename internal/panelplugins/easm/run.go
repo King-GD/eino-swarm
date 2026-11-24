@@ -55,8 +55,8 @@ func Run(ctx context.Context, input Input, settings Settings, current json.RawMe
 	if caller == nil || publish == nil {
 		return Result{}, fmt.Errorf("easm source is not wired")
 	}
-	if settings.MaxDomains < 1 || settings.MaxComponents < 1 {
-		return Result{}, fmt.Errorf("max domains and components must be positive")
+	if settings.MaxDomains < 1 || settings.MaxComponents < 1 || settings.MaxClouds < 1 || settings.MaxServices < 1 {
+		return Result{}, fmt.Errorf("max domains, components, clouds and services must be positive")
 	}
 	r := &run{input: input, settings: settings, caller: caller, publish: publish}
 	if err := r.begin(current); err != nil {
@@ -87,7 +87,7 @@ func Run(ctx context.Context, input Input, settings Settings, current json.RawMe
 // finishedNext is the receipt's instruction once the panel holds every
 // aggregation for the query. Without it the agent keeps researching after the
 // portrait is complete, and the conversation outlives the panel by minutes.
-const finishedNext = "The panel now holds the totals, trend and components for this query. Reply with a short summary of the panel and end the turn without calling more tools."
+const finishedNext = "The panel now holds the totals, trend, components and hosting providers for this query. Reply with a short summary of the panel and end the turn without calling more tools."
 
 // next words the receipt from what the steps actually produced. A missing
 // aggregation is named instead of being implied by a completion claim, so the
@@ -129,7 +129,7 @@ func (r *run) begin(current json.RawMessage) error {
 		detail = mergeDetail(detail, &Detail{RegistryID: registry, RegistryName: r.input.Subject})
 	}
 	r.graph = NewGraph(r.input.Subject, detail)
-	r.state = State{SchemaVersion: 1, Title: r.input.Subject, Collection: Collection{Status: statusIdle}, Heat: []HeatPoint{}, Components: []Component{}}
+	r.state = State{SchemaVersion: 1, Title: r.input.Subject, Collection: Collection{Status: statusIdle}, Heat: []HeatPoint{}, Components: []Component{}, Clouds: []Cloud{}}
 	for _, step := range Steps {
 		r.state.Collection.Steps = append(r.state.Collection.Steps, StepStatus{ID: step, Status: statusPending})
 	}
@@ -149,6 +149,7 @@ func (r *run) begin(current json.RawMessage) error {
 	r.state.Summary = previous.Summary
 	r.state.Heat = orEmptyHeat(previous.Heat)
 	r.state.Components = orEmptyComponents(previous.Components)
+	r.state.Clouds = orEmptyClouds(previous.Clouds)
 	// Steps are rebuilt from the current pipeline, so a panel stored before a
 	// step retired keeps only the statuses this producer still reports.
 	for i, step := range Steps {
@@ -173,6 +174,7 @@ func (r *run) planMetrics() bool {
 		r.state.Summary = nil
 		r.state.Heat = []HeatPoint{}
 		r.state.Components = []Component{}
+		r.state.Clouds = []Cloud{}
 	}
 	summary := r.state.Summary
 	if summary != nil {
@@ -447,6 +449,13 @@ func orEmptyComponents(components []Component) []Component {
 		return []Component{}
 	}
 	return components
+}
+
+func orEmptyClouds(clouds []Cloud) []Cloud {
+	if clouds == nil {
+		return []Cloud{}
+	}
+	return clouds
 }
 
 func safeLogo(value string) string {

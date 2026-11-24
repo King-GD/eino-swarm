@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react"
-import type { DisplayKind, TagType } from "./types"
+import type { CloudCategory, DisplayKind, TagType } from "./types"
 
 /** Panel copy. Data values (names, domains, filing numbers) are shown as the
  *  source returned them; only the surrounding words are translated here. */
@@ -33,6 +33,15 @@ const en = {
   supplyCaption: (count: number) => `Supply chain components, ordered by trending, KEV and CVE; ${count} items`,
   component: "Component", count: "Aggregate count", tagsColumn: "Attention tags", tagEvidence: (name: string) => `View tag evidence for ${name}`,
   tagDescription: "Trending and vulnerability tag evidence for this component",
+  cloudTitle: "Cloud providers", cloudCount: (count: string) => `${count} providers`,
+  cloudRegion: "All cloud providers, scrollable", cloudLoading: "Loading cloud providers", cloudEmpty: "No cloud provider data",
+  cloudCaption: (count: number) => `Cloud providers hosting the confirmed assets; ${count} providers`,
+  cloudProvider: "Provider", cloudCategory: "Category", cloudAssets: "Assets", cloudIPs: "IPs", cloudServices: "Main services",
+  cloudService: (name: string, count: string) => `${name} ${count}`,
+  cloudCategories: {
+    cdn: "CDN", waf: "Protection", cloud: "Cloud", storage: "Object storage", mail: "Mail",
+    platform: "Hosting platform", own: "Own network", unknown: "—",
+  } satisfies Record<CloudCategory, string>,
   logo: (name: string) => `${name} logo`,
   filingSubject: (subject: string) => ` ${subject}'s filing record`, filingSaved: "the saved filing record",
   filing: (source: string, filing: string, domains: string) => `From${source}. Extracted: ICP filing ${filing}, domains ${domains}.`,
@@ -76,6 +85,15 @@ const zh: EasmText = {
   supplyCaption: (count) => `供应链组件，按热搜、KEV、CVE 优先级排序；共 ${count} 项`,
   component: "组件", count: "聚合计数", tagsColumn: "关注标签", tagEvidence: (name) => `查看${name}标签依据`,
   tagDescription: "该组件的热搜和漏洞标签依据",
+  cloudTitle: "云服务商", cloudCount: (count) => `${count}家`,
+  cloudRegion: "全部云服务商，可滚动查看", cloudLoading: "正在加载云服务商", cloudEmpty: "暂无云服务商数据",
+  cloudCaption: (count) => `企业资产所在的云服务商，共 ${count} 家`,
+  cloudProvider: "云商", cloudCategory: "类别", cloudAssets: "资产", cloudIPs: "IP", cloudServices: "主要服务",
+  cloudService: (name, count) => `${name} ${count}`,
+  cloudCategories: {
+    cdn: "CDN", waf: "云防护", cloud: "云主机", storage: "对象存储", mail: "邮件",
+    platform: "托管平台", own: "自有网络", unknown: "—",
+  },
   logo: (name) => `${name}标识`,
   filingSubject: (subject) => ` ${subject} 的备案记录`, filingSaved: "已保存的备案记录",
   filing: (source, filing, domains) => `线索来源于${source}。提取信息：ICP备案 ${filing}，域名 ${domains}。`,

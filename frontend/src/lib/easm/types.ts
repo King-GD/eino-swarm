@@ -78,9 +78,29 @@ export interface EasmComponent {
   tags?: { type: TagType; summary?: string; evidence?: EasmTagEvidence[] }[]
 }
 
+/** Hosting kind of one provider; the producer reports a stable key so the copy
+ *  stays in the user's language. */
+export type CloudCategory = "cdn" | "waf" | "cloud" | "storage" | "mail" | "platform" | "own" | "unknown"
+
+export interface EasmCloudService {
+  name: string
+  count: number
+}
+
+/** One hosting provider row: the company's assets behind it, not the provider's
+ *  own footprint. */
+export interface EasmCloud {
+  name: string
+  display_name?: string
+  category: CloudCategory
+  assets: number
+  ips: number
+  services: EasmCloudService[]
+}
+
 export type EasmStepId =
   | "organizations" | "relations" | "branches" | "filings" | "asset_rules"
-  | "certificates" | "summary" | "heat" | "components"
+  | "certificates" | "summary" | "heat" | "components" | "clouds"
 export type EasmStepStatus = "pending" | "running" | "done" | "failed" | "skipped" | "unavailable" | "interrupted"
 
 /** Producer progress. Step status drives loading indicators, so no transient
@@ -100,4 +120,6 @@ export interface EasmResult {
   summary?: { clues?: number; fofa_assets?: number; fofa_ips?: number }
   heat: { date: string; value: number }[]
   components: EasmComponent[]
+  /** Absent on a panel stored before the table existed. */
+  clouds?: EasmCloud[]
 }

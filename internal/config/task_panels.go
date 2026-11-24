@@ -30,6 +30,10 @@ type EASMPanelConfig struct {
 	Tools         map[string]string `yaml:"tools" json:"tools"`
 	MaxDomains    int               `yaml:"max_domains" json:"max_domains"`
 	MaxComponents int               `yaml:"max_components" json:"max_components"`
+	// MaxClouds bounds the hosting provider rows; MaxServices the services
+	// listed inside each row.
+	MaxClouds   int `yaml:"max_clouds" json:"max_clouds"`
+	MaxServices int `yaml:"max_services" json:"max_services"`
 }
 
 // EASMToolRoles are the aggregation roles of the portrait producer, with the
@@ -117,12 +121,21 @@ func (c EASMPanelConfig) withDefaults() EASMPanelConfig {
 	if c.MaxComponents == 0 {
 		c.MaxComponents = 20
 	}
+	if c.MaxClouds == 0 {
+		c.MaxClouds = 5
+	}
+	if c.MaxServices == 0 {
+		c.MaxServices = 3
+	}
 	return c
 }
 
 func (c EASMPanelConfig) validate() error {
 	if c.MaxDomains < 1 || c.MaxDomains > 200 || c.MaxComponents < 5 || c.MaxComponents > 100 {
 		return fmt.Errorf("invalid EASM settings: max_domains must be 1..200 and max_components 5..100")
+	}
+	if c.MaxClouds < 1 || c.MaxClouds > 20 || c.MaxServices < 1 || c.MaxServices > 10 {
+		return fmt.Errorf("invalid EASM settings: max_clouds must be 1..20 and max_services 1..10")
 	}
 	for role, name := range c.Tools {
 		if retiredEASMToolRoles[role] {
@@ -139,6 +152,28 @@ func (c EASMPanelConfig) validate() error {
 	}
 	if c.ServerID != strings.TrimSpace(c.ServerID) {
 		return fmt.Errorf("invalid EASM settings: server_id must be trimmed")
+	}
+	return validateCloudLabels(EASMCloudLabels)
+}
+
+// validateCloudLabels keeps the label table usable as a lookup: a key that is
+// not lowercase would never match, and a category outside the published set
+// would reach the renderer as a blank cell.
+func validateCloudLabels(labels map[string]CloudLabel) error {
+	known := make(map[string]bool, len(EASMCloudCategories))
+	for _, category := range EASMCloudCategories {
+		known[category] = true
+	}
+	for name, label := range labels {
+		if name == "" || name != strings.ToLower(strings.TrimSpace(name)) {
+			return fmt.Errorf("invalid EASM cloud label %q: keys must be trimmed lowercase", name)
+		}
+		if strings.TrimSpace(label.Display) == "" {
+			return fmt.Errorf("invalid EASM cloud label %q: display name is empty", name)
+		}
+		if !known[label.Category] {
+			return fmt.Errorf("invalid EASM cloud label %q: unknown category %q", name, label.Category)
+		}
 	}
 	return nil
 }
