@@ -878,7 +878,10 @@ In **Knowledge → Build wiki graph**, choose **Current task** or **Current proj
 to build a graph from retained history. The builder reads eligible sources in
 full and extracts entities and events across subjects. It saves nodes, links
 and original sources as batches finish, so you can open a node before its
-document is ready. After extraction, it appends source observations to the
+document is ready. The panel shows when the first batch is awaiting verification
+and counts saved batches even while a long record is still in progress.
+Some model and validation failures retry with a smaller piece of the same
+source. After extraction, it appends source observations to the
 documents and preserves existing prose. The two progress bars show the
 source review and the document updates. Pause and resume use the saved
 positions. The graph build has its own receipt alongside **Distill**.

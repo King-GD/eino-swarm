@@ -131,7 +131,7 @@ func TestWikiProposalRefusesIncompleteCoverageAndUnsupportedRelations(t *testing
 func TestWikiBuildRetriesIncompleteCoverageWithoutAdvancing(t *testing.T) {
 	e, requests := distillWire(t, func(w http.ResponseWriter, req scheduleCompletionRequest, step int) {
 		proposal := `{"reviewed":[],"nodes":[],"links":[]}`
-		if step > 1 {
+		if step > 2 {
 			proposal = `{"reviewed":[1],"nodes":[],"links":[]}`
 		}
 		nuwaValidationTool(w, req, fmt.Sprintf("coverage-%d", step), wikiExtractTool, proposal)
@@ -143,16 +143,30 @@ func TestWikiBuildRetriesIncompleteCoverageWithoutAdvancing(t *testing.T) {
 	}
 	th := knowledgeFixtureThread(t, e, p.ID, "Original task")
 	distillEvent(t, e, th, store.TurnDone, KindUser, "Source that contains no graph facts.")
-	if _, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{Scope: "project", WikiGraph: true}); err != nil {
+	started, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{Scope: "project", WikiGraph: true})
+	if err != nil {
 		t.Fatal(err)
 	}
+	resumed := false
 	for deadline := time.Now().Add(8 * time.Second); time.Now().Before(deadline); {
 		r, err := e.ProjectWikiBuildStatus(t.Context(), p.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if r.State != "running" {
-			if r.State != "completed" || requests.Load() != 2 || r.Progress.Processed != 1 || r.Progress.Batches != 1 || r.WikiDocumented != 0 {
+			if !resumed {
+				if r.State != "failed" || r.ErrorCode != "evidence" || requests.Load() != 2 || r.Progress.Processed != 0 || r.Progress.Batches != 0 {
+					t.Fatalf("exhausted evidence retries changed the saved position: %+v %+v requests=%d", r, r.Progress, requests.Load())
+				}
+				if _, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{
+					ResumeReviewID: started.ReviewID, WikiGraph: true,
+				}); err != nil {
+					t.Fatal(err)
+				}
+				resumed = true
+				continue
+			}
+			if r.State != "completed" || requests.Load() != 3 || r.Progress.Processed != 1 || r.Progress.Batches != 1 || r.WikiDocumented != 0 {
 				t.Fatalf("an incomplete model batch was counted or not recovered: %+v %+v requests=%d", r, r.Progress, requests.Load())
 			}
 			return
@@ -160,6 +174,101 @@ func TestWikiBuildRetriesIncompleteCoverageWithoutAdvancing(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("the incomplete graph batch was not settled")
+}
+
+func TestWikiBuildNarrowsARefusedBatchWithoutLosingSourceBytes(t *testing.T) {
+	const beginning = "Start of observation. "
+	const ending = " End of observation."
+	source := beginning + strings.Repeat("原始记录。 ", 680) + ending
+	framing := regexp.MustCompile(`(?m)^\[seq=1 kind=[^\n]+byte_offset=(\d+)\] human: `)
+	var mu sync.Mutex
+	covered := make([]bool, len(source))
+	var refused int
+	e, _ := distillWire(t, func(w http.ResponseWriter, r scheduleCompletionRequest, step int) {
+		input := r.Messages[1].Content
+		match := framing.FindStringSubmatchIndex(input)
+		if match == nil {
+			t.Error("model request did not include the saved source")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		offset, _ := strconv.Atoi(input[match[2]:match[3]])
+		part := strings.TrimSuffix(input[match[1]:], "\n\n")
+		end := offset + len(part)
+		if end > len(source) || part != source[offset:end] {
+			t.Error("a re-planned chunk sent different bytes from the original source")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		proposal := `{"reviewed":[1],"nodes":[],"links":[]}`
+		mu.Lock()
+		if len(input) > 4096 {
+			// Reject the wide window, even on the in-session correction.
+			// Bytes from this window count only if a smaller one is accepted.
+			refused++
+			proposal = `{"reviewed":[],"nodes":[],"links":[]}`
+		} else {
+			for i := offset; i < end; i++ {
+				covered[i] = true
+			}
+		}
+		mu.Unlock()
+		nuwaValidationTool(w, r, fmt.Sprintf("narrow-%d", step), wikiExtractTool, proposal)
+	})
+	e.cfg.Memory.ReviewMaxIterations = 5
+	p, err := e.CreateProject("Bounded wiki review", "", "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	th := knowledgeFixtureThread(t, e, p.ID, "Source")
+	distillEvent(t, e, th, store.TurnDone, KindUser, source)
+	if _, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{Scope: "thread", ThreadID: th.ID, WikiGraph: true}); err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(8 * time.Second); time.Now().Before(deadline); {
+		status, err := e.ProjectWikiBuildStatus(t.Context(), p.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if status.State == "running" {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		if status.State != "completed" || status.Progress.Processed != 1 || status.Progress.Skipped != 0 || status.Progress.Batches < 3 {
+			t.Fatalf("refused batch did not recover without skipping the record: %+v %+v", status, status.Progress)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if refused < 2 {
+			t.Fatalf("did not exercise a refused input and correction: %d", refused)
+		}
+		for i, accepted := range covered {
+			if !accepted {
+				t.Fatalf("source byte %d was not sent in any accepted input", i)
+			}
+		}
+		return
+	}
+	t.Fatal("wiki build did not settle after smaller retries")
+}
+
+func TestWikiBuildOnlyNarrowsInputForRecoverableBatchFailures(t *testing.T) {
+	for _, code := range []string{"evidence", "context_overflow", "iteration_limit", "agent_timeout"} {
+		if got := wikiRetryBudget(code, 8192); got != 4096 {
+			t.Errorf("%s retries with %d bytes, want 4096", code, got)
+		}
+		if got := wikiRetryBudget(code, 2896); got != 2048 {
+			t.Errorf("%s retries with %d bytes, want the 2048 byte floor", code, got)
+		}
+		if got := wikiRetryBudget(code, 2048); got != 0 {
+			t.Errorf("%s can retry indefinitely at the minimum budget: %d", code, got)
+		}
+	}
+	for _, code := range []string{"rate_limited", "model_settings", "temporary_model", "first_byte_timeout", ""} {
+		if got := wikiRetryBudget(code, 8192); got != 0 {
+			t.Errorf("%s unexpectedly replanned the batch: %d", code, got)
+		}
+	}
 }
 
 func TestWikiBuildRecoversPublishedDocumentAfterReceiptWriteFails(t *testing.T) {
@@ -259,6 +368,11 @@ func TestWikiBuildPublishesGraphBeforeDocumentsAndResumesFullSource(t *testing.T
 		}
 		proposal := map[string]any{"reviewed": reviewed, "nodes": []any{}, "links": []any{}}
 		if strings.Contains(transcript, first) {
+			// The leading interactive request must stay small even if the
+			// first record is huge. Later requests can use the normal budget.
+			if len(transcript) > 2048 {
+				t.Errorf("first model request sent %d bytes of history; want at most 2048", len(transcript))
+			}
 			evidence := map[string]any{"seq": 1, "quote": first}
 			proposal["nodes"] = []any{
 				map[string]any{"key": "person", "title": "Sable Finch", "kind": "entity", "category": "person", "evidence": evidence},

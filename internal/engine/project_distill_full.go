@@ -12,7 +12,7 @@ import (
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 )
 
-func (e *Engine) distillationFullSlice(ctx context.Context, job *projectDistillWork, cursor uint, rows []store.DistillationSourceRow) (*projectDistillWork, error) {
+func (e *Engine) distillationFullSlice(ctx context.Context, job *projectDistillWork, cursor uint, rows []store.DistillationSourceRow, maxBytes int) (*projectDistillWork, error) {
 	calls, err := e.store.DistillationCallHeads(ctx, distillationCallIDs(rows))
 	if err != nil {
 		return nil, err
@@ -26,7 +26,7 @@ func (e *Engine) distillationFullSlice(ctx context.Context, job *projectDistillW
 	for _, row := range rows {
 		handle := int64(len(batch.sources.sources) + 1)
 		header := distillationFullHeader(row, handle, offset, calls[row.CallID])
-		room := reviewMaxChars - transcript.Len() - len(header) - len("\n\n")
+		room := maxBytes - transcript.Len() - len(header) - len("\n\n")
 		if header != "" && room < utf8.UTFMax {
 			if len(batch.sources.sources) == 0 {
 				return nil, errors.New("distillation source identity exceeds the review budget")

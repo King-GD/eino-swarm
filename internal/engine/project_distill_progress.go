@@ -201,7 +201,7 @@ func (e *Engine) runDistillationSlice(ctx context.Context, job *projectDistillWo
 			return cursor, false
 		}
 	}
-	batch, err := e.loadDistillationSlice(ctx, job, cursor)
+	batch, err := e.loadDistillationSlice(ctx, job, cursor, reviewMaxChars)
 	if err != nil {
 		stopDistillation(ctx, &job.result, err)
 		return cursor, false
@@ -263,7 +263,7 @@ func stopDistillation(ctx context.Context, result *DistillationResult, err error
 	result.State, result.Error = "failed", publicTurnError(err)
 }
 
-func (e *Engine) loadDistillationSlice(ctx context.Context, job *projectDistillWork, cursor uint) (*projectDistillWork, error) {
+func (e *Engine) loadDistillationSlice(ctx context.Context, job *projectDistillWork, cursor uint, maxBytes int) (*projectDistillWork, error) {
 	load := e.store.DistillationWindow
 	if job.result.FullText {
 		load = e.store.DistillationMetadataWindow
@@ -276,7 +276,7 @@ func (e *Engine) loadDistillationSlice(ctx context.Context, job *projectDistillW
 		return nil, fmt.Errorf("distillation history checkpoint has %d records remaining but no saved source", job.result.Progress.Remaining)
 	}
 	if job.result.FullText {
-		return e.distillationFullSlice(ctx, job, cursor, rows)
+		return e.distillationFullSlice(ctx, job, cursor, rows, maxBytes)
 	}
 	return e.distillationSliceFromRows(ctx, job, cursor, rows)
 }

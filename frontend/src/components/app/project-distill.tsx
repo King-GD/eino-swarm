@@ -208,6 +208,11 @@ export function ProjectDistillStatus({ projectId, wikiGraph = false }: { project
           ) : null}
         </div>
       ) : null}
+      {wikiGraph && result?.wiki_phase === "graph" && progress && (progress.batches > 0 || running) ? (
+        <p aria-live="polite" data-testid="wiki-source-batches">
+          {progress.batches > 0 ? t("knowledge.wikiSourceBatches", { count: progress.batches }) : t("knowledge.wikiFirstBatch")}
+        </p>
+      ) : null}
       {result?.wiki_phase === "documents" ? (
         <div className="grid gap-1">
           <ReviewProgressBar label={t("knowledge.wikiDocumentProgressLabel")} percent={result.wiki_documents ?

@@ -2670,9 +2670,10 @@ and current-project manual distillation freeze source identities in SQLite,
 read bounded batches in order and commit a cursor with each accepted receipt.
 Full-text mode also commits the byte offset inside an unfinished source. The
 event cursor advances after the final segment, and explicitly resumed jobs use
-both saved positions. Wiki builds use a separate project receipt and submit
-several independent source windows to the reviewer at once. They validate
-drafts and commit completed windows in source order. A bulk publisher uses one
+both saved positions. Wiki builds use a separate project receipt. They submit
+a short first window, then send several bounded source windows to the reviewer
+at once. Eligible failures reduce the input size at the uncommitted position.
+They validate drafts and commit completed windows in source order. A bulk publisher uses one
 wiki snapshot to validate nodes and writes each Markdown file atomically.
 The document pass extends articles from the verified observations already
 stored with each node. The Knowledge graph projects the

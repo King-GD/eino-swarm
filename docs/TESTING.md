@@ -1065,10 +1065,13 @@ repeats the committed batch nor admits history added after the snapshot.
 The pause response stays pending until the reviewer exits. Browser coverage
 checks the toolbar resumes the original task after reopening, and the real
 reviewer checks that an explicit resume after failure still excludes peers.
-The wiki build loopback test holds a later segment while the first nodes and
+The wiki build loopback tests cap the first model input and hold a later segment while the first nodes and
 their undirected edge become visible. It checks the original attribution,
 pauses and resumes inside the source, and checks article completion without
-overwriting a separate distillation receipt. The store test covers article
+overwriting a separate distillation receipt. A wide-input refusal is
+replanned, with assertions that the accepted model inputs cover every original
+UTF-8 byte. The browser shows verified batch counts before the first record is
+complete. The store test covers article
 edits, replay and untrusted excerpt markup. The browser follows the Knowledge
 entry through the generated graph and article endpoints. `wiki-build-*`
 TLC cases catch early document publication, early completion and a lost

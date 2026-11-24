@@ -280,7 +280,7 @@ func TestDistillationFullTextAccountsForSourcesLostBetweenSegments(t *testing.T)
 	if err := e.store.DB().Delete(&store.Event{}, removed.ID).Error; err != nil {
 		t.Fatal(err)
 	}
-	batch, err := e.loadDistillationSlice(t.Context(), job, 0)
+	batch, err := e.loadDistillationSlice(t.Context(), job, 0, reviewMaxChars)
 	if err != nil || batch.checkpoint.count != 2 || batch.checkpoint.skipped != 2 ||
 		batch.checkpoint.segmentBytes != 0 || len(batch.sources.sources) != 0 {
 		t.Fatalf("changed sources supplied a different suffix to the next batch: %+v %v", batch, err)
@@ -291,7 +291,7 @@ func TestDistillationFullTextAccountsForSourcesLostBetweenSegments(t *testing.T)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := e.distillationFullSlice(ctx, job, 0, rows); !errors.Is(err, context.Canceled) {
+	if _, err := e.distillationFullSlice(ctx, job, 0, rows, reviewMaxChars); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation became a skipped record: %v", err)
 	}
 }

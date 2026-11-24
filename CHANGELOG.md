@@ -88,6 +88,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Wiki graph builds use a smaller first batch for earlier publication. Large
+  failed batches can retry with smaller source segments, and the panel shows
+  verified batch counts while a long record is still in progress. (`F-138`, `C-054`)
+
 - Conversation image sends, including queued follow-ups, pass the original
   image and caption to the conversation model and keep the image in history,
   independent of OCR availability. Desktop and Web image previews offer

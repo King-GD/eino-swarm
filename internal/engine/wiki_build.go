@@ -10,6 +10,8 @@ import (
 )
 
 const wikiExtractParallelism = 6
+const wikiExtractBytes = 8 * 1024
+const wikiMinimumExtractBytes = 2 * 1024
 const wikiDocumentBatch = 64
 
 type wikiDraftResult struct {
@@ -19,6 +21,11 @@ type wikiDraftResult struct {
 }
 
 func (e *Engine) runWikiBuild(ctx context.Context, gate chan struct{}, job *projectDistillWork, cursor uint) {
+	maxBytes, parallelism := wikiExtractBytes, wikiExtractParallelism
+	if job.result.Progress.Batches == 0 {
+		// Publish a small first batch before starting bulk requests.
+		maxBytes, parallelism = wikiMinimumExtractBytes, 1
+	}
 	for job.result.Progress.Remaining > 0 {
 		select {
 		case gate <- struct{}{}:
@@ -26,15 +33,20 @@ func (e *Engine) runWikiBuild(ctx context.Context, gate chan struct{}, job *proj
 			job.result.State = "interrupted"
 			return
 		}
-		next, err := func() (uint, error) {
+		next, retryBytes, err := func() (uint, int, error) {
 			defer func() { <-gate }()
-			return e.runWikiWindow(ctx, job, cursor)
+			return e.runWikiWindow(ctx, job, cursor, maxBytes, parallelism)
 		}()
 		cursor = next
+		if retryBytes > 0 && ctx.Err() == nil {
+			maxBytes, parallelism = retryBytes, 1
+			continue
+		}
 		if err != nil {
 			stopDistillation(ctx, &job.result, err)
 			return
 		}
+		maxBytes, parallelism = wikiExtractBytes, wikiExtractParallelism
 	}
 	e.renderWikiBuild(ctx, gate, job, cursor)
 }
@@ -42,13 +54,13 @@ func (e *Engine) runWikiBuild(ctx context.Context, gate chan struct{}, job *proj
 // Plan independent model inputs with a temporary cursor. Publication and
 // durable progress still follow source order. No window can commit past an
 // unaccepted batch, and cancellation joins its in-flight reviewers.
-func (e *Engine) planWikiWindow(ctx context.Context, job *projectDistillWork, cursor uint) ([]*projectDistillWork, error) {
+func (e *Engine) planWikiWindow(ctx context.Context, job *projectDistillWork, cursor uint, maxBytes, parallelism int) ([]*projectDistillWork, error) {
 	plan := *job
 	progress := *plan.result.Progress
 	plan.result.Progress = &progress
 	var batches []*projectDistillWork
-	for len(batches) < wikiExtractParallelism && progress.Remaining > 0 {
-		batch, err := e.loadDistillationSlice(ctx, &plan, cursor)
+	for len(batches) < parallelism && progress.Remaining > 0 {
+		batch, err := e.loadDistillationSlice(ctx, &plan, cursor, maxBytes)
 		if err != nil {
 			return nil, err
 		}
@@ -61,13 +73,13 @@ func (e *Engine) planWikiWindow(ctx context.Context, job *projectDistillWork, cu
 	return batches, nil
 }
 
-func (e *Engine) runWikiWindow(ctx context.Context, job *projectDistillWork, cursor uint) (uint, error) {
+func (e *Engine) runWikiWindow(ctx context.Context, job *projectDistillWork, cursor uint, maxBytes, parallelism int) (uint, int, error) {
 	if err := e.validateDistillationDestinations(job.projectID, job.kb, job.result); err != nil {
-		return cursor, err
+		return cursor, 0, err
 	}
-	batches, err := e.planWikiWindow(ctx, job, cursor)
+	batches, err := e.planWikiWindow(ctx, job, cursor, maxBytes, parallelism)
 	if err != nil {
-		return cursor, err
+		return cursor, 0, err
 	}
 	windowCtx, cancel := context.WithCancel(ctx)
 	var workers sync.WaitGroup
@@ -85,7 +97,8 @@ func (e *Engine) runWikiWindow(ctx context.Context, job *projectDistillWork, cur
 		result := results[i]
 		workers.Go(func() {
 			proposal, code, err := e.extractWikiDraft(windowCtx, batch)
-			if err != nil && windowCtx.Err() == nil && (code == "evidence" || code == "temporary_model") {
+			if err != nil && windowCtx.Err() == nil &&
+				(code == "temporary_model" || (code == "evidence" && len(batch.sources.transcript) <= wikiMinimumExtractBytes)) {
 				proposal, code, err = e.extractWikiDraft(windowCtx, batch)
 			}
 			result <- wikiDraftResult{proposal, code, err}
@@ -94,20 +107,37 @@ func (e *Engine) runWikiWindow(ctx context.Context, job *projectDistillWork, cur
 	for i, batch := range batches {
 		select {
 		case <-windowCtx.Done():
-			return cursor, context.Cause(ctx)
+			return cursor, 0, context.Cause(ctx)
 		case draft := <-results[i]:
 			if draft.err != nil {
+				if smaller := wikiRetryBudget(draft.code, len(batch.sources.transcript)); smaller > 0 {
+					return cursor, smaller, draft.err
+				}
 				job.result.ErrorCode, job.result.ErrorProviderID = draft.code, job.route.provider
-				return cursor, draft.err
+				return cursor, 0, draft.err
 			}
 			batch.checkpoint.current = &job.result
 			if err := e.publishWikiDraft(ctx, batch, draft.proposal); err != nil {
-				return cursor, err
+				return cursor, 0, err
 			}
 			cursor = batch.checkpoint.to
 		}
 	}
-	return cursor, nil
+	return cursor, 0, nil
+}
+
+// Re-read the uncommitted source from the same cursor and byte offset.
+// Smaller inputs reduce model output pressure without losing any evidence.
+func wikiRetryBudget(code string, size int) int {
+	if size <= wikiMinimumExtractBytes {
+		return 0
+	}
+	switch code {
+	case "evidence", "context_overflow", "iteration_limit", "agent_timeout":
+		return max(wikiMinimumExtractBytes, size/2)
+	default:
+		return 0
+	}
 }
 
 func (e *Engine) publishWikiDraft(ctx context.Context, batch *projectDistillWork, proposal *wikiProposal) error {

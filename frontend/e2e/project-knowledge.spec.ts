@@ -199,6 +199,42 @@ test("Full-text progress shows a partially reviewed record without counting it a
   }
 })
 
+test("Wiki build shows saved source batches before a long record finishes", async ({ page }) => {
+  const { projectId, threadId } = await openProjectConversation(page, `Wiki batch progress ${Date.now()}`, true)
+  const endpoint = `/api/projects/${projectId}/distill`
+  let started = false
+  let accepted = false
+  await page.route((url) => url.pathname === endpoint, async (route) => {
+    const request = route.request()
+    if (request.method() === "POST") {
+      expect(request.postDataJSON()).toEqual({ scope: "thread", thread_id: threadId, wiki_graph: true })
+      started = true
+    } else if (new URL(request.url()).searchParams.get("wiki_graph") !== "true") {
+      await route.continue()
+      return
+    }
+    await route.fulfill({ json: started ? {
+      state: "running", review_id: "wiki-progress", scope: "thread", wiki_graph: true, wiki_phase: "graph",
+      progress: {
+        total: 1, processed: 0, remaining: 1, skipped: 0, batches: accepted ? 1 : 0,
+        ...(accepted ? { segment_bytes: 1800, segment_total_bytes: 96000 } : {}),
+      },
+    } : { state: "idle" } })
+  })
+  try {
+    await knowledgeTab(page).click()
+    await page.getByTestId("knowledge-build").click()
+    await page.getByRole("menuitem", { name: "Current task", exact: true }).click()
+    const status = page.getByTestId("project-wiki-build-status")
+    await expect(status.getByTestId("wiki-source-batches")).toHaveText("The first source batch is awaiting verification.")
+    accepted = true
+    await expect(status.getByTestId("wiki-source-batches")).toHaveText("Source batches verified and saved · 1")
+    await expect(status.getByTestId("project-distill-progress")).toHaveText("0 of 1 history records processed · 1 remaining")
+  } finally {
+    await page.request.delete(`/api/projects/${projectId}`)
+  }
+})
+
 test("Wiki build publishes its graph, documents, and sources independently of distillation", async ({ page }) => {
   const { projectId, threadId } = await openProjectConversation(page, `Wiki build ${Date.now()}`, true)
   const endpoint = `/api/projects/${projectId}/distill`
