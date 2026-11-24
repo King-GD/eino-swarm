@@ -40,6 +40,31 @@ func TestPhoneDoesNotPinTheConfiguredAccountDefault(t *testing.T) {
 	}
 }
 
+func TestPhoneCatalogPlacesTheHostDefaultBeforeOtherProviderDefaults(t *testing.T) {
+	e := accountPhoneEngine(t, "gateway-chat")
+	if err := e.Config().Update(func(c *config.Config) error {
+		c.Product.Mode = config.ProductModeLocal
+		c.Models.DefaultSource = config.DefaultSourceProvider
+		c.Models.Providers = append(c.Models.Providers, config.Provider{
+			ID: "selected", BaseURL: "https://selected.invalid/v1", Model: "selected-model",
+		})
+		c.Models.Default = "selected"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	resp := handleCatalog(e, Request{ID: "catalog"}, "", "")
+	if !resp.OK || len(resp.Models) == 0 || resp.Models[0].ProviderID != "selected" || !resp.Models[0].Default {
+		t.Fatalf("first catalog model did not match the PC setting: %+v", resp.Models)
+	}
+	for _, row := range resp.Models {
+		if row.ProviderID == "endpoint" && row.Model == "own-model" && row.Default && row.DefaultFollowsSetting {
+			return
+		}
+	}
+	t.Fatalf("existing conversations lost their own provider's default: %+v", resp.Models)
+}
+
 func TestPhoneCatalogShowsAMissingAccountDefaultAsUnavailable(t *testing.T) {
 	e := accountPhoneEngine(t, "first-model", "second-model")
 	if err := e.Config().Update(func(c *config.Config) error {

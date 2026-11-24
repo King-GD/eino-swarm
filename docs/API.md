@@ -334,9 +334,10 @@ Client startup metadata. During recovery, clients poll it until `startup` is `re
 `configured` is true when a model can answer: the offline provider, a configured
 provider with a usable endpoint, **or** a signed-in server account whose models
 are ready. `product_mode` is `fofa` or `local`; see `PUT /api/settings`.
-`default_provider` is the provider id a new conversation uses
-(`gateway:<hex>` when the account's models are the chosen default source, see
-`models.default_source`). `account_models` is what the local UI may know about
+`default_provider` is the provider id a new conversation uses. It follows the
+scoped conversation binding or the selected default source. In LOCAL with the
+account source selected, it prefers the available original Gateway chat
+catalog. `account_models` is what the local UI may know about
 the signed-in server account's model access; it never carries a credential or an
 endpoint:
 
@@ -671,8 +672,10 @@ For `embedding` only, `{ "provider_id": "", "model": "" }` explicitly disables
 semantic search, overriding both a gateway default and a legacy search pin.
 A partially empty reference is invalid.
 Saved gateway scopes separate origin/source/account owner and survive token renewal.
-`models.default_source` and `account_model` remain legacy fallback fields; an
-editable gateway binding save retires these global pins. `account_presentation`
+`models.default_source` chooses the source when the scope has no conversation
+binding. `account_model` is the legacy selection within the Gateway-mode
+account catalog. An editable Gateway binding save clears that pin and resets
+`default_source` to `account`. `account_presentation`
 remains validated as `official`/`full` for compatibility and cannot unlock a preset.
 Gateway catalogs/credentials never become persisted providers; scoped references
 may name a runtime `gateway:` source, while `models.providers` rejects that prefix.
@@ -798,9 +801,9 @@ for a turn that already chose a hidden model; the picker does not switch the
 button to a different row.
 
 `id` is the composer's opaque selection key (`provider_id`, tab, `model`).
-`default` on a row is that provider's configured default name. `default` at the
-top level is still the default **provider** id (the account's `gateway:<hex>`
-when `models.default_source` is `account` and the account is ready). `context_window` is that name's
+`default` on a row marks the default model. A scoped conversation binding
+marks its exact provider and model. `default` at the top level is the same
+default **provider** id as `/api/meta.default_provider`. `context_window` is that name's
 token limit: a discovered per-name value, else the provider fallback, else `0`
 (unknown — the meter then shows a count without a percentage). Offline (`--mock`)
 reports a simulated window so the ring still moves.
@@ -1365,6 +1368,16 @@ waiting on a later push. `status` is the same live header as desktop:
 thread wait is parked. Goal, schedule, `turn`, `done` and `error` event
 frames carry that `status` too so a parked `/goal` does not look idle after
 `done`.
+The same live-edge `ready` also carries `roster`. It is every `spawned`
+identity for a worker the phone would still show as running, whose seq is
+not already in `events`. `text` is empty, so the launch instruction stays
+on the PC. The phone uses these rows for the sub-agent entry and the running
+count; they are not part of `history_before` or the `log` cursor. A ready
+with no such worker sends `roster: []`. Older `log` pages omit `roster`.
+If the sealed frame cannot hold every identity, the oldest running rows are
+dropped and the conversation page is left intact. `finished` and `cleanup`
+remove a worker from this sidecar. A later `error` does not, because the
+phone does not treat that event as the worker stopping.
 With `include_detail: true`, `ready` also carries the existing `open` `detail`.
 Each entry in `detail.turns` may include `user_text`, a single-line user-input
 preview clipped to `summary_chars`. It is independent of the existing `text`
@@ -1464,6 +1477,10 @@ LOCAL `catalog`/`refresh_catalog` model rows optionally carry
 source descriptors. The phone localizes those group labels and retains the
 provider ID even for duplicate model names. Personal/legacy providers omit it.
 No PC credential or endpoint crosses Pairlink.
+If the PC's new-task default has a catalog row, it is the first default row
+in `catalog`.
+Rows for other providers can still mark the default used by a conversation
+that already selected that provider.
 
 `catalog` and `refresh_catalog` report `composer_predictions`; an explicit
 `false` hides paired-PC suggestions. The phone uses only the latest completed

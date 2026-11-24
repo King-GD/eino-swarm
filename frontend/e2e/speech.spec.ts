@@ -15,6 +15,47 @@ function wave(): Buffer {
   return bytes
 }
 
+test("reopening Models does not request microphone access", async ({ page }) => {
+  await page.addInitScript(() => {
+    const observed = { enumerations: 0, requests: 0, stops: 0 }
+    Object.defineProperty(window, "micProbe", { value: observed })
+    Object.defineProperty(navigator, "mediaDevices", { value: {
+      enumerateDevices: async () => {
+        observed.enumerations += 1
+        return [{ kind: "audioinput", deviceId: observed.requests ? "fixture" : "", label: observed.requests ? "Fixture microphone" : "" }]
+      },
+      getUserMedia: async () => {
+        observed.requests += 1
+        return { getTracks: () => [{ stop: () => { observed.stops += 1 } }] }
+      },
+    } })
+  })
+  const probe = () => page.evaluate(() => (window as unknown as {
+    micProbe: { enumerations: number; requests: number; stops: number }
+  }).micProbe)
+  await page.goto("/")
+  await page.getByRole("button", { name: "Settings", exact: true }).click()
+  const settings = page.getByRole("dialog")
+  const models = settings.getByRole("tab", { name: "Models", exact: true })
+  const microphone = settings.getByRole("combobox", { name: "Microphone", exact: true })
+  await models.click()
+  await expect(microphone).toHaveText("System default")
+  await expect.poll(async () => (await probe()).enumerations).toBeGreaterThan(0)
+  const first = await probe()
+  expect(first.requests).toBe(0)
+  await settings.getByRole("tab", { name: "General", exact: true }).click()
+  await models.click()
+  await expect.poll(async () => (await probe()).enumerations).toBeGreaterThan(first.enumerations)
+  expect((await probe()).requests).toBe(0)
+  await microphone.click()
+  await expect(page.getByRole("option", { name: "Fixture microphone" })).toBeVisible()
+  await expect.poll(async () => (await probe()).stops).toBe(1)
+  await page.keyboard.press("Escape")
+  await microphone.click()
+  await expect(page.getByRole("option", { name: "Fixture microphone" })).toBeVisible()
+  expect((await probe()).requests).toBe(1)
+})
+
 test("speech settings explain disabled tests and record and play after enabling", async ({ page, request }, testInfo) => {
   const previous = (await (await request.get("/api/settings")).json()).settings.speech
   let recordedBytes = 0

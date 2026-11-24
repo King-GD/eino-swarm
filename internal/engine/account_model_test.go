@@ -20,6 +20,46 @@ import (
 
 const accountCatalogID = config.AccountSourcePrefix + "0123456789abcdef0123456789abcdef"
 
+func TestNewLocalConversationFollowsTheSelectedGatewaySource(t *testing.T) {
+	var mu sync.Mutex
+	var requested []string
+	srv := httptest.NewServer(recordCompletion(&mu, &requested))
+	defer srv.Close()
+	e := newAccountEngine(t, srv.URL+"/v1", "catalog-first", "gateway-default")
+	if err := e.cfg.Update(func(c *config.Config) error {
+		c.Product.Mode = config.ProductModeLocal
+		c.Models.DefaultSource = config.DefaultSourceAccount
+		c.Models.Providers[0].BaseURL = srv.URL + "/personal/v1"
+		c.Models.Providers[0].Model = "personal-model"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	src := accountCatalog(t, srv.URL+"/v1", "catalog-first", "gateway-default")
+	src.SetCatalogGroup("original")
+	src.SetModelPolicy(true, map[string]string{"conversation": "gateway-default"})
+	src.SetCapabilities(&provider.SourceCapabilities{Authorized: true, Available: true, Configurable: true, Capabilities: map[string]provider.RoleCapability{
+		"conversation": {Supported: true, Available: true, Configurable: true, Endpoints: []string{"chat_completions"}},
+	}})
+	e.pool.SetLocalAccountSources([]*provider.AccountSource{src})
+
+	th, err := e.CreateThread("Gateway default", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if th.ProviderID != accountCatalogID || th.Model != "" {
+		t.Fatalf("new conversation = %q/%q, want the unpinned Gateway default", th.ProviderID, th.Model)
+	}
+	turn, err := e.StartTurn(th.ID, "Summarize the task.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitTurn(t, e, turn.ID)
+	if got := snapshotModels(&mu, &requested); len(got) == 0 || got[0] != "gateway-default" {
+		t.Fatalf("actual request models = %v, want gateway-default", got)
+	}
+}
+
 func TestCatalogReorderDoesNotChangeTheModelAConversationShows(t *testing.T) {
 	var mu sync.Mutex
 	var requested []string

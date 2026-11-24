@@ -4895,9 +4895,27 @@ make e2e         # Playwright, on the scripted offline provider
 make check       # go vet + both of the above
 ```
 
-No test needs a model endpoint, an API key or a network. Anything that would
-otherwise call a model runs on the **scripted offline provider**, so the suite is
-deterministic and fast enough to run on every change.
+The default suites use the scripted offline provider for calls that would
+otherwise require a model endpoint or API key.
+
+### Choosing checks for a local change
+
+- For a localized Go change, run its regression with `-race` in the owning
+  package and test affected callers through their normal entry points. Select
+  specific tests in large packages when the affected behavior is well bounded.
+  Use a short package timeout suited to the selected tests. Two minutes is a
+  starting point for a focused run with typical fixtures.
+- For PC/Web and phone changes, type-check the affected frontend and run the
+  relevant unit tests and browser flows. Use the specialized native cases
+  when their acceptance rules apply.
+- For documentation-only changes, run `python3 tools/docs_check.py` when
+  checking links and contract references. `make docs-check` also runs the
+  Python tools test suite.
+- Run the full checks when the affected behavior cannot be bounded to specific
+  suites, or when the integration or release workflow requires them. Keep the
+  full suite's 25-minute Go package timeout for that workflow. A timed-out run
+  remains incomplete. Base a retry on the failing test, timing evidence or
+  a confirmed environment change, and report which checks passed.
 
 ## Layers
 
@@ -5361,6 +5379,20 @@ keeps the slot, and a queued worker stays out until that slot is released.
 
 ```bash
 python3 tools/model_check.py --fetch concurrency-cap-current concurrency-cap-shrink-keeps-holders concurrency-cap-reach-preempt
+```
+
+## Phone running roster (C-006, C-019)
+
+`models/mobile/PhoneRoster.tla` checks the phone projection after a sub-agent
+watchdog finish. That run stays failed. A parent error does not remove a peer
+that is still running, and a retain receipt does not revive the finished run.
+The running count is one row per worker. Applying the ready snapshot does not
+move the history cursor to a sidecar spawn. `IgnoreTimeout` is the projection
+that treats the watchdog finish as an error and leaves the worker running.
+The model does not represent the timer or the three-failure manager stop.
+
+```bash
+python3 tools/model_check.py --fetch phone-roster-current phone-roster-ignore-timeout phone-roster-reach-timeout
 ```
 
 ## Renderer recovery decision (C-034)
@@ -8146,8 +8178,9 @@ before `npm run e2e`. JSDOM cannot prove WebKit focus zoom.
 The compact composer case verifies the Add-to-field and microphone-to-Stop
 gaps, the lower Agents and Outputs entrances, and the model and thinking
 sheets on a 320 CSS px viewport. The expanded composer shows the current
-model name and thinking level, keeps the actions together on a narrow
-screen, and restores focus, draft and caret after closing or choosing an
+model name and a thinking icon with an accessible description, keeps the
+model and thinking controls on the same row as the microphone, Send and Stop,
+and restores focus, draft and caret after closing or choosing an
 option. `testComposerFocusRevealsSettingsAndMovesThreadLinks` and
 `testThinkingPickerReturnsToEditing` check that the software keyboard
 returns without tapping the editor again, with the editor and actions above
@@ -8558,6 +8591,9 @@ runs through AndroidJUnitRunner without added dependencies: launch the actual
 Activity, find the bottom accessible Stop, perform its native accessibility
 click, require disabled Send and no remaining Stop, and save screenshots plus
 accessibility nodes under the target app's external files `composer-stop`.
+For the focused controls case, use
+`/?mock=1&tick=0&history=streamed-agents&speech=local` and run
+`ComposerStopTest#focusedComposerKeepsModelThinkingMicrophoneAndStopOnOneRow`.
 Do not use the stock `ExampleInstrumentedTest` as this acceptance evidence.
 
 Build and copy Android assets with `cd mobile && npm run build && npx cap copy android`.

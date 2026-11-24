@@ -170,24 +170,24 @@ function MicrophoneChoice({ value, onChange, query }: { value: string; onChange:
   const t = useT()
   const [devices, setDevices] = useState<AudioInputDevice[]>([])
   const live = useRef(true)
-  const pending = useRef<Promise<void> | undefined>(undefined)
-  const refresh = useCallback((permission?: Promise<MediaStream>) => {
-    if (pending.current) {
-      void permission?.then((stream) => stream.getTracks().forEach((track) => track.stop())).catch(() => undefined)
-      return pending.current
-    }
-    const run = listAudioInputDevices(permission).then((next) => {
-      if (!live.current) return
+  const pending = useRef<{ requestingAccess: boolean } | undefined>(undefined)
+  const refresh = useCallback((requestingAccess = false) => {
+    if (pending.current && (!requestingAccess || pending.current.requestingAccess)) return
+    const owner = { requestingAccess }
+    pending.current = owner
+    const permission = requestingAccess ? navigator.mediaDevices?.getUserMedia?.({ audio: true, video: false }) : undefined
+    void listAudioInputDevices(permission).then((next) => {
+      if (!live.current || pending.current !== owner) return
       setDevices((current) => current.length === next.length && current.every((device, index) => device.id === next[index]?.id && device.label === next[index]?.label) ? current : next)
-    }).finally(() => { pending.current = undefined })
-    pending.current = run
-    return run
+    }).catch(() => undefined).finally(() => {
+      if (pending.current === owner) pending.current = undefined
+    })
   }, [])
   useEffect(() => {
     live.current = true
-    void refresh()
+    refresh()
     const media = navigator.mediaDevices
-    const onDeviceChange = () => { void refresh() }
+    const onDeviceChange = () => refresh()
     media?.addEventListener?.("devicechange", onDeviceChange)
     return () => { live.current = false; media?.removeEventListener?.("devicechange", onDeviceChange) }
   }, [refresh])
@@ -196,10 +196,7 @@ function MicrophoneChoice({ value, onChange, query }: { value: string; onChange:
   // An empty select value keeps the default option actionable while the saved
   // preference is temporarily unavailable in this browser.
   return <SettingsChoice label={t("speech.microphone")} hint={t(missing && hasDeviceLabels ? "speech.microphoneFallback" : "speech.microphoneHint")} query={query} value={missing ? "" : value || "system"} placeholder={t("speech.systemDefault")} onValueChange={(id) => onChange(id === "system" ? "" : id)} onOpenChange={(open) => {
-    if (!open) return
-    const media = navigator.mediaDevices
-    const permission = pending.current || hasDeviceLabels ? undefined : media?.getUserMedia?.({ audio: true, video: false })
-    void refresh(permission)
+    if (open) refresh(!hasDeviceLabels)
   }}>
     <SelectItem value="system">{t("speech.systemDefault")}</SelectItem>
     {devices.map((device) => <SelectItem key={device.id} value={device.id}>{device.label || t("speech.microphone")}</SelectItem>)}

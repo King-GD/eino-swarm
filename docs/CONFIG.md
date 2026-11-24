@@ -434,9 +434,11 @@ their published fixed model or role. The picker requires a configurable image
 capability to create a binding. Revoked or stale choices stay saved and can be
 cleared with **Use default**.
 
-An ordinary gateway's first binding save retires legacy global `account_model`
-and `default_source` pins in favour of scoped selection. Legacy `account_model`
-and `default_source` remain readable for existing configurations until that save.
+The scoped `conversation` binding takes priority over `default_source`. In
+LOCAL, `default_source: account` prefers the authorized original Gateway chat
+catalog, then an available account preset, then `models.default`.
+An ordinary Gateway's first binding save retires the global `account_model`
+pin and resets `default_source` to `account`.
 `account_presentation` remains a validated compatibility field (`official`/`full`),
 with no model-unlocking UI or authority over a managed policy. Managed settings
 reads hide personal providers, auxiliary pins and speech endpoints; unrelated saves

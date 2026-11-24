@@ -34,6 +34,9 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
+- Local verification starts with the affected tests. Full suites run when the
+  impact cannot be bounded or the integration or release workflow requires them.
+
 - EASM batches retain the confirmed subject and its first-source relationships. A confirmed registry row can enrich the root. The collection receipt prompts the agent to summarize the available results.
 - The EASM panel takes the agent's own findings instead of looking them up: the Go producer no longer queries the company, investment, branch, filing, asset-rule or certificate sources, and the certificates the agent reports never add domains on their own. `task_panels.easm` binds only `stats`, `heat` and `product_rules`; retired roles in an existing configuration are dropped when it loads, and `max_domains` now bounds the domain nodes of the whole portrait instead of the certificate lookups of one run.
 
@@ -67,6 +70,11 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - 网关模式下，普通网关和第三方接入会根据可用的识别、朗读模型分别默认开启语音。语音设置仅显示网关允许编辑的参数，录音格式和超时等设置默认折叠。(`F-148`, `C-048`)
 
 ### Fixed
+
+- The phone shows the sub-agent entry and the running count as soon as a task opens, while workers are still running outside the first history page. Earlier history is no longer required to reveal them. A sub-agent that hits its lifetime limit leaves that count and stays failed; a later parent error or retain receipt does not put that run back. (`F-222`, `C-006`, `C-019`)
+- The expanded phone composer keeps the selected model name and puts the microphone, Send and Stop on the same row as the settings controls. Thinking levels appear in their picker. (`F-220`, `C-017`)
+- Opening PC or Web Models and Speech settings no longer prompts for microphone access. The microphone picker can request access when opened explicitly. (`F-148`, `C-048`)
+- In LOCAL, new conversations with the account source selected start on the original Gateway chat catalog when available. A scoped conversation binding can explicitly set the default model. (`F-171`, `C-040`)
 
 - A restarted EASM source no longer leaves the panel spinning: loading follows the host's `source_status`, so an interrupted collection stops even though the steps it stored still say running.
 

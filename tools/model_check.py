@@ -60,6 +60,10 @@ withdraws its waiter before releasing the runtime lock, a later decline is not
 stored, and a durable Stop still blocks that resume.
 models/swarm/ConcurrencyCap.tla checks that one task's running sub-agents stay
 within the live cap when lowered, and invalid Settings saves are refused (C-009).
+models/mobile/PhoneRoster.tla checks that a watchdog finish leaves that run
+failed on the phone: a parent error does not retire a live peer, a retain
+receipt does not revive the dead run, the running count stays one row per
+worker, and the history cursor does not follow the sidecar (C-006, C-019).
 Every case sets its model's switch constants and states
 the expected outcome: the current design must pass every safety invariant;
 each historical or seeded behaviour must break the named invariant (checked
@@ -178,6 +182,12 @@ MODELS = {
             ("ShrinkKeepsHolders", "NormalizeInvalidSave"),
             ("TypeOK", "HoldersWithinCap", "InvalidSaveRefused"),
             (("MaxWorkers", 3),),
+        ),
+        Model(
+            "phone-roster", ROOT / "models" / "mobile" / "PhoneRoster.tla",
+            ("IgnoreTimeout", "ErrorKillsRunning", "RetainRevives", "CountEachSpawn", "ReadyMovesCursor"),
+            ("TypeOK", "DeadStaysDead", "ErrorDoesNotRetire", "CountAgrees", "CursorStable"),
+            (),
         ),
         Model(
             "generation-recovery", ROOT / "models" / "generation" / "ModelGenerationRecovery.tla",
@@ -730,6 +740,30 @@ CASES: tuple[Case, ...] = (
           ("NormalizeInvalidSave",), "InvalidSaveRefused", model="concurrency-cap"),
     _case("concurrency-cap-reach-refusal", "witness", witness="NeverRefused", model="concurrency-cap"),
     _case("concurrency-cap-reach-preempt", "witness", witness="NeverPreempted", model="concurrency-cap"),
+    _case("phone-roster-current", "a watchdog finish stays failed and the running count stays one row per worker",
+          model="phone-roster"),
+    _case("phone-roster-ignore-timeout",
+          "seeded: a watchdog finish is stored as an error the phone does not retire",
+          ("IgnoreTimeout",), "DeadStaysDead", model="phone-roster"),
+    _case("phone-roster-error-kills",
+          "seeded: a parent error removes a worker the phone still shows as running",
+          ("ErrorKillsRunning",), "ErrorDoesNotRetire", model="phone-roster"),
+    _case("phone-roster-retain-revives",
+          "seeded: workers_retained puts the timed-out run back in the running roster",
+          ("RetainRevives",), "DeadStaysDead", model="phone-roster"),
+    _case("phone-roster-count-each-spawn",
+          "seeded: a worker that was finished and spawned again occupies two running rows",
+          ("CountEachSpawn",), "CountAgrees", model="phone-roster"),
+    _case("phone-roster-ready-moves-cursor",
+          "seeded: the ready snapshot pulls Earlier back to a sidecar spawn",
+          ("ReadyMovesCursor",), "CursorStable", model="phone-roster"),
+    *(_case("phone-roster-reach-" + name, "phone roster reachability", witness=witness, model="phone-roster")
+      for name, witness in (
+          ("timeout", "NeverTimedOut"),
+          ("peer", "NeverPeerSurvives"),
+          ("respawn", "NeverRespawned"),
+          ("cursor", "NeverCursorHeld"),
+      )),
     _case("ios-startup-current", "iOS binds static cookie and HTTP flags before the page starts",
           model="ios-startup"),
     _case("ios-startup-sync-prompt",

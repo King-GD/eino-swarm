@@ -296,6 +296,9 @@ reason) or the server refused (its own text). `host offline` is still
 "this PC is not on the hub". It never
 calls zwai `/api`.
 
+Focus the message field to see the selected model. The thinking icon opens
+the level picker. The microphone and Send or Stop share the controls row.
+
 In a PC conversation or New chat, open the model picker and tap **Refresh
 models / 刷新模型** to discover the current upstream choices on that PC. The
 button shows progress; a failure keeps the old list and can be retried there.
@@ -380,8 +383,11 @@ answer stays on screen and splits that row. The live tail is **Thinking**
 the row for the pieces. A `progress` pulse is not a chat
 row. `wait_agents` is a status count, not the `elapsed_ms` roster.
 A conversation with sub-agents offers **Agents / 子 Agent** above the message
-box. Its number counts running workers. The list separates running workers
-from finished and failed history. Opening the list or returning from a worker
+box. Its number counts running workers. That entry and count are visible as
+soon as the conversation opens while any worker is still running, including
+when the worker started before the first page. The list separates running workers
+from finished and failed history. Finished workers and older logs still arrive
+with **Earlier**. Opening the list or returning from a worker
 log starts at the top, with running workers first. The list does not follow the
 chat tail while you browse it. Each row shows role, ID, status, and latest
 permitted activity; open a row

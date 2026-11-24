@@ -79,6 +79,16 @@ func modelViews(eng *engine.Engine) []ModelView {
 	if len(out) == 0 {
 		return nil
 	}
+	// A phone starting a conversation uses the first default row. Keep each
+	// provider's own default for existing conversations on that provider.
+	defaultProvider := eng.Providers().DefaultProviderID()
+	for i, row := range out {
+		if row.Default && row.ProviderID == defaultProvider {
+			copy(out[1:i+1], out[:i])
+			out[0] = row
+			break
+		}
+	}
 	return out
 }
 

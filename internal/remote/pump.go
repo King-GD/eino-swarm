@@ -233,6 +233,9 @@ func (p *LinkPump) startWatch(req Request) Response {
 	if req.CompactHistory && req.Since == 0 {
 		resp = p.compactReadyHistory(resp)
 	}
+	if resp.OK {
+		resp = attachRunningRoster(p.eng.Store(), resp, p.cfg)
+	}
 	p.watchWG.Add(1)
 	go func() {
 		defer p.watchWG.Done()

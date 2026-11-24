@@ -317,8 +317,14 @@ func (p *Pool) ConversationDefault(id string) (name string, followsSetting bool,
 	if id == "" {
 		id = p.DefaultProviderID()
 	}
-	if ref, exists := p.cfg.ModelsSnapshot().Bindings[p.ModelPolicy().Scope]["conversation"]; exists && !p.OfficialOnly() && ref.ProviderID == id {
+	if ref, exists := p.ModelPolicy().Bindings["conversation"]; exists && ref.ProviderID == id {
 		return ref.Model, true, true
+	}
+	if p.localExecution() {
+		if src := p.accountForExecution(id); src != nil && src.negotiated {
+			name, follows := src.localConversationDefault()
+			return name, follows, name != ""
+		}
 	}
 	if src := p.activeAccount(); src != nil && id == src.ID() {
 		if src.profiled {
@@ -441,23 +447,30 @@ func (p *Pool) AccountEmbedding() (providerID, model string, enabled, configured
 	return ref.ProviderID, ref.Model, ref.Model != "", configured
 }
 
-// DefaultProviderID is the provider a new conversation starts on: the
-// account's conversation models when that is the chosen source and at least
-// one can start a chat, otherwise the configured default provider.
+// DefaultProviderID resolves the conversation binding, the selected and
+// available account source, or the configured personal provider.
 func (p *Pool) DefaultProviderID() string {
 	m := p.cfg.ModelsSnapshot()
-	if ref, ok := m.Bindings[p.ModelPolicy().Scope]["conversation"]; ok && !p.OfficialOnly() {
+	policy := p.ModelPolicy()
+	if ref, ok := policy.Bindings["conversation"]; ok {
 		return ref.ProviderID
 	}
-	if src := p.activeAccount(); src != nil && src.managed {
-		return src.ID()
-	}
-	if m.DefaultSource != config.DefaultSourceProvider {
-		if src := p.activeAccount(); src != nil && len(src.conversationalNames()) > 0 {
+	if policy.Mode == "local" {
+		if m.DefaultSource != config.DefaultSourceProvider {
+			if src := p.localConversationSource(); src != nil {
+				return src.ID()
+			}
+		}
+	} else if src := p.activeAccount(); src != nil {
+		if src.managed || m.DefaultSource != config.DefaultSourceProvider && len(src.conversationalNames()) > 0 {
 			return src.ID()
 		}
 	}
 	return m.Default
+}
+
+func (s *AccountSource) canStartConversation() bool {
+	return !s.unavailable && s.allowsRole("conversation") && len(s.conversationalNames()) > 0
 }
 
 // OfficialOnly reports that a published profile currently hides every other

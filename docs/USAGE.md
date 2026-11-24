@@ -24,7 +24,8 @@ The encrypted PC-local phone route downloads a completed segment, including PCM;
 it does not provide live synthesis streaming.
 
 The microphone appears beside Send only when recognition is enabled and ready.
-Choose an input device in the Voice input section of Settings. **System default**
+Choose an input device in the Voice input section of Settings. The microphone
+picker can ask for permission to show device names. **System default**
 follows the operating system's current input. When a saved microphone is missing,
 Settings shows **System default** and new recordings fall back to that input.
 The saved microphone can be used again when it returns. Choose **System default**
@@ -150,10 +151,11 @@ Conversation search is always keyword (FTS5). **Settings → Models → Semantic
 search** is off until you turn it on and name an embedding model; then ⌘K
 also ranks by meaning.
 
-For a new setup, new conversations start on the account's models when those
-are available. An existing setup with a working provider keeps starting on it
-(`models.default_source`). An own provider is marked default only when new
-conversations start on it.
+New conversations follow your current conversation binding or default source.
+When LOCAL follows the account source, it starts with the original Gateway
+catalog if it can answer, then an available account preset or your personal
+provider. Open **Settings → Models → Functional models → Conversation** to
+choose a specific default. **Use default** restores the default source.
 
 A managed third-party gateway supplies its own models and capabilities. Model
 settings and the composer model menu stay hidden, including for a saved legacy

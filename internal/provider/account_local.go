@@ -106,13 +106,45 @@ func (p *Pool) effectiveLocalAccountSources() []*AccountSource {
 
 func (p *Pool) listLocalModels() []Info {
 	personal := listModels(p.cfg.Snapshot(), p.mock)
+	defaultID := p.DefaultProviderID()
 	var accountRows []Info
 	for _, src := range p.effectiveLocalAccountSources() {
 		if !src.unavailable {
-			accountRows = append(accountRows, src.rows(false, "")...)
+			isDefault := src.ID() == defaultID
+			preferred := ""
+			if name, follows := src.localConversationDefault(); isDefault && follows {
+				preferred = name
+			}
+			accountRows = append(accountRows, src.rows(isDefault, preferred)...)
 		}
 	}
-	return append(accountRows, personal...)
+	return p.markConversationBinding(append(accountRows, personal...))
+}
+
+// LOCAL uses the original account catalog when available. An independently
+// authorized preset is the fallback if the original has no chat capability.
+func (p *Pool) localConversationSource() *AccountSource {
+	var fallback *AccountSource
+	for _, src := range p.effectiveLocalAccountSources() {
+		if !src.negotiated || !src.canStartConversation() {
+			continue
+		}
+		if src.catalogGroup == "original" {
+			return src
+		}
+		if fallback == nil {
+			fallback = src
+		}
+	}
+	return fallback
+}
+
+func (s *AccountSource) localConversationDefault() (name string, follows bool) {
+	if s.profiled {
+		return config.OfficialModelAlias, true
+	}
+	name = chooseName(s.conversationalNames(), s.defaults["conversation"])
+	return name, name != "" && name == s.defaults["conversation"]
 }
 
 func (p *Pool) credentialMatches(src *AccountSource, prov config.Provider, owner string) bool {

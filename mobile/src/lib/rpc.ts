@@ -313,6 +313,8 @@ export type RemoteResponse = EngineStartup & {
   seq?: number
   event?: RemoteEvent
   events?: RemoteEvent[]
+  /** Live-edge watch only. Running workers whose spawn is outside this page. */
+  roster?: RemoteEvent[]
   history_work?: HistoryWork[]
   focus_seq?: number
   history_before?: number

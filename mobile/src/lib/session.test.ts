@@ -364,3 +364,132 @@ it("keeps the current turn running when an older unseen terminal arrives with it
   expect(view.detail?.running?.turn_id).toBe("new-turn")
   expect(view.events.filter((row) => row.seq === 7)).toHaveLength(1)
 })
+
+it("shows workers that are still running outside the first page without moving Earlier", () => {
+  const secret = "launch instruction stays off the phone"
+  let view = applyPush(openView(detail()), ready({
+    seq: 30,
+    more: true,
+    history_before: 20,
+    events: [
+      ev({ seq: 28, kind: "agent_message", text: "latest report" }),
+      ev({ seq: 29, kind: "done", created_at: "2026-11-24T02:57:46Z" }),
+    ],
+    roster: [
+      ev({ seq: 4, kind: "spawned", agent_id: "w1", role: "scanner", text: secret }),
+      ev({ seq: 5, kind: "spawned", agent_id: "w2", role: "reader", text: secret }),
+    ],
+  }))
+  expect(view.oldestSeq).toBe(20)
+  expect(view.lastSeq).toBe(30)
+  expect(view.hasMore).toBe(true)
+  expect(view.events.map((row) => row.seq)).toEqual([28, 29])
+  expect(managerBlocks(view.blocks).map((block) => block.text)).toEqual([
+    "latest report",
+    "2026-11-24T02:57:46Z",
+  ])
+  expect(view.blocks.some((block) => block.text.includes(secret))).toBe(false)
+  expect(phoneAgents(view.blocks)).toMatchObject([
+    { id: "w1", role: "scanner", status: "running" },
+    { id: "w2", role: "reader", status: "running" },
+  ])
+
+  const cleared = applyPush(view, ready({
+    seq: 30, more: true, history_before: 20, roster: [],
+    events: [
+      ev({ seq: 28, kind: "agent_message", text: "latest report" }),
+      ev({ seq: 29, kind: "done", created_at: "2026-11-24T02:57:46Z" }),
+    ],
+  }))
+  expect(phoneAgents(cleared.blocks)).toEqual([])
+  expect(cleared.oldestSeq).toBe(20)
+
+  view = applyPush(view, push(ev({ seq: 4, kind: "spawned", agent_id: "w1", role: "scanner", text: secret })))
+  expect(view.oldestSeq).toBe(20)
+  expect(view.events.some((row) => row.seq === 4)).toBe(false)
+
+  view = applyPush(view, push(ev({ seq: 31, kind: "tool_call", agent_id: "w1", tool_call_id: "c1", text: "read({})" })))
+  expect(phoneAgents(view.blocks).find((agent) => agent.id === "w1")?.blocks.some((block) => block.kind === "tool")).toBe(true)
+  expect(managerBlocks(view.blocks).some((block) => block.kind === "tool")).toBe(false)
+  expect(view.oldestSeq).toBe(20)
+
+  view = applyPush(view, ready({ seq: 31, more: true, history_before: 20 }))
+  expect(phoneAgents(view.blocks).map((agent) => agent.status)).toEqual(["running", "running"])
+
+  view = applyPush(view, push(ev({ seq: 32, kind: "finished", agent_id: "w1" })))
+  expect(phoneAgents(view.blocks)).toMatchObject([
+    { id: "w1", status: "done" },
+    { id: "w2", status: "running" },
+  ])
+  expect(view.oldestSeq).toBe(20)
+})
+
+it("keeps a timed-out worker failed without moving Earlier or reviving it", () => {
+  const timeout = "swarm: agent w1 exceeded timeout 1s (1 consecutive watchdog failures): context deadline exceeded"
+  let view = applyPush(openView(detail()), ready({
+    seq: 30, more: true, history_before: 20,
+    events: [ev({ seq: 28, kind: "agent_message", text: "latest report" })],
+    roster: [
+      ev({ seq: 4, kind: "spawned", agent_id: "w1", role: "scanner" }),
+      ev({ seq: 5, kind: "spawned", agent_id: "w2", role: "reader" }),
+    ],
+  }))
+  view = applyPush(view, push(ev({ seq: 31, kind: "finished", agent_id: "w1", err: timeout })))
+  expect(phoneAgents(view.blocks)).toMatchObject([
+    { id: "w1", status: "failed" },
+    { id: "w2", status: "running" },
+  ])
+  expect(view.oldestSeq).toBe(20)
+  expect(view.events.map((row) => row.seq)).toEqual([28, 31])
+
+  view = applyPush(view, push(ev({ seq: 32, kind: "error", agent_id: "manager", text: "scheduled check failed" })))
+  expect(phoneAgents(view.blocks).map((agent) => agent.status)).toEqual(["failed", "running"])
+  expect(view.oldestSeq).toBe(20)
+
+  view = applyPush(view, ready({
+    seq: 30, more: true, history_before: 20,
+    events: [ev({ seq: 28, kind: "agent_message", text: "latest report" })],
+    roster: [
+      ev({ seq: 4, kind: "spawned", agent_id: "w1", role: "scanner" }),
+      ev({ seq: 5, kind: "spawned", agent_id: "w2", role: "reader" }),
+    ],
+  }))
+  expect(phoneAgents(view.blocks).map((agent) => agent.status)).toEqual(["failed", "running"])
+  expect(view.oldestSeq).toBe(20)
+  expect(view.roster.map((row) => row.seq)).toEqual([4, 5])
+
+  view = applyPush(view, ready({
+    seq: 32, more: true, history_before: 20,
+    events: [
+      ev({ seq: 28, kind: "agent_message", text: "latest report" }),
+      ev({ seq: 31, kind: "finished", agent_id: "w1", err: timeout }),
+    ],
+    roster: [ev({ seq: 5, kind: "spawned", agent_id: "w2", role: "reader" })],
+  }))
+  expect(phoneAgents(view.blocks).find((agent) => agent.id === "w1")?.status).toBe("failed")
+  expect(phoneAgents(view.blocks).find((agent) => agent.id === "w2")?.status).toBe("running")
+  expect(view.roster.map((row) => row.seq)).toEqual([5])
+  expect(view.oldestSeq).toBe(20)
+})
+
+it("drops a rewound running worker and does not duplicate it when Earlier arrives", () => {
+  let view = applyPush(openView(detail()), ready({
+    seq: 30, more: true, history_before: 20,
+    events: [ev({ seq: 28, kind: "agent_message", text: "latest report" })],
+    roster: [
+      ev({ seq: 4, kind: "spawned", agent_id: "w1", role: "scanner", text: "secret instruction" }),
+      ev({ seq: 8, kind: "spawned", agent_id: "w2", role: "reader" }),
+    ],
+  }))
+  view = applyPush(view, push(ev({ seq: 0, kind: "rewound", text: "6" })))
+  expect(phoneAgents(view.blocks)).toMatchObject([{ id: "w1", role: "scanner", status: "running" }])
+  expect(view.blocks.some((block) => block.text.includes("secret instruction"))).toBe(false)
+
+  view = prependOlder(view, [
+    ev({ seq: 4, kind: "spawned", agent_id: "w1", role: "scanner", text: "secret instruction" }),
+  ], true, 4)
+  expect(view.oldestSeq).toBe(4)
+  expect(view.roster).toEqual([])
+  expect(phoneAgents(view.blocks).find((agent) => agent.id === "w1")?.blocks.filter((block) => block.kind === "spawn")).toHaveLength(1)
+  expect(view.blocks.some((block) => block.text.includes("secret instruction"))).toBe(false)
+})

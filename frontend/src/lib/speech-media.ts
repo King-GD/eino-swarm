@@ -37,34 +37,16 @@ export function audioInputChoices(devices: Array<{ kind: string; deviceId: strin
 
 const releaseStream = (stream?: MediaStream) => stream?.getTracks().forEach((track) => track.stop())
 
-/** WebKit hides every device id until a capture is granted. The permission
- * promise has to be created in the click that opened the menu; starting it
- * after enumeration loses that gesture and the list stays empty. */
+/** Passive enumeration can return hidden device IDs. A caller may pass a
+ * capture started by a user gesture to reveal names while the stream is live. */
 export async function listAudioInputDevices(permission?: Promise<MediaStream>): Promise<AudioInputDevice[]> {
   const media = globalThis.navigator?.mediaDevices
-  if (!media?.enumerateDevices) {
-    void permission?.then(releaseStream).catch(() => undefined)
-    return []
-  }
-  const read = async () => audioInputChoices(await media.enumerateDevices())
-  let choices = await read()
-  if (choices.some((device) => device.label !== "")) {
-    void permission?.then(releaseStream).catch(() => undefined)
-    return choices
-  }
-  if (!permission && media.getUserMedia) permission = media.getUserMedia({ audio: true, video: false })
-  if (!permission) return choices
-  let stream: MediaStream | undefined
+  const stream = await permission?.catch(() => undefined)
   try {
-    stream = await permission
-    choices = await read()
-  } catch {
-    return choices
+    return media?.enumerateDevices ? audioInputChoices(await media.enumerateDevices()) : []
   } finally {
     releaseStream(stream)
   }
-  if (!choices.some((device) => device.label !== "")) choices = await read()
-  return choices
 }
 
 export interface SpeechRecordingOptions {

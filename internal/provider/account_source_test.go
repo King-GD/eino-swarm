@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -210,6 +211,121 @@ func TestDefaultProviderFollowsTheConfiguredSource(t *testing.T) {
 	if list[0].Default || list[1].Default || !list[2].Default {
 		t.Fatalf("own provider row must be the default: %+v", list)
 	}
+}
+
+func TestAuthorizedGatewayConversationDefaultUsesTheExactCatalogRow(t *testing.T) {
+	cfg := configFor(t, true)
+	cfg.Models.DefaultSource = config.DefaultSourceAccount
+	cfg.Models.Providers[0].Catalog = []string{"other-personal"}
+	p := New(cfg)
+	src := accountSourceFor(t, "https://gateway.invalid/v1", "fixture", "first-model", "server-model")
+	src.SetModelPolicy(true, map[string]string{"conversation": "server-model"})
+	src.SetCapabilities(&SourceCapabilities{Authorized: true, Available: true, Configurable: true, Capabilities: map[string]RoleCapability{
+		"conversation": {Supported: true, Available: true, Configurable: true, Endpoints: []string{"chat_completions"}},
+	}})
+	p.SetAccountSource(src)
+	check := func(wantID, wantModel string) {
+		t.Helper()
+		if got := p.DefaultProviderID(); got != wantID {
+			t.Errorf("default provider = %q, want %q", got, wantID)
+		}
+		for _, id := range []string{"", wantID} {
+			got, err := p.ResolveModel(id, "")
+			if err != nil || got.ID != wantID || got.Model != wantModel {
+				t.Errorf("resolved %q to %q/%q (%v), want %q/%q", id, got.ID, got.Model, err, wantID, wantModel)
+			}
+		}
+		if name, follows, ok := p.ConversationDefault(""); !ok || !follows || name != wantModel {
+			t.Errorf("conversation default = %q, follows=%v, ok=%v", name, follows, ok)
+		}
+		var found bool
+		for _, row := range p.List() {
+			if row.ID == ChoiceID(wantID, wantModel) {
+				if !row.Default || !row.DefaultFollowsSetting || !row.Ready {
+					t.Errorf("expected ready default row: %+v", row)
+				}
+				found = true
+			} else if row.Default {
+				t.Errorf("incorrect default row: %+v", row)
+			}
+		}
+		if !found {
+			t.Errorf("no catalog row for %q/%q", wantID, wantModel)
+		}
+	}
+	check(accountTestID, "server-model")
+	scope := p.ModelPolicy().Scope
+	cfg.Models.Bindings = map[string]map[string]config.ModelRef{
+		scope: {"conversation": {ProviderID: cfg.Models.Default, Model: "other-personal"}},
+	}
+	check(cfg.Models.Default, "other-personal")
+	cfg.Models.Bindings[scope]["conversation"] = config.ModelRef{ProviderID: cfg.Models.Default, Model: "unlisted-personal"}
+	var missing *Info
+	for _, row := range p.List() {
+		if row.Default {
+			if missing != nil {
+				t.Fatalf("more than one default with an unlisted binding: %+v", row)
+			}
+			missing = &row
+		}
+	}
+	if missing == nil || missing.ID != ChoiceID(cfg.Models.Default, "unlisted-personal") || missing.Ready || !missing.DefaultFollowsSetting {
+		t.Fatalf("unlisted binding lost its exact identity: %+v", missing)
+	}
+	delete(cfg.Models.Bindings, scope)
+	check(accountTestID, "server-model")
+	cfg.Models.DefaultSource = config.DefaultSourceProvider
+	check(cfg.Models.Default, "some-model")
+}
+
+func TestLocalAccountDefaultPrefersTheAuthorizedOriginalGateway(t *testing.T) {
+	cfg := configFor(t, true)
+	cfg.Product.Mode = config.ProductModeLocal
+	p := New(cfg)
+	capability := &SourceCapabilities{Authorized: true, Available: true, Configurable: true, Capabilities: map[string]RoleCapability{
+		"conversation": {Supported: true, Available: true, Configurable: true, Endpoints: []string{"chat_completions"}},
+	}}
+	preset := accountSourceFor(t, "https://gateway.invalid/v1", "fixture", "conversation")
+	preset.SetCatalogGroup("third_party")
+	preset.SetCapabilities(capability)
+	const originalID = config.AccountSourcePrefix + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	original, err := NewAccountSource(originalID, "Gateway", "https://gateway.invalid/openai/v1", "fixture", Catalog{Names: []string{"gateway-chat"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	original.SetCatalogGroup("original")
+	original.SetCapabilities(capability)
+	p.SetLocalAccountSources([]*AccountSource{preset, original})
+
+	check := func(wantID, wantModel string, follows bool) {
+		t.Helper()
+		if got := p.DefaultProviderID(); got != wantID {
+			t.Errorf("default provider = %q, want %q", got, wantID)
+		}
+		name, gotFollows, ok := p.ConversationDefault("")
+		if !ok || name != wantModel || gotFollows != follows {
+			t.Errorf("default model = %q, follows=%v, ok=%v", name, gotFollows, ok)
+		}
+		rows := p.List()
+		at := slices.IndexFunc(rows, func(row Info) bool { return row.Default })
+		if at < 0 || rows[at].ID != ChoiceID(wantID, wantModel) || rows[at].DefaultFollowsSetting != follows {
+			t.Errorf("incorrect first default model: %+v", rows)
+		}
+		personal := slices.IndexFunc(rows, func(row Info) bool {
+			return row.ID == ChoiceID(cfg.Models.Default, "some-model") && row.Default && row.DefaultFollowsSetting
+		})
+		if personal < 0 {
+			t.Error("the existing personal provider lost its selected model")
+		}
+	}
+	check(originalID, "gateway-chat", false)
+	cfg.Models.DefaultSource = config.DefaultSourceProvider
+	check(cfg.Models.Default, "some-model", true)
+	cfg.Models.DefaultSource = config.DefaultSourceAccount
+	p.SetLocalAccountSources([]*AccountSource{preset})
+	check(preset.ID(), "conversation", false)
+	p.SetLocalAccountSources(nil)
+	check(cfg.Models.Default, "some-model", true)
 }
 
 func TestAccountSourceChangeDropsTheCachedClient(t *testing.T) {

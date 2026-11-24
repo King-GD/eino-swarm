@@ -86,6 +86,24 @@ afterEach(() => {
 })
 
 describe("ModelsTab", () => {
+  it.each(["gateway", "local"] as const)("sets a personal default through the %s conversation binding", (mode) => {
+    const provider = { ...base.models.providers[0], model: "personal-chat", ready: true }
+    const gateway = "gateway:fixture"
+    const model_policy: Settings["model_policy"] = { mode, ready: true, configurable: true, scope: mode === "local" ? mode : gateway, capability_status: "ready",
+      defaults: { conversation: { provider_id: gateway, model: "server-chat" } },
+      capabilities: { authorized: true, available: true, configurable: true, capabilities: {
+        conversation: { supported: true, available: true, configurable: true, endpoints: ["chat_completions"] },
+      } },
+    }
+    const settings: Settings = { ...base, model_policy, models: { ...base.models, default_source: "provider", providers: [provider] } }
+    useApp.setState({ meta: { product_mode: mode === "local" ? "local" : "fofa", default_provider: gateway, model_policy: settings.model_policy } as Meta })
+    const onChange = vi.fn()
+    render(<ModelsTab settings={settings} onChange={onChange} />)
+    expect(screen.getByRole("combobox", { name: "Conversation Provider" })).toHaveTextContent("server-chat")
+    fireEvent.click(ownServices().getByRole("button", { name: "Make default" }))
+    expect(onChange.mock.lastCall![0].models.bindings).toEqual({ conversation: { provider_id: provider.id, model: provider.model } })
+  })
+
   it("lists providers collapsed so a second endpoint is not a wall of fields", () => {
     const two: Settings = {
       ...base,

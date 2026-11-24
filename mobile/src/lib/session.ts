@@ -25,6 +25,9 @@ export type PhoneView = {
   caughtUp: boolean
   queued: RemoteEvent[]
   events: RemoteEvent[]
+  /** Spawned identities for workers still running outside the loaded page.
+   *  They are not part of the history cursor. */
+  roster: RemoteEvent[]
   blocks: CompactBlock[]
   historyWork: HistoryWork[]
   detail: ThreadDetail | null
@@ -40,6 +43,7 @@ export function emptyView(): PhoneView {
     caughtUp: false,
     queued: [],
     events: [],
+    roster: [],
     blocks: [],
     historyWork: [],
     detail: null,
@@ -119,10 +123,12 @@ export function prependOlder(
   if (incoming.length === 0 && work.length === 0)
     return { ...view, oldestSeq: next || view.oldestSeq, hasMore: more && next > 0 }
   const merged = mergeEvents(view.events, incoming)
-  const blocks = restoreStreaming(foldEvents(merged), view.blocks)
+  const roster = pageRoster(view.roster, merged)
+  const blocks = restoreStreaming(foldPage(merged, roster), view.blocks)
   return {
     ...view,
     events: merged,
+    roster,
     oldestSeq: next || merged[0]?.seq || view.oldestSeq,
     hasMore: more,
     historyWork: mergeHistoryWork(view.historyWork, work, merged),
@@ -135,7 +141,10 @@ function applyReady(view: PhoneView, resp: RemoteResponse): PhoneView {
   const fromReady = resp.events ?? []
   const stored = mergeEvents(view.events, mergeEvents(fromReady, view.queued.filter((ev) => ev.seq > 0)))
   const deltas = view.queued.filter((ev) => ev.seq <= 0)
-  let blocks = foldEvents(stored)
+  // A ready that carries roster replaces it, including an explicit empty list.
+  // An older host omits the field; keep the sidecar already on screen.
+  const roster = pageRoster(Array.isArray(resp.roster) ? resp.roster : view.roster, stored)
+  let blocks = foldPage(stored, roster)
   for (const ev of deltas) blocks = applyEvent(blocks, ev)
   let detail = view.detail
   let lastSeq = Math.max(view.lastSeq, resp.seq ?? 0)
@@ -158,6 +167,7 @@ function applyReady(view: PhoneView, resp: RemoteResponse): PhoneView {
     caughtUp: true,
     queued: [],
     events: stored,
+    roster,
     blocks,
     historyWork: mergeHistoryWork(view.historyWork, resp.history_work ?? [], stored),
     detail,
@@ -197,12 +207,16 @@ function oldestOf(
 
 function applyLiveEvent(view: PhoneView, ev: RemoteEvent, status?: WatchStatus): PhoneView {
   if (ev.seq > 0 && view.events.some((row) => row.seq === ev.seq)) return view
+  // The sidecar already represents this row. Putting it in the page would
+  // pull the Earlier cursor back to that older seq.
+  if (ev.seq > 0 && view.roster.some((row) => row.seq === ev.seq)) return view
   const cut = rewindCut(ev)
   if (cut > 0) return applyRewind(view, ev, cut)
   const events = rememberEvent(view.events, ev)
+  const roster = pageRoster(view.roster, events)
   const historical = ev.seq > 0 && ev.seq < view.lastSeq
   const blocks = historical
-    ? restoreStreaming(foldEvents(events), view.blocks)
+    ? restoreStreaming(foldPage(events, roster), view.blocks)
     : applyEvent(view.blocks, ev)
   let detail = view.detail
   if (detail) {
@@ -218,6 +232,7 @@ function applyLiveEvent(view: PhoneView, ev: RemoteEvent, status?: WatchStatus):
         ? ev.seq
         : view.oldestSeq,
     events,
+    roster,
     blocks,
     detail,
     followups: status?.followups ?? view.followups,
@@ -229,7 +244,8 @@ function applyLiveEvent(view: PhoneView, ev: RemoteEvent, status?: WatchStatus):
  *  at or before the oldest loaded one are still stored and stay pageable. */
 function applyRewind(view: PhoneView, ev: RemoteEvent, cut: number): PhoneView {
   const events = ev.seq > 0 ? rememberEvent(view.events, ev) : view.events.filter((row) => row.seq < cut)
-  const blocks = foldEvents(events)
+  const roster = pageRoster(view.roster, events).filter((row) => row.seq < cut || (ev.seq > 0 && row.seq >= ev.seq))
+  const blocks = foldPage(events, roster)
   const unloaded = view.oldestSeq === 0 || view.oldestSeq >= cut
   return {
     ...view,
@@ -237,6 +253,7 @@ function applyRewind(view: PhoneView, ev: RemoteEvent, cut: number): PhoneView {
     oldestSeq: unloaded ? cut : view.oldestSeq,
     hasMore: unloaded ? view.hasMore || cut > 1 : view.hasMore,
     events,
+    roster,
     blocks,
     historyWork: view.historyWork.flatMap((range) => range.from >= cut ? [] : [{ ...range, through: Math.min(range.through, cut - 1) }]),
     detail: view.detail ? askDetail(view.detail, blocks) : view.detail,
@@ -263,6 +280,16 @@ function rememberEvent(events: RemoteEvent[], ev: RemoteEvent): RemoteEvent[] {
   if (ev.seq <= 0) return events
   if (events.some((row) => row.seq === ev.seq)) return events
   return mergeEvents(events, [ev])
+}
+
+function pageRoster(roster: RemoteEvent[] | undefined, events: RemoteEvent[]): RemoteEvent[] {
+  const seen = new Set(events.map((ev) => ev.seq))
+  const extra = (roster ?? []).filter((ev) => ev.seq > 0 && !seen.has(ev.seq))
+  return withoutRewound(extra.concat(events.filter((ev) => ev.kind === "rewound"))).filter((ev) => ev.kind !== "rewound")
+}
+
+function foldPage(events: RemoteEvent[], roster: RemoteEvent[] | undefined): CompactBlock[] {
+  return foldEvents(mergeEvents(pageRoster(roster, events), events))
 }
 
 function mergeEvents(base: RemoteEvent[], extra: RemoteEvent[]): RemoteEvent[] {

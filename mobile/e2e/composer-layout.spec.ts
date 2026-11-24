@@ -148,9 +148,12 @@ test("composer reveals settings on focus and docks Agents and Outputs next to th
   await expect(model).toBeVisible()
   await expect(thinking).toBeVisible()
   const modelName = model.getByText("scripted", { exact: true })
-  const defaultLevel = thinking.getByText("默认思考", { exact: true })
-  for (const label of [modelName, defaultLevel]) {
-    await expect.poll(() => label.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(16)
+  await expect(model).toHaveAccessibleDescription("scripted")
+  await expect.poll(() => modelName.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(16)
+  await expect(thinking).toHaveAccessibleDescription("默认思考")
+  expect(await thinking.getByText("默认思考", { exact: true }).evaluate((node) => node.getBoundingClientRect().width)).toBeLessThanOrEqual(1)
+  for (const control of [add, model, thinking, mic]) {
+    expect((await control.boundingBox())!.y).toBeCloseTo((await stop.boundingBox())!.y, 0)
   }
   expect((await form.boundingBox())!.height - compact.height).toBeGreaterThanOrEqual(36)
   expect((await model.boundingBox())!.y).toBeGreaterThanOrEqual((await editor.boundingBox())!.y + (await editor.boundingBox())!.height)
@@ -168,7 +171,7 @@ test("composer reveals settings on focus and docks Agents and Outputs next to th
   await expect(thinkingSheet).toHaveCount(0)
   await expect(editor).toBeFocused()
   await expect(thinking).toHaveAccessibleDescription("高思考")
-  await expect.poll(() => thinking.getByText("高思考", { exact: true }).evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(16)
+  expect(await thinking.getByText("高思考", { exact: true }).evaluate((node) => node.getBoundingClientRect().width)).toBeLessThanOrEqual(1)
   await model.tap()
   const modelSheet = page.getByRole("dialog", { name: "模型", exact: true })
   await expect(modelSheet.getByRole("radio", { name: "scripted", exact: true })).toBeVisible()
@@ -177,7 +180,7 @@ test("composer reveals settings on focus and docks Agents and Outputs next to th
   await expect(model).toBeVisible()
   await page.keyboard.insertText("!")
   await expect(editor).toHaveValue("Keep! this draft")
-  const actions = await Promise.all([mic, form.getByRole("button", { name: "发送方式" }), form.getByRole("button", { name: "跟进" }), stop]
+  const actions = await Promise.all([add, model, thinking, mic, form.getByRole("button", { name: "发送方式" }), form.getByRole("button", { name: "跟进" }), stop]
     .map((control) => control.boundingBox()))
   const actionLine = actions[0]!.y
   const composerBounds = (await form.boundingBox())!
@@ -304,6 +307,11 @@ test("direct model chat keeps submission inside the phone", async ({ page }) => 
     body: 'data: {"choices":[{"delta":{"content":"offline reply"}}]}\n\ndata: [DONE]\n\n',
   }))
   await page.goto("/")
+  await page.getByRole("textbox", { name: "消息", exact: true }).focus()
+  const model = "long-model-name-".repeat(12)
+  const modelName = page.getByRole("button", { name: "模型", exact: true }).getByText(model, { exact: true })
+  await expect(modelName).toBeVisible()
+  await expect.poll(() => modelName.evaluate(node => node.getBoundingClientRect().width)).toBeGreaterThan(16)
   await controlsFit(page, "消息")
   await expect(page.getByText("offline reply", { exact: true })).toBeVisible()
   await controlsFit(page, "消息")

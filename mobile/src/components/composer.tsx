@@ -30,7 +30,7 @@ import { insertSpeechText } from "../../../frontend/src/lib/speech-text"
 
 const noModels: ModelChoice[] = []
 const noLevels: string[] = []
-const settingClass = "flex h-9 min-w-0 max-w-36 items-center gap-1.5 rounded-full px-1.5 text-xs font-medium"
+const settingClass = "flex h-9 min-w-0 items-center gap-1.5 rounded-full px-1.5 text-xs font-medium"
 const settingButton = "text-foreground/85 active:bg-accent disabled:opacity-40"
 
 export type ComposerExtra = {
@@ -157,7 +157,7 @@ export function Composer({
   </>
   const thinkingIndicator = <>
     <Brain className="size-3.5 shrink-0" aria-hidden />
-    <span id={thinkingTextId} className="truncate">{thinkingText}</span>
+    <span id={thinkingTextId} className="sr-only">{thinkingText}</span>
   </>
   const catalog = slashCommands?.map((command) => ({
     ...command,
@@ -520,7 +520,7 @@ export function Composer({
           )}
         />
         {expanded && (showModel || modelName || showThinking || level || catalogBusy && !hideModel) ? (
-          <div className="flex min-w-0 max-w-[calc(100%-2.25rem)] items-center gap-0.5">
+          <div className="flex min-w-0 flex-1 items-center gap-0.5">
             {catalogBusy && models.length === 0 && !hideModel ? (
               <span role="status" className="flex size-9 shrink-0 items-center justify-center text-muted-foreground">
                 <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden />
@@ -548,7 +548,7 @@ export function Composer({
               aria-haspopup="dialog"
               aria-describedby={thinkingTextId}
               title={thinkingText}
-              className={cn(settingClass, settingButton, "shrink-0")}
+              className={cn(settingClass, settingButton, "w-9 shrink-0 justify-center")}
               disabled={disabled || pending}
               onClick={() => { setPicker("thinking"); box.current?.blur() }}
             >
@@ -639,21 +639,17 @@ function chosen(
   // conversation on it instead of silently sending the next endpoint.
   const stillListed = !providerId || rows.some((row) => row.provider_id === providerId)
   if (!stillListed) return { providerId, model }
-  const settings =
-    rows.find((row) => row.provider_id === providerId && row.default && row.default_follows_setting) ??
-    rows.find((row) => row.default && row.default_follows_setting)
-  if (settings && (!providerId || settings.provider_id === providerId)) {
-    return { providerId: settings.provider_id, model: settings.model }
+  const candidates = providerId ? rows.filter((row) => row.provider_id === providerId) : rows
+  const defaultRow = candidates.find((row) => row.default)
+  if (defaultRow && (defaultRow.default_follows_setting || current?.providerId !== defaultRow.provider_id)) {
+    return { providerId: defaultRow.provider_id, model: defaultRow.model }
   }
   // A catalog-order fallback already on the button stays there when the
   // list is reordered. A settings default above is allowed to move it.
   if (current?.model && (!providerId || !current.providerId || current.providerId === providerId)) {
     return { providerId: current.providerId || providerId, model: current.model }
   }
-  const hit =
-    rows.find((row) => row.provider_id === providerId && row.default) ??
-    rows.find((row) => row.default) ??
-    rows[0]
+  const hit = defaultRow ?? candidates[0]
   return { providerId: hit?.provider_id ?? providerId, model: hit?.model ?? model }
 }
 

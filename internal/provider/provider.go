@@ -217,8 +217,10 @@ func (p *Pool) ResolveModel(id, model string) (config.Provider, error) {
 		}
 		return src.provider(""), nil
 	}
-	if ref, ok := p.cfg.ModelsSnapshot().Bindings[p.ModelPolicy().Scope]["conversation"]; ok && strings.TrimSpace(id) == "" && model == "" {
-		id, model = ref.ProviderID, ref.Model
+	if strings.TrimSpace(model) == "" {
+		if ref, ok := p.ModelPolicy().Bindings["conversation"]; ok && (strings.TrimSpace(id) == "" || id == ref.ProviderID) {
+			id, model = ref.ProviderID, ref.Model
+		}
 	}
 	prov, err := p.Resolve(id)
 	if err != nil {
@@ -275,22 +277,8 @@ func (p *Pool) List() []Info {
 	if !p.OfficialOnly() {
 		rows = listModels(p.cfg.Snapshot(), p.mock)
 	}
-	var sources []*AccountSource
-	if p.localExecution() {
-		sources = append(sources, p.localAccountSources()...)
-		if primary := p.account.Load(); primary != nil {
-			sources = append(sources, primary)
-		}
-	} else if primary := p.activeAccount(); primary != nil {
-		sources = append(sources, primary)
-	}
-	seen := map[string]bool{}
 	var accountRows []Info
-	for _, src := range sources {
-		if src == nil || src.unavailable || seen[src.ID()] {
-			continue
-		}
-		seen[src.ID()] = true
+	if src := p.activeAccount(); src != nil && !src.unavailable {
 		isDefault := p.DefaultProviderID() == src.ID()
 		if isDefault {
 			for i := range rows {
@@ -298,9 +286,38 @@ func (p *Pool) List() []Info {
 				rows[i].DefaultFollowsSetting = false
 			}
 		}
-		accountRows = append(accountRows, src.rows(isDefault, p.accountModel())...)
+		accountRows = src.rows(isDefault, p.accountModel())
 	}
-	return append(accountRows, rows...)
+	return p.markConversationBinding(append(accountRows, rows...))
+}
+
+// A scoped conversation model can differ from the provider's own configured
+// model. Mark its exact row so the PC and paired phone display that choice.
+func (p *Pool) markConversationBinding(rows []Info) []Info {
+	ref, ok := p.ModelPolicy().Bindings["conversation"]
+	if !ok {
+		return rows
+	}
+	found := false
+	for i := range rows {
+		if rows[i].ProviderID != ref.ProviderID {
+			continue
+		}
+		selected := rows[i].Model == ref.Model
+		found = found || selected
+		rows[i].Default, rows[i].DefaultFollowsSetting = selected, selected
+	}
+	if !found {
+		for _, row := range rows {
+			if row.ProviderID == ref.ProviderID {
+				row.ID, row.Label, row.Model = ChoiceID(ref.ProviderID, ref.Model), ref.Model, ref.Model
+				row.Default, row.DefaultFollowsSetting, row.Ready = true, true, false
+				row.ContextWindow = p.WindowFor(ref.ProviderID, ref.Model)
+				return append(rows, row)
+			}
+		}
+	}
+	return rows
 }
 
 func (p *Pool) accountModel() string {
@@ -311,7 +328,7 @@ func (p *Pool) accountModel() string {
 		return src.defaults["conversation"]
 	}
 	m := p.cfg.ModelsSnapshot()
-	if ref, ok := m.Bindings[p.ModelPolicy().Scope]["conversation"]; ok {
+	if ref, ok := p.ModelPolicy().Bindings["conversation"]; ok {
 		if src := p.activeAccount(); src != nil && ref.ProviderID == src.id {
 			return ref.Model
 		}

@@ -164,37 +164,42 @@ type Request struct {
 // Response is what the PC replies. Path and SessionID are pairlink
 // metadata so zwai trace can join the remote hop.
 type Response struct {
-	Translation           string                     `json:"translation,omitempty"`
-	ModelPolicy           *provider.ModelPolicy      `json:"model_policy,omitempty"`
-	Speech                *speech.SnapshotView       `json:"speech,omitempty"`
-	SpeechError           string                     `json:"speech_error,omitempty"`
-	Audio                 *AudioView                 `json:"audio,omitempty"`
-	Startup               string                     `json:"startup,omitempty"`
-	Restore               *engine.RestoreProgress    `json:"restore,omitempty"`
-	DataGeneration        *int64                     `json:"data_generation,omitempty"`
-	ProductMode           string                     `json:"product_mode,omitempty"`
-	V                     int                        `json:"v"`
-	ID                    string                     `json:"id"`
-	OK                    bool                       `json:"ok"`
-	Error                 string                     `json:"error,omitempty"`
-	Code                  string                     `json:"code,omitempty"`
-	Path                  string                     `json:"path,omitempty"`
-	SessionID             string                     `json:"session_id,omitempty"`
-	Host                  string                     `json:"host,omitempty"`
-	Projects              []ProjectView              `json:"projects,omitempty"`
-	Threads               []ThreadView               `json:"threads,omitempty"`
-	Running               []RunningView              `json:"running,omitempty"`
-	Attention             []ThreadView               `json:"attention,omitempty"`
-	AttentionMore         bool                       `json:"attention_more,omitempty"`
-	AttentionCursor       string                     `json:"attention_cursor,omitempty"`
-	More                  bool                       `json:"more,omitempty"`
-	Next                  string                     `json:"next,omitempty"`
-	Detail                *ThreadDetail              `json:"detail,omitempty"`
-	Op                    string                     `json:"op,omitempty"`
-	ThreadID              string                     `json:"thread_id,omitempty"`
-	Seq                   int64                      `json:"seq,omitempty"`
-	Event                 *EventView                 `json:"event,omitempty"`
-	Events                []EventView                `json:"events,omitempty"`
+	Translation     string                  `json:"translation,omitempty"`
+	ModelPolicy     *provider.ModelPolicy   `json:"model_policy,omitempty"`
+	Speech          *speech.SnapshotView    `json:"speech,omitempty"`
+	SpeechError     string                  `json:"speech_error,omitempty"`
+	Audio           *AudioView              `json:"audio,omitempty"`
+	Startup         string                  `json:"startup,omitempty"`
+	Restore         *engine.RestoreProgress `json:"restore,omitempty"`
+	DataGeneration  *int64                  `json:"data_generation,omitempty"`
+	ProductMode     string                  `json:"product_mode,omitempty"`
+	V               int                     `json:"v"`
+	ID              string                  `json:"id"`
+	OK              bool                    `json:"ok"`
+	Error           string                  `json:"error,omitempty"`
+	Code            string                  `json:"code,omitempty"`
+	Path            string                  `json:"path,omitempty"`
+	SessionID       string                  `json:"session_id,omitempty"`
+	Host            string                  `json:"host,omitempty"`
+	Projects        []ProjectView           `json:"projects,omitempty"`
+	Threads         []ThreadView            `json:"threads,omitempty"`
+	Running         []RunningView           `json:"running,omitempty"`
+	Attention       []ThreadView            `json:"attention,omitempty"`
+	AttentionMore   bool                    `json:"attention_more,omitempty"`
+	AttentionCursor string                  `json:"attention_cursor,omitempty"`
+	More            bool                    `json:"more,omitempty"`
+	Next            string                  `json:"next,omitempty"`
+	Detail          *ThreadDetail           `json:"detail,omitempty"`
+	Op              string                  `json:"op,omitempty"`
+	ThreadID        string                  `json:"thread_id,omitempty"`
+	Seq             int64                   `json:"seq,omitempty"`
+	Event           *EventView              `json:"event,omitempty"`
+	Events          []EventView             `json:"events,omitempty"`
+	// Roster is set only on a live-edge watch ready. A non-nil empty slice
+	// means that snapshot has no running worker outside its event page.
+	// Older log pages leave it nil so a phone cannot walk its cursor from a
+	// spawned seq and skip the events in between.
+	Roster                *[]EventView               `json:"roster,omitempty"`
 	HistoryWork           []HistoryWork              `json:"history_work,omitempty"`
 	FocusSeq              int64                      `json:"focus_seq,omitempty"`
 	HistoryBefore         int64                      `json:"history_before,omitempty"`

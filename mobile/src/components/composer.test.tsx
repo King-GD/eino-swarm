@@ -345,6 +345,23 @@ it("keeps a shown catalog fallback when the list is reordered", () => {
   expect(modelButton()).toHaveTextContent("first")
 })
 
+it("uses the host's default for a new task and the stored provider for an existing conversation", () => {
+  setLocale("en")
+  const send = vi.fn()
+  const props = { label: "Message", sendLabel: "Send", onSubmit: send }
+  const personal = { provider_id: "personal", model: "configured-model", default: true, default_follows_setting: true }
+  const gateway = { provider_id: "gateway:fixture", model: "gateway-chat", default: true }
+  const { rerender } = render(<Composer {...props} models={[personal]} />)
+  expect(modelButton()).toHaveTextContent(personal.model)
+  rerender(<Composer {...props} models={[gateway, personal]} />)
+  expect(modelButton()).toHaveAccessibleDescription(gateway.model)
+  fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "start a task" } })
+  fireEvent.click(screen.getByRole("button", { name: "Send" }))
+  expect(send).toHaveBeenCalledWith("start a task", expect.objectContaining({ providerId: gateway.provider_id, model: gateway.model }))
+  rerender(<Composer {...props} models={[gateway, personal]} providerId={personal.provider_id} />)
+  expect(modelButton()).toHaveAccessibleDescription(personal.model)
+})
+
 it("follows a changed settings default and marks a missing one unavailable", () => {
   setLocale("en")
   const props = { label: "Message", sendLabel: "Send", onSubmit: vi.fn(), providerId: "a", model: "" }

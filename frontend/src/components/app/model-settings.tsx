@@ -15,6 +15,7 @@ import {
 import { api } from "@/lib/api"
 import { accountChoiceLabel, accountModelRows, officialModelLock, serverStartsConversations } from "@/lib/account-models"
 import { chromeTypeClass } from "@/lib/chrome-type"
+import { policyConfigurable } from "@/lib/model-policy"
 import { firstByteTimeoutSettingsKey } from "@/lib/first-byte-timeout"
 import { formatTokens, mergeModelContext } from "@/lib/usage"
 import type { ModelInfo, Settings } from "@/lib/types"
@@ -70,9 +71,14 @@ export function ModelsTab({
   const listed = useApp((s) => s.models)
   const accountReady = account?.state === "ready" && account.models > 0
   const mode = useApp((s) => s.meta?.product_mode)
+  const activeDefaultProvider = useApp((s) => s.meta?.default_provider)
   const currentPolicy = useApp((s) => s.meta?.model_policy) ?? settings.model_policy
   const officialOnly = mode === undefined || (currentPolicy ? officialModelLock(account, currentPolicy) : mode !== "local")
   const serverStarts = serverStartsConversations(settings.models.default_source, accountReady) && !officialOnly
+  const scopedDefault = Boolean(currentPolicy?.scope && (currentPolicy.mode === "local" || currentPolicy.capability_status))
+  const conversationBinding = settings.models.bindings?.conversation
+  const legacyDefault = serverStarts && !currentPolicy ? undefined : settings.models.default
+  const defaultProvider = conversationBinding?.provider_id ?? (scopedDefault && activeDefaultProvider ? activeDefaultProvider : legacyDefault)
   const [busy, setBusy] = useState<string>()
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set([
     ...Object.keys(toolsErrors),
@@ -140,6 +146,17 @@ export function ModelsTab({
     } finally {
       setBusy(undefined)
     }
+  }
+
+  const makeDefault = (provider: ProviderConfig) => {
+    const models = { ...settings.models }
+    if (scopedDefault) {
+      models.bindings = { ...models.bindings, conversation: { provider_id: provider.id, model: provider.model.trim() } }
+    } else {
+      models.default = provider.id
+      models.default_source = "provider"
+    }
+    onChange({ ...settings, models })
   }
 
   const toggle = (id: string) => {
@@ -210,7 +227,7 @@ export function ModelsTab({
             key={p.id}
             provider={p}
             query={query}
-            isDefault={settings.models.default === p.id && !serverStarts}
+            isDefault={defaultProvider === p.id}
             canRemove={settings.models.providers.length > 1}
             lockOn={p.enabled !== false && listedCount(settings) < 2}
             open={open.has(p.id) || Boolean(toolsErrors[p.id]) || providerFieldsMatch(query, p, t)}
@@ -218,12 +235,8 @@ export function ModelsTab({
             onToggle={() => toggle(p.id)}
             onUpdate={(patch) => update(i, patch)}
             onDiscover={() => void discover(i)}
-            onMakeDefault={() =>
-              onChange({
-                ...settings,
-                models: { ...settings.models, default: p.id, default_source: "provider" },
-              })
-            }
+            onMakeDefault={!scopedDefault || policyConfigurable(currentPolicy, "conversation") && p.ready && p.enabled !== false && p.model.trim()
+              ? () => makeDefault(p) : undefined}
             onRemove={() => setDoomed(p)}
             toolsDraft={toolsDrafts[p.id]}
             toolsError={toolsErrors[p.id]}
@@ -421,7 +434,7 @@ function ProviderRow({
   onToggle: () => void
   onUpdate: (patch: Partial<ProviderConfig>) => void
   onDiscover: () => void
-  onMakeDefault: () => void
+  onMakeDefault?: () => void
   onRemove: () => void
   toolsDraft?: string
   toolsError?: MessageKey
@@ -481,11 +494,11 @@ function ProviderRow({
           />
           {isDefault ? (
             <Badge variant="success">{t("settings.models.default")}</Badge>
-          ) : (
+          ) : onMakeDefault ? (
             <Button type="button" variant="ghost" size="sm" onClick={onMakeDefault}>
               {t("settings.models.makeDefault")}
             </Button>
-          )}
+          ) : null}
           {canRemove ? (
             <Button
               type="button"

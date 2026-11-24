@@ -28,6 +28,56 @@ public class ComposerStopTest {
     private final UiAutomation ui = instrumentation.getUiAutomation();
 
     @Test
+    public void focusedComposerKeepsModelThinkingMicrophoneAndStopOnOneRow() throws Exception {
+        Intent launch = instrumentation.getTargetContext().getPackageManager()
+            .getLaunchIntentForPackage(instrumentation.getTargetContext().getPackageName());
+        assertNotNull("The packaged app must have a launch Activity", launch);
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        instrumentation.startActivitySync(launch);
+        try {
+            waitForButton("Stop", true);
+            AccessibilityNodeInfo editor = nodes(ui.getRootInActiveWindow()).stream()
+                .filter(node -> node.isEditable() && onScreen(node))
+                .findFirst().orElseThrow(() -> new AssertionError("No visible message editor"));
+            assertTrue("Focus the native WebView message editor", editor.performAction(AccessibilityNodeInfo.ACTION_CLICK));
+
+            long deadline = SystemClock.uptimeMillis() + 10000;
+            while (SystemClock.uptimeMillis() < deadline) {
+                Rect stop = visibleActionBounds("Stop");
+                Rect model = visibleActionBounds("Model");
+                Rect thinking = visibleActionBounds("Thinking level");
+                Rect mic = visibleActionBounds("Start voice input");
+                if (stop != null && model != null && thinking != null && mic != null
+                    && stop.centerY() == model.centerY() && stop.centerY() == thinking.centerY()
+                    && stop.centerY() == mic.centerY() && model.right <= thinking.left
+                    && thinking.right <= mic.left && mic.right <= stop.left) {
+                    saveEvidence("focused-composer-controls");
+                    return;
+                }
+                SystemClock.sleep(100);
+            }
+            fail("Model, Thinking level, microphone and Stop must fit in one visible composer row");
+        } catch (Exception | AssertionError failure) {
+            saveEvidence("focused-composer-failure");
+            throw failure;
+        }
+    }
+
+    private Rect visibleActionBounds(String label) {
+        // WebView exposes buttons that open a dialog as generic clickable views.
+        for (AccessibilityNodeInfo node : nodes(ui.getRootInActiveWindow())) {
+            boolean named = label.contentEquals(node.getText() == null ? "" : node.getText())
+                || label.contentEquals(node.getContentDescription() == null ? "" : node.getContentDescription());
+            if (named && node.isClickable() && onScreen(node)) {
+                Rect bounds = new Rect();
+                node.getBoundsInScreen(bounds);
+                return bounds;
+            }
+        }
+        return null;
+    }
+
+    @Test
     public void emptyLiveComposerStopsTurnThroughAccessibleBottomButton() throws Exception {
         Intent launch = instrumentation.getTargetContext().getPackageManager()
             .getLaunchIntentForPackage(instrumentation.getTargetContext().getPackageName());

@@ -92,22 +92,24 @@ describe("microphone selection", () => {
     expect(getUserMedia).toHaveBeenCalledOnce()
   })
 
-  it("unlocks blank device names once and keeps the list when permission is denied", async () => {
+  it("only unlocks hidden names after an explicit request and keeps the list when denied", async () => {
     const stop = vi.fn()
     const enumerateDevices = vi.fn()
       .mockResolvedValueOnce([{ kind: "audioinput", deviceId: "iphone", label: "" }])
       .mockResolvedValueOnce([{ kind: "audioinput", deviceId: "iphone", label: "赵武's iPhone Microphone" }])
     const getUserMedia = vi.fn(async () => ({ getTracks: () => [{ stop }] }))
     vi.stubGlobal("navigator", { mediaDevices: { enumerateDevices, getUserMedia } })
-    await expect(listAudioInputDevices()).resolves.toEqual([{ id: "iphone", label: "赵武's iPhone Microphone" }])
+    await expect(listAudioInputDevices()).resolves.toEqual([{ id: "iphone", label: "" }])
+    expect(getUserMedia).not.toHaveBeenCalled()
+    await expect(listAudioInputDevices(getUserMedia() as unknown as Promise<MediaStream>)).resolves.toEqual([{ id: "iphone", label: "赵武's iPhone Microphone" }])
     expect(stop).toHaveBeenCalledOnce()
     enumerateDevices.mockReset()
     getUserMedia.mockRejectedValueOnce(new DOMException("denied", "NotAllowedError"))
     enumerateDevices.mockResolvedValue([{ kind: "audioinput", deviceId: "iphone", label: "" }])
-    await expect(listAudioInputDevices()).resolves.toEqual([{ id: "iphone", label: "" }])
+    await expect(listAudioInputDevices(getUserMedia() as unknown as Promise<MediaStream>)).resolves.toEqual([{ id: "iphone", label: "" }])
   })
 
-  it("asks for permission when WebKit has not revealed any device id yet", async () => {
+  it("keeps the system input available without requesting access when WebKit hides all device IDs", async () => {
     const stop = vi.fn()
     const enumerateDevices = vi.fn()
       .mockResolvedValueOnce([{ kind: "audioinput", deviceId: "", label: "" }])
@@ -118,7 +120,9 @@ describe("microphone selection", () => {
       ])
     const getUserMedia = vi.fn(async () => ({ getTracks: () => [{ stop }] }))
     vi.stubGlobal("navigator", { mediaDevices: { enumerateDevices, getUserMedia } })
-    await expect(listAudioInputDevices()).resolves.toEqual([
+    await expect(listAudioInputDevices()).resolves.toEqual([])
+    expect(getUserMedia).not.toHaveBeenCalled()
+    await expect(listAudioInputDevices(getUserMedia() as unknown as Promise<MediaStream>)).resolves.toEqual([
       { id: "iphone", label: "赵武's iPhone Microphone" },
       { id: "camera", label: "Camera 100-Audio" },
     ])
@@ -128,9 +132,7 @@ describe("microphone selection", () => {
 
   it("uses the capture started by the menu click instead of asking again after enumeration", async () => {
     const stop = vi.fn()
-    const enumerateDevices = vi.fn()
-      .mockResolvedValueOnce([{ kind: "audioinput", deviceId: "", label: "" }])
-      .mockResolvedValueOnce([{ kind: "audioinput", deviceId: "camera", label: "Camera 100-Audio" }])
+    const enumerateDevices = vi.fn().mockResolvedValue([{ kind: "audioinput", deviceId: "camera", label: "Camera 100-Audio" }])
     const getUserMedia = vi.fn()
     vi.stubGlobal("navigator", { mediaDevices: { enumerateDevices, getUserMedia } })
     const permission = Promise.resolve({ getTracks: () => [{ stop }] } as unknown as MediaStream)

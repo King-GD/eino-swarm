@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from "vitest"
 import { setLocale } from "@/lib/i18n"
 import { ThreadScreen } from "./thread-screen"
 import { applyEvent, type CompactBlock } from "@/lib/transcript"
-import type { RemoteEvent } from "@/lib/rpc"
+import { OpReady, type RemoteEvent } from "@/lib/rpc"
+import { applyPush, openView } from "@/lib/session"
 
 function select(source: Node) {
   const range = document.createRange()
@@ -76,6 +77,29 @@ describe("ThreadScreen", () => {
     expect(screen.getByRole("heading", { name: "Finished (3)" })).toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: "Back" }))
     expect(screen.getByRole("button", { name: "Agents (0)" })).toBeInTheDocument()
+  })
+
+  it("shows the running count before Earlier loads the workers' own history", () => {
+    setLocale("en")
+    const view = applyPush(openView({ id: "t1", title: "talk" }), {
+      v: 1, id: "", ok: true, op: OpReady, thread_id: "t1", seq: 30, more: true, history_before: 20,
+      status: { running: false },
+      events: [{ thread_id: "t1", seq: 28, kind: "agent_message", text: "latest report", created_at: "2026-11-24T02:57:46Z" }],
+      roster: [
+        { thread_id: "t1", seq: 4, kind: "spawned", agent_id: "w1", role: "scanner", text: "", created_at: "2026-11-24T01:00:00Z" },
+        { thread_id: "t1", seq: 5, kind: "spawned", agent_id: "w2", role: "reader", text: "", created_at: "2026-11-24T01:00:01Z" },
+      ],
+    })
+    render(<ThreadScreen detail={{ id: "t1", title: "talk" }} blocks={view.blocks} hasMore caughtUp
+      onBack={vi.fn()} onSend={vi.fn()} onInsert={vi.fn()} onStop={vi.fn()}
+      onAnswer={vi.fn()} onAnswerStructured={vi.fn()} />)
+    expect(screen.getByText("latest report")).toBeVisible()
+    expect(screen.getByRole("button", { name: "Earlier" })).toBeVisible()
+    fireEvent.click(screen.getByRole("button", { name: "Agents (2)" }))
+    const active = screen.getByRole("heading", { name: "Active (2)" }).closest("section")!
+    expect(within(active).getByRole("button", { name: /scanner w1 running/i })).toBeVisible()
+    expect(within(active).getByRole("button", { name: /reader w2 running/i })).toBeVisible()
+    expect(screen.queryByRole("heading", { name: /Finished/ })).not.toBeInTheDocument()
   })
 
   it("opens a worker's separate activity without painting it as the manager answer", () => {

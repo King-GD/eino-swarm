@@ -42,15 +42,25 @@ check inputs/admission, finish headless preparation, freeze the candidate, then
 run the affected guest scenarios serially through cleanup. It preserves the
 required checks below; ordinary smoke does not replace specialized acceptance.
 
-Before finishing any change: **it compiles, the tests pass, and the docs match.**
-Touched Go code → `go test -race -timeout 25m ./...`. Touched `frontend/src` → `npm run lint`
-(a `tsc` type check), `npm test`. `go run ./cmd/zwai desktop` (and `web`)
-rebuild `frontend/dist` when the sources changed, so a local run does not
-need a separate `make frontend`. `make build` still generates first so the
-embed inside the binary is current. Touched `mobile/` → `cd mobile && npm test`. Native iOS/Android trees under
-`mobile/ios` and `mobile/android` stay in git (Pods/.gradle/build stay out).
-Do not `cap add` those platforms again. Touched anything user-visible → the
-E2E suite.
+Before finishing any change: **it compiles, the relevant tests pass, and the docs match.**
+For local work, start with the regression for the affected behavior. Run Go
+tests with `-race` in the changed package and at affected caller boundaries.
+Use a test filter in large suites such as `internal/engine`. A two-minute
+package timeout is a starting point for a focused Go run. Use the scenario's
+documented budget where applicable. For PC/Web and phone changes, type-check
+the affected frontend and run its relevant tests. For user-visible changes,
+exercise the affected E2E flows. Follow the specialized model-check and native
+acceptance rules below when the change reaches those paths.
+
+Run the repository-wide checks when impact cannot be bounded to specific
+suites or when the integration or release workflow calls for them. A timeout
+records an incomplete run. Preserve it and use evidence to choose the next
+test. Report the scope actually verified. See [Testing](docs/TESTING.md#choosing-checks-for-a-local-change).
+
+`go run ./cmd/zwai desktop` (and `web`) rebuilds `frontend/dist` when sources
+change. `make build` generates it before embedding. Native iOS/Android trees
+under `mobile/ios` and `mobile/android` stay in git (Pods/.gradle/build stay out).
+Do not `cap add` those platforms again.
 
 ## Non-negotiables
 
