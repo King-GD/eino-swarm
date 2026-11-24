@@ -134,6 +134,8 @@ it.each(["automatic open", "manual reopen", "an update over Outputs"])("closes s
     fireEvent.click(screen.getByRole("button", { name: "Close" }))
     fireEvent.click(screen.getByRole("button", { name: "Task panels" }))
   }
+  // The sheet can appear before its lazy renderer; cold imports can exceed findBy's timeout.
+  await act(async () => { await vi.dynamicImportSettled() })
   const sheet = await screen.findByTestId("phone-task-panels")
   fireEvent.click(await screen.findByRole("button", { name: easmText("en").tagEvidence(component) }))
   const inner = await screen.findByRole("dialog", { name: component })
