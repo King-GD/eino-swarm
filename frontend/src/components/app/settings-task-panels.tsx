@@ -8,16 +8,11 @@ import { Field, SettingsSection } from "./settings-field"
 
 interface PanelSettings {
   enabled: boolean
-  fofa_client: string
-  max_assets: number
-  batch_size: number
-  concurrency: number
-  timeout_seconds: number
-  flush_interval_ms: number
   max_state_bytes: number
   max_update_bytes: number
 }
-const numbers = ["max_assets", "batch_size", "concurrency", "timeout_seconds", "flush_interval_ms", "max_state_bytes", "max_update_bytes"] as const
+const limits = ["max_state_bytes", "max_update_bytes"] as const
+const editableKeys = ["enabled", ...limits] as const
 
 export function TaskPanelSettings({ query }: { query: string }) {
   const t = useT()
@@ -37,9 +32,12 @@ export function TaskPanelSettings({ query }: { query: string }) {
     return () => abort.abort()
   }, [])
   const update = (next: PanelSettings) => { setSettings(next); setSaved(false) }
-  const edited = settings && baseline ? Object.fromEntries(Object.entries(settings).filter(([key, value]) => value !== baseline[key as keyof PanelSettings])) : {}
+  const edited = settings && baseline
+    ? Object.fromEntries(editableKeys.filter((key) => settings[key] !== baseline[key]).map((key) => [key, settings[key]]))
+    : {}
+  const hasEdits = Object.keys(edited).length > 0
   const save = async () => {
-    if (!settings || saving || !Object.keys(edited).length) return
+    if (saving || !hasEdits) return
     setSaving(true); setError(undefined); setSaved(false)
     try {
       const response = await fetch("/api/task-panels/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(edited) })
@@ -53,15 +51,19 @@ export function TaskPanelSettings({ query }: { query: string }) {
     finally { setSaving(false) }
   }
   if (!settings && !error) return null
-  return <SettingsSection title={panelText(t.locale, "settings")}>
-    <p className="mb-3 text-xs text-muted-foreground">{panelText(t.locale, "hint")}</p>
+  return <SettingsSection
+    title={panelText(t.locale, "settings")}
+    action={hasEdits ? <Button type="button" size="sm" disabled={saving} onClick={() => void save()}>{panelText(t.locale, "save")}</Button> : undefined}
+  >
     {settings ? <>
       <Field query={query} label={panelText(t.locale, "enabled")}><Switch disabled={saving} aria-label={panelText(t.locale, "enabled")} checked={settings.enabled} onCheckedChange={(enabled) => update({ ...settings, enabled })} /></Field>
-      <Field query={query} label={panelText(t.locale, "client")} wide><Input disabled={saving} value={settings.fofa_client} onChange={(event) => update({ ...settings, fofa_client: event.target.value })} /></Field>
-      {numbers.map((key) => <Field key={key} query={query} label={panelText(t.locale, key)}><Input disabled={saving} type="number" min={1} value={settings[key]} onChange={(event) => update({ ...settings, [key]: Number(event.target.value) })} /></Field>)}
-      <Button type="button" size="sm" disabled={saving || !Object.keys(edited).length} onClick={() => void save()}>{panelText(t.locale, "save")}</Button>
+      {limits.map((key) => (
+        <Field key={key} query={query} label={panelText(t.locale, key)} controlClassName="[&_input[type=number]]:w-32">
+          <Input disabled={saving} type="number" min={1} value={settings[key]} onChange={(event) => update({ ...settings, [key]: Number(event.target.value) })} />
+        </Field>
+      ))}
     </> : null}
-    {saved ? <p role="status" className="mt-2 text-xs">{panelText(t.locale, "saved")}</p> : null}
-    {error ? <p role="alert" className="mt-2 text-xs text-destructive">{error}</p> : null}
+    {saved ? <p role="status" className="px-4 py-3 text-xs">{panelText(t.locale, "saved")}</p> : null}
+    {error ? <p role="alert" className="px-4 py-3 text-xs text-destructive">{error}</p> : null}
   </SettingsSection>
 }

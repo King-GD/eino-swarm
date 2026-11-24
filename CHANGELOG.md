@@ -88,6 +88,11 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Task panel plugin settings show the shared enable switch and byte limits
+  for state and updates. Source-specific options are managed through the
+  configuration file or settings API. The Save button appears after an edit.
+  (`F-137`, `C-050`)
+
 - Project distillation gives the reviewer actionable citation feedback,
   retries an unwritten batch once for recoverable failures, and shows
   saved progress and timeout settings guidance in both panels. (`F-138`, `C-054`)

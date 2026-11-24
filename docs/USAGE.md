@@ -85,6 +85,10 @@ instance from this conversation, including after restart. A running source
 for that instance is interrupted while the conversation continues. Hiding the
 inspector keeps its panels available.
 
+**Settings → Tools → Task panel plugins** controls the shared enable switch
+and the state and update byte limits. Select **Save panel settings** when
+you change these values. See [Task panels](TASK_PANELS.md) for source settings.
+
 On the Mac, an independent native controller checks actual painted pixels.
 A window that stays one flat colour counts as not painted. It tries one
 reload, then replaces the window on the same engine if needed.
