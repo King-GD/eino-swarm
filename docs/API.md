@@ -2559,8 +2559,10 @@ and Continue/Stop path. See `C-036` and [source identities](DATA_MODEL.md#source
 `text` may be empty when `images` or `files` is not, or when `from_event_seq`
 points at a `user_message` that still has its original images. Each image is sniffed (png/jpeg/gif/webp);
 a renamed HTML file is rejected. At most 8 images, 8 MiB decoded each. They are
-**visual input**, stored under `$ZWAI_HOME/inputs/<thread>/`, not workspace
-uploads. `files` are workspace-relative paths of uploads attached to **this**
+**visual input** for the conversation model, stored under
+`$ZWAI_HOME/inputs/<thread>/` and referenced by the sent message. A queued
+image follow-up supplies the same visual input when it starts. `files` are
+workspace-relative paths of uploads attached to **this**
 send (always under `uploads/`). They are named on the user message so the
 model reads those first instead of scavenging older leftovers in the same
 folder. Unknown, escaped, or non-upload paths are `400`. At most 32 files.
@@ -4103,6 +4105,14 @@ do not. Event kinds and phone RPC shapes stay stable. See `C-019` and
 ### PC image MIME normalization (F-140 / C-028)
 
 The composer retains image-suffixed generic binary/UTI drops as vision input and normalizes their MIME claim before the existing turn/steer image payload. Bytes remain unchanged. Explicit text/PDF files stay attachments. The server still sniffs real bytes and rejects unsupported or mismatched claims; client filename inference is not content validation. See [C-028](CONTRACTS.md#c-028-image-intake-retains-vision-bytes).
+
+`POST /api/threads/:id/input-images/:image_id/ocr` extracts text from the
+single stored image identified by the same path as its preview. It uses the
+configured and authorized `ocr` role and returns `{"text":"…"}`. An empty
+string represents an image with no recognized text. The HTTP request owns the
+call and the result stays in the preview. Missing images return 404. An
+unavailable role returns 403, a busy extraction service 429, an upstream
+failure 502 and a timeout 504.
 
 ## Engine restart handoff (`F-110`, `C-027`)
 

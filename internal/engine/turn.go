@@ -445,6 +445,10 @@ func (e *Engine) startTurnInput(threadID string, in UserInput) (*store.Turn, err
 	if th.PlanMode {
 		toolset = tools.ExploreOnly(toolset)
 	}
+	modelImages := in.Images
+	if len(modelImages) == 0 && len(keep) > 0 {
+		modelImages = e.loadImageInputs(threadID, keep)
+	}
 	refs := in.storedImages
 	if len(refs) == 0 {
 		refs, err = e.saveInputImages(threadID, in.Images)
@@ -454,15 +458,6 @@ func (e *Engine) startTurnInput(threadID string, in UserInput) (*store.Turn, err
 	}
 	if len(refs) == 0 {
 		refs = keep
-	}
-	modelImages := in.Images
-	if len(modelImages) == 0 && len(keep) > 0 {
-		modelImages = e.loadImageInputs(threadID, keep)
-	}
-	if next, images, used, err := e.readRoleImages(prov.ID, text, modelImages); err != nil {
-		return nil, err
-	} else if used {
-		text, caption, modelImages, refs = next, next, images, nil
 	}
 
 	turn := &store.Turn{

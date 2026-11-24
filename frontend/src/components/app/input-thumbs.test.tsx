@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
+import { api } from "@/lib/api"
 import { InputThumbs } from "./input-thumbs"
 
 describe("InputThumbs", () => {
@@ -80,5 +81,25 @@ describe("InputThumbs", () => {
       .toHaveAttribute("src", "/api/threads/th_2/input-images/img_ab")
     view.rerender(<InputThumbs threadId="th_2" images={[]} />)
     expect(screen.queryByRole("dialog")).toBeNull()
+  })
+
+  it("cancels OCR when the preview closes", async () => {
+    const request = vi.spyOn(api, "extractImageText").mockImplementation(() => new Promise(() => {}))
+    try {
+      const user = userEvent.setup()
+      render(<InputThumbs threadId="th_1" images={[{ id: "img_ab", mime: "image/png" }]} />)
+      await user.click(screen.getByRole("button", { name: "Enlarge Pasted image" }))
+      const dialog = screen.getByRole("dialog")
+      fireEvent.load(within(dialog).getByAltText("Pasted image"))
+      expect(request).not.toHaveBeenCalled()
+      await user.click(within(dialog).getByRole("button", { name: "Extract text" }))
+      const [thread, image, signal] = request.mock.calls[0]
+      expect([thread, image, signal.aborted]).toEqual(["th_1", "img_ab", false])
+      expect(within(dialog).getByRole("button", { name: "Extracting text…" })).toBeDisabled()
+      await user.keyboard("{Escape}")
+      expect(signal.aborted).toBe(true)
+    } finally {
+      request.mockRestore()
+    }
   })
 })

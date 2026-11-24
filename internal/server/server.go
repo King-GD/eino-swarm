@@ -72,6 +72,7 @@ type Server struct {
 	updater      update.Checker
 	sideChats    chan struct{}
 	translations chan struct{}
+	imageOCR     chan struct{}
 	audioCalls   chan struct{}
 }
 
@@ -95,6 +96,7 @@ func New(opts Options) (*Server, error) {
 		updater:      opts.Updater,
 		sideChats:    make(chan struct{}, sideChatConcurrency),
 		translations: make(chan struct{}, selectionTranslationConcurrency),
+		imageOCR:     make(chan struct{}, imageOCRConcurrency),
 		audioCalls:   make(chan struct{}, speechHTTPConcurrency),
 	}
 	r := gin.New()
@@ -219,6 +221,7 @@ func New(opts Options) (*Server, error) {
 		api.GET("/threads/:id/download/*path", s.downloadFile)
 		api.DELETE("/threads/:id/download/*path", s.deleteFile)
 		api.GET("/threads/:id/input-images/:image_id", s.getInputImage)
+		api.POST("/threads/:id/input-images/:image_id/ocr", s.extractInputImageText)
 		api.GET("/threads/:id/generated-images/:image_id", s.getGeneratedImage)
 		api.POST("/threads/:id/reveal", s.reveal)
 		api.GET("/threads/:id/terminal", s.threadTerminal)

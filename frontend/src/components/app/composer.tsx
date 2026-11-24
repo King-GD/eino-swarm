@@ -1,5 +1,4 @@
 import { CapabilityNotice } from "./capability-notice"
-import { selectedFeatureAllows } from "@/lib/model-policy"
 import { ComposerContextMeter, ComposerSlashMenu, thinkingLabel } from "./composer-widgets"
 import { VoiceInputControl } from "./voice-input-control"
 import { useComposerSpeech } from "@/lib/use-composer-speech"
@@ -205,8 +204,6 @@ export function Composer({
   onLeavePlan?: () => void
 }) {
   const t = useT()
-  const policy = useApp(s => s.meta?.model_policy)
-  const imageAllowed = selectedFeatureAllows(policy, provider || models.find(m => m.default)?.provider_id, "ocr")
   const lastTurnError = useApp((s) => lastFailedTurnError(s.transcript.turns))
   const parkedWait = useApp(
     (s) =>
@@ -470,7 +467,6 @@ export function Composer({
           uploaded = (await (threadId ? onUpload(uploadList, threadId) : onUpload(uploadList))) ?? []
           if (uploaded.length !== uploadList.length) throw new Error("The attachments were not completely uploaded. The draft was kept.")
         }
-        if (imageList.length > 0 && !imageAllowed) return false
         const images = imageList.length > 0 ? await toSendImages(imageList) : undefined
         const files = uploaded.map((a) => a.rel_path).filter(Boolean)
         const result = onSend(payload, images, {
@@ -519,11 +515,9 @@ export function Composer({
     e.stopPropagation()
     setArmed(false)
     if (disabled) return
-    const dropped = splitDroppedFiles(
+    const { images, attachments } = splitDroppedFiles(
       filesFromDataTransfer(e.dataTransfer),
     )
-    const images = imageAllowed ? dropped.images : []
-    const attachments = dropped.attachments
     if (images.length === 0 && attachments.length === 0) return
     if (durable.session) { durable.session.addSelection([...images, ...attachments]); return }
     setAdding(true)
@@ -716,7 +710,7 @@ export function Composer({
               setText(next)
             }}
             onPaste={(e) => {
-              const files = imageAllowed ? filesFromClipboard(e.clipboardData) : []
+              const files = filesFromClipboard(e.clipboardData)
               if (files.length > 0) {
                 e.preventDefault()
                 if (durable.session) durable.session.addSelection(files)

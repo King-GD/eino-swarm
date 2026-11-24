@@ -10,6 +10,17 @@ function modelButton() {
 }
 
 describe("Composer", () => {
+  it("sends a paired conversation image without an OCR grant", () => {
+    setLocale("en")
+    const onSubmit = vi.fn()
+    const image = new File(["pixels"], "preview.png", { type: "image/png" })
+    render(<Composer label="Message" sendLabel="Send" onSubmit={onSubmit}
+      models={[{ provider_id: "gateway:fixture", model: "dialog", default: true }]} />)
+    fireEvent.change(screen.getByTestId("file-input"), { target: { files: [image] } })
+    fireEvent.click(screen.getByRole("button", { name: "Send" }))
+    expect(onSubmit).toHaveBeenCalledWith("", expect.objectContaining({ images: [image] }))
+  })
+
   it("shows the managed model name without offering a picker", () => {
     setLocale("en")
     render(<Composer label="Message" sendLabel="Send" onSubmit={vi.fn()} hideModel models={[{ provider_id: "p", model: "one", default: true }]} />)

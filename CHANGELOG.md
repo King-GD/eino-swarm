@@ -88,6 +88,12 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Conversation image sends, including queued follow-ups, pass the original
+  image and caption to the conversation model and keep the image in history,
+  independent of OCR availability. Desktop and Web image previews offer
+  explicit text extraction through the OCR model.
+  (`F-140`, `C-028`)
+
 - Responses requests omit the optional `include` field by default, so
   compatibility endpoints that reject the field can accept the first request.
   (`F-175`, `C-030`)

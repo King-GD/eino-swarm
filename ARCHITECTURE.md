@@ -96,9 +96,11 @@ cancellation or selection change invalidates its in-flight response locally.
 
 PC and paired phone use the same composer delivery rules. An ordinary send
 during an active turn queues the message with its uploaded files and image
-references. Explicit insertion binds the request to the displayed turn and
-optionally one selected queue row. When the user interrupts and inserts, the
-Registry queues that input and cancels the active manager step under one lock.
+references. When that follow-up starts, the conversation model receives the
+original images and caption as a multimodal message. Explicit insertion binds
+the request to the displayed turn and optionally one selected queue row. When
+the user interrupts and inserts, the Registry queues that input and cancels
+the active manager step under one lock.
 The next manager input keeps the turn identity and workers. The durable
 steer and selected queue claim commit together.
 
@@ -748,6 +750,12 @@ reference after the validated original bytes are saved under the thread's input
 tree. Reconnects replay the card. Paired phones read the pixels through bounded
 RPC chunks. Direct phone chat owns a separate request using its Mobile Bearer
 and persists the original bytes in IndexedDB.
+
+On desktop and Web, **Extract text** in a sent image preview makes a
+cancellable, tool-free request using the OCR role. The adapter resolves the
+role's own provider and protocol and sends the selected stored image. The
+result belongs to the open preview. Conversation sends use the conversation
+model's visual input path, independently of OCR availability.
 
 ## Phone remote (pairlink)
 
@@ -1417,7 +1425,9 @@ worker before closing SQLite.
    `{text, images?, files?, from_event_seq?, history_report?}`. Pasted images are decoded,
    sniffed, stored under `$ZWAI_HOME/inputs/<thread>/` and sent as eino
    `UserInputMultiContent` (caption in a text part, not also on `Content` —
-   OpenAI cannot marshal both), not as workspace files. A `/goal <objective>`
+   OpenAI cannot marshal both), not as workspace files. The conversation's
+   model receives the multimodal input and the transcript retains image
+   references for later turns. A `/goal <objective>`
    body (identifier split, glued CJK, fullwidth `／`, IME punctuation `、`) pins the standing
    objective and starts or steers; the stored user message is the objective.
    One turn per conversation
@@ -1425,8 +1435,9 @@ worker before closing SQLite.
    a live `/goal`, which steers this turn, and
    `from_event_seq`, which interrupts, truncates from that `user_message`,
    and starts again at that position. Ordinary Enter while running **queues a
-   follow-up** (`POST /api/threads/:id/followups`) that starts as the next turn
-   after completion or failure. Stop, cancellation and restart keep it queued.
+   follow-up** with its attachments (`POST /api/threads/:id/deliver`, mode
+   `queue`). The queued message starts as the next turn after completion or
+   failure. Stop, cancellation and restart keep it queued.
    Clicking a waiting row deletes it and loads the
    text into the composer; Enter while the turn is still running enqueues a
    new follow-up at the back. `PATCH …/followups/:fid` still rewrites one row
@@ -1442,8 +1453,7 @@ worker before closing SQLite.
    Enter queues a follow-up instead of leaving the steer in the inbox.
    `PATCH …/steers/:seq` still rewrites one unread caption in place
    (`steer_revised`) for other clients; images on that steer stay.
-   Stop is still `POST …/interrupt` (turn ctx). Pasted images cannot wait in
-   the queue (the row is text) and inject now instead.
+   Stop is still `POST …/interrupt` (turn ctx).
 2. The runtime loads the conversation's transcript from the database (reduced
    to user/assistant messages, so context stays bounded; `/compact` and
    in-turn auto-compact further

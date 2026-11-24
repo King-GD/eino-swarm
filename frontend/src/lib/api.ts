@@ -892,6 +892,11 @@ export const api = {
 
   inputImageURL: (id: string, imageId: string) =>
     `/api/threads/${id}/input-images/${encodeURIComponent(imageId)}`,
+  extractImageText: (id: string, imageId: string, signal: AbortSignal) =>
+    request<{ text: string }>(
+      `/api/threads/${encodeURIComponent(id)}/input-images/${encodeURIComponent(imageId)}/ocr`,
+      { method: "POST", signal },
+    ),
   deleteFile: (id: string, path: string, location?: FileLocation) =>
     request<void>(
       `/api/threads/${id}/download/${path.split("/").map(encodeURIComponent).join("/")}${fileQuery(location)}`,

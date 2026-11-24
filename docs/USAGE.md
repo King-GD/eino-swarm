@@ -213,18 +213,21 @@ After a visible reply, one likely next message can appear as the placeholder.
 Tab inserts it; Enter sends it. **Settings → Swarm → Suggest a next step**
 turns the extra call off. It is on by default.
 
-Paste a screenshot into the box. It lands as a thumbnail you can drop before
-sending, and goes to the model as visual input, not as a file in the
-workspace. Dragging a file onto the box does the same split: images become
-thumbs, other files become workspace attachments. A photo whose drop reports
-a generic binary type, or only a `png` / `jpg` / `gif` / `webp` name, is still
+Paste a screenshot into the box. It lands as a thumbnail you can remove before
+sending. The conversation model receives the original image and caption as
+visual input, including when a queued message starts its turn. Dragging images
+onto the box creates thumbnails. Other files become workspace attachments.
+A photo whose drop reports a generic binary type, or only a
+`png` / `jpg` / `gif` / `webp` name, is still
 a thumb. The server sniffs the bytes and refuses unsupported or mismatched
 type claims. Sending names those files on the message, so the model reads what
 you just attached.
 
 Click a sent image, or focus it and press Enter or Space, to open it over the
 conversation. Escape, the backdrop, or Close returns to the thumbnail.
-Closing the preview keeps a running task going.
+Choose **Extract text** in that preview to run the configured OCR model on
+the selected image. The recognized text can be selected and copied from the
+preview. Closing it cancels the extraction and keeps any running task going.
 
 Hover a user bubble or a finished answer to see the event time. Copy takes
 the text. Edit opens the bubble in place. Sending keeps that bubble, clears

@@ -125,6 +125,23 @@ func TestATurnWithOnlyAnImageIsAccepted(t *testing.T) {
 	h.waitTurnDone(id)
 }
 
+func TestImageOCRRouteRejectsAnUnconfiguredRoleAndAnImageFromAnotherThread(t *testing.T) {
+	h := newHarness(t)
+	id := h.newThread()
+	other := h.newThread()
+	h.json(http.MethodPost, "/api/threads/"+id+"/turns", map[string]any{
+		"images": []any{pngBody()},
+	}, http.StatusAccepted)
+	ref := eventImages(t, h, id, "user_message")[0]
+	path := "/input-images/" + ref.ID + "/ocr"
+	result := h.json(http.MethodPost, "/api/threads/"+id+path, nil, http.StatusForbidden)
+	if result["code"] != "image_ocr_unavailable" {
+		t.Fatalf("missing OCR binding should report unavailable: %v", result)
+	}
+	h.json(http.MethodPost, "/api/threads/"+other+path, nil, http.StatusNotFound)
+	h.waitTurnDone(id)
+}
+
 func TestANonImagePayloadIsRejectedOnTheTurnEndpoint(t *testing.T) {
 	h := newHarness(t)
 	id := h.newThread()

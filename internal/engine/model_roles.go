@@ -1,15 +1,5 @@
 package engine
 
-import (
-	"context"
-	"strings"
-	"time"
-
-	"github.com/LubyRuffy/eino-swarm/internal/provider"
-	"github.com/cloudwego/eino/components/model"
-	"github.com/cloudwego/eino/schema"
-)
-
 // roleModel picks the fixed role for a FOFA account provider. ok is false when
 // this install or provider is not in role mode, and the caller keeps its own
 // model. An enabled role returns its id. Title and compact stay on when their
@@ -40,45 +30,4 @@ func (e *Engine) enabledAccountRole(role string) (providerID, modelName string, 
 		return "", "", false
 	}
 	return id, role, true
-}
-
-// readRoleImages sends user images through the ocr role and returns text for
-// the conversation. used is false when the role is off, so the images stay on
-// the original message.
-func (e *Engine) readRoleImages(providerID, text string, images []ImageInput) (string, []ImageInput, bool, error) {
-	if len(images) > 0 && !e.pool.FeatureAvailable(providerID, "ocr") {
-		return "", nil, true, provider.ErrModelPolicy
-	}
-	ref, ok := e.pool.RoleSelection("ocr", providerID, "")
-	modelName := ref.Model
-	if !ok || modelName == "" || len(images) == 0 {
-		return text, images, false, nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	defer cancel()
-	builder, err := e.pool.RoleModelBuilder(ctx, ref.ProviderID, modelName, "", nil, "ocr")
-	if err != nil {
-		return "", nil, true, err
-	}
-	out, err := ocrGenerate(ctx, builder("ocr", "ocr"), []*schema.Message{
-		schema.SystemMessage("Read the text in the images. Reply with only that text."),
-		BuildUserMessage(text, images),
-	})
-	if err != nil {
-		return "", nil, true, err
-	}
-	read := ""
-	if out != nil {
-		read = strings.TrimSpace(out.Content)
-	}
-	if read == "" {
-		read = strings.TrimSpace(text)
-	} else if strings.TrimSpace(text) != "" {
-		read = strings.TrimSpace(text) + "\n" + read
-	}
-	return read, nil, true, nil
-}
-
-var ocrGenerate = func(ctx context.Context, m model.BaseChatModel, msgs []*schema.Message) (*schema.Message, error) {
-	return m.Generate(ctx, msgs)
 }

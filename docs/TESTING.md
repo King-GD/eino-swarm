@@ -9034,6 +9034,18 @@ shared desktop/Web React flow; they do not establish native Wails acceptance.
 
 ## Decodable image input and sent-image preview (F-140 / C-028)
 
+`internal/engine/image_input_http_test.go` holds a conversation request open,
+queues a PNG with OCR configured, and observes the actual model HTTP requests
+when the queued turn runs and when a later turn reads the history. It verifies
+model names, caption, MIME, original bytes and decoded dimensions. A separate
+case sends a normal image on a Gateway that grants conversation only.
+`internal/engine/image_ocr_test.go` checks that an explicit extraction sends
+only the selected stored bytes to the authorized OCR model over HTTP, keeps
+the result out of conversation history and refuses an unavailable role.
+`frontend/e2e/image-input.spec.ts` exercises explicit selection, an unavailable
+OCR response and result display. `input-thumbs.test.tsx` checks that closing
+the preview cancels its own request.
+
 `frontend/e2e/fixtures/vision-photo.jpg` is a valid JPEG (684 bytes, 16x12), not a three-byte magic marker. `frontend/e2e/image-input.spec.ts` checks MIME and unchanged base64 through submission, exact stored bytes, Trace references, natural dimensions and reload. `composer-image-drop.test.tsx` owns the corresponding component behavior; the large conversation/composer suites keep their other responsibilities. A visible img element or src alone does not prove decoding. The default offline provider does not prove image semantics; independent keyless loopback acceptance can inspect actual OpenAI image_url transport without using a real model.
 
 `frontend/src/components/app/input-thumbs.test.tsx` covers selected-image identity, mouse/keyboard opening, loading/error states and closing with focus returned to the thumbnail. The sent-image browser path in `frontend/e2e/image-input.spec.ts` uses decoded stored images, checks proportional viewport fitting and verifies that the selected image opens again after reload. `frontend/src/App.test.tsx` exercises the actual window capture handler with a mounted Radix dialog: Escape closes the preview before a Find bar underneath it, and repeated Escape after either closes never calls interrupt. It also covers a focused composer, closed dialog remnants, the explicit Stop button and unchanged unrelated shortcuts. `frontend/e2e/shell.spec.ts` verifies Find dismissal during a running turn, repeated Escape keeping that turn active and the Stop button ending it (`F-130` / `C-002`). Desktop and Web share this component; a browser run does not by itself claim a native-window acceptance result.
