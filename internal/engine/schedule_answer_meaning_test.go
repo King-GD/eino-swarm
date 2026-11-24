@@ -28,8 +28,11 @@ func TestScheduleAnswerMeaningExcludesNonCurrentOrReportedAssertions(t *testing.
 			// Keep a concrete cadence so this tests meaning independently of
 			// the rule that ignores assertions with no verifiable fields.
 			const text = "complete assertion every 90 seconds"
-			claim := map[string]any{"quote": text, "scope": "unspecified", "new": true, "every_s": 90,
+			claim := map[string]any{"quote": text, "scope": "unspecified", "every_s": 90,
 				"stance": tc.stance, "temporal": tc.temporal, "attribution": tc.attribution}
+			if tc.name == "current" {
+				claim["new"] = true
+			}
 			body, _ := json.Marshal(map[string]any{"claims": []any{claim}})
 			claims, err := decodeScheduleAnswer(schema.AssistantMessage(string(body), nil), []string{text})
 			want := 0
@@ -101,6 +104,7 @@ func TestNonClaimMeaningPublishesThroughRegistryAndHTTPWithoutGoalBlock(t *testi
 							"stance": tc.stance, "temporal": tc.temporal, "attribution": tc.attribution}
 						if tc.externalActor != "" {
 							claim["scope"], claim["scope_quote"], claim["every_s"] = "external", tc.externalActor, 45
+							delete(claim, "new")
 						}
 						claims = append(claims, claim)
 					}
@@ -176,6 +180,38 @@ func TestNonClaimMeaningPublishesThroughRegistryAndHTTPWithoutGoalBlock(t *testi
 			}
 			if tc.mixed && (rows[0].State != "rejected" || rows[0].Payload != "") {
 				t.Fatalf("unsupported local candidate was retained: %+v", rows[0])
+			}
+		})
+	}
+}
+
+func TestExternalObservationDoesNotRequireAnAppArmingFlag(t *testing.T) {
+	const external = "The archive service polls its queue every 45 seconds."
+	const local = "The scheduled check runs every 60 seconds."
+	externalItem := `{"quote":"` + external + `","scope":"external","scope_quote":"The archive service","stance":"affirmed","temporal":"current","attribution":"assistant","every_s":45}`
+	localItem := `{"quote":"` + local + `","scope":"unspecified","stance":"affirmed","temporal":"current","attribution":"assistant","every_s":60`
+	body := []string{external, local}
+	for _, tc := range []struct {
+		name, items string
+		want        int
+	}{
+		{"external-only", externalItem, 0},
+		{"mixed", externalItem + "," + localItem + `,"new":true}`, 1},
+		{"local-still-requires-new", externalItem + "," + localItem + "}", -1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			claims, err := decodeScheduleAnswer(schema.AssistantMessage(`{"claims":[`+tc.items+`]}`, nil), body)
+			if tc.want < 0 {
+				if failure, ok := err.(*scheduleAnswerError); !ok || failure.Detail != "claim_shape" {
+					t.Fatalf("local claim with missing new became valid: claims=%+v err=%v", claims, err)
+				}
+				return
+			}
+			if err != nil || len(claims) != tc.want {
+				t.Fatalf("external observation depended on app arming metadata: claims=%+v err=%v", claims, err)
+			}
+			if tc.want == 1 && (claims[0].Quote != local || claims[0].New == nil || !*claims[0].New || claims[0].EveryS != 60) {
+				t.Fatalf("mixed candidate lost its separate local claim: %+v", claims[0])
 			}
 		})
 	}

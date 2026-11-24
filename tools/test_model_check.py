@@ -560,6 +560,8 @@ EventuallyDone == <>(phase = "done")
                      "schedule-current", "schedule-pre-cancel-authority",
                      "schedule-claimed-cancel-ignored", "schedule-manager-cancel-masks-human",
                      "schedule-retarget-after-terminal", "schedule-reach-cancel-storage-refusal",
+                     "schedule-answer-current", "schedule-answer-external-mislabelled-twice",
+                     "schedule-answer-mixed-bypass", "schedule-answer-external-new-required",
                      "consent-current", "consent-pre-cancel-authority"):
             outcome, log = mc.run_case(by_name[name], jar, out)
             self.assertIsNone(mc.judge(by_name[name], outcome), log.read_text()[-2000:])

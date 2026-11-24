@@ -2,7 +2,9 @@ import { createServer, type ServerResponse } from "node:http"
 import { setTimeout as delay } from "node:timers/promises"
 
 export const unsupportedScheduleAnswer = "A new future check is already armed every 90 seconds."
-export const verifiedScheduleAnswer = "A recurring check is confirmed for every 90 seconds."
+const externalObservation = "The archive service polls its queue every 45 seconds."
+const confirmedCheck = "A recurring check is confirmed for every 90 seconds."
+export const verifiedScheduleAnswer = externalObservation + " " + confirmedCheck
 
 type Input = { messages: { role: string; content?: string }[]; stream?: boolean; tools?: unknown[]; tool_choice?: string }
 
@@ -54,8 +56,12 @@ export async function startScheduleAnswerFixture({ secondPolicyDelayMS = 0, seco
           // Delay headers to exercise the configured non-streaming first-byte
           // budget, independently of the shorter response-body idle budget.
           if (checks === secondPolicyFailures.length + 2 && secondPolicyDelayMS > 0) await delay(secondPolicyDelayMS)
-          policy(res, { claims: [{ quote: checks === 1 || uncorrected ? unsupportedScheduleAnswer : verifiedScheduleAnswer, scope: "unspecified", new: true, every_s: 90,
-            stance: "affirmed", temporal: "current", attribution: "assistant" }] })
+          const unsupported = checks === 1 || uncorrected
+          const localClaim = { quote: unsupported ? unsupportedScheduleAnswer : confirmedCheck, scope: "unspecified", new: true, every_s: 90,
+            stance: "affirmed", temporal: "current", attribution: "assistant" }
+          const externalClaim = { quote: externalObservation, scope: "external", scope_quote: "The archive service", every_s: 45,
+            stance: "affirmed", temporal: "current", attribution: "assistant" }
+          policy(res, { claims: unsupported ? [localClaim] : [externalClaim, localClaim] })
           return
         }
         if (system.startsWith("## Thread wake authorization classification")) {

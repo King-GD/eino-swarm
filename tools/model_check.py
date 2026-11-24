@@ -17,6 +17,8 @@ models/scheduling/WakeConsentTimeline.tla checks multiple original human
 decisions, asynchronous classification and exact-ID cancellation deduplication.
 models/scheduling/WakePolicyBackfill.tla checks bounded calls, same-turn
 classification progress and the atomic schedule-write recheck (C-009 / C-012).
+models/scheduling/ScheduleAnswerAdmission.tla checks external observations,
+mixed local claims and current evidence at answer publication (C-012).
 models/stream/ManagerCommentary.tla checks the order and privacy of admitted
 manager commentary before it enters the event stream.
 models/account/DeviceLogin.tla checks validated public-link publication, manual
@@ -395,6 +397,15 @@ MODELS = {
              "TerminalDestinationStable", "CancellationKeepsSelectedTarget",
              "ClaimedCancellationStopsReport", "DuplicateDeleteKeepsLaterAllowance"),
             (("MaxAttempts", 2),),
+        ),
+        Model(
+            "schedule-answer", ROOT / "models" / "scheduling" / "ScheduleAnswerAdmission.tla",
+            ("TreatExternalAsLocal", "ExternalSkipsLocal", "TrustInvalidExternal", "SkipCommitRecheck",
+             "RequireExternalNew", "PermitMissingLocalNew"),
+            ("TypeOK", "ExternalOnlyAvoidsCorrection", "ExternalOnlyDoesNotFail",
+             "LocalPublicationRequiresEvidence", "MalformedExternalStaysPrivate", "PublishedLocalUsesCurrentRow",
+             "ExternalDoesNotRequireNew", "MissingLocalNewStaysPrivate"),
+            (), ("ExternalOnlyEventuallyPublishes",),
         ),
         Model(
             "consent", ROOT / "models" / "scheduling" / "WakeConsentTimeline.tla",
@@ -1111,6 +1122,33 @@ CASES: tuple[Case, ...] = (
         ("manager-commentary-reach-two-rounds", "NeverTwoOrdinaryRounds"),
         ("manager-commentary-reach-private-claim-tool", "NeverPrivateClaimAndToolProgress"),
         ("manager-commentary-reach-terminal-verified-claim", "NeverTerminalVerifiedClaim"),
+    )),
+    _case("schedule-answer-current", "grounded external observations and checked local claims",
+          model="schedule-answer"),
+    *(_case("schedule-answer-" + name, source, (switch,), invariant, model="schedule-answer")
+      for name, source, switch, invariant in (
+          ("external-mislabelled", "observed: the extractor presented external polling as a local claim",
+           "TreatExternalAsLocal", "ExternalOnlyAvoidsCorrection"),
+          ("external-mislabelled-twice", "observed: the corrected external observation was refused again",
+           "TreatExternalAsLocal", "ExternalOnlyDoesNotFail"),
+          ("mixed-bypass", "seeded: an external observation exempts a separate local claim",
+           "ExternalSkipsLocal", "LocalPublicationRequiresEvidence"),
+          ("invalid-external", "seeded: accept an external item with no witness or a local schedule ID",
+           "TrustInvalidExternal", "MalformedExternalStaysPrivate"),
+          ("external-new-required", "observed: the model omitted the app arming field for an external observation",
+           "RequireExternalNew", "ExternalDoesNotRequireNew"),
+          ("local-new-optional", "seeded: admit a concrete current local claim without an arming flag",
+           "PermitMissingLocalNew", "MissingLocalNewStaysPrivate"),
+          ("stale-row", "seeded: the selected row changes after verification but before publication",
+           "SkipCommitRecheck", "PublishedLocalUsesCurrentRow"),
+    )),
+    *(_case("schedule-answer-reach-" + name, "witness", witness=witness, model="schedule-answer")
+      for name, witness in (
+          ("external", "NeverExternalPublishedWithoutSchedule"),
+          ("mixed-corrected", "NeverCorrectedMixedPublished"),
+          ("mixed-verified", "NeverVerifiedMixedPublished"),
+          ("stale-refused", "NeverStaleLocalRefused"),
+          ("mixed-refused-twice", "NeverRepeatedMixedFailed"),
     )),
     # Real UI-ID callback scheduling witness; target remains a pre-code model gate.
     _askpub("askpub-knownfault-publication", "observed clean EOF lost after actual checkpoint/cancel",

@@ -1736,9 +1736,32 @@ is used in regression tests. Structured classification
 requires stance, time and attribution; nonaffirmative, noncurrent and reported
 items cannot require a matching armed plan. These offline fixtures prove the
 protocol and runtime boundary, not an external model's semantic accuracy.
+
+The [schedule answer admission model](../models/scheduling/ScheduleAnswerAdmission.tla)
+runs with `make model-check`. It checks one private candidate and at most one
+same-turn correction. The historical switch sends a grounded external polling
+observation to local schedule matching. TLC finds both an unnecessary correction
+and a second refusal ending in `no_matching_schedule`. Separate switches check
+that a mixed answer cannot exempt its local claim, a malformed external item
+cannot publish, and changed scheduling evidence cannot be used at commit.
+The current model reaches publication for external-only and verified mixed
+answers and can publish a corrected mixed answer that drops its unsupported
+local claim. With a live owner, healthy storage and fair verification and
+commit, an external-only observation eventually publishes.
+
+The model starts at structured extraction. The external item needs a verbatim
+witness and passage and may carry no app schedule ID. Only a concrete
+current app claim needs the arming flag `new`. TLC checks guard removal on
+both sides, and the Go tests exercise this distinction through Registry and
+the real model transport. Identifying the operator in prose remains a
+semantic model assumption. The Registry/HTTP
+tests above cover valid external items, both kinds of mixed answer, and refusal
+after one correction. `internal/store/schedule_answer_test.go` covers the
+recheck of the selected row under actual SQLite cancellation.
+
 `internal/engine/schedule_answer_identity_test.go` and
-`internal/engine/schedule_answer_identity_boundary_test.go` cover the three-value scope
-protocol and the real Registry/HTTP answer boundary (Issue #132). A recurring
+`internal/engine/schedule_answer_identity_boundary_test.go` cover application
+scope and the real Registry/HTTP answer boundary (Issue #132). A recurring
 thread wake can support an assertion that does not specify a destination;
 recurrence alone must not fabricate an independent job. Specific scopes require
 an exact `scope_quote` within the claim's passage, and any extracted ID must

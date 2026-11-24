@@ -251,7 +251,7 @@ func TestInvalidScheduleClassificationDetailsCrossTheActualHTTPBoundary(t *testi
 		{detail: "trailing", content: `{"claims":[]} private-policy-fragment`},
 		{detail: "claim_list", content: `{"claims":null}`},
 		{detail: "claim_meaning", content: claimBody(func(c map[string]any) { c["stance"] = "unknown" })},
-		{detail: "claim_shape", content: claimBody(func(c map[string]any) { delete(c, "new") })},
+		{detail: "claim_shape", content: claimBody(func(c map[string]any) { delete(c, "new"); c["every_s"] = 90 })},
 		{detail: "unspecified_scope_quote", content: claimBody(func(c map[string]any) { c["scope_quote"] = "current state" })},
 		{detail: "scope_quote", content: claimBody(func(c map[string]any) { c["scope"] = "thread"; c["scope_quote"] = "private-policy-fragment" })},
 		{detail: "schedule_id", content: claimBody(func(c map[string]any) { c["schedule_id"] = "private-policy-fragment" })},
