@@ -29,6 +29,9 @@ func TestResponsesGenerateKeepsHostedToolsRemoteAndReplaysOutput(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Error(err)
 		}
+		if _, present := body["include"]; present {
+			t.Error("Responses request must omit include by default")
+		}
 		requests = append(requests, body)
 		fmt.Fprint(w, responsesFixture)
 	}))
@@ -72,6 +75,9 @@ func TestResponsesGenerateKeepsHostedToolsRemoteAndReplaysOutput(t *testing.T) {
 	replay := requests[1]["input"].([]any)
 	if len(replay) != 6 || replay[1].(map[string]any)["type"] != "reasoning" || replay[2].(map[string]any)["type"] != "web_search_call" || replay[5].(map[string]any)["type"] != "function_call_output" || replay[5].(map[string]any)["call_id"] != "fc_1" {
 		t.Fatalf("replay=%+v", replay)
+	}
+	if replay[1].(map[string]any)["encrypted_content"] != "opaque" {
+		t.Fatal("replay lost the encrypted reasoning returned by the endpoint")
 	}
 }
 
@@ -127,6 +133,13 @@ func responsesReadAll(t *testing.T, sr *schema.StreamReader[*schema.Message]) ([
 
 func TestResponsesStreamKeepsDeltasCitationsAndOneHostedReceipt(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]json.RawMessage
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+		}
+		if _, present := body["include"]; present {
+			t.Error("streaming Responses request must omit include by default")
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		for _, raw := range []string{
 			`{"type":"response.output_item.added","output_index":0,"item":{"id":"ws_1","type":"web_search_call","status":"in_progress"}}`,

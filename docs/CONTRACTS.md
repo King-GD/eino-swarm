@@ -772,6 +772,7 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 - 关联功能：`F-175`、`F-160`、`F-170`
 - 契约内容：
   - 空或 `chat_completions` 的 `api_mode` 保留现有 POST /chat/completions 行为；`responses` 显式选择 POST /responses，不根据名称猜测协议。
+  - Responses 流式和非流式请求默认省略可选的 `include` 字段。端点返回的加密推理继续随原始 Responses 输出保留，并用于后续回放。验证见 `internal/provider/responses_test.go`。
   - `builtin_tools` 默认空；非空只允许 Responses。每项为完整对象，`type` 为非空字符串、不得重复，当前支持 web_search/web_search_preview/file_search/code_interpreter，嵌套参数原样保存。
   - 云端工具与实际 Agent 本地函数声明合并；只有 function_call 进入本地工具调度，云端 *_call 不能伪造成本地调用、spawn 或本地成功回执。
   - 云端调用状态同模型请求归属原 turn/agent/provider/model，保存在 `builtin_tool` 事件，并可通过一 ID Trace 重建；同请求中重复的同 ID/状态不重复计数。quiet 定时检查保持 Chat 安静，同时在 Trace Full log 保留收据。流式失败或取消不得伪造完成。

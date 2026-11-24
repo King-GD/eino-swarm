@@ -88,6 +88,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Responses requests omit the optional `include` field by default, so
+  compatibility endpoints that reject the field can accept the first request.
+  (`F-175`, `C-030`)
+
 - Task panel plugin settings show the shared enable switch and byte limits
   for state and updates. Source-specific options are managed through the
   configuration file or settings API. The Save button appears after an edit.

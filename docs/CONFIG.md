@@ -385,6 +385,9 @@ The adapter supports text and image inputs and preserves provider tool outputs;
 client-side downloading of authenticated container files and other audio/video/file
 input parts are not implemented by this adapter.
 
+Responses requests omit the optional `include` field by default. When the
+endpoint returns encrypted reasoning, the adapter preserves it for replay.
+
 Invalid JSON keeps the settings draft and suspends automatic saving. Clear the
 list before switching back to Chat Completions. A malformed/unsupported saved
 configuration returns an error on load or save rather than silently dropping tools.

@@ -380,6 +380,7 @@ This is the current user-facing capability map. The code and tests named below a
 - 目的：让支持 Responses 的 provider 在云端执行自带工具；使用者：PC 用户及 API 配置管理者；入口：Settings → Models 的 provider API 模式和工具 JSON、`PUT /api/settings`、`config.yaml`；输入：`api_mode` 和 `builtin_tools`，工具对象包含唯一非空 `type` 及服务商参数；输出：云端工具与本地函数工具共同供模型选择，流式回答含可点击来源，同 turn 的 `builtin_tool` Trace 回执；前置条件：端点、模型及所配置工具支持 Responses；失败表现：无效配置拒绝且保留草稿，服务端拒绝或流错误沿现有模型错误通道显示；关联契约：`C-030`、`C-009`、`C-012`；实现证据：`internal/config/provider_tools.go`、`internal/provider/responses.go`、`internal/engine/builtin_tools.go`、`frontend/src/components/app/model-settings.tsx`；验证：`internal/config/provider_tools_test.go`、`internal/server/settings_provider_tools_test.go`、`internal/engine/builtin_tools_test.go`、`frontend/e2e/builtin-tools.spec.ts`。
 - 当前支持 `web_search`、`web_search_preview`、`file_search`、`code_interpreter`；参数原样保留，不另行上传文件或调用资源管理接口；自动容器等选项仍可在服务商执行时创建资源。默认仍为 Chat Completions 且工具为空，不能根据服务商名称自动开工具。PC provider 配置也作用于通过 PC 执行的配对手机会话；手机独立直连配置不在此功能范围。
 - PC 主管通过已协商固定指令继承的网关目录调用原生 Responses 时，首轮用开头的 `developer` 消息提交固定指令。相同模型的历史只追加时，续接只上传新增输入。固定指令或历史变化、续接失效时以本地完整输入重建。关联契约 `C-030`，验证 `internal/engine/gateway_responses_continuation_test.go`。
+- Responses 请求默认省略 `include`，并保留端点返回的加密推理以供后续回放。关联契约 `C-030`，验证 `internal/provider/responses_test.go`。
 
 ### F-176 External MCP tools
 

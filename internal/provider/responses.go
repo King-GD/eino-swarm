@@ -102,7 +102,7 @@ func (m *responsesModel) requestOnce(ctx context.Context, in []*schema.Message, 
 	if err != nil {
 		return nil, responsesRequest{}, err
 	}
-	body := map[string]any{"model": strings.TrimSpace(m.provider.Model), "include": []string{"reasoning.encrypted_content"}}
+	body := map[string]any{"model": strings.TrimSpace(m.provider.Model)}
 	if o.Model != nil {
 		body["model"] = *o.Model
 	}

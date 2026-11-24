@@ -4180,6 +4180,8 @@ on Chat Completions return `400` before changing configuration. API key omission
 clearing and masking retain their existing semantics. Supported types and cloud
 resource limits are described in [configuration](CONFIG.md#provider-cloud-tools).
 
+The provider adapter omits the optional `include` field in Responses requests.
+
 The PC manager can use native Responses continuation when the Gateway
 conversation capability advertises `responses_developer_history: 1`. The
 initial `store:true` request places the fixed instructions in leading
