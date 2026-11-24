@@ -195,7 +195,7 @@ func hasUserPrefix(msgs []adk.Message, prefix string) bool {
 // These recovery notices are regenerated from current worker state on resume.
 func isEngineOnlyUser(content string) bool {
 	switch content {
-	case resumeCue, resumeWorkersCue, parkedWorkersCue, scheduleAnswerCorrectionCue:
+	case resumeCue, resumeWorkersCue, parkedWorkersCue, scheduleAnswerCorrectionCue, legacyScheduleAnswerCorrectionCue:
 		return true
 	default:
 		return strings.HasPrefix(content, interruptedWorkersCueLead) && legacyRuntimeCue(content)

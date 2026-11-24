@@ -88,6 +88,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Reports of an external service's observed polling cadence can publish
+  without a local schedule receipt. Claims about checks armed by the app
+  still require a matching schedule. (`F-150`, `C-012`)
+
 - Memory capacity warnings allow writes that fit the actual budget. Skill folding
   preserves complete source instructions and reports writes that landed before a
   later cleanup failure. (`F-420`, `C-025`)
