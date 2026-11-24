@@ -104,3 +104,12 @@ describe("Tool result limit", () => {
     expect(onChange).toHaveBeenCalledWith({ ...base, tools: { ...base.tools, result_max_chars: 12000 } })
   })
 })
+
+it("defaults work records on and lets the user disable them for future ordinary turns", () => {
+  const onChange = vi.fn()
+  render(<SwarmTab settings={base} onChange={onChange} />)
+  const ledger = screen.getByRole("switch", { name: "Work records" })
+  expect(ledger).toBeChecked()
+  fireEvent.click(ledger)
+  expect((onChange.mock.calls[0][0] as Settings).swarm.work_ledger).toBe(false)
+})

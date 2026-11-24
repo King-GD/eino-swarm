@@ -100,7 +100,7 @@ func TestNuwaPlannerDelegatesExecutionToolsAtModelHTTP(t *testing.T) {
 					t.Error("worker did not receive actual MCP evidence")
 				}
 				call("separation-worker-record", "record_work", map[string]any{
-					"kind": "artifact", "title": "Worker deliverable", "summary": value,
+					"scope": "project", "kind": "artifact", "title": "Worker deliverable", "summary": value,
 					"artifact_path": artifact, "evidence": []any{},
 				})
 			case 6:

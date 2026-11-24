@@ -22,6 +22,7 @@ type projectView struct {
 	ResolvedWorkdir        string `json:"resolved_workdir"`
 	MemoryEnabled          bool   `json:"memory_enabled"`
 	NuwaEnabled            bool   `json:"nuwa_enabled"`
+	NuwaConfigured         bool   `json:"nuwa_configured,omitempty"`
 	NuwaPlannerProviderID  string `json:"nuwa_planner_provider_id"`
 	NuwaPlannerModel       string `json:"nuwa_planner_model"`
 	NuwaExecutorProviderID string `json:"nuwa_executor_provider_id"`
@@ -47,6 +48,7 @@ func (s *Server) viewProject(p *store.Project) projectView {
 		ResolvedWorkdir:        s.engine.ProjectWorkdir(p),
 		MemoryEnabled:          p.MemoryEnabled,
 		NuwaEnabled:            p.NuwaEnabled,
+		NuwaConfigured:         p.NuwaEnabled || p.NuwaPlannerModel != "" || p.NuwaExecutorModel != "",
 		NuwaPlannerProviderID:  p.NuwaPlannerProviderID,
 		NuwaPlannerModel:       p.NuwaPlannerModel,
 		NuwaExecutorProviderID: p.NuwaExecutorProviderID,

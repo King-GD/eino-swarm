@@ -22,7 +22,7 @@ func distillationSources(db *gorm.DB, projectID, threadID string) *gorm.DB {
 	query := db.Table("events AS e").
 		Joins("JOIN turns t ON t.id=e.turn_id AND t.thread_id=e.thread_id").
 		Joins("JOIN threads h ON h.id=t.thread_id").
-		Where("h.project_id = ?", projectID).
+		Where("h.project_id = ? AND e.work_record_payload = 0", projectID).
 		Where("(t.status=? AND e.kind IN ?) OR (t.status=? AND e.kind IN ?)",
 			TurnDone, []string{"user_message", "steer", "agent_message", "tool_result"},
 			TurnError, []string{"user_message", "steer"})
@@ -37,7 +37,7 @@ func (s *Store) ProjectDistillationAnchor(ctx context.Context, projectID, thread
 	var turn Turn
 	query := s.db.WithContext(ctx).Table("turns t").Joins("JOIN threads h ON h.id=t.thread_id").
 		Where("h.project_id=?", projectID).
-		Where(`EXISTS (SELECT 1 FROM events e WHERE e.thread_id=t.thread_id AND e.turn_id=t.id
+		Where(`EXISTS (SELECT 1 FROM events e WHERE e.thread_id=t.thread_id AND e.turn_id=t.id AND e.work_record_payload=0
 			AND ((t.status=? AND e.kind IN ?) OR (t.status=? AND e.kind IN ?)))`,
 			TurnDone, []string{"user_message", "steer", "agent_message", "tool_result"},
 			TurnError, []string{"user_message", "steer"})
@@ -107,7 +107,7 @@ func (s *Store) DistillationWindow(ctx context.Context, reviewID string, after u
 		FROM project_distillation_sources q
 		LEFT JOIN threads h ON h.id=q.thread_id AND h.project_id=q.project_id
 		LEFT JOIN turns t ON t.id=q.turn_id AND t.thread_id=h.id AND t.status=q.turn_status
-		LEFT JOIN events e ON e.id=q.event_id AND e.turn_id=t.id AND e.thread_id=h.id AND e.seq=q.seq AND e.kind=q.kind
+		LEFT JOIN events e ON e.id=q.event_id AND e.turn_id=t.id AND e.thread_id=h.id AND e.seq=q.seq AND e.kind=q.kind AND e.work_record_payload=0
 		WHERE q.review_id=? AND q.event_id>? ORDER BY q.event_id LIMIT ?`, reviewID, after, limit).Scan(&rows).Error
 	return rows, err
 }
@@ -119,7 +119,7 @@ func (s *Store) DistillationToolCalls(ctx context.Context, ids []uint) (map[uint
 	}
 	var rows []DistillationSourceRow
 	if err := s.db.WithContext(ctx).Table("events e").Select(distillationEventProjection).
-		Where("e.id IN ? AND e.kind = ?", ids, "tool_call").Scan(&rows).Error; err != nil {
+		Where("e.id IN ? AND e.kind = ? AND e.work_record_payload = 0", ids, "tool_call").Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	for _, row := range rows {

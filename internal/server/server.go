@@ -185,6 +185,9 @@ func New(opts Options) (*Server, error) {
 		api.DELETE("/threads/:id", s.deleteThread)
 
 		api.GET("/threads/:id/events", s.streamEvents)
+		api.GET("/threads/:id/work", s.getThreadWork)
+		api.GET("/threads/:id/work/events", s.streamThreadWork)
+		api.POST("/threads/:id/work/promote", s.promoteThreadWork)
 		api.GET("/threads/:id/log", s.listLog)
 		api.GET("/threads/:id/agents/:agent/log", s.listAgentLog)
 		api.POST("/threads/:id/turns", s.startTurn)
@@ -314,6 +317,10 @@ func (s *Server) fail(c *gin.Context, err error) {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "file_root_changed"})
 	case errors.Is(err, engine.ErrRestoring):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "restoring"})
+	case errors.Is(err, store.ErrNuwaConflict):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "work_conflict"})
+	case errors.Is(err, store.ErrInvalidNuwaNode):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "work_invalid"})
 	case errors.Is(err, store.ErrDraftConflict):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "draft_conflict"})
 	case errors.Is(err, store.ErrInvalidDraft):

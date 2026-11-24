@@ -25,7 +25,7 @@ func TestNuwaManagerSharesEvidenceThroughActualHTTPModel(t *testing.T) {
 		switch step {
 		case 1:
 			assertNuwaRecordWorkGuidance(t, request, "manager")
-			writeScheduleCompletionTool(w, request, "record_work", `{"kind":"fact","title":"Measured result","summary":"The supplied input was inspected.","evidence":[]}`)
+			writeScheduleCompletionTool(w, request, "record_work", `{"scope":"project","kind":"fact","title":"Measured result","summary":"The supplied input was inspected.","evidence":[]}`)
 		case 2:
 			var receipt struct {
 				OK   bool           `json:"ok"`

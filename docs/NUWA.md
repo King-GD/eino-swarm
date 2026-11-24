@@ -36,14 +36,9 @@ Accept the result using the workers' evidence against the acceptance criteria.
 For shared findings and results, record their sources and artifact paths.
 ```
 
-On desktop or Web, open **Collaboration** in the right inspector. The host
-shows the tab when the conversation's project has Nuwa enabled or has recorded
-collaboration history. With no conversation open, the tab follows the selected
-project. A standalone conversation does not show that project's records.
-The tab does not take focus when it appears. Use **Expand graph** when work has
-been recorded, then select a node and open **Details and evidence** to inspect
-its sources. The paired phone can configure a project's Nuwa mode but does not
-show the collaboration graph. See the [host registration guide](TASK_PANELS.md#宿主注册表与插件目录).
+On desktop or Web, the **Work records** tab shows the selected conversation's
+records, including work reported by its executors. Use **Expand graph** to
+inspect work dependencies and details. See [Work records](WORK.md).
 
 ## Planning, models and delegation
 
@@ -151,161 +146,21 @@ excluding System messages. A child's context therefore comes from its parent.
 Closing a subtree records the affected generations and retains
 `already_finished` for results that had already ended.
 
-## Shared work
+## Work records and mode changes
 
-Before each Nuwa manager or worker model call, the engine adds a fresh, bounded
-preview of the original turn's project graph. Each record in that preview
-keeps its id, kind, title, status, summary, dependencies, version and
-dependency warnings. Storage provenance, timestamps, empty detail and evidence
-stay on `read_work`. When the same request already contains every current id
-and summary outside the preview, the call sends `status: unchanged` and the
-revision instead of repeating the snapshot. A changed revision or a missing
-summary sends the short preview again. Managers see recent updates first.
-Workers prioritize records whose titles or summaries match the task supplied
-when their current generation started, then use update time and ID for stable
-ordering. Matching uses words and CJK character pairs, not semantic inference;
-without a useful match, ordering remains recent first. Full detail is left to
-`read_work`. The complete preview, including its explanation and JSON,
-uses the existing **tool result character limit**. Oversized nodes are omitted
-whole and counted explicitly; they are still available through `read_work`.
-When a kept node depends on an omitted one, `path` lists that prerequisite
-chain in dependency order, including each step's summary. Lower-priority
-detailed nodes make room only when the chain itself fits in the budget.
-Omitted records that the kept nodes do not depend on stay out of `path`.
-Each model call and shared-work read takes its budget from one committed config
-snapshot, so live Settings updates do not race or change the cap during encoding.
-This bounds the preview, not the entire model context. Provider-internal retries
-may reuse one preview.
+The planner and executors use the same [work records](WORK.md) surface
+available to ordinary conversations. New records are conversation-scoped
+until explicitly shared. Nuwa always mounts the work record tools for its
+eligible turns, with reads only in planning. Verification and repair targets
+must be visible to the turn.
 
-The preview is untrusted reported data, not instructions, verification or new
-human authority. It is added only to the model request, leaving transcript,
-compact input and fork history unchanged. A resumed worker keeps its original
-configuration and project owner while reading that project's latest graph.
-Related records keep their current versions and dependency warnings. Relevance
-does not establish truth or successful reuse. Inbox messages do not rewrite the
-generation's initial task; resume and restore use the task supplied to that new
-execution. The task travels separately from planner instructions and fork history.
-Cold recovery retains a known checkpoint assignment separately from its normal
-recovery message. Legacy records without a known assignment use recent-first
-previews rather than guessing from saved instructions or recovery guidance.
-A failed read or changed project membership supplies `status: unavailable`,
-without records, a revision or database error text. It does not turn an optional
-preview into a new lifetime guard for existing work. Actual shared-work tools
-and new claims still validate ownership. Cancellation and budget or encoding
-failures refuse the model call; an unavailable preview is never a current-looking
-empty graph. Ordinary mode receives no automatic preview.
-
-Open **Collaboration** in the right panel. **Entire project** shows all recorded
-work; **This conversation** retains cross-conversation prerequisites so their
-paths remain visible. Select a node for detail, sources and correction identity,
-or expand the collaboration graph. Solid arrows show recorded work dependencies.
-When several records of the same kind neither depend on nor support another
-record, they collapse into one row and share a single dashed arrow to the goal.
-A single unconnected record stays a card. A real chain
-still ends in its own dashed arrow. These arrows do not assert that one result
-relied on another. Selecting a record on the path highlights only its upstream
-and downstream. The graph frame stays as tall as the path instead of stretching to fill the
-panel. A collapsed row shows how many records share each status. Opening it
-lists the newest records first, and a list longer than eight records can be
-filtered by title or summary. The index below the graph does not repeat those
-grouped records. The graph card shows kind, title and status. Tasks, facts and results use
-different background colors on the summary, graph cards, unlinked groups,
-lists and detail. Who recorded a result, in which turn, and with which model
-stays in the detail and in the opened kind list, not on a separate graph node. Worker
-rows show durable lifecycle status and recorded model bindings. Source links open the source conversation and, when a
-turn is given, its Trace; results use the existing file API.
-
-When the selected scope has no shared records or workers, Collaboration shows
-the open conversation's latest turn status and links to its Trace and Files.
-A discussion turn can complete without workers or a recorded graph. A task that
-requires operations still assigns those operations to workers.
-
-| kind | status | meaning |
-|---|---|---|
-| task | `pending`, `running`, `done`, `blocked`, `cancelled` | an agent's reported task state |
-| fact | `reported`, `superseded`, `retracted` | a claim and its correction state |
-| artifact | `reported`, `superseded`, `retracted` | a reference to an existing workspace file |
-
-On creation, a task defaults to `pending`. Facts and artifacts default to
-`reported`.
-
-An evidence reference binds to an existing event in this project by conversation
-and event `seq`; an optional turn must match. This checks identity and
-availability, not whether the evidence supports the claim. Empty evidence stays
-explicitly unverified. Worker lifecycle is a separate projection: a shared task
-marked `done` does not finish an engine turn or collect a worker result.
-
-An agent can also pass `own_tool_call_ids` to `record_work` using exact IDs from
-its earlier tool replies. The host resolves up to 16 IDs in the current
-manager turn or worker execution. A retained worker keeps that execution
-scope when a later turn takes over its notifications. The fact keeps its
-original author and the evidence points to the turn where the result was
-recorded. Recovery starts a fresh execution scope for new tool calls.
-Earlier receipts remain referable by explicit `evidence`, and a retry of an
-already committed write returns its saved response.
-
-Each ID needs a unique earlier call and its result. A missing, still-uncommitted
-or ambiguous receipt refuses the entire write. The two evidence fields are
-mutually exclusive, including when either array is empty. On an update, supply
-one field to replace evidence, use an empty array to clear it, or omit both to
-preserve it.
-
-`read_work` returns bounded summaries, then detail and provenance by `id`.
-`offset`/`limit` page list entries or detail runes. JSON remains complete under
-the existing tool-result budget; oversized metadata refuses explicitly.
-
-`record_work` creates without `id`/`version`, or patches an existing node using
-its current version. Omitted fields remain; `[]` explicitly clears dependencies
-or evidence. Creation requires kind/title. An artifact requires an
-`artifact_path` that resolves to an existing regular file within the
-conversation workspace. Use a workspace-relative or absolute path. A saved path
-is not an immutable content receipt.
-An unknown update ID is refused with guidance to omit the ID and version for
-creation or retrieve an existing ID and version with `read_work` for an update.
-
-The host supplies project, conversation, turn, caller and generation identity.
-Corrections preserve the original author and record the actual updating caller.
-Node CAS, project revision and full version audit commit together. Stale versions
-refuse; reread and reconcile. After current ownership and input-validity checks,
-re-delivery of one real tool-call identity with the same arguments returns its
-exact saved receipt without another write. Idempotency does not bypass
-cancellation, deleted owners/targets or artifact-file validity. Different
-arguments under that identity refuse. That receipt may predate a later correction.
-
-Dependencies must exist in the same project without cycles. Writes retain the
-source versions on which a result depends. Use exact IDs from `record_work` or
-`read_work` for material prerequisites the work actually relied on. Independent
-work can omit `depends_on` on creation. Correction, supersession or retraction
-marks downstream results **Needs review**. An unrelated patch cannot silently
-acknowledge new evidence: reread and explicitly supply the reviewed `depends_on`
-list. Deleted prerequisites and unavailable events remain visibly unavailable.
-The graph records reasoning and progress; it does not schedule or execute nodes.
+Changing the mode applies to subsequent turns. Current workers keep their
+saved mode and concrete model bindings. The manager delegates read-only
+exploration before proposing a plan. Accepting it keeps execution on workers.
+An actual mode change advances the project revision. The project inspector
+retains access to committed work after disabling Nuwa.
 
 ## Updates and recovery
-
-`GET /api/projects/:id/nuwa` reads the project snapshot. Its separate SSE stream
-at `.../nuwa/events` sends `nuwa_updated` revision invalidations; clients fetch
-the snapshot. Revisions are not conversation event sequences. Reconnect sends
-the current revision; durable revision sampling repairs missed notifications.
-Clients reject old revisions and previous-project responses.
-
-Changing the switch affects subsequent turns. Current work retains its mode;
-turning it off does not erase recorded work. `/plan` keeps shared writes
-unmounted, including for recovered planning workers.
-The manager delegates read-only exploration to workers before proposing a plan.
-Accepting that plan keeps execution on workers. Fresh and recovered managers
-use the turn's saved Nuwa mode even if the project switch has since changed.
-An actual switch change also advances the project revision. The view remains
-available if the switch is turned off before the first pending result arrives;
-ordinary edits and repeated settings do not advance that revision.
-Moving a conversation refreshes the affected Collaboration views. A saved
-evidence link is unavailable while its source conversation belongs to another
-project. Moving the source back restores the link when the event still exists.
-Editing and resending a message refreshes Collaboration when it removes
-earlier evidence. Existing references to removed events show **Source
-unavailable**. Explicitly deleting a conversation removes the shared work it created
-and its version history from every project that still holds it. References
-from other conversations stay visible as unavailable.
 
 Checkpoints and worker-spawn events retain the explicit workspace tool selection.
 A resumed or restored worker receives that same selection. A missing selected
@@ -368,7 +223,7 @@ See the [calibration boundary](../evals/nuwa/RESULTS.md#legacy-f3-calibration-20
 CyberGym execution was stopped by platform safety review. There is no CyberGym
 score or comparative performance result, and that requirement remains incomplete.
 
-Related boundaries: `F-136`, `C-037`, `C-019`, `C-027`. See [API](API.md),
+Related boundaries: `F-136`, `C-037`, `C-019`, `C-027`. Work records follow `C-055`. See [API](API.md),
 [data model](DATA_MODEL.md) and [library](LIBRARY.md) for integration details.
 
 ### 恢复已移除的模型提供商

@@ -15,6 +15,12 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - The Knowledge panel opens a full project graph with page titles as nodes,
   one undirected line per connected pair, zoom and search by title or alias. (`F-138`, `C-053`)
 
+- Desktop and Web conversations have a Work records tab. Agents can keep
+  private tasks, facts and results, then explicitly share records and their
+  prerequisites with a project. Retracted records can be unfolded or restored
+  with their existing identity. Existing shared records stay visible.
+  (`F-139`, `C-055`)
+
 - Task panels can show an enterprise asset portrait (EASM). The agent confirms the subject, performs the discovery lookups itself, and pushes each finished batch of companies, domains and certificates into the panel, which merges the batches into one graph; on the batch that carries the final asset query the panel collects the asset totals, attention trend and components itself. Each aggregation shows its own progress and a failure never stops the others. The panel follows the app language on PC, Web and paired phones.
 
 - PC and Web projects can keep a Markdown knowledge base with linked pages,

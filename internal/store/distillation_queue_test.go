@@ -154,3 +154,54 @@ func TestDistillationQueueFreezesIdentityAndKeepsAResultWithItsOriginalCall(t *t
 		t.Fatalf("deleted project left a review queue: %+v %v", window, err)
 	}
 }
+
+func TestDistillationQueueExcludesWorkRecordPayloadsFromNewAndResumedReviews(t *testing.T) {
+	st := openTestStore(t)
+	ctx := t.Context()
+	project := Project{Name: "Project"}
+	if err := st.CreateProject(&project); err != nil {
+		t.Fatal(err)
+	}
+	thread := Thread{ProjectID: project.ID}
+	if err := st.CreateThread(&thread); err != nil {
+		t.Fatal(err)
+	}
+	turn := Turn{ThreadID: thread.ID, Status: TurnDone}
+	if err := st.CreateTurn(&turn); err != nil {
+		t.Fatal(err)
+	}
+	add := func(kind, call string, flagged bool) uint {
+		t.Helper()
+		event := Event{ThreadID: thread.ID, TurnID: turn.ID, Kind: kind, Text: "source text", ToolCallID: call, WorkRecordPayload: flagged}
+		if err := st.AppendEvent(&event); err != nil {
+			t.Fatal(err)
+		}
+		return event.ID
+	}
+	privateCall := add("tool_call", "private", true)
+	add("tool_result", "private", true)
+	if anchor, err := st.ProjectDistillationAnchor(ctx, project.ID, thread.ID); err != nil || anchor.ID != "" {
+		t.Fatalf("private work alone produced an eligible review anchor: %s, %v", anchor.ID, err)
+	}
+	call := add("tool_call", "ordinary", false)
+	result := add("tool_result", "ordinary", false)
+	human := add("user_message", "", false)
+	job := ProjectDistillation{ProjectID: project.ID, ID: "review", State: "running"}
+	makeReceipt := func(int) ([]byte, error) { return []byte(`{"state":"running"}`), nil }
+	if count, err := st.StartDistillationQueue(ctx, job, thread.ID, makeReceipt); err != nil || count != 2 {
+		t.Fatalf("work payload entered the admission denominator: %d, %v", count, err)
+	}
+	// A resumed snapshot can predate the work-record tag. Keep its saved
+	// positions while refusing to load the now-private text and call.
+	if err := st.DB().Model(&Event{}).Where("id IN ?", []uint{human, call}).Update("work_record_payload", true).Error; err != nil {
+		t.Fatal(err)
+	}
+	rows, err := st.DistillationWindow(ctx, job.ID, 0, 10)
+	if err != nil || len(rows) != 2 || rows[0].Position != result || rows[0].CallID != call ||
+		rows[1].Position != human || rows[1].ID != 0 || rows[1].Text != "" {
+		t.Fatalf("resumed snapshot loaded a private payload or moved its position: %+v, %v", rows, err)
+	}
+	if calls, err := st.DistillationToolCalls(ctx, []uint{privateCall, call}); err != nil || len(calls) != 0 {
+		t.Fatalf("work payload was read as supporting evidence: %+v, %v", calls, err)
+	}
+}

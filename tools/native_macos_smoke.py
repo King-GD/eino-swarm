@@ -236,6 +236,9 @@ def request_json(origin, path, deadline):
 
 
 def wait_engine(context, deadline):
+    expected_mock = context.get("expected_mock", True)
+    if type(expected_mock) is not bool:
+        raise ValueError("invalid native engine mock policy")
     while True:
         deadline.remaining("engine readiness")
         try:
@@ -246,8 +249,8 @@ def wait_engine(context, deadline):
         if not isinstance(record, dict):
             raise readiness.Failure("native_identity_refused", "engine", "engine lease is not an identity object")
         origin = engine_origin(record["url"])
-        if record.get("mock") is not True or type(record.get("pid")) is not int:
-            raise readiness.Failure("native_identity_refused", "engine", "engine lease identity is not the case's offline engine")
+        if record.get("mock") is not expected_mock or type(record.get("pid")) is not int:
+            raise readiness.Failure("native_identity_refused", "engine", "engine lease identity is not the case's configured engine")
         assert_process(context, record["pid"], "engine")
         try:
             metadata = request_json(origin, "/api/meta", deadline)
@@ -262,9 +265,9 @@ def wait_engine(context, deadline):
             pending(context, deadline, "engine", "engine_listener_pending")
             continue
         clients = metadata.get("clients", [])
-        if (metadata.get("mock") is not True or metadata.get("data_dir") != str(context["data"])
+        if (metadata.get("mock") is not expected_mock or metadata.get("data_dir") != str(context["data"])
                 or not isinstance(clients, list) or any(not isinstance(row, dict) for row in clients)):
-            raise readiness.Failure("native_identity_refused", "engine", "engine HTTP identity differs from the private offline lease")
+            raise readiness.Failure("native_identity_refused", "engine", "engine HTTP identity differs from the private engine lease")
         if not any(row.get("surface") == "desktop" and row.get("pid") == context["app_pid"] for row in clients):
             pending(context, deadline, "engine", "desktop_presence_pending")
             continue

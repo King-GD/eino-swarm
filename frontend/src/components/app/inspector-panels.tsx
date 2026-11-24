@@ -15,6 +15,8 @@ interface TaskPanelProjection {
 interface InspectorContext {
   threadId?: string
   project?: Project
+  threadProjectId?: string
+  dataGeneration?: number
   taskPanels: TaskPanelProjection
 }
 
@@ -27,6 +29,8 @@ interface InspectorView {
 
 interface InspectorBinding {
   ownerId: string
+  scope: "project" | "thread"
+  activation: "project_mode" | "thread_open" | "agent_open"
   render: (view: InspectorView) => ReactNode
 }
 
@@ -35,15 +39,13 @@ type InspectorRegistration = {
   label: (t: Translate) => string
   bind: (context: InspectorContext) => InspectorBinding | undefined
 } & (
-  | { scope: "project"; activation: "project_mode"; renderer: "react"; mount: "active" }
-  | { scope: "thread"; activation: "agent_open"; renderer: "iframe"; mount: "retained" }
+  | { renderer: "react"; mount: "active" }
+  | { renderer: "iframe"; mount: "retained" }
 )
 
 const registrations = [
   {
     id: "task-panels",
-    scope: "thread",
-    activation: "agent_open",
     renderer: "iframe",
     mount: "retained",
     label: (t) => panelText(t.locale, "tab"),
@@ -51,25 +53,31 @@ const registrations = [
       if (!threadId || taskPanels.threadId !== threadId || !taskPanels.panels.some((panel) => panel.thread_id === threadId)) return
       return {
         ownerId: threadId,
+        scope: "thread",
+        activation: "agent_open",
         render: ({ visible }) => <TaskPanels threadId={threadId} visible={visible} />,
       }
     },
   },
   {
     id: "nuwa",
-    scope: "project",
-    activation: "project_mode",
     renderer: "react",
     mount: "active",
     label: (t) => t("nuwa.tab"),
-    bind: ({ project, threadId }) => {
-      if (!project || !(project.nuwa_enabled || (project.nuwa_revision ?? 0) > 0)) return
+    bind: ({ project, threadId, threadProjectId, dataGeneration }) => {
+      if (!threadId && (!project || !(project.nuwa_enabled || (project.nuwa_revision ?? 0) > 0))) return
+      const projectId = threadId ? threadProjectId ?? project?.id : project?.id
       return {
-        ownerId: project.id,
+        ownerId: threadId ?? project!.id,
+        scope: threadId ? "thread" : "project",
+        activation: threadId ? "thread_open" : "project_mode",
         render: ({ latestTurn, openFiles, selectAgent }) => (
           <NuwaPanel
+            key={JSON.stringify([threadId, projectId, dataGeneration])}
             project={project}
+            projectId={projectId}
             threadId={threadId}
+            dataGeneration={dataGeneration}
             activity={threadId && latestTurn ? {
               id: latestTurn.id,
               status: latestTurn.status,

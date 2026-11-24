@@ -300,8 +300,8 @@ func TestKnowledgeToolsFollowPlanningAndNuwaAtManagerAndWorkerHTTP(t *testing.T)
 					}
 					return
 				}
-				if offered["record_work"] != (mode.nuwa && !mode.planning) {
-					t.Errorf("knowledge writes do not match Nuwa write admission in %s", mode.name)
+				if offered["record_work"] != (!mode.planning) {
+					t.Errorf("work records do not match planning write admission in %s", mode.name)
 				}
 				switch managerSteps.Add(1) {
 				case 1:

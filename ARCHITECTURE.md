@@ -30,7 +30,7 @@ the Registry's worker tool catalog. Workspace and MCP operations stay on workers
 model and tool-scope selection still use that complete catalog. For Responses,
 the planner receives a model-instance copy without provider-hosted builtins,
 preserving the shared client, worker factory, call accounting and backoff.
-Ordinary turns keep their existing tool surface. Restored workers retain their
+Ordinary turns retain their execution tools and mount work-record tools by default. Restored workers retain their
 original model and selected tools; a human can explicitly replace a removed
 provider through the idle conversation worker-model-recovery endpoint. Its
 transactional source-turn overlay preserves historical selection, worker identity
@@ -51,16 +51,16 @@ The explicit project file scope resolves the currently selected project's
 directory and never grants mutation. Legacy conversations retain the old
 workspace resolver.
 
-Nuwa model wrappers refresh a bounded project-state preview at each Generate or
+Work-record model wrappers refresh a bounded conversation and project preview at each Generate or
 Stream entry. They validate the original project/thread/turn owner through
-`Store.NuwaSnapshotForTurn` and add a transient runtime System message to a new
+a transactional conversation snapshot and add a transient runtime System message to a new
 request slice. ADK state, compact input, durable transcript and fork seeds do not
 receive that preview. The Registry's per-generation `WorkerMiddlewares` factory
 retains the original worker configuration; tagged recovery rebuilds it from the
 original turn. The graph remains reported data. Failed optional reads produce
 an explicit unavailable state without records, revision or raw error; shared
 tools and new claims retain their ownership checks. The Registry carries each
-worker generation's starting task as a separate context value. Nuwa uses it to
+worker generation's starting task as a separate context value. The preview uses it to
 prioritize matching titles and summaries from the same fresh snapshot before
 recent records; full detail remains on demand. Managers retain recent-first
 ordering. Retrieval does not alter the worker instruction, fork seed or graph,
@@ -2550,26 +2550,21 @@ Nuwa dispatch can narrow the actual workspace tools on a new worker. The
 selection is recorded with its spawn and checkpoint, then reapplied before
 recovery claims that worker. Descendants inherit the available subset.
 
-`nuwa_tools.go` mounts project-scoped reads and, outside planning, trusted shared
-writes. Store transactions commit node CAS, project revision, provenance audit
-and tool-call idempotency together. Agents can cite their own persisted tool
-replies by call ID without mounting the history query tool. The transaction
-resolves manager IDs within the turn and worker IDs within one execution.
-Worker notification ownership can pass to a new manager turn while the
-execution continues. A fact retains its original author and links to the
-actual result event. Recovery creates a fresh scope for new tool calls.
-Dependency version stamps make corrections and unavailable references
-explicit. Reported nodes record claims and their sources. `nuwa_snapshot.go`
-combines these records with workers projected from actual lifecycle receipts.
-GET and a separate project-revision SSE stream drive the Collaboration panel
-without adding another chat event sequence. For isolated work, the graph derives
-dashed origin paths from the saved turn and author. A worker's displayed metadata
-requires a matching conversation, turn, agent and generation. Solid arrows
-continue to represent the stored work dependencies.
-Timeline truncation advances the current project's visible collaboration
-revision in the same transaction. Explicit conversation deletion cleans up authored
-nodes across their historical projects and advances each affected revision.
-See [Nuwa](docs/NUWA.md), `F-136` and `C-037`.
+The [work records](docs/WORK.md) layer mounts `read_work` and, outside
+planning, `record_work` independently of Nuwa. The original turn freezes
+availability. Store transactions commit scope, node CAS, revision and audit
+together. Private records stay with their conversation. Explicit promotion
+atomically shares the prerequisite closure and preserves original identity
+and dependency version evidence. The model sees a bounded untrusted preview,
+with inactive record stubs taking the lowest priority under budget.
+
+The work snapshot combines records with durable worker state. The desktop
+inspector uses a thread snapshot and revision pair when a conversation is
+open, with the existing project snapshot elsewhere. The named conversation
+notification uses the chat connection and no chat sequence. Membership moves,
+rewind and deletion invalidate affected snapshots; authored shared records
+retain their original project until the author is deleted. The graph derives
+its inactive projection from current states. See `F-139` and `C-055`.
 
 ## Independent conversation coordination
 
@@ -3011,8 +3006,8 @@ in [current contracts](docs/CONTRACTS.md).
 
 The desktop and Web inspector resolves registered entries against the active
 project or conversation and uses the result to render both the tab and its
-content. Nuwa is a project-owned React entry gated by mode or retained history;
-it uses the existing project GET/SSE and mounts when selected. The conversation
+content. Work records follow the open conversation, including standalone
+conversations, with a project fallback when no conversation is open. The conversation
 Task panels entry groups visible instances and keeps them mounted behind other
 tabs. The store admits a visible projection when the instance has committed
 observations or a running source. Open writes initial state for runtime tools.
@@ -3020,8 +3015,7 @@ HTTP and sealed Pairlink close use the same engine operation, committing a
 conversation-scoped close marker and deletion before cancelling the instance's
 producer context. The host registry controls presentation; the embedded
 HTML/JS plugin catalog remains the source for builds and Agent tools. The paired
-phone continues to use its conversation panel surface and does not register the
-Nuwa graph.
+phone continues to use its conversation panel surface.
 
 `internal/taskpanel` defines the versioned state protocol; `internal/store/task_panels.go` persists conversation-owned projections and a separate delivery journal. Runtime tools provide trusted provenance and bounded producer publication. Repository HTML/JS plugins under `frontend/src/task-panels` own their layout and run in dedicated opaque-origin iframes through an acknowledged SDK channel. The FOFA example producer uses CLI batches and locally owned HTTP checks; no asset fields enter the generic host protocol. See [Task panels](docs/TASK_PANELS.md), `F-137` and `C-050`.
 

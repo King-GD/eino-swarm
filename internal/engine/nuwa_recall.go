@@ -103,3 +103,16 @@ func nuwaRecallTerms(text string) map[string]struct{} {
 	flushCJK()
 	return terms
 }
+
+// Partition before ranking so withdrawn text cannot affect active recall or
+// consume space needed for its dependency chain.
+func splitNuwaPreviewNodes(nodes []store.NuwaNode) (active, inactive []store.NuwaNode) {
+	for _, node := range nodes {
+		if node.Inactive() {
+			inactive = append(inactive, node)
+		} else {
+			active = append(active, node)
+		}
+	}
+	return active, inactive
+}

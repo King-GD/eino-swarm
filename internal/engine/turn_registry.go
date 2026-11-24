@@ -22,6 +22,7 @@ func (e *Engine) newTurnRegistry(builder swarm.ModelBuilder, toolset *tools.Set,
 	e.wireWorkerSurface(reg, toolset, pc, turn)
 	if turn != nil {
 		e.wireNuwaRegistry(reg, toolset, pc, turn)
+		e.wireWorkLedgerRegistry(reg, toolset, turn)
 		e.wireTaskPanelRegistry(reg, toolset, turn)
 		config := reg.WorkerConfiguration()
 		config.Tag = turn.ID

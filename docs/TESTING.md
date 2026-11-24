@@ -465,6 +465,62 @@ output, final AX/pixel result and its own `smoke.json`; cleanup and a separate
 fresh inventory confirmed deleted case data and no owned processes. Its bound
 records are retained separately in `native-smoke-revision3-readygate01` and do
 not change the earlier failed baseline or accept a future public installer.
+## Conversation work records (`F-139`, `C-055`)
+
+Start with the Nuwa and Inspector cases in `make model-check`. The current
+design permits a standalone conversation to read its records and a peer to
+read both records after closure promotion. Seeded private leaks, missing
+closure and focus stealing each violate their own invariant. The EventStream
+case also rejects using the work revision as the conversation cursor.
+
+The `nuwa-merge-*` cases model confirmation against the original destination,
+conversation and project revisions, and restore generation. Failure between
+prerequisite and root writes leaves no partial merge. The first publishable
+snapshot includes the full dependency closure and both revisions. The
+`work-pruning-*` cases model a bounded dependency graph. Inactive ancestors
+of an active result remain visible, an entirely inactive branch collapses,
+and restoration returns the same record ID. A dependent keeps its version
+warning until it explicitly reconfirms the restored prerequisite. Fault cases
+check the corresponding invariants and reachability cases exercise both
+refusal and successful outcomes. The models cover these bounded protocols.
+
+Exercise versioned promotion and its failures at the Store and HTTP boundaries.
+Use actual model HTTP inputs for ordinary and standalone tools, planning,
+setting changes, original-turn restore, preview revision matching and inactive
+record budgeting. Project and full backup tests cover scope-aware row
+ownership and omission. Use the work panel E2E for explicit sharing, navigation,
+failed preconditions and retraction/restoration. Exercise draft saves from a
+second window while both work panels receive native chat-stream invalidations.
+The Playwright run uses an isolated server, data directory and evidence output.
+
+For native acceptance, prepare the matching AX helpers on the host.
+
+```bash
+make native-smoke-prepare
+xcrun clang -fobjc-arc -mmacosx-version-min=13.0 \
+  -framework Foundation -framework AppKit -framework ApplicationServices \
+  -framework CoreGraphics tools/native_generation_interruption_ax.m \
+  -o bin/native-work-record-controls
+shasum -a 256 bin/native-work-record-controls
+```
+
+Transfer the helpers, their sources, `tools/`, and the frozen app to the
+guest. In the authorized `ci-macOS` Terminal, use the recorded control-helper
+digest and a new evidence directory.
+
+```bash
+python3 -B tools/native_work_records.py --case --app "$APP" --evidence "$EVIDENCE" \
+  --ax bin/native-macos-ax --controls bin/native-work-record-controls \
+  --control-sha256 "$CONTROL_SHA256"
+```
+
+The case sends through the native composer to a private loopback fixture,
+merges from the record detail, and checks the graph before and after
+retraction and restoration. Keep the native press and screenshot receipts,
+the durable record ID and version snapshots, and the cleanup receipt outside
+case data. The targeted round allows 100 seconds including cleanup. The
+ordinary native smoke keeps its 60-second budget.
+
 ## Nuwa project collaboration (`F-136`, `C-037`)
 
 A saved Nuwa planner and executor are checked through project create/update and
@@ -503,7 +559,7 @@ that record's details through `read_work`.
 Check `/plan` and accepted-plan instructions at actual model HTTP input, including
 recovery after the project switch changes: neither may direct a Nuwa planner to
 call execution tools. `nuwa_plan_prompt_http_test.go` covers this boundary.
-The Collaboration panel must retain the live status, exact Trace and worker
+The Work records panel must retain the live status, exact Trace and worker
 result files even when no graph nodes are recorded.
 The browser suite also creates two dependency-free artifacts with different recorded authors in
 one turn, checks each dashed origin link against the persisted identities before
@@ -538,7 +594,7 @@ through edit/resend and explicit deletion after a move. It checks committed
 revision delivery, unavailable references and removal of the deleted
 author's private history. Store tests inject failed revision writes and
 check transaction rollback. The Nuwa model reproduces stale revisions for
-both mutations. The browser scenario drives the open Collaboration view
+both mutations. The browser scenario drives the open Work records view
 through the same source changes.
 
 `internal/store/nuwa_test.go` exercises CAS races, full correction provenance,

@@ -212,6 +212,7 @@ type putSwarmSettings struct {
 	// Absent keeps the stored choice. A missing bool would otherwise
 	// unmarshal as false and turn the next-step call off.
 	ComposerPredictions *bool `json:"composer_predictions"`
+	WorkLedger          *bool `json:"work_ledger"`
 	// Omitted or null preserves the stored choice for older clients.
 	IncrementalExecution *bool `json:"incremental_execution"`
 	// Omitted or null preserves the choice. An explicit empty string clears it.
@@ -315,6 +316,10 @@ func (s *Server) putSettings(c *gin.Context) {
 			next.Swarm.ComposerPredictions = cfg.Swarm.ComposerPredictions
 			if req.Swarm.ComposerPredictions != nil {
 				next.Swarm.ComposerPredictions = *req.Swarm.ComposerPredictions
+			}
+			next.Swarm.WorkLedger = cfg.Swarm.WorkLedger
+			if req.Swarm.WorkLedger != nil {
+				next.Swarm.WorkLedger = *req.Swarm.WorkLedger
 			}
 			next.Swarm.IncrementalExecution = cfg.Swarm.IncrementalExecution
 			if req.Swarm.IncrementalExecution != nil {

@@ -17,6 +17,7 @@ export interface NuwaModelBinding {
 export interface NuwaNode {
   id: string
   project_id?: string
+  scope: "thread" | "project"
   kind: "task" | "fact" | "artifact" | string
   title: string
   summary: string
@@ -64,20 +65,61 @@ export interface NuwaSnapshot {
   workers: NuwaWorker[]
 }
 
-/** A thread view includes its prerequisites, even when another conversation
- * discovered them. Omitting those would invent a disconnected work path. */
-export function scopeNuwaNodes(nodes: NuwaNode[], threadId?: string): NuwaNode[] {
-  if (!threadId) return nodes
-  const byID = new Map(nodes.map((node) => [node.id, node]))
-  const included = new Set<string>()
-  const visit = (id: string) => {
-    if (included.has(id) || !byID.has(id)) return
-    included.add(id)
-    for (const parent of byID.get(id)!.depends_on ?? []) visit(parent)
+export interface WorkVersion {
+  thread_id: string
+  project_id: string
+  thread_revision: number
+  project_revision: number
+  data_generation: number
+}
+
+export interface ThreadWorkSnapshot extends WorkVersion {
+  nodes: NuwaNode[]
+  workers: NuwaWorker[]
+}
+
+export function parseWorkVersion(raw: string, threadId: string): WorkVersion | undefined {
+  try {
+    const value = JSON.parse(raw) as WorkVersion
+    if (value.thread_id === threadId && typeof value.project_id === "string" &&
+        [value.thread_revision, value.project_revision, value.data_generation].every(
+          (revision) => Number.isSafeInteger(revision) && revision >= 0,
+        )) return value
+  } catch { /* A malformed notification cannot advance the view. */ }
+}
+
+/** Project counters are comparable only while membership and data generation match. */
+export function workAtLeast(next: WorkVersion, before: WorkVersion): boolean {
+  if (next.data_generation !== before.data_generation) return next.data_generation > before.data_generation
+  if (next.project_id !== before.project_id) return next.thread_revision > before.thread_revision
+  return next.thread_revision >= before.thread_revision && next.project_revision >= before.project_revision
+}
+
+export function isInactiveNuwaNode({ kind, status }: Pick<NuwaNode, "kind" | "status">) {
+  if (kind === "task") return status === "cancelled"
+  return (kind === "fact" || kind === "artifact") && (status === "superseded" || status === "retracted")
+}
+
+/** Keep the prerequisites of visible active work, including a chain of inactive prerequisites. */
+export function pruneNuwaNodes(nodes: NuwaNode[]) {
+  const active = nodes.filter((node) => !isInactiveNuwaNode(node))
+  const index = new Map(nodes.map((node) => [node.id, node]))
+  const keep = new Set<string>()
+  const pending = [...active]
+  while (pending.length) {
+    const node = pending.pop()!
+    if (keep.has(node.id)) continue
+    keep.add(node.id)
+    for (const id of node.depends_on ?? []) {
+      const dependency = index.get(id)
+      if (dependency && !keep.has(id)) pending.push(dependency)
+    }
   }
-  for (const node of nodes)
-    if (node.thread_id === threadId || node.updated_thread_id === threadId) visit(node.id)
-  return nodes.filter((node) => included.has(node.id))
+  return {
+    active,
+    shown: nodes.filter((node) => keep.has(node.id)),
+    collapsed: nodes.filter((node) => !keep.has(node.id)),
+  }
 }
 
 type NuwaPathNode = Pick<NuwaNode, "id" | "created_at"> & { depends_on: string[] | null }

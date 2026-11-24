@@ -97,7 +97,7 @@ func (e *Engine) conversationToolsForExecution(ctx context.Context, th *store.Th
 	if th.ProjectID != "" {
 		reader = history.NewProject(e.cfg.DBPath(), th.ProjectID)
 	}
-	set.Tools = append(set.Tools, &historyQueryTool{reader: reader, maxChars: e.cfg.Tools.ToolResultLimit(), context: identity, guard: e.admitHistoryRead,
+	set.Tools = append(set.Tools, &historyQueryTool{reader: reader.ForThread(th.ID), maxChars: e.cfg.Tools.ToolResultLimit(), context: identity, guard: e.admitHistoryRead,
 		knowledge: len(knowledgeEnabled) > 0 && knowledgeEnabled[0]})
 	set.Names = append(set.Names, ToolQueryHistory)
 	return set, nil

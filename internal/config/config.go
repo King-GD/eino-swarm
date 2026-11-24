@@ -101,6 +101,9 @@ type SwarmConfig struct {
 	// empty input's placeholder. Tab inserts it; Enter sends it. Off stops
 	// the extra call. An older file without the key stays on.
 	ComposerPredictions bool `yaml:"composer_predictions" json:"composer_predictions"`
+	// WorkLedger offers work-record tools to future ordinary conversation turns.
+	// Nuwa always includes these tools, and older files default to enabled.
+	WorkLedger bool `yaml:"work_ledger" json:"work_ledger"`
 	// IncrementalExecution adds implementation-first and requirement-based
 	// verification guidance to ordinary manager turns. It is opt-in.
 	IncrementalExecution bool `yaml:"incremental_execution" json:"incremental_execution"`
@@ -479,6 +482,7 @@ func Default() *Config {
 			DeltaCoalesceMS:            DefaultDeltaCoalesceMS,
 			AutoTitle:                  true,
 			ComposerPredictions:        true,
+			WorkLedger:                 true,
 			ContextCharBudget:          DefaultContextCharBudget,
 			CompactKeepMessages:        DefaultCompactKeepMessages,
 			AutoCompactTokens:          DefaultAutoCompactTokens,

@@ -11,7 +11,7 @@ type NodeReceipt = { ok: boolean; node: { id: string; version: number } }
 
 /** Real model HTTP → Registry tool → durable project nodes → snapshot/SSE.
  * This is protocol evidence, not a measurement of autonomous model reasoning. */
-export async function startNuwaFixture(mode?: "discussion" | "published") {
+export async function startNuwaFixture(mode?: "discussion" | "published" | "ordinary") {
   const errors: string[] = []
   const workerModels: string[] = []
   let taskNode: { id: string; version: number } | undefined
@@ -22,7 +22,7 @@ export async function startNuwaFixture(mode?: "discussion" | "published") {
   const taskGate = new Promise<void>((resolve) => {
     releaseTask = resolve
   })
-  let revision: { id: string; version: number } | undefined
+  let revision: { id: string; version: number; status?: string } | undefined
   const reply = (response: ServerResponse, input: Input, delta: object, finish = "stop") => {
     response.writeHead(200, {
       "Content-Type": input.stream ? "text/event-stream" : "application/json",
@@ -50,7 +50,12 @@ export async function startNuwaFixture(mode?: "discussion" | "published") {
             index: 0,
             id,
             type: "function",
-            function: { name, arguments: JSON.stringify(args) },
+            function: {
+              name,
+              arguments: JSON.stringify(name === "record_work" && mode !== "ordinary" && !("id" in args)
+                ? { ...args, scope: "project" }
+                : args),
+            },
           },
         ],
       },
@@ -77,7 +82,7 @@ export async function startNuwaFixture(mode?: "discussion" | "published") {
         }
         if (!input.tools?.some((tool) => tool.function.name === "record_work"))
           throw new Error("record_work absent at real model boundary")
-        if (input.model === "nuwa-fixture") {
+        if (input.model === "nuwa-fixture" && mode !== "ordinary") {
           const executionTools = new Set([
             "read", "write", "edit", "ls", "tree", "glob", "grep", "exec",
             "web_search", "web_fetch", "python_runner", "screenshot",
@@ -86,7 +91,7 @@ export async function startNuwaFixture(mode?: "discussion" | "published") {
             if (executionTools.has(tool.function.name) || tool.function.name.startsWith("mcp_"))
               throw new Error(`Nuwa manager gained an execution tool: ${tool.function.name}`)
           }
-        } else if (input.model !== "nuwa-worker") {
+        } else if (input.model !== "nuwa-fixture" && input.model !== "nuwa-worker") {
           throw new Error(`Unexpected Nuwa fixture model: ${input.model}`)
         }
         if (mode === "discussion") {
@@ -104,6 +109,25 @@ export async function startNuwaFixture(mode?: "discussion" | "published") {
           if (!receipt.ok || !receipt.node?.id)
             throw new Error(`Node write refused: ${message.content}`)
           return receipt.node
+        }
+        if (mode === "ordinary") {
+          if (!input.tools.some((tool) => tool.function.name === "read_work") ||
+              !input.tools.some((tool) => tool.function.name === "read") ||
+              input.tools.some((tool) => tool.function.name === "list_models")) {
+            throw new Error("An ordinary manager did not receive the ordinary execution and work surfaces")
+          }
+          const callID = `ordinary-fact-${revision?.version ?? 0}`
+          if (!result(callID)) {
+            call(response, input, callID, revision?.status ? {
+              id: revision.id, version: revision.version, status: revision.status,
+              summary: revision.status === "retracted" ? "The new evidence refutes it." : "The follow-up supports it.",
+            } : {
+              kind: "fact", title: "Bounded observation", summary: "An evidence-based observation", status: "reported",
+            })
+            return
+          }
+          reply(response, input, { role: "assistant", content: "The work record is saved." })
+          return
         }
         if (input.model === "nuwa-worker") {
           workerModels.push(input.model)
@@ -312,7 +336,7 @@ export async function startNuwaFixture(mode?: "discussion" | "published") {
       sourceTurn = turn
     },
     releaseTask,
-    revise: (node: { id: string; version: number }) => {
+    revise: (node: { id: string; version: number; status?: string }) => {
       revision = node
     },
     close: () =>

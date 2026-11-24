@@ -285,7 +285,11 @@ func projectFilter(table, projectID string) (string, []any, bool, error) {
 	case "schedule_runs":
 		return `thread_id IN (` + threads + `) OR schedule_id IN (SELECT id FROM main.schedules WHERE project_id = ? OR thread_id IN (` + threads + `))`,
 			[]any{projectID, projectID, projectID}, false, nil
-	case "nuwa_nodes", "nuwa_revisions", "nuwa_verify_slots", "project_distillations", "project_distillation_sources":
+	case "nuwa_nodes":
+		return `project_id = ? OR (scope = 'thread' AND thread_id IN (` + threads + `))`, []any{projectID, projectID}, false, nil
+	case "nuwa_revisions":
+		return `project_id = ? OR (project_id = '' AND thread_id IN (` + threads + `))`, []any{projectID, projectID}, false, nil
+	case "nuwa_verify_slots", "project_distillations", "project_distillation_sources":
 		return `project_id = ?`, []any{projectID}, false, nil
 	case "composer_drafts", "composer_draft_blobs":
 		return `draft_key = ? OR draft_key IN (SELECT 'thread:' || id FROM main.threads WHERE project_id = ?)`,
@@ -715,8 +719,14 @@ func findConflicts(ctx context.Context, conn *sql.Conn, projectID string, replac
 			func(v []string) { add("turns", v[0], v[1], v[1] == projectID) }},
 		{`SELECT i.id, CASE WHEN COALESCE(m.project_id, '') <> '' THEN m.project_id ELSE COALESCE(th.project_id, '') END FROM incoming.schedules AS i JOIN main.schedules AS m ON m.id = i.id LEFT JOIN main.threads AS th ON th.id = m.thread_id`, 2,
 			func(v []string) { add("schedules", v[0], v[1], v[1] == projectID) }},
-		{`SELECT i.id, COALESCE(m.project_id, '') FROM incoming.nuwa_nodes AS i JOIN main.nuwa_nodes AS m ON m.id = i.id`, 2,
+		{`SELECT i.id, CASE WHEN m.scope = 'thread' THEN COALESCE(th.project_id, '') ELSE COALESCE(m.project_id, '') END
+			FROM incoming.nuwa_nodes AS i JOIN main.nuwa_nodes AS m ON m.id = i.id
+			LEFT JOIN main.threads AS th ON th.id = m.thread_id`, 2,
 			func(v []string) { add("nuwa_nodes", v[0], v[1], v[1] == projectID) }},
+		{`SELECT i.node_id, CASE WHEN m.project_id = '' THEN COALESCE(th.project_id, '') ELSE m.project_id END
+			FROM incoming.nuwa_revisions AS i JOIN main.nuwa_revisions AS m ON m.request_key = i.request_key
+			LEFT JOIN main.threads AS th ON th.id = m.thread_id`, 2,
+			func(v []string) { add("nuwa_revisions", v[0], v[1], v[1] == projectID) }},
 		{`SELECT i.id, COALESCE(th.project_id, '') FROM incoming.task_panel_rows AS i JOIN main.task_panel_rows AS m ON m.id = i.id LEFT JOIN main.threads AS th ON th.id = m.thread_id`, 2,
 			func(v []string) { add("task_panel_rows", v[0], v[1], v[1] == projectID) }},
 		{`SELECT i.draft_key FROM incoming.composer_drafts AS i JOIN main.composer_drafts AS m ON m.draft_key = i.draft_key`, 1,

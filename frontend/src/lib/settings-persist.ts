@@ -28,10 +28,13 @@ export function persistPayload(
   }
   if (!same(next.ui, normalizeUISettings(baseline.ui))) patch.ui = next.ui
   if (!same(next.swarm, baseline.swarm)) {
-    const { agent_timeout_seconds, ...rest } = next.swarm
+    const { agent_timeout_seconds, work_ledger, ...rest } = next.swarm
     patch.swarm = { ...rest }
     if (agent_timeout_seconds !== baseline.swarm.agent_timeout_seconds) {
       patch.swarm.agent_timeout_seconds = agent_timeout_seconds
+    }
+    if (work_ledger !== undefined && work_ledger !== baseline.swarm.work_ledger) {
+      patch.swarm.work_ledger = work_ledger
     }
   }
   if (!same(next.models, baseline.models)) {

@@ -20,6 +20,11 @@ func reviewSourceWithHistory(events, history []store.Event, sessionMemory, final
 }
 
 func reviewEventLine(ev store.Event) (role, text string, ok bool) {
+	// A conversation briefing feeds project review. Keep structured work
+	// traffic in its own ledger instead of copying it into that briefing.
+	if ev.WorkRecordPayload {
+		return "", "", false
+	}
 	text = strings.TrimSpace(ev.Text)
 	switch ev.Kind {
 	case KindUser, KindSteer:

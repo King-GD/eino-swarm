@@ -172,9 +172,11 @@ func (rt *runtime) runManager(ctx context.Context, turn *store.Turn, reg *swarm.
 			instruction = JoinPromptSections(instruction, nuwaWorkerToolHint)
 		}
 		managerTools = append(managerTools, e.nuwaModelTool(turn))
-		if pc != nil && pc.project != nil {
-			managerTools = append(managerTools, e.nuwaWorkTools(pc.project.ID, toolset.WorkspaceDir, turn, turn.NuwaReadOnly || (th != nil && th.PlanMode))...)
-		}
+	}
+	if workLedgerEnabled(turn) {
+		readOnly := workLedgerReadOnly(turn)
+		managerTools = append(managerTools, e.nuwaWorkTools(toolset.WorkspaceDir, turn, readOnly)...)
+		instruction = JoinPromptSections(instruction, workLedgerInstruction(readOnly))
 	}
 	managerTools = append(managerTools, e.knowledgeTools(pc, turn, knowledgeReadOnly)...)
 	if knowledgeReadOnly {
@@ -820,7 +822,7 @@ func stitchManagerToolResults(msgs []adk.Message, results []store.Event) []adk.M
 				if placed[id] {
 					continue
 				}
-				out = append(out, schema.ToolMessage(ev.Text, id))
+				out = append(out, restoredToolReceipt(ev.Text, id, ev.WorkRecordPayload))
 				placed[id] = true
 				continue
 			}
@@ -838,7 +840,7 @@ func stitchManagerToolResults(msgs []adk.Message, results []store.Event) []adk.M
 			if !ok {
 				continue
 			}
-			out = append(out, schema.ToolMessage(ev.Text, id))
+			out = append(out, restoredToolReceipt(ev.Text, id, ev.WorkRecordPayload))
 			placed[id] = true
 		}
 	}

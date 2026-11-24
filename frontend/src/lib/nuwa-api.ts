@@ -1,14 +1,30 @@
 import { ApiError } from "./api"
-import type { NuwaSnapshot } from "./nuwa"
+import type { NuwaSnapshot, ThreadWorkSnapshot, WorkVersion } from "./nuwa"
+
+async function checked(response: Response): Promise<Response> {
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error?: string; code?: string }
+    throw new ApiError(body.error || response.statusText, response.status, body.code)
+  }
+  return response
+}
 
 export const nuwaAPI = {
   async snapshot(projectId: string): Promise<NuwaSnapshot> {
-    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/nuwa`)
-    if (!response.ok) {
-      const body = (await response.json().catch(() => ({}))) as { error?: string; code?: string }
-      throw new ApiError(body.error || response.statusText, response.status, body.code)
-    }
+    const response = await checked(await fetch(`/api/projects/${encodeURIComponent(projectId)}/nuwa`))
     return response.json() as Promise<NuwaSnapshot>
+  },
+  async threadSnapshot(threadId: string): Promise<{ view: ThreadWorkSnapshot; tag?: string }> {
+    const response = await checked(await fetch(`/api/threads/${encodeURIComponent(threadId)}/work`))
+    return { view: await response.json() as ThreadWorkSnapshot, tag: response.headers.get("ETag") ?? undefined }
+  },
+  async promote(threadId: string, ids: string[], tag: string): Promise<WorkVersion> {
+    const response = await checked(await fetch(`/api/threads/${encodeURIComponent(threadId)}/work/promote`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "If-Match": tag },
+      body: JSON.stringify({ ids }),
+    }))
+    return response.json() as Promise<WorkVersion>
   },
 }
 

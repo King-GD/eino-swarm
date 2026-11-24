@@ -78,17 +78,15 @@ func (s *Store) AdmitNuwaVerification(ctx context.Context, in NuwaVerifyAdmissio
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var existing NuwaVerifySlot
 		err := tx.Where("request_key = ?", key).Take(&existing).Error
-		if err == nil {
-			if existing.RequestHash != hash {
-				return ErrNuwaVerifyConflict
-			}
-			return nil
+		replay := err == nil
+		if replay && existing.RequestHash != hash {
+			return ErrNuwaVerifyConflict
 		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
 		var node NuwaNode
-		err = tx.Select("id").Where("id = ? AND project_id = ?", in.TargetID, in.ProjectID).Take(&node).Error
+		err = visibleWorkNodes(tx, in.ThreadID, in.ProjectID).Select("id").Take(&node, "id = ?", in.TargetID).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrNotFound
 		}
@@ -97,6 +95,9 @@ func (s *Store) AdmitNuwaVerification(ctx context.Context, in NuwaVerifyAdmissio
 		}
 		if err := validateNuwaOwner(tx, NuwaNode{ProjectID: in.ProjectID, ThreadID: in.ThreadID, TurnID: in.TurnID, AgentID: in.AgentID, Generation: in.Generation, Title: "verification"}, false); err != nil {
 			return err
+		}
+		if replay {
+			return nil
 		}
 		var turn Turn
 		if err := tx.Select("status").First(&turn, "id = ?", in.TurnID).Error; err != nil {
