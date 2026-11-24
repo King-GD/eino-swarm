@@ -23,7 +23,8 @@ func panelPumpRequest(t *testing.T, p *LinkPump, log *pushLog, req Request) Resp
 	return rows[len(rows)-1]
 }
 func TestPhonePanelBadRequestsPreserveAnExistingTransfer(t *testing.T) {
-	e, panel, _ := phonePanelFixture(t)
+	e, panel, source := phonePanelFixture(t)
+	panel = phonePanelPublish(t, e, panel, source, "initial-observation", map[string]any{"count": 1})
 	p, log := testPump(t, e)
 	first := panelPumpRequest(t, p, log, Request{ID: "first", Op: OpTaskPanelRead, ThreadID: panel.ThreadID, PanelID: panel.ID})
 	if !first.OK || first.PanelTransfer == nil {
@@ -68,7 +69,8 @@ func TestPhonePanelBadRequestsPreserveAnExistingTransfer(t *testing.T) {
 	}
 }
 func TestPhonePanelDeletedScopeReleasesOnlyItsTransfer(t *testing.T) {
-	e, panel, _ := phonePanelFixture(t)
+	e, panel, source := phonePanelFixture(t)
+	panel = phonePanelPublish(t, e, panel, source, "initial-observation", map[string]any{"count": 1})
 	p, log := testPump(t, e)
 	first := panelPumpRequest(t, p, log, Request{ID: "first", Op: OpTaskPanelRead, ThreadID: panel.ThreadID, PanelID: panel.ID})
 	if !first.OK || first.PanelTransfer == nil {
@@ -83,7 +85,8 @@ func TestPhonePanelDeletedScopeReleasesOnlyItsTransfer(t *testing.T) {
 	}
 }
 func TestPhonePanelEncodingFailureDoesNotReplaceTransfer(t *testing.T) {
-	e, panel, _ := phonePanelFixture(t)
+	e, panel, source := phonePanelFixture(t)
+	panel = phonePanelPublish(t, e, panel, source, "initial-observation", map[string]any{"count": 1})
 	p, log := testPump(t, e)
 	first := panelPumpRequest(t, p, log, Request{ID: "first", Op: OpTaskPanelRead, ThreadID: panel.ThreadID, PanelID: panel.ID})
 	if !first.OK || first.PanelTransfer == nil {
@@ -98,7 +101,8 @@ func TestPhonePanelEncodingFailureDoesNotReplaceTransfer(t *testing.T) {
 	}
 }
 func TestPhonePanelStatelessReadRequiresLinkAndManifestReportsFailures(t *testing.T) {
-	e, panel, _ := phonePanelFixture(t)
+	e, panel, source := phonePanelFixture(t)
+	panel = phonePanelPublish(t, e, panel, source, "initial-observation", map[string]any{"count": 1})
 	for _, op := range []string{OpTaskPanelRead, OpTaskPanelCancel} {
 		if got := Handle(e, config.RemoteConfig{}, Request{ID: op, Op: op, ThreadID: panel.ThreadID, PanelID: panel.ID}, "relay", "session"); got.OK || got.Code != "link_required" {
 			t.Fatal(got)
