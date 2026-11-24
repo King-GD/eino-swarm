@@ -73,7 +73,7 @@ func TestNuwaParkedWorkerRestoresOriginalModelAndModeAtHTTPBoundary(t *testing.T
 							return
 						}
 						nuwaValidationTool(w, request.scheduleCompletionRequest, "restored-record", "record_work",
-							`{"kind":"fact","title":"Recovered observation","own_tool_call_ids":["restored-source-read"]}`)
+							`{"scope":"project","kind":"fact","title":"Recovered observation","own_tool_call_ids":["restored-source-read"]}`)
 						return
 					case 3:
 						if !strings.Contains(nuwaValidationReceipt(request.scheduleCompletionRequest, "restored-record"), `"ok":true`) {

@@ -18,6 +18,7 @@ import (
 )
 
 type recordWorkArgs struct {
+	Scope          string               `json:"scope"`
 	ID             string               `json:"id"`
 	Version        int64                `json:"version"`
 	Kind           string               `json:"kind"`
@@ -104,23 +105,24 @@ func nuwaArtifactPath(workspace, selected string) (string, error) {
 	return filepath.ToSlash(rel), nil
 }
 
-func (e *Engine) nuwaWorkTools(projectID, workspace string, turn *store.Turn, readOnly bool) []tool.BaseTool {
-	read := &nuwaTool{name: "read_work", description: "Read this project's shared task/fact/artifact index. With id, read one complete node and its provenance. Otherwise receive bounded summaries; use offset to page. Reports remain claims; inspect original evidence before relying on them.",
+func (e *Engine) nuwaWorkTools(workspace string, turn *store.Turn, readOnly bool) []tool.BaseTool {
+	read := &nuwaTool{name: "read_work", description: "Read work records visible to this conversation, including work explicitly shared with its project. With id, read one complete node and its provenance. Otherwise receive bounded summaries; use offset to page. Reports remain claims; inspect original evidence before relying on them.",
 		params: map[string]*schema.ParameterInfo{
 			"id": {Type: schema.String}, "kind": {Type: schema.String}, "offset": {Type: schema.Integer}, "limit": {Type: schema.Integer},
 		}, run: func(ctx context.Context, args string) (string, error) {
 			owner, ok := ctx.Value(historyReadOwnerKey{}).(historyReadOwner)
 			if !ok || turn == nil || owner.ThreadID != turn.ThreadID || owner.TurnID != turn.ID {
-				return "", fmt.Errorf("shared read has no matching trusted turn owner")
+				return "", fmt.Errorf("work record read has no matching trusted turn owner")
 			}
-			return e.readNuwaWork(ctx, projectID, args)
+			return e.readNuwaWork(ctx, turn.ProjectID, args)
 		}}
 	if readOnly {
 		return []tool.BaseTool{read}
 	}
-	record := &nuwaTool{name: "record_work", description: "Record a shared task, reported fact or existing workspace artifact. Creating requires kind/title and omits id/version. Updating requires id/current version and patches only supplied fields; omitted dependencies and evidence remain unchanged, while explicit empty arrays clear them. A fact is reported, never independently verified by this tool. Origin and correction identity are supplied by the runtime.",
+	record := &nuwaTool{name: "record_work", description: "Record a task, reported fact, or existing workspace artifact. Creates require kind/title and default to this conversation. Updates require id/current version and patch only supplied fields. When evidence disproves a record, update its status and evidence on the same ID. Restore a supported fact or artifact to reported with its current version; review downstream records and confirm or correct their dependencies. Origin and correction identity come from the runtime.",
 		params: map[string]*schema.ParameterInfo{
-			"id": {Type: schema.String}, "version": {Type: schema.Integer}, "title": {Type: schema.String},
+			"scope": {Type: schema.String, Desc: "On creation, thread (default) or project. Project scope also shares the private prerequisites. To share an existing record, send only id, current version, and scope project. Sharing is one-way and requires membership in the project."},
+			"id":    {Type: schema.String}, "version": {Type: schema.Integer}, "title": {Type: schema.String},
 			"summary": {Type: schema.String}, "detail": {Type: schema.String},
 			"kind": {Type: schema.String, Desc: "A task, fact, or artifact. Required on creation."},
 			"status": {Type: schema.String,
@@ -131,27 +133,48 @@ func (e *Engine) nuwaWorkTools(projectID, workspace string, turn *store.Turn, re
 				Desc: "Exact node IDs returned by record_work or read_work for material prerequisites actually relied on. On update, omit this field to preserve existing dependencies or supply [] to clear them."},
 			"own_tool_call_ids": {Type: schema.Array, ElemInfo: &schema.ParameterInfo{Type: schema.String},
 				Desc: "Exact IDs of your own persisted tool results in this manager turn or worker execution. Mutually exclusive with evidence, even when empty. An empty array clears evidence."},
-			"evidence": {Type: schema.Array, Desc: "References to existing events in this project. Mutually exclusive with own_tool_call_ids, even when empty. An empty array clears evidence.",
+			"evidence": {Type: schema.Array, Desc: "References to existing events within the record's conversation or project scope. Mutually exclusive with own_tool_call_ids, even when empty. An empty array clears evidence.",
 				ElemInfo: &schema.ParameterInfo{Type: schema.Object, SubParams: map[string]*schema.ParameterInfo{
 					"thread_id": {Type: schema.String, Required: true}, "turn_id": {Type: schema.String}, "seq": {Type: schema.Integer, Required: true}, "label": {Type: schema.String},
 				}}},
 		}, run: func(ctx context.Context, args string) (string, error) {
-			return e.recordNuwaWork(ctx, projectID, workspace, turn, args)
+			return e.recordNuwaWork(ctx, workspace, turn, args)
 		}}
 	return []tool.BaseTool{read, record}
 }
 
-func (e *Engine) recordNuwaWork(ctx context.Context, projectID, workspace string, turn *store.Turn, args string) (string, error) {
+func requestedWorkScope(input recordWorkArgs, fields map[string]json.RawMessage) (bool, error) {
+	found := false
+	for field := range fields {
+		if !strings.EqualFold(field, "scope") {
+			continue
+		}
+		if found {
+			return false, fmt.Errorf("scope was supplied with multiple spellings")
+		}
+		found = true
+	}
+	if found && input.Scope != store.WorkScopeProject && input.Scope != store.WorkScopeThread {
+		return false, fmt.Errorf("scope must be thread or project")
+	}
+	return found, nil
+}
+
+func (e *Engine) recordNuwaWork(ctx context.Context, workspace string, turn *store.Turn, args string) (string, error) {
 	if err := context.Cause(ctx); err != nil {
 		return "", err
 	}
 	caller, ok := swarm.ToolCaller(ctx)
-	if !ok || caller.AgentID == "" || turn == nil || !turn.NuwaEnabled || turn.NuwaReadOnly {
-		return "", fmt.Errorf("shared writes require an actual Nuwa agent invocation")
+	if !ok || caller.AgentID == "" || !workLedgerEnabled(turn) || workLedgerReadOnly(turn) {
+		return "", fmt.Errorf("work record writes require an actual agent invocation authorized for this turn")
 	}
 	owner, ok := ctx.Value(historyReadOwnerKey{}).(historyReadOwner)
 	if !ok || owner.ThreadID != turn.ThreadID || owner.TurnID != turn.ID {
-		return "", fmt.Errorf("shared write has no matching trusted turn owner")
+		return "", fmt.Errorf("work record write has no matching trusted turn owner")
+	}
+	callID := compose.GetToolCallID(ctx)
+	if callID == "" {
+		return "", fmt.Errorf("work record write requires a real tool call identity")
 	}
 	var input recordWorkArgs
 	if err := decodeNuwaArgs(args, &input); err != nil {
@@ -159,6 +182,10 @@ func (e *Engine) recordNuwaWork(ctx context.Context, projectID, workspace string
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(args), &fields); err != nil {
+		return "", err
+	}
+	scopeSupplied, err := requestedWorkScope(input, fields)
+	if err != nil {
 		return "", err
 	}
 	evidenceSupplied, ownToolCallIDs, err := decodeNuwaEvidenceFields(fields)
@@ -169,89 +196,144 @@ func (e *Engine) recordNuwaWork(ctx context.Context, projectID, workspace string
 	if err != nil {
 		return "", err
 	}
-	var dependencyVersions map[string]int64
-	if input.ID != "" {
-		_, nodes, err := e.store.NuwaSnapshot(ctx, projectID)
-		if err != nil {
-			return "", err
-		}
-		found := false
-		for _, previous := range nodes {
-			if previous.ID != input.ID {
-				continue
-			}
-			found = true
-			if _, set := fields["kind"]; !set {
-				input.Kind = previous.Kind
-			}
-			if _, set := fields["title"]; !set {
-				input.Title = previous.Title
-			}
-			if _, set := fields["summary"]; !set {
-				input.Summary = previous.Summary
-			}
-			if _, set := fields["detail"]; !set {
-				input.Detail = previous.Detail
-			}
-			if _, set := fields["status"]; !set {
-				input.Status = previous.Status
-			}
-			if _, set := fields["depends_on"]; !set {
-				input.DependsOn = previous.DependsOn
-				dependencyVersions = previous.DependencyVersions
-			}
-			if !evidenceSupplied {
-				input.Evidence = previous.Evidence
-			}
-			if _, set := fields["artifact_path"]; !set {
-				input.ArtifactPath = previous.ArtifactPath
-			}
-			break
-		}
-		if !found {
-			return "", fmt.Errorf("unknown shared work id: omit id and version to create, or use an existing id and version from read_work to update: %w", store.ErrNotFound)
-		}
-	}
-	selected := input.ArtifactPath
-	fileRoot := e.TaskFileDir(turn.ThreadID)
-	if workspace != fileRoot && workspace == e.WorkspaceDir(turn.ThreadID) {
-		_, supplied := fields["artifact_path"]
-		if (supplied || input.ID == "") && strings.TrimSpace(selected) != "" && !filepath.IsAbs(selected) {
-			selected = filepath.Join(workspace, selected)
-		}
-		workspace = fileRoot
-	}
-	path, err := nuwaArtifactPath(workspace, selected)
-	if err != nil {
-		return "", err
-	}
-	node := store.NuwaNode{ID: input.ID, ProjectID: projectID, Kind: input.Kind, Title: input.Title, Summary: input.Summary, Detail: input.Detail, Status: input.Status,
-		DependsOn: input.DependsOn, DependencyVersions: dependencyVersions, Evidence: input.Evidence, ArtifactPath: path, ThreadID: turn.ThreadID, TurnID: turn.ID, AgentID: caller.AgentID, Generation: caller.Generation}
-	callID := compose.GetToolCallID(ctx)
-	if callID == "" {
-		return "", fmt.Errorf("shared write requires a real tool call identity")
-	}
 	identity, err := json.Marshal([]any{turn.ThreadID, turn.ID, caller.AgentID, caller.Generation, callID})
 	if err != nil {
 		return "", err
 	}
 	receipt := store.NuwaWriteReceipt{
 		Key: fmt.Sprintf("%x", sha256.Sum256(identity)), Hash: fmt.Sprintf("%x", sha256.Sum256(canonical)),
-		OwnToolCallIDs: ownToolCallIDs, CurrentToolCallID: callID, ToolReceiptScope: swarm.ToolReceiptScope(ctx),
+		CallerProjectID: &turn.ProjectID, OwnToolCallIDs: ownToolCallIDs,
+		CurrentToolCallID: callID, ToolReceiptScope: swarm.ToolReceiptScope(ctx),
 	}
-	e.recordMu.Lock()
-	defer e.recordMu.Unlock()
-	if _, dropped := e.droppedTurns[turn.ID]; dropped {
-		return "", store.ErrNotFound
+	if input.ID != "" && input.Scope == store.WorkScopeProject {
+		if len(fields) != 3 || input.Version <= 0 {
+			return "", fmt.Errorf("sharing an existing record requires only id, current version and scope project")
+		}
+		unlock, err := e.lockWorkRecordWrite(ctx, turn.ID)
+		if err != nil {
+			return "", err
+		}
+		defer unlock()
+		promotion, err := e.store.PromoteNuwaNodes(ctx, store.NuwaPromoteInput{
+			ThreadID: turn.ThreadID, IDs: []string{input.ID}, ProjectID: turn.ProjectID, TurnID: turn.ID,
+			AgentID: caller.AgentID, Generation: caller.Generation, Version: input.Version, Receipt: receipt,
+		})
+		if err != nil {
+			return "", err
+		}
+		for _, node := range promotion.Nodes {
+			if node.ID == input.ID {
+				body, err := json.Marshal(map[string]any{"ok": true, "node": node})
+				return string(body), err
+			}
+		}
+		return "", fmt.Errorf("sharing did not return its requested record")
 	}
-	if err := context.Cause(ctx); err != nil {
+	if input.Scope == "" {
+		input.Scope = store.WorkScopeThread
+	}
+	node := store.NuwaNode{
+		ID: input.ID, Scope: input.Scope, Kind: input.Kind, Title: input.Title, Summary: input.Summary,
+		Detail: input.Detail, Status: input.Status, DependsOn: input.DependsOn, Evidence: input.Evidence,
+		ArtifactPath: input.ArtifactPath, ThreadID: turn.ThreadID, TurnID: turn.ID, AgentID: caller.AgentID,
+		Generation: caller.Generation,
+	}
+	artifactThreadID := turn.ThreadID
+	if input.ID != "" {
+		view, err := e.store.WorkSnapshotForTurn(ctx, turn.ProjectID, owner.ThreadID, owner.TurnID)
+		if err != nil {
+			return "", err
+		}
+		found := false
+		for _, previous := range view.Nodes {
+			if previous.ID != input.ID {
+				continue
+			}
+			found = true
+			// An explicit scope belongs to the original request. The store
+			// replays its committed receipt before checking the current scope.
+			if !scopeSupplied {
+				node.Scope = previous.Scope
+			}
+			applyWorkPatch(&node, previous, fields, evidenceSupplied)
+			artifactThreadID = previous.ThreadID
+			break
+		}
+		if !found {
+			return "", fmt.Errorf("unknown work record id: omit id and version to create, or use an existing id and version from read_work to update: %w", store.ErrNotFound)
+		}
+	}
+	if node.Scope == store.WorkScopeProject {
+		node.ProjectID = turn.ProjectID
+	}
+	if artifactThreadID != turn.ThreadID {
+		workspace = e.WorkspaceDir(artifactThreadID)
+	}
+	fileRoot := e.TaskFileDir(artifactThreadID)
+	if workspace != fileRoot && workspace == e.WorkspaceDir(artifactThreadID) {
+		_, supplied := fields["artifact_path"]
+		if (supplied || input.ID == "") && strings.TrimSpace(node.ArtifactPath) != "" && !filepath.IsAbs(node.ArtifactPath) {
+			node.ArtifactPath = filepath.Join(workspace, node.ArtifactPath)
+		}
+		workspace = fileRoot
+	}
+	node.ArtifactPath, err = nuwaArtifactPath(workspace, node.ArtifactPath)
+	if err != nil {
 		return "", err
 	}
+	unlock, err := e.lockWorkRecordWrite(ctx, turn.ID)
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
 	if err := e.store.UpsertNuwaNode(ctx, &node, input.Version, receipt); err != nil {
 		return "", err
 	}
 	body, err := json.Marshal(map[string]any{"ok": true, "node": node})
 	return string(body), err
+}
+
+// The mutation and turn removal share ownership. Artifact resolution and the
+// snapshot used to prepare a patch do not hold the event writer lock.
+func (e *Engine) lockWorkRecordWrite(ctx context.Context, turnID string) (func(), error) {
+	e.recordMu.Lock()
+	if _, dropped := e.droppedTurns[turnID]; dropped {
+		e.recordMu.Unlock()
+		return nil, store.ErrNotFound
+	}
+	if err := context.Cause(ctx); err != nil {
+		e.recordMu.Unlock()
+		return nil, err
+	}
+	return e.recordMu.Unlock, nil
+}
+
+func applyWorkPatch(node *store.NuwaNode, previous store.NuwaNode, fields map[string]json.RawMessage, evidenceSupplied bool) {
+	if _, set := fields["kind"]; !set {
+		node.Kind = previous.Kind
+	}
+	if _, set := fields["title"]; !set {
+		node.Title = previous.Title
+	}
+	if _, set := fields["summary"]; !set {
+		node.Summary = previous.Summary
+	}
+	if _, set := fields["detail"]; !set {
+		node.Detail = previous.Detail
+	}
+	if _, set := fields["status"]; !set {
+		node.Status = previous.Status
+	}
+	if _, set := fields["depends_on"]; !set {
+		node.DependsOn = previous.DependsOn
+		node.DependencyVersions = previous.DependencyVersions
+	}
+	if !evidenceSupplied {
+		node.Evidence = previous.Evidence
+	}
+	if _, set := fields["artifact_path"]; !set {
+		node.ArtifactPath = previous.ArtifactPath
+	}
 }
 
 func (e *Engine) readNuwaWork(ctx context.Context, projectID, args string) (string, error) {
@@ -267,17 +349,16 @@ func (e *Engine) readNuwaWork(ctx context.Context, projectID, args string) (stri
 	if input.Offset < 0 || input.Limit < 0 {
 		return "", fmt.Errorf("offset and limit must be nonnegative")
 	}
-	var revision int64
-	var nodes []store.NuwaNode
-	var err error
-	if owner, ok := ctx.Value(historyReadOwnerKey{}).(historyReadOwner); ok {
-		revision, nodes, err = e.store.NuwaSnapshotForTurn(ctx, projectID, owner.ThreadID, owner.TurnID)
-	} else {
-		revision, nodes, err = e.store.NuwaSnapshot(ctx, projectID)
+	owner, ok := ctx.Value(historyReadOwnerKey{}).(historyReadOwner)
+	if !ok {
+		return "", fmt.Errorf("work record read has no matching trusted turn owner")
 	}
+	view, err := e.store.WorkSnapshotForTurn(ctx, projectID, owner.ThreadID, owner.TurnID)
 	if err != nil {
 		return "", err
 	}
+	nodes := view.Nodes
+	revision := view.WorkRevision
 	// Keep one committed budget for the whole response during live settings updates.
 	budget := e.cfg.Snapshot().Tools.ToolResultLimit()
 	if input.ID != "" {
@@ -305,7 +386,13 @@ func (e *Engine) readNuwaWork(ctx context.Context, projectID, args string) (stri
 	page := filtered[input.Offset:end]
 	// Omit whole nodes under the existing tool-result budget; never truncate JSON.
 	for {
-		body, err := json.Marshal(map[string]any{"revision": revision, "nodes": page, "total": len(filtered), "next_offset": input.Offset + len(page), "more": input.Offset+len(page) < len(filtered)})
+		body, err := json.Marshal(struct {
+			workReadRevision
+			Nodes      []store.NuwaNode `json:"nodes"`
+			Total      int              `json:"total"`
+			NextOffset int              `json:"next_offset"`
+			More       bool             `json:"more"`
+		}{readRevision(revision), page, len(filtered), input.Offset + len(page), input.Offset+len(page) < len(filtered)})
 		if err != nil {
 			return "", err
 		}
@@ -319,7 +406,16 @@ func (e *Engine) readNuwaWork(ctx context.Context, projectID, args string) (stri
 	}
 }
 
-func boundedNuwaNode(node store.NuwaNode, revision int64, offset, limit, budget int) (string, error) {
+type workReadRevision struct {
+	store.WorkRevision
+	Revision int64 `json:"revision"`
+}
+
+func readRevision(revision store.WorkRevision) workReadRevision {
+	return workReadRevision{WorkRevision: revision, Revision: revision.ProjectRevision}
+}
+
+func boundedNuwaNode(node store.NuwaNode, revision store.WorkRevision, offset, limit, budget int) (string, error) {
 	runes := []rune(node.Detail)
 	if offset > len(runes) {
 		offset = len(runes)
@@ -333,7 +429,14 @@ func boundedNuwaNode(node store.NuwaNode, revision int64, offset, limit, budget 
 	for lo <= hi {
 		count := (lo + hi) / 2
 		node.Detail = string(runes[offset : offset+count])
-		body, err := json.Marshal(map[string]any{"revision": revision, "node": node, "detail_offset": offset, "next_offset": offset + count, "detail_total": len(runes), "more": offset+count < len(runes)})
+		body, err := json.Marshal(struct {
+			workReadRevision
+			Node         store.NuwaNode `json:"node"`
+			DetailOffset int            `json:"detail_offset"`
+			NextOffset   int            `json:"next_offset"`
+			DetailTotal  int            `json:"detail_total"`
+			More         bool           `json:"more"`
+		}{readRevision(revision), node, offset, offset + count, len(runes), offset+count < len(runes)})
 		if err != nil {
 			return "", err
 		}

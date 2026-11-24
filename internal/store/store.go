@@ -90,6 +90,10 @@ func Open(path string) (*Store, error) {
 		_ = sqlDB.Close()
 		return nil, fmt.Errorf("store: backfill task panel observations: %w", err)
 	}
+	if err := migrateWorkScopes(db); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("store: migrate work scopes: %w", err)
+	}
 	if err := s.ensureThreadOwnership(); err != nil {
 		return nil, err
 	}

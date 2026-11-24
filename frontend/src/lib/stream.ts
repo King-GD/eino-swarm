@@ -2,6 +2,9 @@ import type { SwarmEvent, ThreadStatus } from "./types"
 import { publishTaskPanelEvent } from "./task-panel-events"
 import type { PanelChange, TaskPanel } from "@/task-panels/types"
 
+import { parseWorkVersion } from "./nuwa"
+import { publishWorkEvent } from "./nuwa-events"
+
 export interface StreamHandlers {
   onEvent: (ev: SwarmEvent) => void
   /** Fired once the replay is finished, so the UI can drop its loading state.
@@ -105,6 +108,7 @@ export function subscribeEvents(
   const query = new URLSearchParams()
   if (since > 0) query.set("since", String(since))
   query.set("panels", "1")
+  query.set("work", "1")
   const url = `/api/threads/${threadId}/events?${query}`
   const source = new EventSource(url)
   let closed = false
@@ -112,13 +116,17 @@ export function subscribeEvents(
   source.onopen = () => {
     if (closed) return
     publishTaskPanelEvent(threadId, { kind: "connection", connected: true })
+    publishWorkEvent(threadId, { kind: "connection", connected: true })
     handlers.onOpen?.()
   }
   source.onerror = (event) => {
     // A named application `event: error` also invokes this property. It says
     // nothing about the HTTP connection and still reaches onEvent below.
     if (event instanceof MessageEvent) return
-    if (!closed) publishTaskPanelEvent(threadId, { kind: "connection", connected: false })
+    if (!closed) {
+      publishTaskPanelEvent(threadId, { kind: "connection", connected: false })
+      publishWorkEvent(threadId, { kind: "connection", connected: false })
+    }
     // EventSource retries by itself unless the connection was closed for
     // good; only a terminal state is worth telling the UI about.
     if (source.readyState === EventSource.CLOSED && !closed) {
@@ -160,10 +168,17 @@ export function subscribeEvents(
     if (!closed) publishTaskPanelEvent(threadId, { kind: "error", error: "Panel state unavailable" })
   })
 
+  source.addEventListener("nuwa_updated", (event) => {
+    if (closed) return
+    const version = parseWorkVersion((event as MessageEvent).data, threadId)
+    if (version) publishWorkEvent(threadId, { kind: "revision", version })
+  })
+
   return () => {
     closed = true
     source.close()
     publishTaskPanelEvent(threadId, { kind: "connection", connected: false })
+    publishWorkEvent(threadId, { kind: "connection", connected: false })
     handlers.onClose?.("closed")
   }
 }

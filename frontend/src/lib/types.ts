@@ -120,6 +120,7 @@ export interface Project {
   memory_enabled: boolean
   /** Opt-in project collaboration; absent on older hosts means standard mode. */
   nuwa_enabled?: boolean
+  nuwa_configured?: boolean
   /** Saved planner for later Nuwa turns. Empty means this project has not chosen a pair. */
   nuwa_planner_provider_id?: string
   nuwa_planner_model?: string
@@ -592,6 +593,7 @@ export interface SwarmLimits {
   auto_title: boolean
   /** Missing means on. Off stops the extra next-step call. */
   composer_predictions?: boolean
+  work_ledger?: boolean
   /** Empty follows this conversation's model. */
   title_provider?: string
   title_model?: string

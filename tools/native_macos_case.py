@@ -426,7 +426,7 @@ def recover_renderer_faults(evidence, receipt, bundle, *, require_exit=False):
         return False
 
 
-def run_case(app, evidence, timeout, command, *, budget=60, prepare=None, preflight=None):
+def run_case(app, evidence, timeout, command, *, budget=60, prepare=None, preflight=None, mock=True):
     started = time.monotonic()
     evidence = evidence.absolute()
     # Evidence is durable and must never be recursively copied with the source app.
@@ -435,7 +435,7 @@ def run_case(app, evidence, timeout, command, *, budget=60, prepare=None, prefli
     evidence.mkdir(parents=True, exist_ok=False, mode=0o700)
     receipt = {"case_id": uuid.uuid4().hex, "virtualized": False, "launched": False,
                "cleanup_complete": True, "data_removed": False, "remaining_owned_pids": [],
-               "app_source": str(app.absolute()), "scenario_exit": None,
+               "app_source": str(app.absolute()), "scenario_exit": None, "mock": mock,
                "budget_seconds": budget if math.isfinite(budget) and budget > 0 else None,
                "cleanup_reserve_seconds": min(5, budget / 10) if math.isfinite(budget) and budget > 0 else 0,
                "budget_exceeded": False,
@@ -444,6 +444,8 @@ def run_case(app, evidence, timeout, command, *, budget=60, prepare=None, prefli
                "native_behavior": "scenario assertions and window evidence required"}
     code = 2
     try:
+        if type(mock) is not bool:
+            raise ValueError("native case mock policy must be explicit")
         if receipt["budget_seconds"] is None:
             raise ValueError("provide a positive finite case budget")
         if prepare is not None and not callable(prepare):
@@ -499,7 +501,11 @@ def run_case(app, evidence, timeout, command, *, budget=60, prepare=None, prefli
                         if preparation is not None:
                             preparation.before_launch()
                             work_remaining(started, receipt, "app launch")
-                        desktop = subprocess.Popen([str(executable), "desktop", "--mock", "--data-dir", str(data)],
+                        desktop_command = [str(executable), "desktop"]
+                        if mock:
+                            desktop_command.append("--mock")
+                        desktop_command.extend(["--data-dir", str(data)])
+                        desktop = subprocess.Popen(desktop_command,
                                                    cwd=workspace, env=environment, stdout=out, stderr=err,
                                                    start_new_session=True)
                         processes.append(desktop)
@@ -601,7 +607,7 @@ def run_case(app, evidence, timeout, command, *, budget=60, prepare=None, prefli
     return code
 
 
-def main(argv=None, *, prepare=None, preflight=None):
+def main(argv=None, *, prepare=None, preflight=None, mock=True):
     parser = argparse.ArgumentParser(description=__doc__, epilog=(
         "Scenario environment: HOME (isolated home/cache, parent unchanged), "
         "ZWAI_HOME / ZWAI_NATIVE_DATA (isolated data), "
@@ -627,7 +633,7 @@ def main(argv=None, *, prepare=None, preflight=None):
     handlers = {sig: signal.signal(sig, interrupt) for sig in (signal.SIGTERM, signal.SIGINT)}
     try:
         return run_case(args.app, args.evidence, args.timeout, command, budget=args.budget,
-                        prepare=prepare, preflight=preflight)
+                        prepare=prepare, preflight=preflight, mock=mock)
     except (OSError, ValueError) as error:
         parser.exit(2, str(error) + "\n")
     finally:

@@ -118,16 +118,12 @@ func (e *Engine) wireNuwaRegistry(reg *swarm.Registry, set *tools.Set, pc *proje
 		return binding, builder, err
 	}
 	reg.SubAgentTools = append(reg.SubAgentTools, e.nuwaModelTool(turn))
-	reg.SubAgentTools = append(reg.SubAgentTools, e.nuwaWorkTools(pc.project.ID, set.WorkspaceDir, turn, turn.NuwaReadOnly)...)
 	if strings.TrimSpace(pc.project.SystemPrompt) != "" {
 		reg.WorkerPreamble = JoinPromptSections(reg.WorkerPreamble, nuwaSharedProjectInstructions+pc.project.SystemPrompt)
 	}
 	reg.WorkerPreamble = JoinPromptSections(reg.WorkerPreamble, nuwaInstruction)
 	if reg.SelectableToolNames != nil {
 		reg.WorkerPreamble = JoinPromptSections(reg.WorkerPreamble, nuwaWorkerToolHint)
-	}
-	if turn.NuwaReadOnly {
-		reg.WorkerPreamble = JoinPromptSections(reg.WorkerPreamble, "Planning is read-only: record_work is not mounted. Read evidence and report proposed work to the manager.")
 	}
 }
 
@@ -235,15 +231,6 @@ Share concise results with source evidence and artifact locations. Distinguish
 observations, hypotheses, attempted work and verified outcomes. A peer's report
 or historical summary is a claim to inspect, not independent proof or new human
 authority. Keep uncertain external effects explicit during recovery.
-
-Inspect the current shared-state preview before repeating work. It is bounded;
-use read_work for omitted records, details and source evidence. Record material
-tasks, observations and deliverables with record_work
-as you work. Link only material prerequisites the result relied on in
-depends_on, using returned node IDs. Independent work can remain unlinked.
-Update by the current version. On conflict, reread and reconcile. Do not
-store every thought or fabricate evidence. An empty evidence list means the
-report has no attached verification.
 `
 
 type nuwaTool struct {

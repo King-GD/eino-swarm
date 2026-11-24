@@ -68,6 +68,11 @@ func (s *Server) streamEvents(c *gin.Context) {
 		return
 	}
 	panels := s.startTaskPanelDelivery(c, th.ID)
+	var work *workDelivery
+	if c.Query("work") == "1" {
+		work = &workDelivery{threadID: th.ID}
+		_, _ = s.pollWorkDelivery(c, work)
+	}
 	// Tell the client the replay is over so it can stop showing a loading
 	// state and start rendering streamed text.
 	writeSSE(c, "ready", gin.H{
@@ -79,8 +84,8 @@ func (s *Server) streamEvents(c *gin.Context) {
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
 	// The last dropped event may be the one that says the turn finished, and
-	// no further event would come to trigger a catch-up. Checking a flag on a
-	// short tick costs nothing; the database is only touched when it is set.
+	// no further event would come to trigger a catch-up. Inspector subscriptions
+	// also sample their own revisions on this tick.
 	lagTicker := time.NewTicker(lagCheckInterval)
 	defer lagTicker.Stop()
 	ctx := c.Request.Context()
@@ -89,7 +94,9 @@ func (s *Server) streamEvents(c *gin.Context) {
 		case <-ctx.Done():
 			return
 		case <-lagTicker.C:
-			if s.pollTaskPanelDelivery(c, panels) {
+			panelChanged := s.pollTaskPanelDelivery(c, panels)
+			workChanged, _ := s.pollWorkDelivery(c, work)
+			if panelChanged || workChanged {
 				w.Flush()
 			}
 			if sub.Lagged() {

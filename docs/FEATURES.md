@@ -13,6 +13,7 @@ This is the current user-facing capability map. The code and tests named below a
     - `F-136` Nuwa project collaboration
     - `F-137` HTML/JS task panels
     - `F-138` Project Markdown knowledge base
+    - `F-139` Conversation work records
     - `F-140` Files and attachments
     - `F-145` Durable composer drafts
     - `F-146` Next-step composer suggestions
@@ -215,32 +216,29 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-136 Nuwa project collaboration
 
-- 桌面和 Web 的 Collaboration 是宿主注册的项目面板。项目启用女娲或已有协作历史时显示入口，出现时不切换标签。有当前会话时按其所属项目读取，独立会话不显示侧栏所选项目的数据。配对手机可以配置模式，但没有协作图入口。见 [Nuwa](NUWA.md)。
+- 项目设置保存规划／执行模型，宿主按回合冻结模式和工具范围。项目指令、真实模型选择、Registry 分工及恢复由 `C-037` 约束。缺失模型、越权派工或超额度验收明确拒绝。工作记录另见 `F-139`。入口：项目创建／编辑中的 Nuwa collaboration 和 `list_models` 工具。实现证据：`internal/engine/nuwa_models.go` 和 `internal/engine/nuwa_model_pair_http_test.go`。见 [Nuwa](NUWA.md)。
+
 
 失效模型恢复：桌面错误行提供“使用当前所选模型修复恢复配置”，仅显式迁移已移除的提供商；保存后继续／重试，保留 worker 身份、历史和工具范围。空闲／无 parked Registry 才可操作；失败不部分更新。契约 `C-037`；证据 `internal/engine/worker_model_recovery_http_test.go`、`frontend/src/components/app/worker-model-recovery.test.tsx`。
 
-- 目的：由模型基于目标与事实选择计划和分工，项目保存规划模型与执行模型，并让项目内共享任务、事实报告、成果及依赖可检查；使用者：PC 用户；入口：项目创建／编辑的 Nuwa collaboration、Instruction、右侧 Collaboration、`list_models`／`read_work`／`record_work` 及项目 Nuwa GET／SSE；输入：项目提示词、已配置资源、实际事件证据及已有成果文件；输出：动态 worker 树、实际模型绑定、有版本和来源的共享记录与依赖图；前置条件：项目启用模式，资源已接入；失败表现：不可用模型、跨子树控制、无效引用、过期版本及存储失败明确拒绝；关联契约：`C-037`、`C-019`、`C-027`、`C-012`；实现证据：`internal/engine/nuwa_models.go`、`internal/engine/nuwa_tools.go`、`internal/store/nuwa.go`、`internal/server/nuwa.go`、`delegation.go`、`worker_config.go`、`model_binding.go`、`frontend/src/components/app/nuwa-panel.tsx`；验证：`internal/engine/nuwa_engine_http_test.go`、`internal/store/nuwa_test.go`、`internal/server/nuwa_stream_test.go`、`delegation_http_test.go`、`model_binding_http_test.go`、`frontend/e2e/nuwa.spec.ts`。
-- 模式变更从后续 turn 生效；既有 worker 保留原配置／模型和执行身份。fact／artifact 是 reported，引用存在不证明推导成立；来源纠正／删除需明确重查。项目 revision 标识共享快照，不进入聊天 seq。停用保留已存内容，规划模式不挂共享写工具。见 [Nuwa](NUWA.md)；不预置领域流程，不宣称 CyberGym、原生或真实模型效率已验收。
 - 女娲执行者每次收到当前 generation 已实际绑定的身份及模型；`list_models.current` 显示同一事实，和会话轮次的 `default` 分开。原绑定跨续办和冷恢复保留；旧未绑定执行标为未知。提示是临时运行事实，不改变普通模式、项目指令、工具权限或可委派范围。关联 `C-037`；实际输入及工具验证见 `internal/engine/nuwa_context_worker_http_test.go`、`internal/engine/nuwa_context_restore_http_test.go`。
-- 女娲规划者与执行者每次模型调用入口自动读取原 turn 所属项目的最新共享状态，注入有界短预览：标识、类型、标题、状态、摘要、依赖、版本和依赖失效。存储身份、时间戳和正文留在 read_work。同一请求已经带有当前每条标识和摘要时，只发送 unchanged 与 revision。超预算节点完整省略并计数。被保留节点依赖的省略前置步骤写入 `path`，按依赖顺序保留摘要；前置链放得进预算时，较低优先级的详细节点才让位。无关省略记录不进入 `path`。正文和证据按需 read_work。它保留 reported／untrusted 语义，不修改历史、压缩输入或 fork seed；读取失败或归属变化明确显示不可用，不提供节点／revision／数据库原始错误，也不额外终止既有执行。实际共享工具及新接管仍核验归属；取消、预算或编码失败拒绝模型调用。普通模式不注入。实现：`internal/engine/nuwa_context.go`、`internal/engine/turn_registry.go`、`worker.go`；验证：`internal/engine/nuwa_long_path_test.go`、`internal/engine/nuwa_context_http_test.go`、`internal/engine/nuwa_context_worker_http_test.go`、`worker_model_middleware_test.go`。
-- 女娲执行者按当前 generation 初始任务召回同项目相关旧 Title／Summary，优先于近期无关记录进入原有有界预览；原文仍按需 read_work。规划者保持近期排序。查询不解析 manager 人格，不注入正文、不改变事实状态或持久历史；模型实际利用与效果仍需单独验收。实现／验证：`worker_task.go`、`internal/engine/nuwa_recall.go`、`internal/engine/nuwa_recall_test.go`、`internal/engine/nuwa_recall_http_test.go`。
 - Nuwa manager 只负责规划、派工、协调和基于 worker 证据验收，不挂 workspace／MCP 实际执行工具，并禁用其 provider-hosted builtin 执行；worker 和普通模式保留原 provider 配置。需要操作的任务由 worker 执行。无需操作的纯讨论不强制创建 worker。角色、任务拆分和工具选择由 AI 根据目标决定，不固定领域角色表或工作流。
 - 勾选女娲时，项目保存一对可修改的规划模型和执行模型，默认来自就绪目录顺序，不按能力排序，也不写死模型名。之后的回合用规划模型；新角色、验收和修复用回合开始时复制的执行模型。冲突的 `model_ref` 在创建 worker 前拒绝。同角色恢复保留原 binding。关闭女娲保留这一对。四列仍为空的旧项目保持原来的显式选择。已保存模型不可用时，下一回合在模型请求前失败。会话输入框在已保存规划模型时改的是项目规划模型；手机端不新增编辑入口。验证：`internal/engine/nuwa_model_pair_http_test.go`、`internal/server/nuwa_model_pair_test.go`、`frontend/src/components/app/project-dialog.test.tsx`、`frontend/e2e/nuwa.spec.ts`。
 - Nuwa 执行者通过独立项目上下文直接获得用户的项目目标、约束和验收指令，memory 关闭时仍可读取；不继承规划者完整 System／personality，不改变既有角色和工具权限。普通模式不变；非空已存 Instruction 首次恢复保留原文，旧空 Instruction 保留按配置重建的兼容路径。实际模型 HTTP 输入与已保存 worker 恢复验证：`internal/engine/nuwa_project_instructions_http_test.go`。
 - 规划者可查询 worker 的完整可选工具目录，并在派工时为新角色选择所需的 workspace／MCP 工具；manager 不挂执行工具不会缩减 worker 的可选目录。省略选择时使用 worker 可用范围，显式选择随身份恢复，后代可继承或缩小。见 `C-037` 和 [Nuwa](NUWA.md)。既有工具选择验证：`internal/engine/worker_tool_scope_flow_test.go`、`internal/engine/worker_tool_scope_restore_test.go`；规划／执行分离验证：`internal/engine/nuwa_planner_separation_http_test.go`、`internal/engine/nuwa_planner_responses_http_test.go`、`internal/provider/nuwa_planner_builtin_test.go`。
-- 女娲验收次数由主机计数：同一回合、同一共享记录最多一次 `verify` 和一次 `fix`。超额在创建 worker 之前拒绝，同一次调用重送不重复扣次，重启后额度仍在。普通实现和普通模式不占这个额度，也不按任务原文猜测意图。额度不是设置项。验证：`internal/engine/nuwa_verify_budget_http_test.go`、`internal/store/nuwa_verify_test.go`、`verify_admission_test.go`。
+- 女娲验收次数由主机计数：同一回合、同一可见工作记录最多一次 `verify` 和一次 `fix`。超额在创建 worker 之前拒绝，同一次调用重送不重复扣次，重启后额度仍在。普通实现和普通模式不占这个额度，也不按任务原文猜测意图。额度不是设置项。验证：`internal/engine/nuwa_verify_budget_http_test.go`、`internal/store/nuwa_verify_test.go`、`verify_admission_test.go`。
 
-- 当前范围没有共享节点或 Worker 时，Collaboration 显示已打开会话的最新轮次状态，并可进入对应 Trace 和会话文件。验证见 `frontend/e2e/nuwa.spec.ts`。
-- 协作路径图用实线显示已登记的工作依赖。同一类型有多条且都没有依赖时收成一行，共用一条虚线指向目标；只有一条时仍显示该记录。真实依赖链的末端仍各自以虚线指向目标。选中路径上的记录时，只高亮它的上下游，其余变淡。分组行显示各状态的数量。展开后的清单紧挨画布，超过 8 条时可按标题或摘要筛选，最新的在前；这些记录不再在图下的索引里重复。类型、标题和状态留在图上；记录者、来源轮次与模型在详情和未接入清单中显示，不另做图节点。任务、事实和成果使用不同底色，摘要计数、路径卡片、未接入分组、清单和详情沿用同一套。验证见 `frontend/src/lib/nuwa.test.ts`、`frontend/src/components/app/nuwa-panel.test.tsx`、`frontend/e2e/nuwa.spec.ts`。
-- 移动会话时，打开的 Collaboration 视图会更新来源链接状态。移回源会话后可重新打开仍然存在的证据。关联契约 `C-037`，验证见 `internal/server/nuwa_stream_test.go`、`frontend/e2e/nuwa.spec.ts`。
-- 编辑重发移除来源事件后，已打开的 Collaboration 视图会将原引用标记为不可用。删除迁移过的会话会清理它在历史项目中创建的共享工作和版本，其他会话的引用保留。关联契约 `C-037`，验证见 `internal/server/nuwa_source_lifecycle_test.go`、`frontend/e2e/nuwa.spec.ts`。
-- Agent 可用已见的工具调用 ID 将自己的持久回执关联到共享记录。活跃 worker 跨轮保留时可引用当前执行的回执，冷恢复后可引用新执行产生的回执。事实保留原始作者，链接指向实际记录结果的轮次。持久化失败时写入会明确拒绝。验证见 `internal/engine/nuwa_adopted_evidence_test.go`、`internal/engine/nuwa_worker_restore_test.go` 和 `internal/store/nuwa_own_tool_evidence_test.go`。
 - 升级时回填旧 turn 未记录的项目归属，既有 worker 可跨重启恢复。已记录归属与当前项目不符时，显式继续目标返回冲突并保留 checkpoint，归属修复后可继续。见 [归属迁移](DATA_MODEL.md#turns--one-request-and-everything-done-to-answer-it)。
+
+### F-139 Conversation work records
+
+- 入口：PC／Web 右侧工作记录、宿主 `read_work`／`record_work` 与会话工作接口展示并保存任务、事实、成果及可核验来源。新记录默认归会话，可单向合并到所属项目并保留身份、历史和依赖。规划回合只读。非法共享、版本冲突和存储故障有明确反馈。见 `C-055` 和 [工作记录](WORK.md)。
+- 面板保留共享工作、worker、Trace 和文件入口。可展开发现已剪枝记录，状态恢复时自动回显，仍需要重新确认的依赖有独立提示。实现证据：`internal/store/nuwa.go`、`internal/engine/nuwa_tools.go`、`internal/server/nuwa.go`、`frontend/src/components/app/nuwa-panel.tsx` 和 `frontend/e2e/nuwa.spec.ts`。
 
 ### F-138 Project Markdown knowledge base
 
 - 目的：在一个项目内用可编辑的 Markdown 页面积累、查找和追溯跨对话的知识。
-- 入口：PC／Web 右侧 Knowledge 标签、提炼菜单、对话 wikilink、项目回合的 `read_knowledge`／`record_knowledge` 和项目知识库 HTTP 路由。Agents、Files、Trace、任务面板归任务组，Memory、Collaboration、Knowledge 归项目组。
+- 入口：PC／Web 右侧 Knowledge 标签、提炼菜单、对话 wikilink、项目回合的 `read_knowledge`／`record_knowledge` 和项目知识库 HTTP 路由。Agents、Files、Trace、工作记录和任务面板可绑定当前会话，Memory 和 Knowledge 归项目组。
 - 输入与输出：项目 schema、稳定页面 ID、Markdown、历史引用；提供类型或关系树、待处理项、单页、反链、来源、Trace 和宽幅预览。Memory 与 Knowledge 共用一次后台提炼，支持最近成功回合、当前任务和当前项目。启用项目记忆、自动复盘和知识库后，成功非计划回合的自动复盘也可写入知识库。一次运行可同时提交笔记、Skills 与知识库变更，并在两处显示同一回执和 Trace。
 - 前置与失败：未启用时可在 Knowledge 显式启用，或在任一提炼入口显式启用并提炼。部分提交保留实际写入回执。无项目对话提示移动到项目。相同名称、旧 revision 和错误来源拒绝写入；已保存来源失效时给出提示。
 - 契约：`C-053`、`C-054`、`C-036`、`C-044`。

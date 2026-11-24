@@ -101,6 +101,9 @@ func (s *Store) TruncateFromEventSeq(threadID string, fromSeq int64) error {
 }
 
 func invalidateNuwaRewind(tx *gorm.DB, threadID string) error {
+	if err := bumpWorkRevision(tx, threadID); err != nil {
+		return err
+	}
 	// Resolve membership inside the truncation transaction. The source may
 	// have moved since the caller read the thread or its original turn.
 	var project Project

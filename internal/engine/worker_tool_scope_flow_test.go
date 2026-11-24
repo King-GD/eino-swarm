@@ -266,7 +266,7 @@ func runToolScopeFlow(t *testing.T, names *[]string, writeProbe, failReadReceipt
 					}
 				}
 				call("scope-record", "record_work", map[string]any{
-					"kind": "fact", "title": "Source observation", "summary": strings.TrimSpace(observed),
+					"scope": "project", "kind": "fact", "title": "Source observation", "summary": strings.TrimSpace(observed),
 					"own_tool_call_ids": []string{"scope-read"},
 				})
 			case 3:

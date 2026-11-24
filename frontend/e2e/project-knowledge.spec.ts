@@ -25,7 +25,7 @@ test("a conversation outside projects keeps its shared library and explains know
   await freshConversation(page)
   const task = page.getByRole("group", { name: "Task", exact: true })
   const shared = page.getByRole("group", { name: "Shared library", exact: true })
-  await expect(task.getByRole("tab")).toHaveText(["Agents", "Files", "Trace"])
+  await expect(task.getByRole("tab")).toHaveText(["Agents", "Files", "Trace", "Work records"])
   await expect(shared.getByRole("tab", { name: "Memory", exact: true })).toBeVisible()
   await shared.getByRole("tab", { name: "Knowledge", exact: true }).click()
   await expect(page.getByTestId("knowledge-panel")).toContainText("Move this conversation into a project")

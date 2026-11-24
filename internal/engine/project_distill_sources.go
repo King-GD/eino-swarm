@@ -111,6 +111,9 @@ func distillOriginalEvents(events []store.Event) []store.Event {
 	derived := make(map[reviewToolKey]bool)
 	var selected []store.Event
 	for _, ev := range events {
+		if ev.WorkRecordPayload {
+			continue
+		}
 		key := reviewToolKey{ev.AgentID, ev.ToolCallID}
 		if ev.Kind == swarm.NotifyToolCall.String() && ev.ToolCallID != "" {
 			name := toolCallName(ev.Text)

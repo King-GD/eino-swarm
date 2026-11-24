@@ -32,7 +32,7 @@ const turnOpeningColumns = `project_id, id, thread_id, seq, status,
 CASE WHEN goal_continue <> 0 OR schedule_continue <> 0 THEN '' ELSE user_text END AS user_text,
 '' AS final,
 error, provider_id, model, worker_model_recovery, reasoning_effort, web_execution,
-nuwa_enabled, nuwa_executor_provider_id, nuwa_executor_model, nuwa_read_only,
+nuwa_enabled, nuwa_executor_provider_id, nuwa_executor_model, nuwa_read_only, work_ledger, work_ledger_read_only,
 image_command, goal_continue, schedule_run_id, retry_turn_id, quiet, schedule_continue,
 started_at, ended_at, duration_ms`
 

@@ -147,6 +147,8 @@ def load_spec(path: Path) -> dict:
     for arm in arms:
         if arm.get("project_mode") not in ("default", "nuwa"):
             raise ValueError("each arm needs project_mode default or nuwa")
+        if "work_ledger" in arm and type(arm["work_ledger"]) is not bool:
+            raise ValueError("work_ledger must be a boolean")
         if not isinstance(arm.get("project_instruction", ""), str):
             raise ValueError("project_instruction must be a string")
         if "reasoning_effort" in arm and (not isinstance(arm["reasoning_effort"], str)
@@ -245,7 +247,8 @@ def main(argv: list[str]) -> int:
                                         review_wait=review_wait, max_completion_tokens=cap,
                                         project_mode=arm["project_mode"], models=model_setup, run_identity=item,
                                         project_instruction=arm.get("project_instruction", ""),
-                                        reasoning_effort=arm.get("reasoning_effort"))
+                                        reasoning_effort=arm.get("reasoning_effort"),
+                                        work_ledger=arm.get("work_ledger"))
         provider = model_setup["providers"][0] if model_setup else None
         print(f"[{index + 1}/{len(schedule)}] {item['task']} replicate {item['replicate']} {item['arm']}", flush=True)
         result = runner.run_once(task_by_id[item["task"]], item["replicate"], run_args, provider, out / "arms" / item["arm"])

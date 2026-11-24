@@ -30,6 +30,11 @@ func omitThreads(ctx context.Context, q queryer, schema string, ids []string) er
 	marks := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
 	in := func(column string) string { return column + " IN (" + marks + ")" }
 	prefix := schema + "."
+	// The archive includes SQLite pages, so removing rows must also scrub
+	// omitted payloads from released cells in the attached snapshot.
+	if _, err := q.ExecContext(ctx, "PRAGMA "+prefix+"secure_delete = ON"); err != nil {
+		return fmt.Errorf("backup: enable secure deletion for omitted records: %w", err)
+	}
 	runArgs := make([]any, 0, len(args)*2)
 	runArgs = append(runArgs, args...)
 	runArgs = append(runArgs, args...)
@@ -41,6 +46,9 @@ func omitThreads(ctx context.Context, q queryer, schema string, ids []string) er
 		// A project receipt may cite or summarize any retained conversation.
 		{"project_distillations", `DELETE FROM ` + prefix + `project_distillations WHERE project_id IN (SELECT project_id FROM ` +
 			prefix + `threads WHERE ` + in("id") + `)`, args},
+		{"nuwa_verify_slots", `DELETE FROM ` + prefix + `nuwa_verify_slots WHERE ` + in("thread_id"), args},
+		{"nuwa_revisions", `DELETE FROM ` + prefix + `nuwa_revisions WHERE project_id = '' AND ` + in("thread_id"), args},
+		{"nuwa_nodes", `DELETE FROM ` + prefix + `nuwa_nodes WHERE scope = 'thread' AND ` + in("thread_id"), args},
 		{"schedule_runs", `DELETE FROM ` + prefix + `schedule_runs WHERE ` + in("thread_id") +
 			` OR schedule_id IN (SELECT id FROM ` + prefix + `schedules WHERE ` + in("thread_id") + `)`, runArgs},
 		{"composer_draft_blobs", `DELETE FROM ` + prefix + `composer_draft_blobs WHERE ` + in("draft_key"), drafts},

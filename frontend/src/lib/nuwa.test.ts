@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { compareNuwaRecent, layoutNuwa, layoutNuwaCollaboration, nuwaLooseGroupID, nuwaPathFocus, nuwaStatusTally, NUWA_GOAL_ID, scopeNuwaNodes, type NuwaNode } from "./nuwa"
+import { compareNuwaRecent, layoutNuwa, layoutNuwaCollaboration, nuwaLooseGroupID, nuwaPathFocus, nuwaStatusTally, NUWA_GOAL_ID, pruneNuwaNodes, type NuwaNode } from "./nuwa"
 
 const node = (id: string, depends_on: string[] = [], thread_id = "a", kind = "task"): NuwaNode => ({
   id, kind, title: id, summary: "", status: "pending", depends_on,
-  project_id: "p", thread_id, turn_id: "t", version: 1,
+  project_id: "p", scope: "project", thread_id, turn_id: "t", version: 1,
   created_at: `2026-01-01T00:00:${id.length.toString().padStart(2, "0")}Z`, updated_at: "2026-01-01T00:00:00Z",
 })
 
@@ -26,9 +26,22 @@ describe("Shared work paths", () => {
     expect(result.edges).toHaveLength(2)
   })
 
-  it("retains cross-conversation prerequisites in a conversation's dependency path", () => {
-    const result = scopeNuwaNodes([node("a", [], "other"), node("b", ["a"]), node("c", [], "other")], "a")
-    expect(result.map((n) => n.id)).toEqual(["a", "b"])
+  it("prunes inactive branches and restores their position when supported again", () => {
+    const task = node("task")
+    const premise = { ...node("premise", ["task"], "a", "fact"), status: "retracted" }
+    const intermediate = { ...node("middle", ["premise"], "a", "fact"), status: "superseded" }
+    const result = node("result", ["middle"], "a", "artifact")
+    const cancelled = { ...node("cancelled"), status: "cancelled" }
+    const retracted = { ...node("retracted", ["cancelled"], "a", "artifact"), status: "retracted" }
+    const nodes = [task, premise, intermediate, result, cancelled, retracted]
+    const initial = pruneNuwaNodes(nodes)
+    expect(initial.active).toEqual([task, result])
+    expect(initial.shown).toEqual([task, premise, intermediate, result])
+    expect(initial.collapsed).toEqual([cancelled, retracted])
+    const restored = { ...retracted, status: "reported", version: 2 }
+    expect(pruneNuwaNodes([...nodes.slice(0, -1), restored]).shown).toEqual([
+      task, premise, intermediate, result, cancelled, restored,
+    ])
   })
 
   it("collapses records with no dependency into one goal arrow per kind", () => {

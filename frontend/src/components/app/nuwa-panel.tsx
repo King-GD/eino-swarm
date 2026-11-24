@@ -1,6 +1,7 @@
 import { FileCheck2, Layers3, ListTodo, RefreshCw, Radio, ChevronRight } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
 import {
   Dialog,
   DialogContent,
@@ -10,7 +11,7 @@ import {
 } from "@/components/ui/dialog"
 import { MemoMarkdown } from "@/components/app/markdown"
 import { api } from "@/lib/api"
-import { partitionNuwaCollaboration, scopeNuwaNodes, type NuwaEvidence, type NuwaNode, type NuwaWorker } from "@/lib/nuwa"
+import { partitionNuwaCollaboration, pruneNuwaNodes, type NuwaEvidence, type NuwaNode, type NuwaWorker } from "@/lib/nuwa"
 import type { Project } from "@/lib/types"
 import { useT } from "@/lib/use-t"
 import { cn } from "@/lib/utils"
@@ -22,42 +23,60 @@ import { NuwaStatus, NuwaStale, nuwaKind, nuwaKindSurface } from "./nuwa-status"
 
 export function NuwaPanel({
   project,
+  projectId = project?.id,
   threadId,
+  dataGeneration = 0,
   activity,
   onSelectAgent,
 }: {
-  project: Project
+  project?: Project
+  projectId?: string
   threadId?: string
+  dataGeneration?: number
   activity?: { id: string; status: string; onOpenFiles: () => void }
   onSelectAgent: (id: string) => void
 }) {
   const t = useT()
-  const { projectId, snapshot, loading: snapshotLoading, connected: streamConnected, error: snapshotError, connect, refresh } = useNuwa()
-  const [scope, setScope] = useState<"project" | "thread">("project")
+  const {
+    owner, snapshot, tag, loading: snapshotLoading, connected: streamConnected, error: snapshotError,
+    connect, refresh, promote, promoting, promoteError,
+  } = useNuwa()
+  const defaultScope = threadId ? "thread" : "project"
+  const [scope, setScope] = useState<"project" | "thread">(defaultScope)
   const [selected, setSelected] = useState<string>()
   const [graphOpen, setGraphOpen] = useState(false)
+  const [showPruned, setShowPruned] = useState(false)
   useEffect(() => {
+    setScope(defaultScope)
     setSelected(undefined)
     setGraphOpen(false)
-    return connect(project.id)
-  }, [project.id, connect])
-  const ownsProjection = projectId === project.id
+    setShowPruned(false)
+    if (threadId || projectId) return connect({ threadId, projectId, generation: dataGeneration })
+  }, [threadId, projectId, dataGeneration, defaultScope, connect])
+  const ownsProjection = owner?.threadId === threadId && owner?.projectId === projectId && owner?.generation === dataGeneration
   const current = ownsProjection ? snapshot : undefined
   const loading = !ownsProjection || snapshotLoading
   const connected = ownsProjection && streamConnected
   const error = ownsProjection ? snapshotError : undefined
+  const currentProjectId = current?.project_id ?? projectId
+  const currentProject = currentProjectId === project?.id ? project : undefined
+  const effectiveScope = currentProjectId ? scope : "thread"
   const nodes = useMemo(
-    () => scopeNuwaNodes(current?.nodes ?? [], scope === "thread" ? threadId : undefined),
-    [current, scope, threadId]
+    () => effectiveScope === "thread" ? current?.nodes ?? [] : current?.nodes.filter((node) => node.scope === "project") ?? [],
+    [current, effectiveScope],
   )
-  const indexed = useMemo(() => {
-    const grouped = new Set(partitionNuwaCollaboration(nodes).groups.flatMap((group) => group.records.map((record) => record.id)))
-    return nodes.filter((node) => !grouped.has(node.id))
-  }, [nodes])
+  const { active, shown, collapsed } = useMemo(() => pruneNuwaNodes(nodes), [nodes])
+  const graphNodes = showPruned ? nodes : shown
+  const indexed = useMemo(() => partitionNuwaCollaboration(graphNodes).path, [graphNodes])
   const detail = nodes.find((node) => node.id === selected)
-  const workers = (current?.workers ?? []).filter(
-    (worker) => scope !== "thread" || worker.thread_id === threadId
-  )
+  const workers = current?.workers ?? []
+  const promotion = detail?.scope === "thread" && threadId && current?.project_id && tag ? {
+    submit: () => void promote(detail.id),
+    pending: promoting,
+    error: promoteError?.id === detail.id
+      ? promoteError.conflict ? t("nuwa.promoteConflict") : promoteError.message
+      : undefined,
+  } : undefined
 
   const openSource = async (source: Pick<NuwaEvidence, "thread_id" | "turn_id">) => {
     if (!source.thread_id) return
@@ -80,7 +99,7 @@ export function NuwaPanel({
     <div data-testid="nuwa-panel" className="thin-scrollbar min-h-0 flex-1 overflow-y-auto p-3">
       <div className="mb-3 flex items-center gap-2">
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-(length:--chrome-font-size) font-semibold">{project.name}</h2>
+          <h2 className="truncate text-(length:--chrome-font-size) font-semibold">{currentProject?.name ?? t("nuwa.tab")}</h2>
           <span
             className={cn(
               "mt-1 flex items-center gap-1 text-[11px]",
@@ -90,10 +109,10 @@ export function NuwaPanel({
             <Radio className="size-3" />
             {connected ? t("nuwa.connected") : t("nuwa.connecting")}
           </span>
-          {project.nuwa_enabled ? (
+          {currentProject?.nuwa_enabled ? (
             <p className="mt-1 truncate text-[11px] text-muted-foreground">
-              {project.nuwa_executor_model?.trim()
-                ? t("nuwa.executorModel", { model: project.nuwa_executor_model })
+              {currentProject.nuwa_executor_model?.trim()
+                ? t("nuwa.executorModel", { model: currentProject.nuwa_executor_model })
                 : t("nuwa.executorUnset")}
             </p>
           ) : null}
@@ -108,7 +127,7 @@ export function NuwaPanel({
           <RefreshCw className={loading ? "animate-spin" : ""} />
         </Button>
       </div>
-      {!project.nuwa_enabled ? (
+      {currentProject?.nuwa_configured && !currentProject.nuwa_enabled ? (
         <p className="mb-3 text-xs text-muted-foreground">{t("nuwa.paused")}</p>
       ) : null}
       <div
@@ -118,8 +137,9 @@ export function NuwaPanel({
       >
         <Button
           size="sm"
-          variant={scope === "project" ? "secondary" : "ghost"}
-          aria-pressed={scope === "project"}
+          variant={effectiveScope === "project" ? "secondary" : "ghost"}
+          aria-pressed={effectiveScope === "project"}
+          disabled={!currentProjectId}
           onClick={() => {
             setScope("project")
             setSelected(undefined)
@@ -129,9 +149,9 @@ export function NuwaPanel({
         </Button>
         <Button
           size="sm"
-          variant={scope === "thread" ? "secondary" : "ghost"}
+          variant={effectiveScope === "thread" ? "secondary" : "ghost"}
           disabled={!threadId}
-          aria-pressed={scope === "thread"}
+          aria-pressed={effectiveScope === "thread"}
           onClick={() => {
             setScope("thread")
             setSelected(undefined)
@@ -173,16 +193,27 @@ export function NuwaPanel({
               >
                 <Icon className="mb-1 size-3.5 text-muted-foreground" />
                 <strong className="block text-lg font-semibold tabular-nums">
-                  {nodes.filter((node) => node.kind === kind).length}
+                  {active.filter((node) => node.kind === kind).length}
                 </strong>
                 <span className="text-[11px] text-muted-foreground">{nuwaKind(kind, t)}</span>
               </div>
             ))}
           </div>
+          {collapsed.length ? (
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>{t("nuwa.pruned", { count: collapsed.length })}</span>
+              <label className="inline-flex items-center gap-2">
+                <Switch checked={showPruned} onCheckedChange={setShowPruned} aria-label={t("nuwa.showPruned")} />
+                {t("nuwa.showPruned")}
+              </label>
+            </div>
+          ) : null}
           {nodes.length ? (
             <NuwaGraph
-              nodes={nodes}
-              workers={current.workers}
+              nodes={graphNodes}
+              collapsed={showPruned ? [] : collapsed}
+              conversation={effectiveScope === "thread"}
+              workers={workers}
               selected={selected}
               onSelect={setSelected}
               onExpand={() => setGraphOpen(true)}
@@ -190,7 +221,7 @@ export function NuwaPanel({
           ) : (
             <>
               <p className="py-6 text-center text-xs text-muted-foreground">
-                {t(scope === "thread" ? "nuwa.threadEmpty" : "nuwa.empty")}
+                {t(effectiveScope === "thread" ? "nuwa.threadEmpty" : "nuwa.empty")}
               </p>
               {threadId && activity && !workers.length ? (
                 <section aria-label={t("nuwa.lastTurn")} className="rounded-md border border-border p-2">
@@ -217,7 +248,8 @@ export function NuwaPanel({
               key={detail.id}
               node={detail}
               nodes={current.nodes}
-              workers={current.workers}
+              workers={workers}
+              promotion={promotion}
               onSelect={setSelected}
               onSource={openSource}
               onWorker={openWorker}
@@ -244,7 +276,7 @@ export function NuwaPanel({
                       </span>
                       <NuwaStale node={node} />
                     </span>
-                    <NuwaStatus status={node.status} />
+                    <NuwaStatus status={node.status} kind={node.kind} />
                     <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
                   </button>
                 </div>
@@ -270,18 +302,27 @@ export function NuwaPanel({
               <DialogHeader>
                 <DialogTitle>{t("nuwa.path")}</DialogTitle>
                 <DialogDescription>
-                  {project.name} · {t(scope === "thread" ? "nuwa.thread" : "nuwa.project")}
+                  {currentProject?.name ?? t("nuwa.tab")} · {t(effectiveScope === "thread" ? "nuwa.thread" : "nuwa.project")}
                 </DialogDescription>
               </DialogHeader>
               <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[minmax(0,1fr)_280px]">
-                <NuwaGraph nodes={nodes} workers={current.workers} selected={selected} onSelect={setSelected} expanded />
+                <NuwaGraph
+                  nodes={graphNodes}
+                  collapsed={showPruned ? [] : collapsed}
+                  conversation={effectiveScope === "thread"}
+                  workers={workers}
+                  selected={selected}
+                  onSelect={setSelected}
+                  expanded
+                />
                 <div className="thin-scrollbar min-h-0 overflow-y-auto">
                   {detail ? (
                     <NodeDetail
                       key={detail.id}
                       node={detail}
                       nodes={current.nodes}
-                      workers={current.workers}
+                      workers={workers}
+                      promotion={promotion}
                       onSelect={setSelected}
                       onSource={async (source) => {
                         setGraphOpen(false)
@@ -340,6 +381,7 @@ function NodeDetail({
   node,
   nodes,
   workers,
+  promotion,
   onSelect,
   onSource,
   onWorker,
@@ -347,6 +389,7 @@ function NodeDetail({
   node: NuwaNode
   nodes: NuwaNode[]
   workers: NuwaWorker[]
+  promotion?: { submit: () => void; pending: boolean; error?: string }
   onSelect: (id: string) => void
   onSource: (source: NuwaEvidence) => Promise<void>
   onWorker: (worker: { thread_id: string; agent_id: string }) => Promise<void>
@@ -366,11 +409,20 @@ function NodeDetail({
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <h3 className="wrap-break-word text-(length:--chrome-font-size) font-medium">{node.title}</h3>
-        <NuwaStatus status={node.status} />
+        <NuwaStatus status={node.status} kind={node.kind} />
       </div>
       <p className="whitespace-pre-wrap wrap-break-word text-xs text-muted-foreground">
         {node.summary}
       </p>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span>{t(node.scope === "thread" ? "nuwa.scopeThread" : "nuwa.scopeProject")}</span>
+        {promotion ? (
+          <Button size="sm" variant="outline" disabled={promotion.pending} onClick={promotion.submit}>
+            {t(promotion.pending ? "nuwa.promoting" : "nuwa.promote")}
+          </Button>
+        ) : null}
+      </div>
+      {promotion?.error ? <p role="alert" className="mt-2 text-xs text-destructive">{promotion.error}</p> : null}
       {node.stale_dependencies?.length ? (
         <p className="mt-2 text-xs text-running">{t("nuwa.stale")}</p>
       ) : null}

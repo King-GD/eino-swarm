@@ -145,6 +145,8 @@ type Notification struct {
 	// several calls in one turn, so matching by position or name is wrong;
 	// match on this instead.
 	ToolCallID string
+	// ToolName comes from the structured call or the tool node receipt.
+	ToolName string `json:"-"`
 
 	// MessageID identifies one streamed model output across host checkpoints.
 	// Reasoning and answer share this ID but remain separate message kinds.
@@ -300,11 +302,11 @@ func (r *Registry) emitComplete(role, agentID string, ev *adk.AgentEvent, owners
 		}
 		for _, tc := range mergeStreamedToolCalls(msg.ToolCalls) {
 			emit(Notification{Kind: NotifyToolCall, AgentID: agentID, Role: role,
-				Text: tc.Function.Name + "(" + tc.Function.Arguments + ")", ToolCallID: tc.ID})
+				Text: tc.Function.Name + "(" + tc.Function.Arguments + ")", ToolCallID: tc.ID, ToolName: tc.Function.Name})
 		}
 	case schema.Tool:
 		emit(Notification{Kind: NotifyToolResult, AgentID: agentID, Role: role,
-			Text: clipToolResult(msg.Content, toolResultNotifyLimit), ToolCallID: msg.ToolCallID})
+			Text: clipToolResult(msg.Content, toolResultNotifyLimit), ToolCallID: msg.ToolCallID, ToolName: msg.ToolName})
 	}
 }
 
@@ -530,7 +532,7 @@ func (s *streamAcc) drain(st *schema.StreamReader[*schema.Message]) (string, []s
 	}
 	for _, tc := range calls {
 		s.touch(tc.Function.Name + "(" + truncStr(tc.Function.Arguments, 80) + ")")
-		s.emit(Notification{Kind: NotifyToolCall, ToolCallID: tc.ID,
+		s.emit(Notification{Kind: NotifyToolCall, ToolCallID: tc.ID, ToolName: tc.Function.Name,
 			Text: tc.Function.Name + "(" + tc.Function.Arguments + ")"})
 		s.raw(&schema.Message{Role: schema.Assistant, ToolCalls: []schema.ToolCall{tc}})
 	}

@@ -24,6 +24,7 @@ func resolveNuwaOwnToolEvidence(tx *gorm.DB, caller NuwaNode, receipt NuwaWriteR
 	type toolPair struct {
 		call, result int64
 		resultTurnID string
+		workPayload  bool
 	}
 	pairs := make(map[string]toolPair, len(ids))
 	for _, id := range ids {
@@ -37,12 +38,13 @@ func resolveNuwaOwnToolEvidence(tx *gorm.DB, caller NuwaNode, receipt NuwaWriteR
 	}
 
 	var events []struct {
-		ToolCallID string
-		Kind       string
-		Seq        int64
-		TurnID     string
+		ToolCallID        string
+		Kind              string
+		Seq               int64
+		TurnID            string
+		WorkRecordPayload bool
 	}
-	query := tx.Model(&Event{}).Select("tool_call_id", "kind", "seq", "turn_id").
+	query := tx.Model(&Event{}).Select("tool_call_id", "kind", "seq", "turn_id", "work_record_payload").
 		Where("thread_id = ? AND kind IN ? AND agent_id = ? AND worker_generation = ? AND tool_call_id IN ?",
 			caller.ThreadID, []string{"tool_call", "tool_result"}, caller.AgentID, caller.Generation, ids)
 	if receipt.ToolReceiptScope == "" {
@@ -65,7 +67,7 @@ func resolveNuwaOwnToolEvidence(tx *gorm.DB, caller NuwaNode, receipt NuwaWriteR
 		if ev.Kind == "tool_call" {
 			seq = &pair.call
 		} else {
-			pair.resultTurnID = ev.TurnID
+			pair.resultTurnID, pair.workPayload = ev.TurnID, ev.WorkRecordPayload
 		}
 		if *seq != 0 || ev.Seq <= 0 || ev.TurnID == "" {
 			return nil, ErrNuwaOwnToolReceiptUnavailable
@@ -79,6 +81,9 @@ func resolveNuwaOwnToolEvidence(tx *gorm.DB, caller NuwaNode, receipt NuwaWriteR
 		pair := pairs[id]
 		if pair.call == 0 || pair.result <= pair.call {
 			return nil, ErrNuwaOwnToolReceiptUnavailable
+		}
+		if caller.Scope == WorkScopeProject && pair.workPayload {
+			return nil, errWorkPayloadEvidence
 		}
 		evidence = append(evidence, NuwaEvidence{ThreadID: caller.ThreadID, TurnID: pair.resultTurnID, Seq: pair.result})
 	}

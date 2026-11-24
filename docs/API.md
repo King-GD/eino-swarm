@@ -1776,10 +1776,33 @@ connection. Clients refetch GET rather than applying event payloads as node
 patches. Reconnect reads current state, not a chat-sequence replay. Revisions may
 skip intermediate updates and must never be used as conversation `seq` values.
 
-Shared mutation is through actual agent `record_work` calls, not a public
-project-node write endpoint. `list_models`, `read_work` and `record_work` tool
-schemas and their trust/CAS boundaries are described in [Nuwa](NUWA.md) and
-`C-037`.
+The node `scope` is `project` in this snapshot. The work-record tools
+and the conversation endpoints below provide the two read scopes. See
+[Work records](WORK.md) and `C-055`.
+
+### `GET /api/threads/:id/work`
+
+Returns `thread_id`, `project_id`, `thread_revision`, `project_revision`,
+`data_generation`, `nodes`, and `workers`. A standalone thread has an empty project ID and zero
+project revision. The snapshot includes the thread's own private records and
+its current project's shared records. Workers are limited to this thread and
+come from durable lifecycle records. The response ETag identifies this snapshot
+and is the precondition for promotion.
+
+### `GET /api/threads/:id/work/events`
+
+Sends a named `nuwa_updated` frame for the current thread, project, revision pair
+and data generation on connect and when that identity changes. Refetch the snapshot
+on notification. Clients may receive the same named frames over
+`GET /api/threads/:id/events?work=1`. Work frames use no SSE id and do not affect
+the conversation replay cursor.
+
+### `POST /api/threads/:id/work/promote`
+
+Body `{"ids":["nw_…"]}`, with the current work snapshot's ETag in `If-Match`.
+Moves the requested private records and their private prerequisites to the
+current project in one transaction. Returns `200` with the committed `thread_id`, `project_id`, revision pair, `data_generation`, promoted `nodes` and a new ETag. A changed snapshot or membership returns `409`. Invalid
+input or a standalone destination returns `400`.
 
 ### `DELETE /api/projects/:id` → `204`
 

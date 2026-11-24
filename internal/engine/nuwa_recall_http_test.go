@@ -232,6 +232,7 @@ func TestNuwaWorkersRecallRelatedOlderRecordsAtActualHTTP(t *testing.T) {
 			}
 			envelope, err := json.Marshal(map[string]any{
 				"project_id": project.ID, "status": "available", "revision": revision,
+				"thread_revision": 0, "project_revision": revision,
 				"total": len(nodes), "omitted": len(nodes) - len(shown), "nodes": shown,
 			})
 			if err != nil {

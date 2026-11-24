@@ -312,7 +312,7 @@ func TestNuwaOwnToolEvidenceReadsIndexedMetadataWithoutToolBodies(t *testing.T) 
 			if err := f.s.UpsertNuwaNode(t.Context(), &node, 0, receipt); err != nil {
 				t.Fatal(err)
 			}
-			if len(projections) != 1 || !slices.Equal(projections[0], []string{"tool_call_id", "kind", "seq", "turn_id"}) {
+			if len(projections) != 1 || !slices.Equal(projections[0], []string{"tool_call_id", "kind", "seq", "turn_id", "work_record_payload"}) {
 				t.Fatalf("receipt resolution loaded unexpected event columns: %v", projections)
 			}
 			var plan []struct{ Detail string }

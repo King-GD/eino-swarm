@@ -71,6 +71,7 @@ export function RightPanel({
   onSearch,
   usage,
   nuwaProject,
+  threadProjectId,
 }: {
   tab: PanelTab
   onTabChange: (tab: PanelTab) => void
@@ -99,6 +100,7 @@ export function RightPanel({
   onSearch?: (query: string) => Promise<FileEntry[]>
   usage?: UsageSnapshot | null
   nuwaProject?: Project
+  threadProjectId?: string
 }) {
   const t = useT()
   const storedTaskPanels = useTaskPanels((state) => state.panels)
@@ -106,6 +108,8 @@ export function RightPanel({
   const registeredPanels = resolveInspectorPanels({
     threadId,
     project: nuwaProject,
+    threadProjectId,
+    dataGeneration: meta?.data_generation,
     taskPanels: { threadId: taskPanelThread, panels: storedTaskPanels },
   })
   const tabs = groupInspectorTabs([

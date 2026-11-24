@@ -93,7 +93,7 @@ func (s *Store) ProjectDistillationHistory(ctx context.Context, projectID, threa
 					"CASE WHEN length(CAST(err AS BLOB)) <= ? THEN err END AS err, "+
 					"COALESCE(length(CAST(text AS BLOB)),0) > ? OR COALESCE(length(CAST(err AS BLOB)),0) > ? AS oversize",
 					maxEventBytes, maxEventBytes, maxEventBytes, maxEventBytes).
-				Where("thread_id = ? AND turn_id = ? AND kind IN ?", turn.ThreadID, turn.ID, kinds).
+				Where("thread_id = ? AND turn_id = ? AND kind IN ? AND work_record_payload = 0", turn.ThreadID, turn.ID, kinds).
 				Order("seq DESC").Limit(remaining + 1).Find(&rows).Error; err != nil {
 				return err
 			}

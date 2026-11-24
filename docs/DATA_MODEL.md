@@ -250,27 +250,29 @@ project removes the row. Full database backups include the receipt unless a conv
 is omitted. Portable project bundles carry notes, Skills and knowledge files.
 Their restore resets the latest receipt for the replaced project.
 
-## `nuwa_nodes` / `nuwa_revisions` — project collaboration (`C-037`)
+## `nuwa_nodes` / `nuwa_revisions` — work records (`C-055`)
 
 `nuwa_nodes` stores task/fact/artifact records. It is separate from memory files
-and the conversation transcript. Each `nw_…` node contains project ID, kind,
+and the conversation transcript. Each `nw_…` node contains scope, optional project ID, kind,
 title/summary/detail, status, `depends_on`, `dependency_versions`, event evidence
 references and optional workspace-relative `artifact_path`. Original
 `thread_id`, `turn_id`, `agent_id`, `generation` and creation time remain fixed;
 `updated_by`, `updated_thread_id`, `updated_turn_id`, `updated_generation`,
 `version` and update time identify the actual correction.
 
-A write transaction validates owner, cancellation, same-project evidence and
-acyclic dependencies, checks the expected node version, increments the project
-revision and saves a complete version payload in `nuwa_revisions`. Its unique
-project/revision index defines ordering. A trusted tool-call `request_key` and
-canonical argument `request_hash` deduplicate re-delivery: the same call returns
-its exact saved payload; conflicting arguments refuse. A later correction is
-never overwritten by that replay. Empty-node revision rows represent worker
-view invalidation, not a fabricated fact. Actual mode changes advance the
-project counter atomically without a node audit row; revisions need not be
-contiguous in this table. The host's current owner/input checks still apply to
-receipt replay, including cancellation, deletion and artifact availability.
+Scope is `thread` or `project`. Thread records have an empty project ID and
+follow the originating thread. Project records retain their project ID when a
+thread moves. Existing rows and missing legacy scope values read as project
+records. `threads.work_revision` advances the thread side of a work snapshot.
+
+A write transaction validates owner and cancellation, scope-appropriate evidence,
+and acyclic dependencies. It checks the expected node version, increments the
+applicable revision and saves the full version payload. The audit uniqueness
+key is (project, thread, revision), with the other owner column empty. The
+globally unique tool-call `request_key` and its argument `request_hash` control
+replay. Empty-node rows represent invalidation. Promotion verifies the private
+dependency closure and replaces its scope in one transaction, committing both
+revision domains and audit together.
 
 When a write supplies its own tool call IDs, the transaction resolves the
 caller's matching persisted results to existing event references. Manager
@@ -282,13 +284,13 @@ The node keeps its original author turn. This metadata does not enter the
 event JSON. Older unscoped rows retain their original explicit event
 references.
 
-Snapshots annotate missing dependencies, changed/superseded/retracted source
+Snapshots annotate missing dependencies, changed/superseded/retracted/cancelled source
 versions and unavailable events without inventing new stored conclusions.
 Omitted dependencies preserve their prior version stamps; explicit reviewed
 `depends_on` refreshes them. Thread/project deletion removes owned nodes and
 their audit history, retaining surviving nodes' unavailable references.
 Event evidence validates identity, not truth; artifact paths do not freeze file
-bytes. See `internal/store/nuwa.go` and [Nuwa](NUWA.md).
+bytes. See `internal/store/nuwa.go` and [Work records](WORK.md).
 
 ## `nuwa_verify_slots` — one verify and one fix (`C-037`)
 
@@ -541,6 +543,7 @@ The `id` is the handle the whole troubleshooting story hangs off: the UI shows i
 | `nuwa_enabled` | collaboration mode captured at turn start; later project edits do not change this turn or its workers |
 | `nuwa_executor_provider_id`, `nuwa_executor_model` | executor copied from the project at turn start. Empty means the project had not saved a pair. In-flight workers keep the binding recorded for their role |
 | `nuwa_read_only` | planning's read-only Nuwa surface retained through recovery |
+| `work_ledger`, `work_ledger_read_only` | work tools and planning mode frozen when the turn starts. Legacy Nuwa rows also enable work tools through their saved Nuwa flag |
 | `goal_continue` | true when the runtime started this turn to keep pursuing an open `/goal`. The timeline records `goal_continued`, not `user_message` |
 | `schedule_run_id` | set when this turn is a scheduled fire; empty for every other origin. Trace joins the run through it |
 | `quiet` | true when a scheduled turn had nothing to report. The row stays for `zwai trace`; the transcript hides the bubbles |

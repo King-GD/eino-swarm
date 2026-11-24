@@ -72,6 +72,7 @@ type Thread struct {
 	// clears it so a later namer cannot overwrite the sidebar.
 	TitleAuto     bool   `json:"title_auto"`
 	ProjectID     string `gorm:"index;size:64" json:"project_id"`
+	WorkRevision  int64  `gorm:"not null;default:0" json:"work_revision"`
 	TaskWorkspace string `gorm:"not null;default:''" json:"-"`
 	ProviderID    string `gorm:"size:64" json:"provider_id"`
 	// Model is the name this conversation sends. Empty follows a user-configured
@@ -158,6 +159,8 @@ type Message struct {
 	Reasoning  string `json:"reasoning,omitempty"`
 	ToolCalls  string `json:"tool_calls,omitempty"` // JSON array, as received
 	ToolCallID string `gorm:"size:128" json:"tool_call_id,omitempty"`
+	// WorkRecordPayload carries host-tagged work tool arguments or results.
+	WorkRecordPayload bool `gorm:"not null;default:false" json:"-"`
 	// Images are pasted vision inputs, stored as files under the data
 	// directory. The bytes do not live here: replaying a turn reloads them.
 	Images []ImageRef `gorm:"serializer:json" json:"images,omitempty"`
@@ -213,6 +216,9 @@ type Turn struct {
 	NuwaExecutorModel      string `gorm:"size:200" json:"nuwa_executor_model,omitempty"`
 	// NuwaReadOnly preserves planning's read-only tool surface after recovery.
 	NuwaReadOnly bool `json:"nuwa_read_only"`
+	// WorkLedger and WorkLedgerReadOnly freeze the work tools for later recovery.
+	WorkLedger         bool `gorm:"not null;default:false" json:"work_ledger"`
+	WorkLedgerReadOnly bool `gorm:"not null;default:false" json:"work_ledger_read_only"`
 	// ImageCommand belongs to an explicit /image turn and never resumes as a chat-model turn.
 	ImageCommand bool `gorm:"not null;default:false" json:"image_command,omitempty"`
 	// GoalContinue is true when the engine started this turn to keep pursuing
@@ -240,6 +246,8 @@ type Turn struct {
 // reconnecting client asks for everything after the last seq it saw and misses
 // nothing.
 type Event struct {
+	// WorkRecordPayload carries host-tagged work tool arguments or results.
+	WorkRecordPayload bool `gorm:"not null;default:false" json:"-"`
 	// Completion is persisted so quiet/rewind cannot revive pre-upgrade
 	// history. SuppressCompletion is a runtime decision, never wire data.
 	Completion         bool                `gorm:"not null;default:false" json:"-"`

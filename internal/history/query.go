@@ -17,6 +17,7 @@ import (
 type Reader struct {
 	path         string
 	projectID    string
+	threadID     string
 	projectBound bool
 }
 
@@ -50,6 +51,13 @@ func New(path string) *Reader { return &Reader{path: path} }
 // missing project identities fail on Query instead of falling back to New.
 func NewProject(path, projectID string) *Reader {
 	return &Reader{path: path, projectID: projectID, projectBound: true}
+}
+
+// ForThread binds work tool visibility to the trusted owning conversation.
+func (r *Reader) ForThread(threadID string) *Reader {
+	bound := *r
+	bound.threadID = threadID
+	return &bound
 }
 
 // Query runs a SELECT against retained raw history. Empty SQL describes its
@@ -106,6 +114,9 @@ func (r *Reader) Query(ctx context.Context, statement string, params []any, maxC
 		if err := applyProjectScope(ctx, tx, schema, r.projectID); err != nil {
 			return Result{}, err
 		}
+	}
+	if err := applyWorkPayloadScope(ctx, tx, schema, r.projectID, r.threadID); err != nil {
+		return Result{}, err
 	}
 	if clean == "" {
 		if len(params) > 0 {

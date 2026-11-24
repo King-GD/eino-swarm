@@ -111,6 +111,7 @@ export function AppPanel({
       meta={meta}
       threadId={activeId}
       nuwaProject={knowledgeProject}
+      threadProjectId={activeThread?.project_id}
       knowledge={activeId || knowledgeProject ? {
         project: knowledgeProject,
         thread: activeThread,

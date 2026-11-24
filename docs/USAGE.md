@@ -815,6 +815,12 @@ and [table semantics](DATA_MODEL.md#read-only-history-sql).
 executor model. Mode changes apply to subsequent turns. Current workers keep
 their configuration. See [Nuwa](NUWA.md).
 
+Open **Work records** in the right inspector to see the conversation's
+tasks, facts and results. In a project, the same view includes shared records.
+Choose **Merge into project** on a private record to share it and its private
+prerequisites. An independent conversation keeps its own work records.
+See [Work records](WORK.md).
+
 ## Project knowledge
 
 In the right panel, open **Knowledge** under the project name and choose
