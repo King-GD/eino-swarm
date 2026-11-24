@@ -984,6 +984,22 @@ own server port, data directory and output directory. Do not rebuild its served
 `dist` during a run. Browser results do not substitute for candidate-specific
 native macOS acceptance in `ci-macOS`.
 
+## Unified project distillation (`F-138`, `F-420`, `C-054`)
+
+`go test -race ./internal/engine ./internal/server -run 'Test(Project)?Distill'`
+exercises the provider and HTTP tool boundaries, distinct conversation sources
+with the same event sequence, partial storage conflicts and interrupted
+receipts. The Playwright project knowledge suite walks all three scopes,
+switches between both panels and follows the Trace receipt. The
+`distillation-*` TLC cases cover exclusive admission, scoped publication,
+committed receipts, and a reachable run that saves all three targets.
+`TestCompletedTurnAutomaticallyKeepsNotesSkillsAndKnowledgeInOneReviewerBatch`
+drives a real completed turn and its automatic reviewer through the model
+adapter, and checks that one proposal and one original-turn receipt cover all
+three destinations. The Dream loopback test covers audit deferral while
+Knowledge is enabled. The offline browser regression keeps Knowledge visible
+and verifies its automatic refresh before reading Trace.
+
 ## Project Markdown knowledge (`F-138`, `C-053`)
 
 - `go test -race -cover ./internal/knowledge ./internal/engine ./internal/server ./internal/backup`
@@ -4088,6 +4104,14 @@ Concurrent runs follow the [E2E isolation rules](#end-to-end-tests).
 
 ## Memory review provenance and commit (F-420 / C-025 / C-012)
 
+`TestAutomaticMemoryReviewRecoversAfterAccountDiscoveryOutage` interrupts the
+actual account bootstrap before a turn finishes. It observes a streamed
+reviewer request and a committed note after fresh authorization. Outage and
+revocation cases retain their failure in the same turn with zero model requests
+and no note write. `TestOpenedAccountChatRechecksDiscoveryBeforeAnyModelRequest`
+covers the same preflight on an already-open account model, including
+cancellation and withdrawal of its role, model or wire adapter.
+
 The 2026-10-29 Issue #130 local candidate passed the full Go race suite with
 94.9% engine and 98.6% memory package coverage. The new proposal preflight and
 aggregate refusal functions measured 95.2% and 100%; the new capacity preview
@@ -6293,6 +6317,8 @@ fixtures the requested reviews caught nothing the manager's own choice of
 review did not. The policy is re-measured with `tools/agent_eval_prereview.py`
 on any change to the Delegating section.
 
+The visible-history projection also runs six bounded TLC cases in `models/stream/VisibleHistory.tla`. The idle tail scans two deferred work rows, reads the preceding visible message and gives SSE a distinct watermark. Seeded cursors and a stale rewind range break the modeled invariants. The model abstracts the SQL and React rendering, which the real HTTP and Playwright tests exercise.
+
 ## The scripted offline provider
 
 `--mock` (or `provider.NewMock`) replaces the model with a script that behaves
@@ -6310,7 +6336,8 @@ Playwright (`go run`) still emit them.
 It answers as a **memory reviewer** too: the post-turn script submits a complete
 `apply_memory_review` batch derived from effective source events, with exact
 seq/quote citations. A normal project review can store a note and a skill;
-failed-turn requirements-only input stores notes without skills. Shared-library
+when Knowledge is enabled, the same mock review can also commit a cited wiki
+page. Failed-turn requirements-only input stores notes without skills. Shared-library
 review submits skills only. The batch exits the agent and the program supplies
 the result line, rather than billing a closing model call. A manager write does
 not skip this path. Explicit Review now selects the latest successful turn.
@@ -7067,8 +7094,8 @@ Several things are tested here, some as pure logic and some in jsdom:
   (`side-panel`). New task opens `schedule-create-drawer` so the form does not
   sit on the list; Expand hides the list (`data-expanded`, list pane `hidden`;
   Escape collapses first). The form is a Task field plus Details (Runs in:
-  new conversation each run, or wake a listed chat; Project only for a minted
-  conversation) and Frequency (Repeat + delay/every/cron). Click a row for
+  an independent results conversation, or wake a listed chat; Project only for
+  the independent option) and Frequency (Repeat + delay/every/cron). Click a row for
   `schedule-edit-drawer` (title in the header, Task + searchable Runs in +
   cadence; Save is dirty-only, including a destination-only change). A finished
   wait locks Runs in. The open conversation's side panel lists waits aimed at
@@ -7078,7 +7105,12 @@ Several things are tested here, some as pure logic and some in jsdom:
   to one Open findings control (a count when there is more than one) so
   finished reports stay off the row (`unreadFindings` newest-first; opening
   a conversation marks every unread fire on that thread; wait rows are
-  `shrink-0`). A `session_memory` event is
+  `shrink-0`). Repeated standalone findings keep one project row, both turns
+  and run receipts, separate Trace links, and a link to the exact task and
+  origin (`frontend/e2e/schedules.spec.ts`). The paired-phone project and
+  unread sections show the same origin (`mobile/e2e/schedule-findings-source.spec.ts`).
+  The engine and store tests also cover quiet runs and legacy duplicates.
+  A `session_memory` event is
   quiet on the manager like a generated title — no chat row, no extra worker.
   Finished `goal_session` / `goal_continued` turns keep every answer visible
   in `transcript-session.test.tsx`, including the live-to-finished transition
@@ -7869,6 +7901,11 @@ npm run e2e
 npx playwright test --headed      # watch it happen
 npx playwright test e2e/shell.spec.ts -g "settings"
 ```
+
+The message-history spec seeds a private conversation in that server's
+SQLite database with a gap of more than 200 tool and reasoning events.
+It checks one visible message per upward page in both transcript modes,
+lazy expansion with retry, and independent worker-log requests.
 
 Playwright starts the real server itself (`go run ./cmd/zwai web --mock --no-open`),
 so a run exercises the whole stack: gin, the engine, SQLite, SSE and the built

@@ -15,9 +15,12 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - Task panels can show an enterprise asset portrait (EASM). The agent confirms the subject, performs the discovery lookups itself, and pushes each finished batch of companies, domains and certificates into the panel, which merges the batches into one graph; on the batch that carries the final asset query the panel collects the asset totals, attention trend and components itself. Each aggregation shows its own progress and a failure never stops the others. The panel follows the app language on PC, Web and paired phones.
 
 - PC and Web projects can keep a Markdown knowledge base with linked pages,
-  sources, relationship views and a pending queue. The Knowledge panel can
-  start a normal conversation to distill the current task or project history.
-  (`F-138`, `C-053`, #185)
+  sources, relationship views and a pending queue. (`F-138`, `C-053`, #185)
+
+- Memory and Knowledge share one manual distillation action for the latest
+  successful turn, current task or current project. A background review can
+  update notes, Skills and the wiki together and show actual writes in both
+  panels. (`F-138`, `F-420`, `C-054`, #185)
 
 - Desktop and Web answers turn a workspace file path into a preview button. Clicking it opens the same file preview as the Files tab. When several files share that name, the preview lists them and opens the one you choose. (`F-140`)
 
@@ -35,6 +38,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - The EASM panel takes the agent's own findings instead of looking them up: the Go producer no longer queries the company, investment, branch, filing, asset-rule or certificate sources, and the certificates the agent reports never add domains on their own. `task_panels.easm` binds only `stats`, `heat` and `product_rules`; retired roles in an existing configuration are dropped when it loads, and `max_domains` now bounds the domain nodes of the whole portrait instead of the certificate lookups of one run.
 
 - Settings → Tools → Task panels shows the common panel options. EASM lookup bindings and limits are managed through `task_panels.easm` in the configuration file.
+- Automatic review after an eligible successful turn now includes the enabled
+  project wiki in the same proposal as notes and Skills. Knowledge writes
+  appear in the original turn receipt and refresh the open Knowledge panel.
+  (`F-138`, `F-420`, `C-025`, `C-054`)
 
 - The right panel groups Agents, Files, Trace and agent-opened panels under
   Task, and Memory, Collaboration and Knowledge under the project name.
@@ -78,6 +85,11 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - EASM supply-chain collection again requests only FOFA `product1,product5`, excluding service and support products that were unintentionally added.
 
 - The EASM asset graph shows the same loading spinner as attention trend and supply chain while waiting for its first data, and stops spinning when an empty collection ends.
+- Scrolling up in desktop and Web history now reaches the previous visible message even across dense tool activity. Older thought and tool folds fetch details when opened. (`F-120`, `C-003`)
+
+- 独立定时任务复用已有结果会话。会话列表显示任务 ID 和来源，静默运行不会顶起已有发现。 (`F-150`, `C-009`)
+
+- A transient Gateway discovery failure can recover before the next bound chat, session briefing or memory review request. The request waits for fresh authorization, and an ongoing outage or revoked grant remains visible in Trace. (`C-040`, `C-025`)
 
 - Project memory refuses new notes without letters or numbers. The Memory editor keeps a refused draft available for correction, and existing notes can still be edited or removed. (`F-420`, `C-025`, #187)
 

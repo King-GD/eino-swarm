@@ -526,3 +526,57 @@ func TestPhoneRosterMarksALiveTurnThatAlsoHasAWait(t *testing.T) {
 		}
 	}
 }
+
+func TestPhoneListsTheSourceOfStandaloneFindings(t *testing.T) {
+	e := testEngine(t)
+	origin, err := e.CreateThread("Origin", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := e.CreateProject("Monitors", "", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := e.CreateThread("Independent check", "", project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := &store.Schedule{Kind: store.ScheduleStandalone, OriginThreadID: origin.ID}
+	if err := e.Store().CreateSchedule(row); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Store().CreateRun(&store.ScheduleRun{
+		ScheduleID: row.ID, ThreadID: result.ID, Kind: store.ScheduleStandalone, Status: store.ScheduleRunFindings,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Store().UpdateThread(result.ID, map[string]any{"completed_seq": 1}); err != nil {
+		t.Fatal(err)
+	}
+	want := store.ScheduleSource{ScheduleID: row.ID, OriginThreadID: origin.ID, OriginTitle: origin.Title, OriginAvailable: true}
+	cfg := config.RemoteConfig{ThreadLimit: 5, SummaryChars: 40}
+	listed := Handle(e, cfg, Request{ID: "1", Op: OpList}, "relay", "sess")
+	if !listed.OK || len(listed.Attention) != 1 || listed.Attention[0].ID != result.ID {
+		t.Fatalf("list dropped the unread result: %+v", listed)
+	}
+	for _, threads := range [][]ThreadView{listed.Threads, listed.Attention} {
+		var found bool
+		for _, thread := range threads {
+			if thread.ID == result.ID {
+				found = true
+				if thread.ScheduleSource == nil || *thread.ScheduleSource != want {
+					t.Fatalf("result lost its provenance: %+v", thread.ScheduleSource)
+				}
+			} else if thread.ScheduleSource != nil {
+				t.Fatalf("source misattributed to an ordinary conversation: %+v", thread)
+			}
+		}
+		if !found {
+			t.Fatal("result missing from the list")
+		}
+	}
+	more := Handle(e, cfg, Request{ID: "2", Op: OpMore, Group: project.ID}, "relay", "sess")
+	if !more.OK || len(more.Threads) != 1 || more.Threads[0].ScheduleSource == nil || *more.Threads[0].ScheduleSource != want {
+		t.Fatalf("project results lost provenance on paging: %+v", more)
+	}
+}

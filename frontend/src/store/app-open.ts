@@ -94,7 +94,7 @@ export async function loadOpenedThread(
   const tail = (async () => {
     let log: ThreadLog | undefined
     try {
-      log = await api.threadLog(id, { limit: logPageSize(0) })
+      log = await api.threadLog(id, { limit: logPageSize(0), view: "messages" })
     } catch {
       // A missing log endpoint falls back to SSE replay from the start.
     }
@@ -103,7 +103,7 @@ export async function loadOpenedThread(
     // A local rewind/send may already have replaced the empty opening state.
     // Status-only metadata changes do not give the tail ownership of that draft.
     if (log && !get().transcript.rewindCut && get().transcript.lastSeq === baseline.transcript.lastSeq) {
-      const transcript = applyTail(id, log.events ?? [], log.roster ?? [])
+      const transcript = applyTail(id, log.events ?? [], log.roster ?? [], log)
       if (get().status.running) transcript.running = true
       since = historyNewestSeq()
       set({ connected: true, transcript, loaded: true, historyHasMore: Boolean(log.has_more) })

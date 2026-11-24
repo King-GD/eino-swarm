@@ -18,8 +18,9 @@ type createThreadRequest struct {
 }
 
 type threadView struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
+	ScheduleSource *store.ScheduleSource `json:"schedule_source,omitempty"`
+	ID             string                `json:"id"`
+	Title          string                `json:"title"`
 	// TitleAuto is always sent: a missing field is indistinguishable from
 	// false, and the sidebar needs the true value to keep a generated name
 	// across a listing fetch that still has the placeholder.
@@ -63,6 +64,7 @@ type threadView struct {
 
 func viewThread(th *store.Thread, running, awaitingAnswer, waiting bool) threadView {
 	v := threadView{
+		ScheduleSource:  th.ScheduleSource,
 		ID:              th.ID,
 		Title:           th.Title,
 		TitleAuto:       th.TitleAuto,
@@ -109,7 +111,7 @@ func viewThreadWithUsage(th *store.Thread, running, awaitingAnswer, waiting bool
 }
 
 func (s *Server) listThreads(c *gin.Context) {
-	threads, err := s.engine.Store().ListThreads(c.Query("archived") == "1", c.Query("project"))
+	threads, err := s.engine.Store().ListThreadsWithScheduleSources(c.Query("archived") == "1", c.Query("project"))
 	if err != nil {
 		s.fail(c, err)
 		return
@@ -152,7 +154,7 @@ func (s *Server) createThread(c *gin.Context) {
 }
 
 func (s *Server) getThread(c *gin.Context) {
-	th, ok := s.thread(c)
+	th, ok := s.lookupThread(c, s.engine.Store().GetThreadWithScheduleSource)
 	if !ok {
 		return
 	}

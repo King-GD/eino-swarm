@@ -31,7 +31,7 @@ export function normalizeSelectedText(raw: string): string {
 
 export function quoteSourceOf(range: Range, doc: Document = document): Element | null {
   const nodes = doc.querySelectorAll(`[${QUOTE_SOURCE_ATTR}]`)
-  for (const root of nodes) {
+  for (const root of Array.from(nodes)) {
     if (root.contains(range.startContainer) && root.contains(range.endContainer)) {
       return root
     }

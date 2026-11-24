@@ -77,6 +77,7 @@ type MockThread = MockGoalFields & {
   id: string
   title: string
   projectID: string
+  scheduleSource?: ThreadView["schedule_source"]
   summary: string
   running: boolean
   waiting: boolean
@@ -325,6 +326,19 @@ export class MockHost {
     // Ordinary walkthrough rows start read; the attention fixture isolates this flow.
     for (const th of this.threads) th.readSeq = th.completedSeq ?? 0
     const completionHistory = new URLSearchParams(location.search).get("history")
+    if (completionHistory === "schedule-findings-source") {
+      const result = this.find("t-recent")
+      const origin = this.find("t-notes")
+      if (result && origin) {
+        result.scheduleSource = {
+          schedule_id: "sch_project_monitor",
+          origin_thread_id: origin.id,
+          origin_title: origin.title,
+          origin_available: true,
+        }
+        result.readSeq = 0
+      }
+    }
     if (completionHistory === "unread-completion" || completionHistory === "unread-completion-pages") {
       const th = this.find("t-recent")
       if (th) th.readSeq = 0
@@ -445,6 +459,7 @@ export class MockHost {
       .map((th) => ({
         thread_id: th.id,
         title: th.title,
+        schedule_source: th.scheduleSource,
         project_id: th.projectID || undefined,
         // A parked wait has no live turn, so the host sends its summary.
         action: th.action || (th.waiting ? th.summary : ""),
@@ -548,6 +563,7 @@ export class MockHost {
   view(th: MockThread): ThreadView {
     return {
       id: th.id,
+      schedule_source: th.scheduleSource,
       title: th.title,
       ...(this.legacyCompletion ? {} : { unread: (th.completedSeq ?? 0) > (th.readSeq ?? 0), completed_seq: th.completedSeq ?? 0 }),
       project_id: th.projectID || undefined,

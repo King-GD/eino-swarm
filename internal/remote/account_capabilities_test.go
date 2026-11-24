@@ -1,8 +1,11 @@
 package remote
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"testing"
 )
@@ -52,4 +55,68 @@ func TestDiscoveryFailureClosesFeaturesWithoutSigningOutOrClearingPreferences(t 
 	if a.Refresh(t.Context()).State != AccountReady || !p.ModelPolicy().Ready {
 		t.Fatal("retry did not restore capability")
 	}
+}
+
+func TestAccountRefreshSharesInFlightDiscoveryWithIndependentCancellation(t *testing.T) {
+	g := newAccountGateway(t)
+	var reads atomic.Int32
+	entered, release := make(chan struct{}), make(chan struct{})
+	g.bootstrap = func(w http.ResponseWriter, r *http.Request) {
+		if reads.Add(1) == 2 {
+			close(entered)
+			select {
+			case <-release:
+			case <-r.Context().Done():
+				return
+			}
+		}
+		g.writeBootstrap(w, g.server.URL, true)
+	}
+	account, pool, _ := accountModelsFixture(t, g)
+	account.Start()
+	t.Cleanup(account.Stop)
+	waitFor(t, func() bool { return account.State().State == AccountReady }, "initial discovery")
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	first, second := make(chan error, 1), make(chan error, 1)
+	go func() { first <- pool.RefreshCapabilities(ctx) }()
+	select {
+	case <-entered:
+	case <-t.Context().Done():
+		t.Fatal("refresh never reached bootstrap")
+	}
+	waiter := &accountRefreshWaitContext{Context: t.Context(), waiting: make(chan struct{})}
+	go func() { second <- pool.RefreshCapabilities(waiter) }()
+	select {
+	case <-waiter.waiting:
+	case <-t.Context().Done():
+		t.Fatal("second caller never waited for discovery")
+	}
+	cancel()
+	if err := <-first; !errors.Is(err, context.Canceled) {
+		t.Fatalf("first caller's cancellation was lost: %v", err)
+	}
+	close(release)
+	if err := <-second; err != nil || reads.Load() != 2 {
+		t.Fatalf("second caller did not share the running refresh: err=%v bootstrap requests=%d", err, reads.Load())
+	}
+	if err := pool.RefreshCapabilities(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("an already canceled caller queued discovery: %v", err)
+	}
+	account.Stop()
+	if err := pool.RefreshCapabilities(t.Context()); err == nil {
+		t.Fatal("the stopped discovery owner accepted a request")
+	}
+}
+
+type accountRefreshWaitContext struct {
+	context.Context
+	once    sync.Once
+	waiting chan struct{}
+}
+
+func (c *accountRefreshWaitContext) Done() <-chan struct{} {
+	c.once.Do(func() { close(c.waiting) })
+	return c.Context.Done()
 }

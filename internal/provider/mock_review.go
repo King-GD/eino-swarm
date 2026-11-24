@@ -13,6 +13,9 @@ import (
 // reviewer tool, persistence and trace without a hosted model. It does not judge
 // whether the source contains useful long-term knowledge.
 func reviewerScript(turn int, msgs []*schema.Message) *schema.Message {
+	if systemContains(msgs, "apply_project_distillation") {
+		return mockProjectDistillation(turn, msgs)
+	}
 	if isCatalogTidy(msgs) {
 		return catalogTidyScript(turn, msgs)
 	}
@@ -32,7 +35,11 @@ func reviewerScript(turn int, msgs []*schema.Message) *schema.Message {
 			changes = append(changes, map[string]any{"target": "skill_manage", "action": "create", "name": name, "description": "After conversation " + tag, "content": "For " + tag + ":\n1. Inspect the workspace.\n2. Collect results.\n3. Report first.\n", "evidence": evidence})
 		}
 	}
-	raw, _ := json.Marshal(map[string]any{"changes": changes})
+	proposal := map[string]any{"changes": changes}
+	if seq > 0 && !mockReviewFailed(msgs) && systemContains(msgs, "In the same final apply_memory_review call, use the knowledge array") {
+		proposal["knowledge"] = []map[string]any{mockKnowledgeObservation(seq, quote)}
+	}
+	raw, _ := json.Marshal(proposal)
 	return &schema.Message{Role: schema.Assistant, ToolCalls: []schema.ToolCall{call("mock-review-batch", "apply_memory_review", string(raw))}}
 }
 

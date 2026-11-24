@@ -57,13 +57,15 @@ The transcript is the middle. Once you have sent two messages, a tick cluster
 on its left edge lists your own turns; click one to pin that send at the top.
 A long conversation packs the ticks into a minimap. Auto-follow unpins so a
 live stream does not yank you back to the bottom. Opening another conversation
-lands at its latest turn. A long log loads from the live edge first; older
-turns appear when you scroll up. New tokens while you are reading light a
-jump-to-latest control.
+lands at its latest message. Each request while scrolling up reaches the
+previous user input or manager answer, including another answer in the same
+turn. New tokens while you are reading light a jump-to-latest control.
 
 Each visible finished turn has one duration and local completion time after
-its last pre-completion content. Reasoning and tool details start collapsed.
-A late memory-review notice stays at its event position and does not repeat
+its last pre-completion content. In user view, reasoning and tools start
+collapsed. The latest message's work is already available when you expand
+it. Older folds fetch details when expanded, including in developer view.
+Click a worker in Agents to read its own log. A late memory-review notice stays at its event position and does not repeat
 that end marker.
 
 A ring on the composer shows how full the last manager prompt is. Hover it
@@ -641,13 +643,13 @@ clock time you asked for is still honored.
 search icon. **New task** is the next row. **Upcoming** is the active list.
 The menu on that row filters **Active / Paused / Completed**. **New task**
 opens the editor in the task column: the task description, then Details
-(**Runs in**: a new conversation each run, or wake an existing one;
-**Project** is the workspace for a minted conversation) and Frequency.
+(**Runs in**: an independent results conversation, or wake an existing one;
+**Project** selects the project for an independent check) and Frequency.
 **Expand** hides the wait list so a long instruction can use the task column.
 Click a wait to edit it. Changing cadence recomputes the next run from now.
-Changing Runs in or Project does not. **Runs in** searches live conversations,
-or starts a new one each fire. **Project** is only for that new conversation.
-Pause, resume, cancel, and Run now live there too. A finished wait keeps the
+Changing Runs in or Project does not. **Runs in** searches live conversations
+and offers an independent results conversation. **Project** applies to the
+independent option. Pause, resume, cancel, and Run now live there too. A finished wait keeps the
 destination it was given. A run already in progress stays on the conversation
 it started on. A short inbox name is generated, the same namer as conversations.
 
@@ -671,9 +673,20 @@ A scheduled check can return its result directly as text. Tools remain
 optional. `report_schedule` can also report the result. Explicit empty
 findings stay quiet. Only a blank response with no tool result or report
 continues once in the same turn. A second empty response visibly fails. This
-also applies to **Run now**. Quiet standalone runs stay out of Recents.
-Findings open from the inbox: **Open findings** on a live wait, with a count
-when several fires are unread. Workers cannot schedule.
+also applies to **Run now**.
+
+An independent job keeps discoveries in its own conversation. Future checks
+use its earliest surviving findings conversation in the selected project.
+Each check has its own turn, Trace, and inbox read state. A quiet check keeps
+its run in history without adding a result or moving earlier findings up in
+Recents. A quiet conversation with no findings is archived.
+
+Conversation lists mark these rows **Scheduled result** and show the schedule
+ID and source conversation when one exists. On desktop and Web, the schedule
+ID opens the task. The source opens the original conversation on desktop, Web,
+and paired phones. Earlier result conversations keep their own history.
+**Open findings** in Scheduled still opens the corresponding result, with a
+count when several fires are unread. Workers cannot schedule.
 
 A conversation whose next turn is a parked wait keeps a clock in the list, so
 it does not look Idle. The title bar says **Waiting**. That banner is not a
@@ -807,17 +820,25 @@ Page sources distinguish primary material, unverified analysis and external
 links. Removed or rewound history remains listed as unavailable. An available
 last-update link opens its conversation or Trace.
 
-From **Knowledge → Distill**, choose **Current task** for the selected
-conversation's history or **Current project** for all conversations in the
-project. Both options enable the wiki if needed and start a new, titled
-project conversation. The ordinary turn uses `query_history` to read
-original project history and can save or update pages through
-`record_knowledge`. You can also ask directly in any enabled project turn
-or edit the files under the project's `knowledge` directory. On desktop,
-the folder button opens that directory. The Memory tab remains the place
-for shared working instructions and skills.
+Open **Distill** from **Memory** or **Knowledge**. Choose **Latest turn** for
+the most recent successful turn, **Current task** for this conversation or
+**Current project** for the project's retained conversations, including archived
+ones. A single background review can save notes, Skills and wiki pages.
+Both panels show the same result and a link to the original Trace. A larger
+scope can exceed the history budget; the result indicates omitted history.
+Failed turns can contribute explicit human requirements to notes.
 
-To run incremental extraction, create a recurring task for the project in
+**Distill** uses enabled destinations. Choose **Enable knowledge and distill**
+to initialize a wiki and include it in the same review. An interrupted run
+with unconfirmed writes asks you to check the current contents before retrying.
+You can also ask directly in an enabled project turn or edit the files under
+the project's `knowledge` directory. On desktop, the folder button opens it.
+
+With project memory and **Review a conversation when it finishes** enabled,
+the automatic review of a successful turn considers notes, Skills and its
+enabled knowledge base together. It only saves findings worth keeping, and
+the turn receipt lists the writes that landed. For incremental extraction across
+multiple conversations, create a recurring task for the project in
 **Scheduled**. Set a time window that matches the recurrence, specify which
 history to read, and ask the agent to check existing pages and cite original
 records before recording changes. To work through the pending queue, give a
@@ -828,7 +849,8 @@ actual reads and writes. Each schedule uses the ordinary project tools.
 ## Memory and skills
 
 With memory and auto-review on, each successful turn is reviewed even if the
-manager already wrote memory. A failed project turn may retain explicit human
+manager already wrote memory. When the project has Knowledge enabled, the
+same review also considers wiki updates. A failed project turn may retain explicit human
 requirements as notes, without learning skills from failed work. Cancellation
 does not start an automatic review. Notes are short facts whose absence would
 misdirect future work. Skills are reusable procedures. Constraints needed only

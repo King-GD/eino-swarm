@@ -1776,6 +1776,28 @@ Body `{"ids": ["pj_a", "pj_b"]}`. Pins that order in the sidebar. Unknown ids ar
 `404`; a repeated id is `400`. An empty list is a no-op. Responds with the same
 `{"projects": […]}` as `GET /api/projects`.
 
+### `POST /api/projects/:id/distill` · `GET /api/projects/:id/distill`
+
+Start one background review of retained project history. The JSON request
+contains `scope: "latest_turn" | "thread" | "project"`. Supply `thread_id`
+for the first two scopes. The conversation must currently belong to the
+project. Supply `enable_knowledge: true` to explicitly initialize Knowledge
+if needed. Both panels use the same project endpoint.
+
+An admitted request returns `202` with `review_id`, `state: "running"`,
+`scope` and, while the original anchor is available, `thread_id` and
+`turn_id`. A duplicate request returns the current run. A scope with no
+evidence returns `200` with `state: "no_work"`. Invalid scope arguments,
+foreign conversations and all destinations disabled return `400`, `404`
+and `409 distillation_disabled`, respectively.
+
+GET returns the latest durable receipt, or `state: "idle"`. Terminal states
+are `completed`, `partial`, `failed` and `interrupted`. Optional fields
+include `changes` for committed notes and Skills, `knowledge` for committed
+pages or schema revisions, `error`, `history_omitted` and `uncertain` for
+possible unconfirmed writes following interruption. Partial success retains
+its committed items. The browser polls this endpoint while showing a run.
+
 ### `GET /api/projects/:id/knowledge` · `POST /api/projects/:id/knowledge`
 
 Both return a status object with `enabled`, `page_count` and
@@ -2816,7 +2838,7 @@ clamped to 200. Response:
  "roster":[{ "seq": 4, "kind": "spawned", "agent_id": "worker-1", "…" : "…" }]}
 ```
 
-The front end opens a conversation with one viewport of this tail, then
+A client using the raw event view can fetch one viewport of this tail, then
 `GET /api/threads/:id/events?since=<last seq>` for live. Scrolling up fetches
 the next older page. An empty conversation is `"events":[]` with
 `has_more: false`. The live-edge page (`before` omitted or `0`) also sends
@@ -2832,6 +2854,31 @@ without inserting "Started" rows into the manager transcript. Sidecar ownership
 receipts and errors reconstruct worker lifecycle state without inserting old
 error bubbles or turn dividers; those belong to the contiguous event page. Clicking a worker whose tools are
 outside the viewport fetches `GET /api/threads/:id/agents/:agent/log`.
+
+### `GET /api/threads/:id/log?view=messages&before=<seq>`
+
+Desktop and Web open on the latest manager message and its local work.
+A page with `before` set reaches one preceding user input or nonblank
+manager answer. Multiple answers in one turn are separate stops. Synthetic
+scheduled-check inputs do not count. An active turn opens with the bounded
+raw event tail for live controls. Ask cards, errors, plans and compaction notices
+retain their event positions.
+
+The response adds `before` (the oldest scanned seq, exclusive on the next
+request) and `seq` (the newest scanned seq, used as the initial SSE `since`).
+These bounds include deferred events. An older page returns ordered `events`
+and may include `history_work` entries with inclusive `from` and `through`,
+`turn_id`, `created_at`, `agent_ids`, a `thinking` flag and a `tools` count.
+A summary can also carry `failed`. The initial `roster` sidecar supplies
+workers before their creation or wait enters the loaded history.
+
+### `GET /api/threads/:id/log?work_from=<seq>&work_through=<seq>&since=<seq>&limit=<n>`
+
+Returns stored manager work inside the inclusive range, in ascending
+sequence order. `since` is an exclusive continuation cursor (optional for the
+first request). Continue with response `seq` while `has_more` is true.
+Malformed bounds or cursors return `400`. Worker details use the worker
+endpoint below.
 
 ### `GET /api/threads/:id/agents/:agent/log`
 
@@ -3301,11 +3348,18 @@ the context used.
 ### Memory reviews
 
 With memory and auto-review enabled, a successful turn receives a full review
-regardless of manager writes. A failed project turn can retain explicit human
+regardless of manager writes. When Knowledge is already enabled for that
+project, the same automatic proposal can include wiki updates. A failed project turn can retain explicit human
 requirements as notes only, excluding task-tool output, assistant/derived text,
 skill edits and skill folding. Cancellation starts no automatic review.
+After a transient Gateway discovery outage, review can wait for one fresh
+authorization check. If access remains unavailable, the original turn records
+a review error with zero proposals and no reviewer model request.
 `memory_review` is stored under the original turn id, with model calls attributed
-to `memory-reviewer`. `text` is JSON:
+to `memory-reviewer`. A receipt with wiki writes includes `project_id` and a
+`knowledge` array of committed actions. A page action includes `id`, `title`
+and `revision`; a schema append includes its new `revision`.
+`text` is JSON:
 
 ```json
 {
@@ -3671,9 +3725,20 @@ not the filtered subset.
 ], "unread": 2}
 ```
 
-`kind` is `thread` (wake an existing conversation) or `standalone` (mint a
-conversation per fire). `status` is `active`, `paused`, `done`, or
-`cancelled`.
+`kind` is `thread` (wake an existing conversation) or `standalone` (use an
+independent results conversation). `status` is `active`, `paused`, `done`, or
+`cancelled`. A standalone fire reuses the earliest surviving conversation
+with findings for that schedule in the selected project. Each fire keeps
+distinct run and turn IDs. Quiet fires do not add unread results or bump
+that conversation's recency.
+
+`GET /api/threads` and `GET /api/threads/:id` can return
+`schedule_source: {schedule_id, origin_thread_id?, origin_title?, origin_available?}`.
+Paired-phone listings include the same optional object on conversation,
+running, and unread rows. `origin_thread_id` remains available after the
+source conversation is deleted. Only a currently resolvable origin has
+`origin_available: true`. The relation follows persisted standalone runs,
+including legacy fires with an empty run kind on a standalone schedule.
 
 ### `GET /api/threads/:id/schedules`
 
@@ -3738,7 +3803,7 @@ the destination alone. A destination edit sends `kind`:
 
 - `thread` with `thread_id` of a conversation that exists and is not archived.
   `project_id` is cleared. The row's provider and model stay, so a later
-  switch back to a minted conversation still has them.
+  switch back to standalone still has them.
 - `standalone` with `thread_id` empty and `project_id` the workspace, or
   empty for a directory of its own. If the row has no provider or model yet,
   the save copies the current default. `origin_thread_id` is not changed.

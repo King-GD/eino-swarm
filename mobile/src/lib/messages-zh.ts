@@ -89,6 +89,8 @@ export const zh: Record<MessageKey, string> = {
   "home.addHost": "添加 PC",
   "home.close": "关闭",
   "home.inProgress": "进行中",
+  "home.scheduledResult": "定时结果 · {id}",
+  "home.scheduleOrigin": "来源 · {title}",
   "home.completedUnread": "已完成未读",
   "home.unread": "完成未读",
   "home.recent": "最近",

@@ -228,6 +228,17 @@ in this database: notes and skills are files, so a person can read and fix them
 | `sort_rank` | int | sidebar drag order. `0` means never dragged: those rows interleave by `updated_at` with ranked rows |
 | `created_at`, `updated_at` | time | gorm-managed. `updated_at` is also bumped when a conversation in the project is used, so the default project list is last used, not created |
 
+## `project_distillations` — latest manual project review receipt (`C-054`)
+
+`project_id` is the primary key. The row stores one run ID, state and JSON
+receipt. Receipt data covers the scope, Trace anchor and actual saved changes.
+Each admission replaces the previous receipt. Completion compares the same
+run ID and running state. The running owner lives in the engine. A saved
+running row without that owner indicates possible interruption. Deleting a
+project removes the row. Full database backups include the receipt unless a conversation in that project
+is omitted. Portable project bundles carry notes, Skills and knowledge files.
+Their restore resets the latest receipt for the replaced project.
+
 ## `nuwa_nodes` / `nuwa_revisions` — project collaboration (`C-037`)
 
 `nuwa_nodes` stores task/fact/artifact records. It is separate from memory files
@@ -811,8 +822,10 @@ new HTTP policy mutation endpoint.
 ## `schedules` — a wall-clock wait
 
 A schedule is either a **thread wake** (lands on an existing conversation) or a
-**standalone** job (mints a new conversation per fire). `next_run_at` is stored
-UTC. Cadence columns (`delay_s`, `every_s`, `cron`) are persisted as given; the
+**standalone** job with its own results conversation. The earliest surviving
+standalone findings run in the selected project identifies the conversation to
+reuse. The source is derived from persisted run and schedule IDs. `next_run_at`
+is stored UTC. Cadence columns (`delay_s`, `every_s`, `cron`) are persisted as given; the
 engine enforces that exactly one is set.
 
 | column | notes |
@@ -821,7 +834,7 @@ engine enforces that exactly one is set.
 | `kind` | `thread` or `standalone`. An inbox PATCH on an active or paused row may change it; `origin_thread_id` stays |
 | `origin_thread_id` | conversation that created it. Standalone fires do **not** reuse it. A destination edit does not rewrite it |
 | `thread_id` | wakes only: the conversation to wake. Empty on standalone rows. Later fires use the value after a destination edit |
-| `project_id` | standalone workspace; empty means that fire gets its own directory. Cleared when the row becomes a thread wake |
+| `project_id` | standalone workspace; empty uses a projectless conversation. Cleared when the row becomes a thread wake |
 | `provider_id`, `model`, `reasoning_effort` | standalone; wakes use the target conversation's model |
 | `title`, `prompt` | display name + durable per-run instruction (user text). `title` may start as a truncated prompt |
 | `title_auto` | true while the engine still owns the inbox label. A PATCH/tool title or a landed generated name clears it so a later namer cannot overwrite the list |
@@ -850,7 +863,7 @@ pinned to that `project_id`.
 |---|---|
 | `id` | `srun_` + hex |
 | `schedule_id` | which schedule fired |
-| `thread_id` | the conversation that ran: the wake target, or the conversation minted for a standalone fire. A later destination edit does not move it |
+| `thread_id` | the conversation that ran: the wake target, or the results conversation for a standalone fire. A later destination edit does not move it |
 | `turn_id` | the turn that ran, when one started. Empty on a skip |
 | `kind` | `thread` or `standalone` at claim time. Quiet archive uses this, not the schedule row after a destination edit. Empty on fires claimed before the column: those still follow the schedule row |
 | `status` | `skipped_busy`, `running`, `findings`, `quiet`, `error` |

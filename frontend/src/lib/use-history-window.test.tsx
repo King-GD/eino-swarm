@@ -65,7 +65,7 @@ function Harness({
   return (
     <div data-testid="scroller" ref={scrollerRef}>
       {hasMore ? <div data-testid="history-sentinel" ref={sentinelRef} /> : null}
-      {withTurn ? <div data-testid="turn-row" data-turn-nav="tn_old" /> : null}
+      {withTurn ? <div data-testid="turn-row" data-turn-nav="tn_old" data-history-message="user:old" /> : null}
       <div>body</div>
     </div>
   )
@@ -230,4 +230,24 @@ describe("useHistoryWindow", () => {
     view.rerender(<Harness loaded hasMore growthKey="2" loadOlder={loadOlder} />)
     expect(size.scrollTop).toBe(1580)
   })
+  it("anchors the visible message when new live content also changes the scroll height", () => {
+    const loadOlder = vi.fn(async () => undefined)
+    const size = { scrollHeight: 2000, clientHeight: 400, scrollTop: 80 }
+    const view = render(<Harness loaded={false} withTurn hasMore growthKey="1" loadOlder={loadOlder} />)
+    mockScroller(screen.getByTestId("scroller"), size)
+    const row = screen.getByTestId("turn-row")
+    let rowTop = 100
+    vi.spyOn(row, "getBoundingClientRect").mockImplementation(() => ({ top: rowTop - size.scrollTop }) as DOMRect)
+    Object.defineProperty(row, "offsetHeight", { value: 50 })
+    view.rerender(<Harness loaded withTurn hasMore growthKey="1" loadOlder={loadOlder} />)
+    act(() => fireSentinel(true))
+    expect(loadOlder).toHaveBeenCalledTimes(1)
+
+    rowTop += 300
+    size.scrollHeight += 700
+    view.rerender(<Harness loaded withTurn hasMore growthKey="2" loadOlder={loadOlder} />)
+    expect(size.scrollTop).toBe(380)
+    expect(row.getBoundingClientRect().top).toBe(20)
+  })
+
 })

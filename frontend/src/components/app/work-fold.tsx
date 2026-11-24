@@ -2,16 +2,19 @@ import { ChevronRight, Loader2 } from "lucide-react"
 import { useMemo, useState, type ReactNode } from "react"
 
 import { SwapLine } from "@/components/app/swap-line"
+import { Button } from "@/components/ui/button"
 import { Disclosure } from "@/components/ui/collapsible"
 import type { TranscriptModePref } from "@/lib/appearance"
 import { chromeTypeClass } from "@/lib/chrome-type"
 import type { Block } from "@/lib/transcript"
 import { cn } from "@/lib/utils"
 import { useT, type Translate } from "@/lib/use-t"
+import { useHistoryWork } from "@/lib/use-history-work"
 import { useApp } from "@/store/app"
 import {
   foldTurnItems,
   formatWorkTicker,
+  isOmittedBlock,
   liveWorkIndex,
   planningTailAfterAnswer,
   workFoldStats,
@@ -43,7 +46,9 @@ export function TurnBlockList({
     <>
       {items.map((item, i) => {
         if (item.type === "block") {
-          return <div key={item.block.id}>{renderBlock(item.block)}</div>
+          const { block } = item
+          const message = block.kind === "user" || block.kind === "answer"
+          return <div key={block.id} data-history-message={message ? block.id : undefined}>{renderBlock(block)}</div>
         }
         const single = item.blocks.length === 1 ? item.blocks[0] : undefined
         // Pending registry calls have no own row; keep their activity ticker.
@@ -97,6 +102,8 @@ export function WorkFold({
   renderBlock: (b: Block) => ReactNode
 }) {
   const t = useT()
+  const threadId = useApp((s) => s.activeId)
+  const ranges = useMemo(() => blocks.flatMap((b) => b.historyWork ? [b.historyWork] : []), [blocks])
   const stats = workFoldStats(blocks)
   const frames = useMemo(
     () => workTickerFrames(blocks, running),
@@ -107,6 +114,11 @@ export function WorkFold({
   const [choice, setChoice] = useState<boolean | null>(null)
   const expanded = (choice ?? false) || Boolean(reveal)
   const tickerText = frame ? formatWorkTicker(frame, t) : ""
+  const { detail, retry } = useHistoryWork(threadId, ranges, expanded)
+  const rows = ranges.length === 0 ? blocks : [
+    ...blocks.filter((b) => !b.historyWork),
+    ...(detail && "blocks" in detail ? detail.blocks.filter((b) => !isOmittedBlock(b)) : []),
+  ].sort((a, b) => a.seq - b.seq)
 
   return (
     <Disclosure
@@ -156,7 +168,16 @@ export function WorkFold({
     >
       {expanded ? (
         <div className="flex flex-col gap-1">
-          {blocks.map((b) => (
+          {ranges.length > 0 && !detail ? (
+            <p role="status" className="px-2 text-muted-foreground">{t("transcript.historyWorkLoading")}</p>
+          ) : null}
+          {detail && "error" in detail ? (
+            <div className="flex flex-wrap items-center gap-2 px-2">
+              <span role="alert">{t("transcript.historyWorkFailed")}</span>
+              <Button variant="outline" size="sm" onClick={retry}>{t("transcript.historyWorkRetry")}</Button>
+            </div>
+          ) : null}
+          {rows.map((b) => (
             <div key={b.id}>{renderBlock(b)}</div>
           ))}
         </div>

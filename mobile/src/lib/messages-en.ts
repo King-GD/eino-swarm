@@ -89,6 +89,8 @@ export const en = {
   "home.addHost": "Add a PC",
   "home.close": "Close",
   "home.inProgress": "In progress",
+  "home.scheduledResult": "Scheduled result · {id}",
+  "home.scheduleOrigin": "Source · {title}",
   "home.completedUnread": "Completed unread",
   "home.unread": "Unread completion",
   "home.recent": "Recent",

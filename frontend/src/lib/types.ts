@@ -278,6 +278,8 @@ export interface ReviewOutcome {
   notes?: Record<string, number>
   skills?: MemoryChange[]
   changes?: MemoryChange[]
+  knowledgeCount?: number
+  projectId?: string
   note?: string
   err?: string
   /** How chatty this review is in the transcript: off | on | verbose. */
@@ -314,7 +316,15 @@ export interface MemoryChange {
 
 export type MemoryNotify = "off" | "on" | "verbose"
 
+export type ScheduleSource = {
+  schedule_id: string
+  origin_thread_id?: string
+  origin_title?: string
+  origin_available?: boolean
+}
+
 export interface Thread {
+  schedule_source?: ScheduleSource
   id: string
   /** Latest primary completion event, retained until that result is viewed. */
   completed_seq?: number

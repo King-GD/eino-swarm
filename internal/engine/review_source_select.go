@@ -15,15 +15,16 @@ const reviewSourceOmitted = "[Some source events or text were omitted to fit the
 const reviewSourceMinFraming = len("[derived] final answer: \n\n")
 
 type reviewSourceItem struct {
-	event    store.Event
-	role     string
-	text     string
-	sourceAt int
-	prefix   string
-	size     int
-	group    int
-	selected bool
-	clipped  bool
+	event     store.Event
+	role      string
+	text      string
+	sourceAt  int
+	reference string
+	prefix    string
+	size      int
+	group     int
+	selected  bool
+	clipped   bool
 }
 type reviewSourceGroup struct {
 	items    []int
@@ -52,6 +53,10 @@ func selectReviewInput(events []store.Event, sessionMemory, final string) review
 
 func selectReviewSources(events []store.Event, sessionMemory, final, facts string) reviewSourceInput {
 	items, groups := collectReviewSources(events, sessionMemory, final)
+	return selectReviewSourceItems(items, groups, facts, false)
+}
+
+func selectReviewSourceItems(items []reviewSourceItem, groups []reviewSourceGroup, facts string, omitted bool) reviewSourceInput {
 	if len(items) == 0 {
 		return reviewSourceInput{Transcript: facts}
 	}
@@ -79,7 +84,6 @@ func selectReviewSources(events []store.Event, sessionMemory, final, facts strin
 	b.WriteString(facts)
 	b.WriteString(reviewSourceHeader)
 	input := reviewSourceInput{Events: make(map[int64]store.Event, selectedCount)}
-	omitted := false
 	for _, item := range items {
 		if !item.selected {
 			omitted = true
@@ -207,7 +211,7 @@ func prepareReviewSourceItem(item *reviewSourceItem, groupSize int) {
 				pair = " paired"
 			}
 		}
-		item.prefix = fmt.Sprintf("[seq=%d kind=%s agent=%q role=%q call=%q%s] %s: ", item.event.Seq, item.event.Kind, item.event.AgentID, item.event.Role, item.event.ToolCallID, pair, item.role)
+		item.prefix = fmt.Sprintf("[seq=%d kind=%s agent=%q role=%q call=%q%s%s] %s: ", item.event.Seq, item.event.Kind, item.event.AgentID, item.event.Role, item.event.ToolCallID, pair, item.reference, item.role)
 	}
 	// Omitted groups never need framing or a clipped copy of their body.
 	framing := utf8.RuneCountInString(item.prefix) + 2

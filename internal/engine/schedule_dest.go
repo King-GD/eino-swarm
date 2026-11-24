@@ -97,13 +97,13 @@ func (e *Engine) standaloneModelFill(row *store.Schedule) (providerID, model str
 	}
 	prov, err := e.pool.ResolveModel(providerID, model)
 	if err != nil {
-		return "", "", false, fmt.Errorf("engine: a new conversation each run needs a model")
+		return "", "", false, fmt.Errorf("engine: a standalone schedule needs a model")
 	}
 	if model == "" {
 		model = strings.TrimSpace(prov.Model)
 	}
 	if model == "" {
-		return "", "", false, fmt.Errorf("engine: a new conversation each run needs a model")
+		return "", "", false, fmt.Errorf("engine: a standalone schedule needs a model")
 	}
 	return providerID, model, true, nil
 }
@@ -122,8 +122,8 @@ func claimedScheduleKind(row store.Schedule, standalone bool) string {
 	return store.ScheduleThread
 }
 
-// scheduleRunMintsConversation is true when this fire opened its own
-// conversation. An empty kind is a row claimed before that column: it
+// scheduleRunMintsConversation is true for an independent check in its
+// own results conversation. An empty kind is a row claimed before that column: it
 // still follows the schedule, which had not been retargeted yet.
 func scheduleRunMintsConversation(run *store.ScheduleRun, sch *store.Schedule) bool {
 	kind := ""
@@ -134,4 +134,20 @@ func scheduleRunMintsConversation(run *store.ScheduleRun, sch *store.Schedule) b
 		kind = strings.TrimSpace(sch.Kind)
 	}
 	return kind == store.ScheduleStandalone
+}
+
+func (e *Engine) isStandaloneRun(run *store.ScheduleRun) bool {
+	if run.Kind != "" {
+		return scheduleRunMintsConversation(run, nil)
+	}
+	row, err := e.store.GetSchedule(run.ScheduleID)
+	return err == nil && scheduleRunMintsConversation(run, row)
+}
+
+func (e *Engine) isStandaloneTurn(turn *store.Turn) bool {
+	if !turn.ScheduleContinue || turn.ScheduleRunID == "" {
+		return false
+	}
+	run, err := e.store.GetRun(turn.ScheduleRunID)
+	return err == nil && e.isStandaloneRun(run)
 }

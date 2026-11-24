@@ -24,7 +24,7 @@ describe("Knowledge panel project ownership", () => {
       id === "first" ? first : Promise.resolve(status(false)),
     )
     const readTree = vi.spyOn(api, "knowledgeTree")
-    const actions = { onDistill: vi.fn(), onTrace: vi.fn(), onOpenThread: vi.fn() }
+    const actions = { onTrace: vi.fn(), onOpenThread: vi.fn() }
     const { rerender } = render(<KnowledgePanel project={project("first")} {...actions} />)
     const oldSignal = read.mock.calls[0]?.[1]
     rerender(<KnowledgePanel project={project("second")} {...actions} />)

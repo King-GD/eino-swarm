@@ -349,22 +349,24 @@ type ProjectView struct {
 }
 
 type ThreadView struct {
-	Unread       bool      `json:"unread"`
-	CompletedSeq int64     `json:"completed_seq"`
-	ID           string    `json:"id"`
-	Title        string    `json:"title"`
-	ProjectID    string    `json:"project_id,omitempty"`
-	WebExecution string    `json:"web_execution,omitempty"`
-	Running      bool      `json:"running"`
-	Waiting      bool      `json:"waiting,omitempty"`
-	LastActiveAt time.Time `json:"last_active_at"`
-	Summary      string    `json:"summary,omitempty"`
+	ScheduleSource *store.ScheduleSource `json:"schedule_source,omitempty"`
+	Unread         bool                  `json:"unread"`
+	CompletedSeq   int64                 `json:"completed_seq"`
+	ID             string                `json:"id"`
+	Title          string                `json:"title"`
+	ProjectID      string                `json:"project_id,omitempty"`
+	WebExecution   string                `json:"web_execution,omitempty"`
+	Running        bool                  `json:"running"`
+	Waiting        bool                  `json:"waiting,omitempty"`
+	LastActiveAt   time.Time             `json:"last_active_at"`
+	Summary        string                `json:"summary,omitempty"`
 }
 
 type RunningView struct {
-	ThreadID string `json:"thread_id"`
-	Title    string `json:"title"`
-	TurnID   string `json:"turn_id,omitempty"`
+	ScheduleSource *store.ScheduleSource `json:"schedule_source,omitempty"`
+	ThreadID       string                `json:"thread_id"`
+	Title          string                `json:"title"`
+	TurnID         string                `json:"turn_id,omitempty"`
 	// Action is a one-line human preview of the live turn: assistant
 	// prose or a tool payload field (findings, command, path). Raw
 	// tool_call envelopes stay off the wire. Empty when the latest

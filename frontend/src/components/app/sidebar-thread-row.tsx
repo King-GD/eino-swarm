@@ -1,4 +1,4 @@
-import { MoreHorizontal, Pencil, Pin, PinOff, Trash2 } from "lucide-react"
+import { Clock, MoreHorizontal, Pencil, Pin, PinOff, Trash2 } from "lucide-react"
 import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -16,9 +16,10 @@ import { WaitMark } from "@/components/app/wait-mark"
 import { UnreadMark } from "@/components/app/unread-mark"
 import { chromeTypeClass } from "@/lib/chrome-type"
 import { useSortableList } from "@/lib/sortable"
-import type { Thread } from "@/lib/types"
+import type { ScheduleSource, Thread } from "@/lib/types"
 import { useT } from "@/lib/use-t"
 import { cn } from "@/lib/utils"
+import { useApp } from "@/store/app"
 
 type DragBind = ReturnType<ReturnType<typeof useSortableList>["bind"]>
 
@@ -53,6 +54,7 @@ export function SidebarThreadRow({
   const t = useT()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(thread.title)
+  const source = thread.schedule_source
   const canPin = Boolean(onPin && thread.project_id)
 
   if (editing) {
@@ -93,6 +95,7 @@ export function SidebarThreadRow({
       aria-current={active ? "true" : undefined}
       className={cn(
         sidebarRowClass,
+        source && "h-auto! flex-wrap gap-y-0",
         drag && "data-[dragging=true]:cursor-grabbing",
         "data-[dragging=true]:opacity-60 data-[over=true]:bg-sidebar-accent",
         active
@@ -103,7 +106,10 @@ export function SidebarThreadRow({
       <button
         type="button"
         onClick={() => onOpen(thread.id)}
-        className="flex min-w-0 flex-1 items-center gap-1 text-left"
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-1 text-left",
+          source && "min-h-(--sidebar-row-height)",
+        )}
       >
         <SidebarKindSlot>
           {asking ? (
@@ -114,6 +120,8 @@ export function SidebarThreadRow({
             <WaitMark />
           ) : thread.unread ? (
             <UnreadMark />
+          ) : source ? (
+            <Clock aria-hidden className="size-3.5 text-muted-foreground" />
           ) : null}
         </SidebarKindSlot>
         <span data-testid="row-label" className="truncate">
@@ -157,6 +165,44 @@ export function SidebarThreadRow({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      {source ? <SidebarScheduleSource source={source} onOpen={onOpen} /> : null}
+    </div>
+  )
+}
+
+function SidebarScheduleSource({
+  source,
+  onOpen,
+}: {
+  source: ScheduleSource
+  onOpen: (id: string) => void
+}) {
+  const t = useT()
+  const openSchedule = useApp((s) => s.openScheduleDetails)
+  const origin = source.origin_thread_id
+  const originLabel = t("schedule.sourceConversation", { title: source.origin_title || origin || "" })
+  const taskLabel = t("schedule.resultSource", { id: source.schedule_id })
+  const linkClass = "h-auto max-w-full justify-start px-0 py-0.5 text-xs"
+
+  return (
+    <div className="flex min-w-0 basis-full gap-1 pb-1">
+      <SidebarKindSlot />
+      <div className="flex min-w-0 flex-col items-start">
+        <Button type="button" variant="link" data-no-drag title={taskLabel}
+          className={linkClass} onClick={() => void openSchedule(source.schedule_id)}>
+          <span className="break-all whitespace-normal text-left">{taskLabel}</span>
+        </Button>
+        {origin && (source.origin_available ? (
+          <Button type="button" variant="link" data-no-drag title={originLabel}
+            className={linkClass} onClick={() => onOpen(origin)}>
+            <span className="truncate">{originLabel}</span>
+          </Button>
+        ) : (
+          <span className="truncate text-xs text-muted-foreground" title={originLabel}>
+            {originLabel}
+          </span>
+        ))}
+      </div>
     </div>
   )
 }

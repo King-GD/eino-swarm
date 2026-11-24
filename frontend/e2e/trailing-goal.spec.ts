@@ -1,7 +1,7 @@
 import { expect, test, type APIRequestContext, type Page, type TestInfo } from "@playwright/test"
 import { writeFile } from "node:fs/promises"
 
-import { composer, freshConversation, reloadOpenConversation, waitForDraftSaved, waitForIdle } from "./session"
+import { composer, freshConversation, readEarlierTranscript, reloadOpenConversation, waitForDraftSaved, waitForIdle } from "./session"
 
 const sendButton = (page: Page) => page.getByRole("button", { name: "Send", exact: true })
 const selectedThread = (page: Page) => page.locator('[data-testid="thread-row"][aria-current="true"]')
@@ -65,6 +65,7 @@ async function submitStandingObjective(
   expect(cleared.revision).toBeGreaterThan(before.revision)
 
   await reloadOpenConversation(page)
+  await readEarlierTranscript(page, page.getByTestId("user-message"))
   await expect(page.getByTestId("plan-banner")).toHaveCount(0)
   await expect(page.getByTestId("goal-banner")).toHaveCount(0)
   await expect(page.getByTestId("transcript")).toContainText("Standing objective completed.")

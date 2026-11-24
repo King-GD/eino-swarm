@@ -141,7 +141,7 @@ export function Transcript({
     }
     return undefined
   }, [blocks])
-  const growthKey = `${blockCount}:${lastText}`
+  const growthKey = `${threadId}:${blockCount}:${lastText}`
   const { showJump, jumpToLatest, unpin, pinned } = useTranscriptFollow({
     scrollerRef,
     loaded,

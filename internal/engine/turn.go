@@ -393,11 +393,24 @@ func (e *Engine) startTurnInput(threadID string, in UserInput) (*store.Turn, err
 		return nil, err
 	}
 
-	prov, err := e.pool.StoredConversationModel(th.ProviderID, th.Model)
+	providerID, model, effort := th.ProviderID, th.Model, th.ReasoningEffort
+	if row := in.standaloneSchedule; row != nil {
+		if th.PlanMode {
+			return nil, ErrBusy
+		}
+		if th.ProjectID != row.ProjectID {
+			return nil, fmt.Errorf("engine: the scheduled result conversation changed project")
+		}
+		providerID = row.ProviderID
+		if providerID == "" {
+			providerID = e.scheduleDefaultProvider()
+		}
+		model, effort = row.Model, row.ReasoningEffort
+	}
+	prov, err := e.pool.StoredConversationModel(providerID, model)
 	if err != nil {
 		return nil, err
 	}
-	effort := th.ReasoningEffort
 	history, err := e.replayHistory(threadID)
 	if err != nil {
 		return nil, err
@@ -540,7 +553,9 @@ func (e *Engine) startTurnInput(threadID string, in UserInput) (*store.Turn, err
 		rt.mu.Unlock()
 	}
 
-	_ = e.store.TouchThread(threadID)
+	if in.standaloneSchedule == nil {
+		_ = e.store.TouchThread(threadID)
+	}
 	if !in.ContinueGoal && !in.ImplementPlan && !in.ContinueSchedule {
 		seed := titleFromInput(caption, modelImages, files)
 		if e.autoTitle(th, seed) {
@@ -872,7 +887,7 @@ func (rt *runtime) run(ctx context.Context, cancel context.CancelFunc, idle chan
 	}
 	// Close the claimed fire even when FinishTurn missed (deleted thread):
 	// leaving status=running sticks HasRunningRun and a CountRunningRuns slot.
-	e.finishScheduledRun(turn, status, res.Final, errText)
+	scheduleHandledActivity := e.finishScheduledRun(turn, status, res.Final, errText)
 	allowGoalRetry := true
 	if status == store.TurnError && !isolatedScheduledFailure(turn, status, runErr) && !isRetryableModelError(runErr) {
 		if isScheduleClaimMismatch(runErr) {
@@ -884,7 +899,9 @@ func (rt *runtime) run(ctx context.Context, cancel context.CancelFunc, idle chan
 	if status == store.TurnCancelled {
 		rt.pauseOpenGoalOnInterrupt()
 	}
-	_ = e.store.TouchThread(rt.threadID)
+	if !scheduleHandledActivity {
+		_ = e.store.TouchThread(rt.threadID)
+	}
 	finishUnlock()
 	finishUnlock = nil
 	// Briefing and review run after the terminal event, in the background:

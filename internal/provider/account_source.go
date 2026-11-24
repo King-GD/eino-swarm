@@ -49,6 +49,8 @@ type AccountSource struct {
 	unavailable bool
 	managed     bool
 	defaults    map[string]string
+
+	discoveryInterrupted bool
 }
 
 // SetCatalogGroup marks an independently authorized catalog before publication.
@@ -477,7 +479,7 @@ func (s *AccountSource) equal(o *AccountSource) bool {
 	if s.catalogGroup != o.catalogGroup || !reflect.DeepEqual(s.audio, o.audio) {
 		return false
 	}
-	if s.negotiated != o.negotiated || !reflect.DeepEqual(s.capabilities, o.capabilities) {
+	if s.negotiated != o.negotiated || s.discoveryInterrupted != o.discoveryInterrupted || !reflect.DeepEqual(s.capabilities, o.capabilities) {
 		return false
 	}
 	if s.unavailable != o.unavailable || s.managed != o.managed || !maps.Equal(s.defaults, o.defaults) || s.owner != o.owner || s.id != o.id || s.label != o.label || s.baseURL != o.baseURL || s.token != o.token || len(s.names) != len(o.names) || len(s.windows) != len(o.windows) || len(s.types) != len(o.types) || !s.sameProfile(o) {

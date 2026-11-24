@@ -6,12 +6,15 @@ import {
   type RefObject,
 } from "react"
 
+import { eventIsFromNestedScroller } from "@/lib/follow-scroll"
 import { readerNearOlderHistory, shouldLoadOlderHistory } from "@/lib/thread-log"
 import { TURN_NAV_ATTR, offsetInScroller } from "@/lib/turn-nav"
 
-/** Load older history when the live edge does not fill the pane, or when
- *  the reader reaches the top sentinel. Prepending must not jump the
- *  viewport — the height delta is added to scrollTop while unpinned. */
+const MESSAGE = "[data-history-message]"
+
+type ScrollAnchor = { id: string; top: number; height: number }
+
+/** Fill a short pane, then page when the reader moves toward its older edge. */
 export function useHistoryWindow({
   scrollerRef,
   loaded,
@@ -30,103 +33,106 @@ export function useHistoryWindow({
   loadOlder: (clientHeight?: number) => Promise<void>
 }) {
   const sentinelRef = useRef<HTMLDivElement>(null)
-  const heightBefore = useRef(0)
-  const wasPinned = useRef(pinned)
+  const anchor = useRef<ScrollAnchor | undefined>(undefined)
+  const lastFill = useRef<string | undefined>(undefined)
+  const requestedTop = useRef<number | undefined>(undefined)
 
   const requestOlder = useCallback(
-    (opts?: { fromSentinel?: boolean; fromScroll?: boolean }) => {
+    (source: "scroll" | "wheel" | "sentinel" | "fill") => {
       const el = scrollerRef.current
       if (!el || !hasMore || loading) return
-      // The sentinel's rootMargin is 80px. IntersectionObserver fires once
-      // on enter; a scrollTop<48 gate ate that shot, then dragging to 0
-      // did nothing because the sentinel never left the root.
-      // Scroll uses a wider lead: the oldest loaded turn-nav row on screen
-      // is already the end of this page, even when scrollTop is still huge.
-      const pixel = shouldLoadOlderHistory(
-        hasMore,
-        loading,
-        el.scrollTop,
-        el.scrollHeight,
-        el.clientHeight,
-      )
-      const near =
-        Boolean(opts?.fromScroll) &&
-        !pinned &&
-        readerNearOlderHistory(
-          el.scrollTop,
-          el.scrollHeight,
-          el.clientHeight,
-          oldestTurnFromViewportTop(el),
+      if (source !== "fill" && source !== "wheel" && requestedTop.current === el.scrollTop) return
+      if (source === "scroll" || source === "wheel") {
+        const first = el.querySelector<HTMLElement>(MESSAGE) ?? el.querySelector<HTMLElement>(`[${TURN_NAV_ATTR}]`)
+        const firstTop = first && offsetInScroller(first, el) - el.scrollTop
+        if (!shouldLoadOlderHistory(hasMore, loading, el.scrollTop, el.scrollHeight, el.clientHeight) &&
+          !readerNearOlderHistory(el.scrollTop, el.scrollHeight, el.clientHeight, firstTop ?? undefined)) return
+      } else if (source === "fill") {
+        if (el.scrollHeight > el.clientHeight + 8 || lastFill.current === growthKey) return
+        lastFill.current = growthKey
+      }
+
+      // At the top the reader wants to see the prepended message. Above that
+      // threshold keep an existing message at the same viewport position.
+      if (el.scrollTop >= 48 && !anchor.current) {
+        const visible = Array.from(el.querySelectorAll<HTMLElement>(MESSAGE)).find(
+          (row) => offsetInScroller(row, el) + row.offsetHeight > el.scrollTop,
         )
-      if (!opts?.fromSentinel && !pixel && !near) return
-      heightBefore.current = el.scrollTop > 48 ? el.scrollHeight : 0
+        anchor.current = {
+          id: visible?.dataset.historyMessage ?? "",
+          top: visible ? offsetInScroller(visible, el) : 0,
+          height: el.scrollHeight,
+        }
+      }
+      requestedTop.current = el.scrollTop
       void loadOlder(el.clientHeight)
     },
-    [hasMore, loading, loadOlder, pinned, scrollerRef],
+    [growthKey, hasMore, loading, loadOlder, scrollerRef],
   )
 
+  const request = useRef(requestOlder)
   useLayoutEffect(() => {
+    request.current = requestOlder
+  }, [requestOlder])
+
+  useLayoutEffect(() => {
+    if (loading) return
+    const previous = anchor.current
+    anchor.current = undefined
     const el = scrollerRef.current
-    if (!el || !heightBefore.current || pinned) {
-      heightBefore.current = 0
-      return
-    }
-    // Fetch started a few pixels from the top; the reader may already be
-    // parked at 0. Adding the delta would throw them back onto the old
-    // first row and the "content above" looks missing.
-    if (el.scrollTop < 48) {
-      heightBefore.current = 0
-      return
-    }
-    el.scrollTop += el.scrollHeight - heightBefore.current
-    heightBefore.current = 0
-  }, [growthKey, pinned, scrollerRef])
+    if (!el || !previous || pinned || el.scrollTop < 48) return
+    const row = Array.from(el.querySelectorAll<HTMLElement>(MESSAGE)).find(
+      (candidate) => candidate.dataset.historyMessage === previous.id,
+    )
+    el.scrollTop += row ? offsetInScroller(row, el) - previous.top : el.scrollHeight - previous.height
+  }, [growthKey, loading, pinned, scrollerRef])
 
   useEffect(() => {
-    if (!loaded) return
-    requestOlder()
-  }, [loaded, growthKey, requestOlder])
-
-  // The scroll event that leaves the live edge still sees pinned=true.
-  // Check once the flag flips, or that gesture never pages.
-  useEffect(() => {
-    const leftLiveEdge = wasPinned.current && !pinned
-    wasPinned.current = pinned
-    if (!loaded || !leftLiveEdge) return
-    requestOlder({ fromScroll: true })
-  }, [loaded, pinned, requestOlder])
+    if (!loaded) {
+      lastFill.current = undefined
+      requestedTop.current = undefined
+      anchor.current = undefined
+      return
+    }
+    requestOlder("fill")
+  }, [loaded, requestOlder])
 
   useEffect(() => {
     const el = scrollerRef.current
     if (!el || !loaded) return
-    const onScroll = () => requestOlder({ fromScroll: true })
+    let top = el.scrollTop
+    const onScroll = () => {
+      const upward = el.scrollTop <= top
+      top = el.scrollTop
+      if (upward) request.current("scroll")
+      else requestedTop.current = undefined
+    }
+    // A wheel-up at scrollTop=0 does not dispatch a scroll event.
+    const onWheel = (event: WheelEvent) => {
+      if (event.deltaY < 0 && el.scrollTop === 0 && !eventIsFromNestedScroller(event.target, el)) {
+        request.current("wheel")
+      }
+    }
     el.addEventListener("scroll", onScroll, { passive: true })
-    return () => el.removeEventListener("scroll", onScroll)
-  }, [loaded, requestOlder, scrollerRef])
+    el.addEventListener("wheel", onWheel, { passive: true })
+    return () => {
+      el.removeEventListener("scroll", onScroll)
+      el.removeEventListener("wheel", onWheel)
+    }
+  }, [loaded, scrollerRef])
 
   useEffect(() => {
     const root = scrollerRef.current
     const sentinel = sentinelRef.current
-    if (!root || !sentinel || !loaded || typeof IntersectionObserver === "undefined") {
-      return
-    }
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) requestOlder({ fromSentinel: true })
-      },
-      { root, rootMargin: "80px 0px 0px 0px" },
-    )
-    io.observe(sentinel)
-    return () => io.disconnect()
-  }, [loaded, hasMore, loading, requestOlder, scrollerRef])
+    if (!root || !sentinel || !loaded || !hasMore || typeof IntersectionObserver === "undefined") return
+    // Keep one observer through a prepend. Re-observing while still at the
+    // top reports the same intersection and can page again without a gesture.
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) request.current("sentinel")
+    }, { root, rootMargin: "80px 0px 0px 0px" })
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [loaded, hasMore, scrollerRef])
 
   return sentinelRef
-}
-
-/** First user row in the loaded slice. Distance from the viewport top;
- *  negative once that row has scrolled above the pane. */
-function oldestTurnFromViewportTop(root: HTMLElement): number | undefined {
-  const marker = root.querySelector(`[${TURN_NAV_ATTR}]`)
-  if (!(marker instanceof HTMLElement)) return undefined
-  return offsetInScroller(marker, root) - root.scrollTop
 }

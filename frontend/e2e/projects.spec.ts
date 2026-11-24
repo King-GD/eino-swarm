@@ -250,13 +250,14 @@ test("the Memory tab does not leave a blank Agents pane above the notes", async 
   ).toHaveCSS("display", "none")
 })
 
-test("Review now says when there is nothing to review", async ({ page }) => {
+test("Project distillation says when there is no retained evidence", async ({ page }) => {
   const project = `Project ${Date.now()}`
   await createProject(page, project)
   await startInProject(page, project)
   await openMemory(page)
-  await page.getByRole("button", { name: "Review this conversation now" }).click()
-  await expect(page.getByTestId("review-status")).toContainText(/nothing to review/i)
+  await page.getByTestId("knowledge-distill").click()
+  await page.getByRole("menuitem", { name: "Latest turn", exact: true }).click()
+  await expect(page.getByTestId("project-distill-status")).toContainText("No retained evidence to distill.")
 })
 
 test("Tidy memory says when the catalog is empty", async ({ page }) => {

@@ -60,6 +60,7 @@ function threadFromLive(r: RunningView): ThreadView {
     id: r.thread_id,
     title: r.title || r.thread_id,
     project_id: r.project_id,
+    schedule_source: r.schedule_source,
     running: !r.waiting,
     waiting: Boolean(r.waiting),
     last_active_at: r.last_active_at ?? "",

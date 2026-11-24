@@ -1,0 +1,50 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+import { api } from "@/lib/api"
+import type { DistillResult } from "@/lib/distillation"
+import { useDistillation } from "./distillation"
+
+vi.mock("@/lib/api", () => ({
+  api: { startDistillation: vi.fn(), distillStatus: vi.fn() },
+}))
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => { resolve = done })
+  return { promise, resolve }
+}
+
+describe("project distillation panel state", () => {
+  beforeEach(() => useDistillation.setState({ projects: {} }))
+  afterEach(() => vi.resetAllMocks())
+
+  it("keeps a newer admission when an earlier panel refresh returns", async () => {
+    const fetch = deferred<DistillResult>()
+    vi.mocked(api.distillStatus).mockReturnValueOnce(fetch.promise)
+    vi.mocked(api.startDistillation).mockResolvedValueOnce({ state: "running", review_id: "new" })
+    const { refresh, start } = useDistillation.getState()
+    const pending = refresh("one", new AbortController().signal)
+    await start("one", { scope: "project" })
+    fetch.resolve({ state: "completed", review_id: "old" })
+    await pending
+
+    expect(useDistillation.getState().projects.one.result?.review_id).toBe("new")
+    expect(useDistillation.getState().projects.two).toBeUndefined()
+  })
+
+  it("shares one request across panels while admission is pending and retains the terminal receipt", async () => {
+    const post = deferred<DistillResult>()
+    vi.mocked(api.startDistillation).mockReturnValueOnce(post.promise)
+    const { refresh, start } = useDistillation.getState()
+    const first = start("one", { scope: "thread", thread_id: "task", enable_knowledge: true })
+    await start("one", { scope: "project" })
+    expect(api.startDistillation).toHaveBeenCalledTimes(1)
+    post.resolve({ state: "running", review_id: "shared" })
+    await first
+
+    const receipt: DistillResult = { state: "partial", review_id: "shared", error: "revision conflict" }
+    vi.mocked(api.distillStatus).mockResolvedValueOnce(receipt)
+    await refresh("one", new AbortController().signal)
+    expect(useDistillation.getState().projects.one.result).toEqual(receipt)
+  })
+})

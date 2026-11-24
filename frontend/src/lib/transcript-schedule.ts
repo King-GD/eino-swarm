@@ -13,7 +13,7 @@ const SCHEDULE_KINDS = new Set([
 
 /** Chat rows a quiet scheduled check must not leave on screen. Trace still
  *  has the events; this list is the reducer's output, not the log. */
-const QUIET_DROP = new Set<BlockKind>(["user", "answer", "tool", "reasoning", "notice"])
+const QUIET_DROP = new Set<BlockKind>(["user", "answer", "tool", "reasoning", "history_work", "notice"])
 
 /** Fold one schedule kind. True means reduceEvent should stop: skipped is a
  *  handled no-op, not an unknown kind that becomes a JSON notice. */
@@ -162,10 +162,13 @@ function dropQuietChat(state: TranscriptState, turnId: string) {
 
 /** The durable scheduled-check wrapper is protocol, not a human bubble. */
 function hideScheduledCheckUser(state: TranscriptState) {
+  if (!state.scheduledFiredTurns?.length) return
+  const scheduled = new Set(state.scheduledFiredTurns)
   for (const id of Object.keys(state.agents)) {
     const agent = state.agents[id]
     const blocks = agent.blocks.filter(
-      (b) => !(b.kind === "user" && b.text.startsWith("This turn is a scheduled check.")),
+      (b) => !(b.kind === "user" && b.turnId && scheduled.has(b.turnId) &&
+        b.text.startsWith("This turn is a scheduled check.")),
     )
     if (blocks.length !== agent.blocks.length) {
       state.agents[id] = { ...agent, blocks }

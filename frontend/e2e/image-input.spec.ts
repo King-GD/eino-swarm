@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import { readFileSync } from "node:fs"
 
-import { composer, filterFiles, freshConversation, reloadOpenConversation, send, waitForIdle } from "./session"
+import { composer, filterFiles, freshConversation, readEarlierTranscript, reloadOpenConversation, send, waitForIdle } from "./session"
 
 const tinyPngB64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
@@ -55,9 +55,8 @@ test("pastes an image as vision input, not a workspace file", async ({ page }) =
   await expect(files.getByText("clip.png")).toBeHidden()
 
   await reloadOpenConversation(page)
-  await expect(
-    page.getByTestId("user-message").getByTestId("input-images").locator("img"),
-  ).toBeVisible()
+  await readEarlierTranscript(page, thumb)
+  await expect(thumb).toBeVisible()
 })
 
 test("drops files and generic binary photos without changing their vision bytes", async ({ page, request }, info) => {
@@ -122,6 +121,7 @@ test("drops files and generic binary photos without changing their vision bytes"
   await page.screenshot({ path: info.outputPath("stored-generic-photo.png"), animations: "disabled" })
 
   await reloadOpenConversation(page)
+  await readEarlierTranscript(page, photo)
   await expect.poll(() => page.getByTestId("user-message").getByAltText("photo.jpg")
     .evaluate((image: HTMLImageElement) => [image.naturalWidth, image.naturalHeight])).toEqual([16, 12])
 
@@ -215,6 +215,7 @@ test("enlarges the selected sent image within the viewport and after reload", as
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expect(trigger).toBeFocused()
   await reloadOpenConversation(page)
+  await readEarlierTranscript(page, trigger)
   await trigger.click()
   await expect(page.getByRole("dialog", { name: "landscape.png", exact: true }).getByAltText("landscape.png")).toBeVisible()
 })

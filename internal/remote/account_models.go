@@ -83,7 +83,6 @@ type AccountModels struct {
 	client   *http.Client
 	interval time.Duration
 	trigger  chan struct{}
-	requests chan chan struct{}
 
 	refreshMu sync.Mutex // serializes Refresh; never held while reading State
 	mu        sync.RWMutex
@@ -101,9 +100,12 @@ type AccountModels struct {
 	// put a credential change in that gap; production leaves it nil.
 	beforePublish func()
 
-	runMu  sync.Mutex
-	cancel context.CancelFunc
-	done   chan struct{}
+	runMu   sync.Mutex
+	cancel  context.CancelFunc
+	done    chan struct{}
+	request chan struct{}
+	// waiting is shared by callers until their one queued refresh finishes.
+	waiting chan struct{}
 }
 
 // NewAccountModels starts in the state the stored credential implies, so the
@@ -113,7 +115,7 @@ func NewAccountModels(cfg *config.Config, pool *provider.Pool, log *slog.Logger)
 		log = slog.Default()
 	}
 	a := &AccountModels{
-		cfg: cfg, pool: pool, log: log, interval: defaultAccountRefresh, trigger: make(chan struct{}, 1), requests: make(chan chan struct{}),
+		cfg: cfg, pool: pool, log: log, interval: defaultAccountRefresh, trigger: make(chan struct{}, 1),
 		lastKey: "\x00never refreshed",
 		client: &http.Client{Timeout: accountRequestTimeout, CheckRedirect: func(*http.Request, []*http.Request) error {
 			// A redirect would carry the credential to wherever it points.
@@ -197,7 +199,8 @@ func (a *AccountModels) Start() {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	a.cancel, a.done = cancel, done
+	request := make(chan struct{}, 1)
+	a.cancel, a.done, a.request = cancel, done, request
 	go func() {
 		defer close(done)
 		a.Refresh(ctx)
@@ -205,9 +208,14 @@ func (a *AccountModels) Start() {
 			select {
 			case <-ctx.Done():
 				return
-			case reply := <-a.requests:
+			case <-request:
 				a.Refresh(ctx)
-				close(reply)
+				a.runMu.Lock()
+				if a.done == done {
+					close(a.waiting)
+					a.waiting = nil
+				}
+				a.runMu.Unlock()
 			case <-a.trigger:
 				a.Refresh(ctx)
 			case <-time.After(a.interval):
@@ -225,7 +233,7 @@ func (a *AccountModels) Stop() {
 	}
 	a.runMu.Lock()
 	cancel, done := a.cancel, a.done
-	a.cancel, a.done = nil, nil
+	a.cancel, a.done, a.request, a.waiting = nil, nil, nil, nil
 	a.runMu.Unlock()
 	if cancel == nil {
 		return
@@ -337,7 +345,7 @@ func (a *AccountModels) publish(fetched accountIdentity, o accountOutcome) Accou
 		// alone; the refresh triggered for it publishes its own models.
 		return a.state
 	case o.transient && a.published:
-		a.pool.InvalidateCapabilities()
+		a.pool.InterruptCapabilityDiscovery()
 		// A brief outage must not take working models away mid-conversation.
 		// A fresh bootstrap can nevertheless revoke independent LOCAL sources.
 		if o.localUpdated {

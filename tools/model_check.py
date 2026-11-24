@@ -112,6 +112,9 @@ class Model:
 MODELS = {
     m.name: m
     for m in (
+        Model("visible-history", ROOT / "models" / "stream" / "VisibleHistory.tla",
+              ("UseVisibleCursor", "SkipOlderMessage", "KeepRewoundWork"),
+              ("TypeOK", "NoDeferredReplay", "PreviousMessageReached", "WorkStillStored"), ()),
         Model("task-panel", ROOT / "models" / "panels" / "TaskPanel.tla",
               ("IgnoreOwner", "DeliverBeforeCommit", "ApplyDuplicate", "IgnoreBaseRevision", "IgnoreOperationDigest", "CleanupOtherOwner", "SkipRecovery", "SeparatePanelConnection"),
               ("TypeOK", "CommittedBeforeDelivery", "OwnerRequired", "Idempotent", "BaseRevisionRequired", "OperationBodyStable", "CleanupKeepsOwner", "NoOrphanAfterRestore", "SaveConnectionAvailable"), ()),
@@ -214,6 +217,12 @@ MODELS = {
             ("TypeOK", "VisibleBundleValidated", "ExistingBundlePreserved", "RemovedBundleHidden",
              "ReadIsProjectScoped", "LoadIsExternalOnly", "ListDisclosesMetadataOnly", "ReviewPreservesInstalled",
              "ProjectDeletionIsFinal"),
+            (),
+        ),
+        Model(
+            "project-distillation", ROOT / "models" / "knowledge" / "ProjectDistillation.tla",
+            ("AllowConcurrent", "AllowForeignSource", "ReceiptWithoutWrite"),
+            ("TypeOK", "OneManualRun", "ScopedWrites", "RealReceipts"),
             (),
         ),
         Model(
@@ -448,6 +457,15 @@ def _askpub(name: str, source: str, switches: tuple[str, ...] = (), violates: st
 
 
 CASES: tuple[Case, ...] = (
+    _case("distillation-current", "exclusive manual review and scoped publication receipts",
+          model="project-distillation"),
+    *(_case("distillation-fault-" + guard, "seeded: " + guard, (guard,), invariant,
+            model="project-distillation")
+      for guard, invariant in (("AllowConcurrent", "OneManualRun"),
+                               ("AllowForeignSource", "ScopedWrites"),
+                               ("ReceiptWithoutWrite", "RealReceipts"))),
+    _case("distillation-reach-all-targets", "one completed run saved every target",
+          witness="NeverThreeTargets", model="project-distillation"),
     _case("knowledge-current", "project-bound revision writes, append-only schema and scoped evidence",
           model="project-knowledge"),
     *(_case("knowledge-fault-" + name, source, (switch,), invariant, model="project-knowledge")
@@ -481,6 +499,15 @@ CASES: tuple[Case, ...] = (
     _case("task-panel-cleanup-owner", "seeded: old producer cleanup changes successor metadata", ("CleanupOtherOwner",), "CleanupKeepsOwner", model="task-panel"),
     _case("task-panel-orphan", "seeded: startup leaves interrupted producer running", ("SkipRecovery",), "NoOrphanAfterRestore", model="task-panel"),
     _case("task-panel-connection-budget", "observed two-window draft PUT starvation when separate panel SSE occupies all six H1 slots", ("SeparatePanelConnection",), "SaveConnectionAvailable", model="task-panel"),
+    _case("visible-history-current", "scanned tail and older cursors, detail expansion and rewind", model="visible-history"),
+    _case("visible-history-visible-cursor", "seeded: SSE starts from the last rendered row",
+          ("UseVisibleCursor",), "NoDeferredReplay", model="visible-history"),
+    _case("visible-history-skipped-older", "seeded: the older cursor skips the previous visible message",
+          ("SkipOlderMessage",), "PreviousMessageReached", model="visible-history"),
+    _case("visible-history-stale-work", "seeded: rewind keeps a deleted range",
+          ("KeepRewoundWork",), "WorkStillStored", model="visible-history"),
+    _case("visible-history-reach-live", "witness", witness="NeverOpenAndCatchUp", model="visible-history"),
+    _case("visible-history-reach-rewind", "witness", witness="NeverPageExpandRewind", model="visible-history"),
     _stream("stream-panel-cursor", "seeded: panel cursor emitted as chat SSE id", ("PanelCursorAsChatID",), "PanelCursorIsIndependent"),
     _stream("stream-panel-reach", "named panel frame reaches shared SSE without a chat cursor", witness="NeverPanelFrame"),
     _case("task-panel-current", "atomic owned publication and idempotent delivery", model="task-panel"),

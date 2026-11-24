@@ -8,9 +8,24 @@ export const LOG_LIMIT_MIN = 24
 export const LOG_LIMIT_MAX = 200
 export const LOG_LIMIT_DEFAULT = 80
 
+export type HistoryWork = {
+  from: number
+  through: number
+  turn_id: string
+  created_at: string
+  agent_ids: string[]
+  thinking: boolean
+  tools: number
+  failed?: boolean
+}
+
 export type ThreadLog = {
   events: SwarmEvent[]
   has_more: boolean
+  /** Scanned bounds can include deferred rows whose bodies were omitted. */
+  before?: number
+  seq?: number
+  history_work?: HistoryWork[]
   /** Worker lifecycle and manager error/retention rows outside this viewport.
    *  Only the live-edge page sends it; paging must not move the cursor. */
   roster?: SwarmEvent[]

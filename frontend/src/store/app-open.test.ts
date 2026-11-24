@@ -64,7 +64,7 @@ describe("opening a conversation without waiting for context replay", () => {
     vi.mocked(api.followups).mockReturnValue(followups.promise)
     const opening = useApp.getState().openThread("a")
     await tick()
-    expect(api.threadLog).toHaveBeenCalledWith("a", { limit: 80 })
+    expect(api.threadLog).toHaveBeenCalledWith("a", { limit: 80, view: "messages" })
     expect(useApp.getState().loaded).toBe(true)
     expect(useApp.getState().transcript.agents.manager.blocks[0].text).toBe("Visible tail")
     expect(fake.subscriptions.at(-1)?.since).toBe(10)
@@ -76,6 +76,33 @@ describe("opening a conversation without waiting for context replay", () => {
     turns.resolve([])
     followups.resolve([])
     await opening
+  })
+
+  it("joins concurrent history reads and uses the scanned bounds rather than roster or work rows", async () => {
+    const older = deferred<Awaited<ReturnType<typeof api.threadLog>>>()
+    vi.mocked(api.threadLog).mockResolvedValueOnce({
+      events: [event("a", 40, "agent_message", "Current answer")],
+      roster: [{ ...event("a", 8, "spawned", "Worker"), agent_id: "worker" }],
+      before: 30, seq: 44, has_more: true,
+    }).mockReturnValueOnce(older.promise)
+    await useApp.getState().openThread("a")
+    expect(fake.subscriptions.at(-1)?.since).toBe(44)
+
+    const scroll = useApp.getState().loadOlder()
+    const intersect = useApp.getState().loadOlder()
+    expect(api.threadLog).toHaveBeenCalledTimes(2)
+    expect(api.threadLog).toHaveBeenLastCalledWith("a", { before: 30, limit: 80, view: "messages" })
+    older.resolve({
+      events: [event("a", 15, "user_message", "Earlier prompt")], before: 15, seq: 29, has_more: false,
+      history_work: [{
+        from: 16, through: 29, agent_ids: ["manager"], turn_id: "turn-1",
+        created_at: "2026-01-01T00:00:00Z", tools: 6, thinking: true,
+      }],
+    })
+    await Promise.all([scroll, intersect])
+    expect(api.threadLog).toHaveBeenCalledTimes(2)
+    expect(useApp.getState().transcript.agents.manager.blocks.map((block) => block.kind))
+      .toEqual(["user", "history_work", "answer"])
   })
 
   it("keeps newer SSE terminal and title when opening detail lands late", async () => {
@@ -218,7 +245,7 @@ describe("opening a conversation without waiting for context replay", () => {
       .mockReturnValueOnce(older.promise)
     const opening = useApp.getState().openThread("a")
     await tick()
-    expect(api.threadLog).toHaveBeenLastCalledWith("a", { before: 14, limit: 80 })
+    expect(api.threadLog).toHaveBeenLastCalledWith("a", { before: 14, limit: 80, view: "messages" })
     expect(useApp.getState().transcript.agents.manager?.blocks ?? []).toHaveLength(0)
     older.resolve({ events: [events[0]], has_more: false })
     await opening
@@ -310,7 +337,7 @@ it("paints a tool-only tail and attaches SSE before its older manager page arriv
   await tick()
   expect(useApp.getState().loaded).toBe(true)
   expect(fake.subscriptions.at(-1)?.since).toBe(40)
-  expect(api.threadLog).toHaveBeenLastCalledWith("a", { before: 40, limit: 80 })
+  expect(api.threadLog).toHaveBeenLastCalledWith("a", { before: 40, limit: 80, view: "messages" })
   older.resolve({ events: [event("a", 2, "user_message", "Earlier manager input")], has_more: false })
   await opening
   expect(useApp.getState().transcript.agents.manager.blocks.some((block) => block.text === "Earlier manager input")).toBe(true)

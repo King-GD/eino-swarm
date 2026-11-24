@@ -41,6 +41,17 @@ function chatKinds(state: TranscriptState, turnId: string) {
   )
 }
 
+it("keeps a human message that resembles a different turn's schedule cue", () => {
+  const text = "This turn is a scheduled check. Please compare the results."
+  const state = fold([
+    ev({ kind: "user_message", turn_id: "tn_human", text }),
+    ev({ kind: "schedule_fired", turn_id: "tn_schedule" }),
+    ev({ kind: "user_message", turn_id: "tn_schedule", text: "This turn is a scheduled check. Synthetic input." }),
+  ])
+  expect(chatKinds(state, "tn_human")).toContainEqual(expect.objectContaining({ kind: "user", text }))
+  expect(chatKinds(state, "tn_schedule").some((row) => row.kind === "user")).toBe(false)
+})
+
 describe("scheduled-task transcript notices", () => {
   it("arms a wait as a manager notice without dumping the payload or a user bubble", () => {
     const payload = JSON.stringify({

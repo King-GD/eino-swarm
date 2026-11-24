@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test"
+import { expect, type Locator, type Page } from "@playwright/test"
 
 /** Every spec starts on its own conversation, so one failing run cannot leave
  *  state that breaks the next. */
@@ -12,6 +12,17 @@ export async function freshConversation(page: Page) {
 
 /** Reload lands on the home page with nothing selected. Tests that still
  *  need the conversation click back into the row that was open. */
+/** Cold history opens at the latest message. Read upward to an older row. */
+export async function readEarlierTranscript(page: Page, target: Locator) {
+  if (await target.count()) return
+  await page.getByTestId("transcript").hover()
+  await expect.poll(async () => {
+    const count = await target.count()
+    if (!count) await page.mouse.wheel(0, -10_000)
+    return count
+  }).toBeGreaterThan(0)
+}
+
 export async function reloadOpenConversation(page: Page) {
   const title = (await page.getByTestId("thread-title").innerText()).trim()
   const project = page.getByTestId("thread-project")

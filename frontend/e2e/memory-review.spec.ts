@@ -35,7 +35,8 @@ test("rejected reviews retain diagnostics; committed changes expose their full d
     await waitForIdle(page)
     await page.getByRole("tab", { name: "Memory", exact: true }).click()
     fixture.pauseReview()
-    await page.getByRole("button", { name: "Review this conversation now" }).click()
+    // Legacy review callers still use this endpoint. Project panels use unified distillation.
+    expect((await request.post(`/api/threads/${thread}/review`)).status()).toBe(202)
     await expect.poll(() => fixture.calls.some((call) => call.review)).toBe(true)
     // A later turn is already complete when this review's old-turn result lands.
     const nextAccepted = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/threads/${thread}/deliver`)
@@ -45,19 +46,19 @@ test("rejected reviews retain diagnostics; committed changes expose their full d
     await waitForIdle(page)
     await page.getByRole("button", { name: `New conversation in ${otherName}` }).click()
     await page.getByRole("tab", { name: "Memory", exact: true }).click()
-    await expect(page.getByTestId("review-status")).toHaveCount(0)
+    await expect(page.getByTestId("memory-notice")).toHaveCount(0)
     fixture.resumeReview()
     await expect.poll(async () => {
       const trace = await (await request.get(`/api/trace/${turn.id}`)).json()
       return trace.events.some((event: { kind: string }) => event.kind === "memory_review")
     }).toBe(true)
     // A late completion belongs to the click's conversation and project.
-    await expect(page.getByTestId("review-status")).toHaveCount(0)
+    await expect(page.getByTestId("memory-notice")).toHaveCount(0)
     const projectButton = page.getByRole("button", { name, exact: true })
     if (await projectButton.getAttribute("aria-expanded") !== "true") await projectButton.click()
     await page.locator(`[data-testid="thread-row"][data-id="${thread}"]`).getByTestId("row-label").click()
     await page.getByRole("tab", { name: "Memory", exact: true }).click()
-    const status = page.getByTestId("review-status")
+    const status = page.getByTestId("memory-notice").filter({ hasText: "repair round limit reached" })
     await expect(status).toContainText("repair round limit reached")
     await expect(status).toContainText("8 attempts")
     await expect(status).toContainText("Evidence reference did not pass validation")
@@ -100,8 +101,7 @@ test("rejected reviews retain diagnostics; committed changes expose their full d
     await expect(page.getByTestId("memory-notice")).toContainText("repair round limit reached")
     await page.getByRole("tab", { name: "Memory", exact: true }).click()
     fixture.setMode("repair")
-    await page.getByRole("button", { name: "Review this conversation now" }).click()
-    await expect(status).toContainText("Review finished.")
+    expect((await request.post(`/api/threads/${thread}/review`)).status()).toBe(202)
     await expect(page.getByLabel("Project notes")).toHaveValue("Verify the current result.")
 
     // Assert the named memory_review stream before reading Trace/history: an

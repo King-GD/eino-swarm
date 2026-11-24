@@ -1962,6 +1962,15 @@ restate the body. This changes no Markdown format or event kind.
    continuation, session briefing, final answer or task-tool evidence, no skill
    tools and no skill fold. Cancellation starts no automatic review.
 
+   When account discovery loses a previously negotiated conversation grant
+   after a transient refresh failure, the rolling briefing and reviewer can
+   wait for one refresh before building the model. A chat client already
+   opened by a turn can do the same before its next model request. The account
+   discovery loop coalesces concurrent requests, and each caller can cancel its
+   own wait. A request needs fresh authorization for the same source and model
+   and an allowed wire adapter. An unresolved failure reaches the original
+   turn's Trace without a model-call receipt.
+
    Dream verification is enabled by default. It discovers an already-recorded
    skill patch before automatic review using bounded same-project and
    same-provider history. Settings can disable it for later reviews.
@@ -2642,9 +2651,16 @@ rebind it after a rewind.
 The engine binds knowledge tools to the project and turn. It stamps page
 updates, resolves and classifies historical sources, and injects a bounded
 schema summary at turn setup. HTTP reads reuse the same index. The right
-inspector uses existing tool results and turn completion to refresh. Distill
-creates a normal project conversation and submits a localized scope request
-through the existing delivery path. See [the design](docs/plans/2026-11-23-project-knowledge-design.md).
+inspector uses existing tool results and turn completion to refresh.
+Manual Distill shares the Memory reviewer and per-project review queue. A
+host-owned read snapshot maps reviewer handles to original history records.
+One validated proposal can update notes, Skills and Knowledge through their
+existing stores. Manual runs share one SQLite receipt between the two panels.
+For a successful turn with project memory, auto-review and Knowledge enabled,
+the existing reviewer applies wiki updates in the same batch as notes and
+Skills. It publishes their committed revisions in the original turn's
+`memory_review` event, which refreshes the open Knowledge panel. See [the distillation design](docs/plans/2026-11-23-unified-project-distillation.md)
+and [the wiki design](docs/plans/2026-11-23-project-knowledge-design.md).
 
 ## Integrated terminal
 
@@ -2848,6 +2864,21 @@ consumes existing quotas and does not imply cross-engine background-PID
 reconnection or task success. `models/generation/ModelGenerationRecovery.tla`
 and actual Registry/HTTP regressions protect this ordering.
 
+
+## Desktop and Web transcript history
+
+The renderer opens with the message view of `GET /api/threads/:id/log`.
+The server selects visible-message boundaries over stored events and
+projects older manager work into counted sequence ranges. The view retains
+control events and uses separate upper and lower scan bounds for SSE and
+upward paging. The open snapshot supplies the conversation's worker roster
+alongside the history. Selecting a worker reads its independent log.
+
+The transcript store replays stored events with their original identities.
+Deferred ranges enter the view at their sequence positions. Expanding one
+reads bounded detail pages with an exclusive cursor and folds them into the
+existing thought and tool components. These reads do not enter the live
+event reducer or advance the conversation cursor.
 
 ## Automatic restart handoff
 

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { KnowledgePageView, type KnowledgePageActions } from "@/components/app/knowledge-page"
 import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { ProjectDistillMenu, ProjectDistillStatus } from "@/components/app/project-distill"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { api, ApiError } from "@/lib/api"
@@ -12,7 +12,6 @@ import {
   filterKnowledgeTree,
   KNOWLEDGE_PENDING_VIEW,
   KNOWLEDGE_TYPE_VIEW,
-  type DistillScope,
   type KnowledgeIssue,
   type KnowledgeNode,
 } from "@/lib/knowledge"
@@ -26,7 +25,6 @@ import { errorMessage } from "@/store/toasts"
 export interface KnowledgePanelProps extends Omit<KnowledgePageActions, "onPage"> {
   project?: Project
   thread?: Pick<Thread, "id" | "title">
-  onDistill: (scope: DistillScope) => Promise<void>
 }
 
 export function KnowledgePanel({ project, ...props }: KnowledgePanelProps) {
@@ -40,7 +38,7 @@ export function KnowledgePanel({ project, ...props }: KnowledgePanelProps) {
   )
 }
 
-function ProjectKnowledge({ project, thread, onDistill, onOpenThread, onTrace }: KnowledgePanelProps & { project: Project }) {
+function ProjectKnowledge({ project, thread, onOpenThread, onTrace }: KnowledgePanelProps & { project: Project }) {
   const t = useT()
   const refresh = useKnowledge((state) => state.refreshByProject[project.id] ?? 0)
   const page = useKnowledge((state) => knowledgeStack(state, project.id).at(-1))
@@ -80,24 +78,7 @@ function ProjectKnowledge({ project, thread, onDistill, onOpenThread, onTrace }:
     await api.enableKnowledge(project.id)
     invalidate()
   }
-  const distill = (scope: DistillScope) => void act(async () => {
-    if (!status.data?.enabled) await enable()
-    await onDistill(scope)
-  })
-
-  const distillMenu = (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button data-testid="knowledge-distill" variant="outline" size="sm" disabled={busy || !status.data}>
-          {t("knowledge.distill")}<ChevronDown aria-hidden />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem disabled={!thread} onSelect={() => distill("thread")}>{t("knowledge.distillTask")}</DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => distill("project")}>{t("knowledge.distillProject")}</DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
+  const distillMenu = <ProjectDistillMenu projectId={project.id} threadId={thread?.id} knowledgeEnabled={status.data?.enabled} />
   const error = actionError ?? (status.error ? errorMessage(status.error) : undefined)
   if (!status.data) {
     if (!error) return <KnowledgeLoading />
@@ -116,22 +97,26 @@ function ProjectKnowledge({ project, thread, onDistill, onOpenThread, onTrace }:
           <Button data-testid="knowledge-enable" size="sm" disabled={busy} onClick={() => void act(enable)}>{t("knowledge.enable")}</Button>
           {distillMenu}
         </div>
+        <ProjectDistillStatus projectId={project.id} />
         {error ? <KnowledgeError error={error} /> : null}
       </div>
     )
   }
   if (page) {
     return (
-      <PageDrilldown
-        key={page}
-        page={page}
-        projectId={project.id}
-        refresh={refresh}
-        onPage={current}
-        onBack={() => useKnowledge.getState().back(project.id)}
-        onOpenThread={onOpenThread}
-        onTrace={onTrace}
-      />
+      <>
+        <div className="px-3"><ProjectDistillStatus projectId={project.id} /></div>
+        <PageDrilldown
+          key={page}
+          page={page}
+          projectId={project.id}
+          refresh={refresh}
+          onPage={current}
+          onBack={() => useKnowledge.getState().back(project.id)}
+          onOpenThread={onOpenThread}
+          onTrace={onTrace}
+        />
+      </>
     )
   }
   return (
@@ -177,6 +162,7 @@ function ProjectKnowledge({ project, thread, onDistill, onOpenThread, onTrace }:
             onClick={() => setView(KNOWLEDGE_PENDING_VIEW)}
           >{t("knowledge.pendingCount", { count: status.data.pending_count })}</Button>
         </div>
+        <ProjectDistillStatus projectId={project.id} />
         {error ? <KnowledgeError error={error} /> : null}
       </div>
       <div data-testid="knowledge-tree" className="thin-scrollbar min-h-0 flex-1 overflow-y-auto p-2">

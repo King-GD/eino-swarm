@@ -339,7 +339,7 @@ func (e *Engine) refreshSessionMemory(ctx context.Context, threadID, turnID stri
 		e.markSessionMemoryAttempt(threadID, tokens)
 		return err
 	}
-	builder, err := e.pool.ModelBuilder(ctx, resolved.ID, resolved.Model, "",
+	builder, err := e.pool.ModelBuilder(provider.WithChatDiscoveryRecovery(ctx), resolved.ID, resolved.Model, "",
 		e.callRecorder(threadID, turnID))
 	if err != nil {
 		e.recordSessionMemory(threadID, turnID, "", 0, err.Error())

@@ -1,4 +1,6 @@
 import { ApiError, api } from "@/lib/api"
+import { closeClient } from "@/lib/client-open"
+import { setDeskDest } from "@/lib/desk-nav"
 import { resolveLocale, t, type LocalePref } from "@/lib/i18n"
 import { setThreadRunning } from "@/lib/thread-title"
 import type {
@@ -15,6 +17,7 @@ import {
   keepArmedWakes,
 } from "@/lib/schedule-view"
 import { withRunningClock } from "./app-stream"
+import { useScheduleInboxUI } from "./schedule-inbox-ui"
 
 export { activeWake } from "@/lib/schedule-view"
 
@@ -57,6 +60,7 @@ export type ScheduleSlice = {
   runScheduleNow: (id: string) => Promise<void>
   readScheduleRun: (rid: string) => Promise<void>
   openScheduleInbox: () => void
+  openScheduleDetails: (id: string) => Promise<void>
   closeScheduleInbox: () => void
 }
 
@@ -206,6 +210,18 @@ export function scheduleActions(
     openScheduleInbox: () => {
       set({ scheduleInboxOpen: true })
       void get().refreshSchedules()
+    },
+
+    openScheduleDetails: async (id) => {
+      try {
+        const row = get().schedules.find((schedule) => schedule.id === id) ?? (await api.schedule(id)).schedule
+        setDeskDest("scheduled")
+        closeClient()
+        useScheduleInboxUI.getState().showEdit(row)
+        get().openScheduleInbox()
+      } catch (e) {
+        set({ error: deps.fail(e) })
+      }
     },
 
     closeScheduleInbox: () => set({ scheduleInboxOpen: false, error: undefined }),

@@ -18,6 +18,7 @@ import (
 // triggers, so they are never copied.
 var copyOrder = []string{
 	"projects",
+	"project_distillations",
 	"threads",
 	"turns",
 	"events",
@@ -283,7 +284,7 @@ func projectFilter(table, projectID string) (string, []any, bool, error) {
 	case "schedule_runs":
 		return `thread_id IN (` + threads + `) OR schedule_id IN (SELECT id FROM main.schedules WHERE project_id = ? OR thread_id IN (` + threads + `))`,
 			[]any{projectID, projectID, projectID}, false, nil
-	case "nuwa_nodes", "nuwa_revisions", "nuwa_verify_slots":
+	case "nuwa_nodes", "nuwa_revisions", "nuwa_verify_slots", "project_distillations":
 		return `project_id = ?`, []any{projectID}, false, nil
 	case "composer_drafts", "composer_draft_blobs":
 		return `draft_key = ? OR draft_key IN (SELECT 'thread:' || id FROM main.threads WHERE project_id = ?)`,
@@ -354,7 +355,7 @@ func exportProject(ctx context.Context, conn *sql.Conn, projectID, dest string) 
 	return exportProjectRows(ctx, conn, projectID, dest, false)
 }
 
-func exportProjectRows(ctx context.Context, conn *sql.Conn, projectID, dest string, allowEmpty bool) error {
+func exportProjectRows(ctx context.Context, conn *sql.Conn, projectID, dest string, rollbackSnapshot bool) error {
 	if err := failNext(); err != nil {
 		return err
 	}
@@ -372,6 +373,9 @@ func exportProjectRows(ctx context.Context, conn *sql.Conn, projectID, dest stri
 		return err
 	}
 	for _, table := range copyOrder {
+		if table == "project_distillations" && !rollbackSnapshot {
+			continue
+		}
 		where, args, skip, err := projectFilter(table, projectID)
 		if err != nil {
 			return err
@@ -392,7 +396,7 @@ func exportProjectRows(ctx context.Context, conn *sql.Conn, projectID, dest stri
 		return err
 	}
 	if n == 0 {
-		if allowEmpty {
+		if rollbackSnapshot {
 			return nil
 		}
 		return store.ErrNotFound
@@ -503,7 +507,7 @@ func applyProject(ctx context.Context, conn *sql.Conn, incomingPath, projectID s
 				}
 			}
 			for _, table := range copyOrder {
-				if table == "remote_devices" {
+				if table == "remote_devices" || table == "project_distillations" {
 					continue
 				}
 				if err := copyTable(ctx, tx, "incoming", "main", table, "", nil, offset); err != nil {

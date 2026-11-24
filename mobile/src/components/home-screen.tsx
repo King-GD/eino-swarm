@@ -177,6 +177,7 @@ export function HomeScreen({
             id={th.id}
             title={th.title || th.id}
             detail={row.detail}
+            scheduleSource={th.schedule_source}
             state={row.state}
             at={row.at}
             onOpen={onOpen}
@@ -240,6 +241,7 @@ export function HomeScreen({
                   onMore={() => onMore(GROUP_ATTENTION)}>
                   {unread.map((th) => (
                     <InboxRow key={th.id} id={th.id} title={th.title || th.id}
+                      scheduleSource={th.schedule_source}
                       detail={inboxPreview(th.summary) || undefined} state="unread"
                       at={th.last_active_at} onOpen={onOpen} />
                   ))}
@@ -260,6 +262,7 @@ export function HomeScreen({
                     title={r.title || r.thread_id}
                     // A parked wait has no live turn to preview; the host
                     // sends the thread's own summary as the line instead.
+                    scheduleSource={r.schedule_source}
                     detail={inboxPreview(r.action) || undefined}
                     state={liveState(r)}
                     // Running is happening now. Only a wait has an age, and

@@ -85,7 +85,7 @@ func (e *Engine) createSchedule(in ScheduleInput, scope *store.GoalTurnScope) (*
 			in.OriginThreadID = in.ThreadID
 		}
 	} else {
-		// Standalone fires mint a conversation; the origin is only a chip.
+		// Standalone checks keep their own results. ThreadID is for wakes.
 		in.ThreadID = ""
 	}
 	if in.OriginThreadID != "" {
@@ -473,43 +473,61 @@ func (e *Engine) pauseRepeatingSchedule(turn *store.Turn) bool {
 // finishScheduledRun closes the claimed fire after FinishTurn. It does not
 // take fireMu: the ticker only claims, and this turn is already done racing
 // StartTurn. A run that is no longer `running` is a no-op so a second call
-// cannot flip findings back to quiet.
-func (e *Engine) finishScheduledRun(turn *store.Turn, status, final, errText string) {
+// cannot flip findings back to quiet. A true result means standalone
+// activity has already been handled and the caller must not touch recency.
+func (e *Engine) finishScheduledRun(turn *store.Turn, status, final, errText string) bool {
 	if turn == nil || !turn.ScheduleContinue {
-		return
+		return false
 	}
 	runID := strings.TrimSpace(turn.ScheduleRunID)
 	if runID == "" {
-		return
+		return false
 	}
 	run, err := e.store.GetRun(runID)
 	if err != nil || run.Status != store.ScheduleRunRunning {
-		return
+		return false
 	}
 	if status != store.TurnDone {
 		if err := e.store.FinishRun(runID, store.ScheduleRunError, strings.TrimSpace(errText), true); err != nil {
 			e.log.Warn("could not close a failed schedule run", "run", runID, "err", err)
 		}
-		return
+		return false
 	}
+	standalone := e.isStandaloneRun(run)
 	quiet, summary := e.scheduledRunOutcome(turn.ID, final)
 	if quiet {
-		if err := e.store.FinishRun(runID, store.ScheduleRunQuiet, "", false); err != nil {
-			e.log.Warn("could not close a quiet schedule run", "run", runID, "err", err)
-			return
-		}
 		if err := e.store.UpdateTurn(turn.ID, map[string]any{"quiet": true}); err != nil {
 			e.log.Warn("could not stamp a quiet scheduled turn", "turn", turn.ID, "err", err)
 		}
-		if scheduleRunMintsConversation(run, e.scheduleForTurn(turn)) {
-			if err := e.SetThreadArchived(turn.ThreadID, true); err != nil {
-				e.log.Warn("could not archive a quiet standalone fire", "thread", turn.ThreadID, "err", err)
-			}
+		if standalone {
+			e.archiveQuietStandalone(turn, run)
 		}
-		return
+		if err := e.store.FinishRun(runID, store.ScheduleRunQuiet, "", false); err != nil {
+			e.log.Warn("could not close a quiet schedule run", "run", runID, "err", err)
+		}
+		return standalone
+	}
+	if standalone {
+		if err := e.store.TouchThread(turn.ThreadID); err != nil {
+			e.logPersistFailure("could not update scheduled findings activity", err, "thread", turn.ThreadID)
+		}
 	}
 	if err := e.store.FinishRun(runID, store.ScheduleRunFindings, summary, true); err != nil {
 		e.log.Warn("could not close a findings schedule run", "run", runID, "err", err)
+	}
+	return standalone
+}
+
+func (e *Engine) archiveQuietStandalone(turn *store.Turn, run *store.ScheduleRun) {
+	hasFindings, err := e.store.HasStandaloneFindings(turn.ThreadID, run.ScheduleID)
+	if err != nil {
+		e.log.Warn("could not check existing standalone findings", "thread", turn.ThreadID, "err", err)
+		return
+	}
+	if !hasFindings {
+		if err := e.SetThreadArchived(turn.ThreadID, true); err != nil {
+			e.logPersistFailure("could not archive a quiet standalone fire", err, "thread", turn.ThreadID)
+		}
 	}
 }
 

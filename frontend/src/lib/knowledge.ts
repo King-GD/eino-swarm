@@ -73,7 +73,6 @@ export interface KnowledgePage extends KnowledgePageRef {
   sources?: KnowledgeSource[]
 }
 
-export type DistillScope = "thread" | "project"
 
 export const KNOWLEDGE_TYPE_VIEW = "type"
 export const KNOWLEDGE_PENDING_VIEW = "pending"

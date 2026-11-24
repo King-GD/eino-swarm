@@ -128,3 +128,129 @@ func TestCapabilityGuardWithoutTrackedModelRetainsGrantChecks(t *testing.T) {
 		t.Fatalf("missing source bypassed: %v", err)
 	}
 }
+
+func TestOpenedAccountChatRechecksDiscoveryBeforeAnyModelRequest(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		model   string
+		api     string
+		allowed bool
+		cancel  bool
+		want    error
+	}{
+		{name: "restored", model: "server-model", api: "chat_completions", allowed: true},
+		{name: "endpoint changed", model: "server-model", api: "responses", allowed: true, want: ErrModelPolicy},
+		{name: "role withdrawn", model: "server-model", api: "chat_completions", want: ErrModelPolicy},
+		{name: "model withdrawn", model: "different-model", api: "chat_completions", allowed: true, want: ErrModelPolicy},
+		{name: "cancelled", cancel: true, want: context.Canceled},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var modelRequests, refreshes atomic.Int32
+			endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				modelRequests.Add(1)
+				if req.URL.Path != "/chat/completions" || req.Header.Get("Authorization") != "Bearer test-token" {
+					t.Errorf("request changed endpoint or identity: %s", req.URL.Path)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, backoffCompletion)
+			}))
+			defer endpoint.Close()
+			pool := backoffPool(endpoint.URL)
+			src := accountSourceFor(t, endpoint.URL, "test-token")
+			src.SetCapabilities(roleManifest("conversation", "chat_completions", true))
+			pool.SetAccountSource(src)
+			pool.SetLocalAccountSources([]*AccountSource{src})
+			records := make(chan CallRecord, 2)
+			build, err := pool.ModelBuilder(t.Context(), src.id, "server-model", "", func(r CallRecord) { records <- r })
+			if err != nil {
+				t.Fatal(err)
+			}
+			chat := build("manager", "manager")
+			pool.InterruptCapabilityDiscovery()
+			if pool.FeatureAvailable(src.id, "conversation") {
+				t.Fatal("waiting for discovery retained an active grant")
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			pool.SetCapabilitiesRefresher(func(context.Context) error {
+				refreshes.Add(1)
+				if modelRequests.Load() != 0 || len(records) != 0 {
+					t.Error("the model request was sent or recorded before renewal")
+				}
+				if tc.cancel {
+					cancel()
+					return ctx.Err()
+				}
+				fresh, err := NewAccountSource(src.id, "fixture", endpoint.URL, "test-token", Catalog{Names: []string{tc.model}})
+				if err != nil {
+					return err
+				}
+				capabilities := roleManifest("conversation", tc.api, true)
+				if !tc.allowed {
+					delete(capabilities.Capabilities, "conversation")
+				}
+				fresh.SetCapabilities(capabilities)
+				pool.SetAccountSource(fresh)
+				return nil
+			})
+			out, err := chat.Generate(ctx, backoffMessages())
+			if !errors.Is(err, tc.want) || refreshes.Load() != 1 {
+				t.Fatalf("refreshes=%d, error=%v, want %v", refreshes.Load(), err, tc.want)
+			}
+			if tc.want == nil {
+				if out == nil || out.Content != "ready" || modelRequests.Load() != 1 || len(records) != 1 {
+					t.Fatalf("restored result=%v calls=%d records=%d", out, modelRequests.Load(), len(records))
+				}
+			} else if modelRequests.Load() != 0 || len(records) != 0 {
+				t.Fatalf("unauthorized or cancelled request reached the model: calls=%d records=%d", modelRequests.Load(), len(records))
+			}
+		})
+	}
+}
+
+func TestBackgroundReviewPreservesModelAndAccountWhenDiscoveryIsInterrupted(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		fresh string
+		want  error
+	}{
+		{"cancelled", "", context.Canceled},
+		{"discovery owner stopped", "", errCapabilityDiscoveryInterrupted},
+		{"account changed", "new-token", ErrAccountModelsUnavailable},
+		{"model changed", "test-token", ErrModelPolicy},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pool := New(config.Default())
+			const endpoint = "http://127.0.0.1:1"
+			src := accountSourceFor(t, endpoint, "test-token")
+			src.SetModelPolicy(false, nil)
+			src.SetCapabilities(roleManifest("conversation", "chat_completions", true))
+			pool.SetAccountSource(src)
+			pool.InterruptCapabilityDiscovery()
+
+			ctx, cancel := context.WithCancel(WithChatDiscoveryRecovery(t.Context()))
+			defer cancel()
+			pool.SetCapabilitiesRefresher(func(context.Context) error {
+				if tc.fresh == "" {
+					if errors.Is(tc.want, context.Canceled) {
+						cancel()
+					}
+					return errors.New("discovery stopped")
+				}
+				replacement, err := NewAccountSource(src.id, "fixture", endpoint, tc.fresh, Catalog{Names: []string{"replacement"}})
+				if err != nil {
+					return err
+				}
+				replacement.SetModelPolicy(false, nil)
+				replacement.SetCapabilities(roleManifest("conversation", "chat_completions", true))
+				pool.SetAccountSource(replacement)
+				return nil
+			})
+
+			build, err := pool.ReviewModelBuilder(ctx, src.id, "server-model", "", nil)
+			if build != nil || !errors.Is(err, tc.want) {
+				t.Fatalf("unexpected review admission: built=%t err=%v, want %v", build != nil, err, tc.want)
+			}
+		})
+	}
+}

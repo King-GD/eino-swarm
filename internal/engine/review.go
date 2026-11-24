@@ -268,9 +268,10 @@ type reviewOutcome struct {
 	Dream     *dreamReceipt `json:"dream,omitempty"`
 	// Changes describes writes that landed. Available before/after snapshots
 	// keep transcript details tied to this review rather than later file edits.
-	Changes []memory.Change `json:"changes,omitempty"`
-	Note    string          `json:"note,omitempty"`
-	Err     string          `json:"err,omitempty"`
+	Changes   []memory.Change `json:"changes,omitempty"`
+	Knowledge []distillChange `json:"knowledge,omitempty"`
+	Note      string          `json:"note,omitempty"`
+	Err       string          `json:"err,omitempty"`
 	// Notify is how chatty this review should be in the transcript, stamped
 	// at record time so a later settings change does not rewrite history.
 	Notify       string           `json:"notify,omitempty"`
@@ -284,6 +285,8 @@ type reviewOutcome struct {
 // reviewRun is one reviewer agent: post-turn extraction or the Memory panel's
 // catalog tidy. Same agent id so a trace still names the cost memory-reviewer.
 type reviewRun struct {
+	ctx        context.Context
+	recorder   provider.Recorder
 	threadID   string
 	turnID     string
 	providerID string
@@ -293,6 +296,7 @@ type reviewRun struct {
 	// chosen level; an endpoint without reasoning control may reject it.
 	optionalEffort bool
 	dream          *dreamReview
+	ordinaryBatch  *schema.ToolInfo
 	description    string
 	instruction    string
 	userMsg        string
@@ -382,6 +386,11 @@ func (e *Engine) runReviewInput(threadID string, turn *store.Turn, pc *projectCo
 	userMsg := e.reviewUserMessageWithNotes(pc, input.Transcript, notes)
 	if automatic {
 		batch.dream = e.prepareDream(turn, pc, sourceEvents, input.Events)
+		batch.knowledge = e.automaticReviewKnowledge(turn, pc, sourceEvents, input.Events)
+		if batch.knowledge != nil {
+			instruction += "\n" + automaticKnowledgeReviewPrompt
+			tools = append(tools, batch.knowledge.knowledgeReader())
+		}
 	}
 	effort, optionalEffort := memorySettings.ReviewEffort(turn.ReasoningEffort)
 	e.driveReviewer(reviewRun{
@@ -392,6 +401,7 @@ func (e *Engine) runReviewInput(threadID string, turn *store.Turn, pc *projectCo
 		effort:         effort,
 		optionalEffort: optionalEffort,
 		dream:          batch.dream,
+		ordinaryBatch:  batch.toolInfo(nil),
 		description:    description,
 		instruction:    instruction,
 		userMsg:        userMsg,
@@ -428,7 +438,10 @@ func (e *Engine) runReviewInput(threadID string, turn *store.Turn, pc *projectCo
 }
 
 func (e *Engine) reviewerModel(ctx context.Context, run reviewRun) (model.BaseChatModel, error) {
-	rec := e.callRecorder(run.threadID, run.turnID)
+	rec := run.recorder
+	if rec == nil {
+		rec = e.callRecorder(run.threadID, run.turnID)
+	}
 	modelBuilder := e.pool.ReviewModelBuilder
 	if run.optionalEffort {
 		modelBuilder = e.pool.AuxiliaryModelBuilder
@@ -450,9 +463,9 @@ func (e *Engine) reviewerModel(ctx context.Context, run reviewRun) (model.BaseCh
 	if err != nil {
 		return nil, err
 	}
-	ordinaryBatch, err := (&reviewBatchTool{}).Info(ctx)
-	if err != nil {
-		return nil, err
+	ordinaryBatch := run.ordinaryBatch
+	if ordinaryBatch == nil {
+		ordinaryBatch = (&reviewBatchTool{}).toolInfo(nil)
 	}
 	return &dreamReviewModel{
 		ordinary: ordinary, first: audit(ReviewAgentID, ReviewAgentID),
@@ -463,9 +476,13 @@ func (e *Engine) reviewerModel(ctx context.Context, run reviewRun) (model.BaseCh
 // driveReviewer runs one ChatModelAgent with the memory tools. The caller
 // owns the outcome lock for onChange; this function writes Err and Note.
 func (e *Engine) driveReviewer(run reviewRun, mu *sync.Mutex, outcome *reviewOutcome) {
-	ctx, cancel := context.WithTimeout(context.Background(), e.cfg.SwarmSnapshot().AgentTimeout())
+	parent := run.ctx
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, e.cfg.SwarmSnapshot().AgentTimeout())
 	defer cancel()
-	ctx = provider.WithoutRouteRecovery(ctx)
+	ctx = provider.WithChatDiscoveryRecovery(provider.WithoutRouteRecovery(ctx))
 
 	if run.maxIter <= 0 {
 		run.maxIter = e.cfg.Memory.ReviewIterations()
