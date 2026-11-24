@@ -86,3 +86,119 @@ func TestReviewFinalCommitConflictFeedbackRetainsFixedRevisionAndSafeMetadata(t 
 		t.Fatalf("rejected conflict retained edited notes: %s", raw)
 	}
 }
+
+// The actual post-review adapter must publish a keeper that was saved before
+// a later source deletion failed, and retain both source content and usage.
+func TestReviewFoldPartialDeletionReportsEveryLandedSkillChange(t *testing.T) {
+	requireReviewFoldRemovalPermissionFailure(t)
+	engine := newTestEngine(t)
+	thread, turn, pc := qualityReviewTurn(t, engine, store.TurnDone, nil)
+	names := []string{"stable-audit", "stable-audit-first", "stable-audit-second"}
+	bodies := []string{
+		"Inspect every source record and verify the active generation before marking the recorded batch complete.",
+		"Do not inspect every source record and verify the active generation before marking the recorded batch complete.",
+		"Inspect every source record and wait exactly 24 seconds before marking the recorded batch complete.",
+	}
+	for i, name := range names {
+		plantProjectSkill(t, engine, thread.ProjectID, name, "When auditing recorded source state.", bodies[i])
+		for range i + 1 {
+			if _, err := pc.memory.ViewSkill(name); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	blocked := filepath.Join(pc.memory.Dir(), memory.SkillsDir, names[2])
+	if err := os.Chmod(blocked, 0500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(blocked, 0700) })
+	engine.finishReview(thread.ID, turn, pc, reviewOutcome{StopReason: "completed"})
+	event := waitForReview(t, engine, turn.ID)
+	outcome := decodeReview(t, event)
+	if !outcome.Changed || outcome.StopReason != "error" || outcome.Err == "" || len(outcome.Changes) != 1 || len(outcome.Skills) != 1 || outcome.Skills[0].Action != "merge" || outcome.Skills[0].Name != names[0] || outcome.Skills[0].Text != names[1] {
+		t.Fatalf("actual fold adapter hid partial writes or claimed an undeleted source: %+v", outcome)
+	}
+	kept, err := pc.memory.ReadSkill(names[0])
+	if err != nil || kept.Views != 3 {
+		t.Fatalf("saved keeper usage was lost: %+v %v", kept, err)
+	}
+	remaining, err := pc.memory.ReadSkill(names[2])
+	if err != nil || remaining.Views != 3 {
+		t.Fatalf("readable failed source lost its own usage: %+v %v", remaining, err)
+	}
+	if _, err := pc.memory.ReadSkill(names[1]); !errors.Is(err, memory.ErrNoMatch) {
+		t.Fatalf("first source was not actually removed: %v", err)
+	}
+	for _, body := range bodies {
+		if !strings.Contains(strings.Join(strings.Fields(kept.Body), " "), strings.Join(strings.Fields(body), " ")) {
+			t.Fatalf("partially completed fold lost full source body: %q", body)
+		}
+	}
+	if err := os.Chmod(blocked, 0700); err != nil {
+		t.Fatal(err)
+	}
+	engine.finishReview(thread.ID, turn, pc, reviewOutcome{StopReason: "completed"})
+	kept, err = pc.memory.ReadSkill(names[0])
+	if err != nil || kept.Views != 6 || !kept.LastViewedAt.Equal(remaining.LastViewedAt) {
+		t.Fatalf("retry lost or double-counted source usage: %+v %v", kept, err)
+	}
+	events, err := engine.store.ListTurnEvents(turn.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reviews []store.Event
+	for _, candidate := range events {
+		if candidate.Kind == KindMemoryReview {
+			reviews = append(reviews, candidate)
+		}
+	}
+	if len(reviews) != 2 {
+		t.Fatalf("review receipts=%d, want both partial and retry", len(reviews))
+	}
+	retry := decodeReview(t, reviews[1])
+	if !retry.Changed || retry.Err != "" || retry.StopReason != "completed" || len(retry.Skills) != 1 || retry.Skills[0].Text != names[2] {
+		t.Fatalf("retry receipt did not name only the newly removed source: %+v", retry)
+	}
+}
+
+func requireReviewFoldRemovalPermissionFailure(t *testing.T) {
+	t.Helper()
+	source := filepath.Join(t.TempDir(), "source")
+	if err := os.Mkdir(source, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(source, memory.SkillFile)
+	const content = "permission probe"
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, memory.SkillUsageFile), []byte("{}"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(source, 0500); err != nil {
+		t.Fatalf("set up review fold permission probe: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(source, 0700); err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("restore review fold permission probe: %v", err)
+		}
+	})
+	err := os.RemoveAll(source)
+	if err == nil {
+		t.Skip("filesystem permits removal despite mode 0500; cannot inject required review fold failure")
+	}
+	if !os.IsPermission(err) {
+		t.Fatalf("unexpected review fold removal probe error: %v", err)
+	}
+	body, readErr := os.ReadFile(path)
+	if readErr == nil && string(body) != content {
+		t.Fatal("review fold probe content changed unexpectedly")
+	}
+	if readErr != nil {
+		if !errors.Is(readErr, os.ErrNotExist) && !os.IsPermission(readErr) {
+			t.Fatalf("inspect review fold probe source: %v", readErr)
+		}
+		t.Skip("filesystem cannot reproduce a readable retained source after the permission error")
+	}
+	t.Log("real review fold removal permission probe succeeded: source retained and readable")
+}

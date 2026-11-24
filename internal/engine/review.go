@@ -682,6 +682,13 @@ func (e *Engine) applySkillFold(pc *projectContext, outcome *reviewOutcome) {
 		return
 	}
 	changes, err := pc.memory.FoldSkillFamilies()
+	for _, c := range changes {
+		outcome.Changed = true
+		outcome.Changes = append(outcome.Changes, c)
+		if c.Target == memory.ToolSkillManage {
+			outcome.Skills = append(outcome.Skills, c)
+		}
+	}
 	if err != nil {
 		if outcome.Err == "" {
 			outcome.Err = err.Error()
@@ -690,13 +697,6 @@ func (e *Engine) applySkillFold(pc *projectContext, outcome *reviewOutcome) {
 			}
 		}
 		return
-	}
-	for _, c := range changes {
-		outcome.Changed = true
-		outcome.Changes = append(outcome.Changes, c)
-		if c.Target == memory.ToolSkillManage {
-			outcome.Skills = append(outcome.Skills, c)
-		}
 	}
 }
 

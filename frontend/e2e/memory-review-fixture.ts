@@ -28,6 +28,10 @@ export async function startMemoryReviewFixture(port = 0) {
   let callID = 0
   let held: Promise<void> | undefined
   let release: (() => void) | undefined
+  const replyCompletion = (response: ServerResponse, content: string) => {
+    response.writeHead(200, { "Content-Type": "application/json" })
+    response.end(JSON.stringify({ choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }] }))
+  }
   const reply = (response: ServerResponse, content: string, args?: object) => {
     const delta = args ? { role: "assistant", tool_calls: [{ index: 0, id: `review-fixture-${++callID}`, type: "function", function: { name: "apply_memory_review", arguments: JSON.stringify(args) } }] } : { role: "assistant", content }
     response.writeHead(200, { "Content-Type": "text/event-stream" })
@@ -44,14 +48,17 @@ export async function startMemoryReviewFixture(port = 0) {
           if (input.stream || input.messages.length !== 2 || input.tools?.length) throw new Error("Answer classification must remain a separate tool-free request")
           const candidate = JSON.parse(input.messages[1].content ?? "") as { messages?: unknown }
           if (!Array.isArray(candidate.messages) || candidate.messages.length !== 1 || candidate.messages[0] !== managerAnswer) throw new Error("Unknown answer classification candidate")
-          response.writeHead(200, { "Content-Type": "application/json" })
-          response.end(JSON.stringify({ choices: [{ index: 0, message: { role: "assistant", content: JSON.stringify({ claims: [] }) }, finish_reason: "stop" }] }))
+          replyCompletion(response, JSON.stringify({ claims: [] }))
           return
         }
         const review = input.tools?.some((tool) => tool.function.name === "apply_memory_review") ?? false
         const attempt = input.messages.filter((message) => message.role === "assistant" && message.tool_calls?.some((call) => call.function.name === "apply_memory_review")).length + 1
         calls.push({ review, attempt, authorization: Boolean(incoming.headers.authorization) })
-        if (!review) { reply(response, managerAnswer); return }
+        if (!review) {
+          if (input.stream) reply(response, managerAnswer)
+          else replyCompletion(response, managerAnswer)
+          return
+        }
         if (held) await held
         const source = input.messages.filter((message) => message.role === "user").map((message) => message.content ?? "").join("\n")
         const match = /\[seq=(\d+)[^\n]*\] human: ([^\n]+)/.exec(source)

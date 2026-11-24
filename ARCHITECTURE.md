@@ -1965,6 +1965,27 @@ constraints belong in skill preconditions; descriptions state when to use a
 skill. An exact existing skill-name pointer may remain in notes if it does not
 restate the body. This changes no Markdown format or event kind.
 
+Deterministic family folding keeps every source's complete body, normalizing
+whitespace only. It omits a source section only when that entire normalized body
+already occurs in the original keeper; word overlap cannot preserve negation,
+numbers, conditions or ordering. Keeper writes and source deletions are separate
+filesystem operations. On a later failure the Store returns the original error
+and reports the actual keeper write and only source files confirmed gone. The
+turn's memory-review event records that failure and those landed changes, using
+its existing safe error summary. This is text retention, not a semantic guarantee for
+model-authored skill patches. Regression coverage: `internal/memory/families_test.go`,
+`internal/memory/skill_usage_test.go` and `internal/engine/review_finalize_test.go`.
+
+The 80% notes-pressure warning is advisory. It reports the remaining character
+budget from the turn-start snapshot; the write tool accepts growth that still
+fits the total and per-note limits. Adding to a nonempty store also costs the
+two-character entry separator, while a replacement spends its net growth.
+If a useful change does not fit, consolidation preserves unrelated notes and
+the supported meaning of related notes. The prompt snapshot stays stable for
+the turn, and tool results report the live write outcome. Regression coverage:
+`internal/memory/prompt_test.go` and
+`internal/engine/memory_pressure_http_test.go`.
+
 8. **Review** (`F-420`, `C-025`): with memory and auto-review enabled, a
    successful turn starts a single streaming `adk.ChatModelAgent` from the stored
    event log, even when the manager already used a memory tool. Compacted ADK

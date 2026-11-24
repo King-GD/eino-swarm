@@ -89,7 +89,8 @@ func (s *Store) SkillFamilyNames() ([][]string, error) {
 
 // FoldMerge is one family the catalog folded: the name that remains, the
 // chapter-skills that were deleted, and whether the keeper had to be created
-// because the shared stem was not already a skill.
+// because the shared stem was not already a skill. A failed fold can report
+// partial progress; Dropped includes only sources whose skill files are gone.
 type FoldMerge struct {
 	Keep    string   `json:"keep"`
 	Dropped []string `json:"dropped"`
@@ -254,8 +255,8 @@ func sortedSetNames(in map[string]struct{}) []string {
 //
 // The kept name is the shared stem when that stem is a usable skill name,
 // otherwise the shortest existing name. Bodies of the dropped skills become
-// headed sections so the steps are not lost. Returns one Change per fold
-// that landed.
+// headed sections so the steps are not lost. Returns actual keeper writes and
+// source removals even when a later step fails; a completed fold is a merge.
 func (s *Store) FoldSkillFamilies() ([]Change, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -280,26 +281,38 @@ func (s *Store) foldReportLocked() (FoldReport, error) {
 	report := emptyFoldReport(len(skills))
 	report.Families = len(families)
 	touched := 0
+	var foldErr error
 	for _, fam := range families {
 		merge, change, err := s.foldOneFamilyLocked(fam)
-		if err != nil {
-			report.Unchanged = report.Scanned - touched
-			report.After = report.Before - len(report.Deleted) + len(report.Created)
-			return report, err
+		if merge.Keep != "" {
+			// A keeper may be saved before usage transfer or source deletion
+			// fails. Count only original entries actually rewritten or removed.
+			if !merge.Created {
+				touched++
+			}
+			touched += len(merge.Dropped)
+			if len(merge.Dropped) > 0 {
+				report.Merged = append(report.Merged, merge)
+			}
+			report.Changes = append(report.Changes, change)
+			report.Deleted = append(report.Deleted, merge.Dropped...)
+			if merge.Created {
+				report.Created = append(report.Created, merge.Keep)
+			} else if change.Action == "patch" {
+				report.Patched = append(report.Patched, merge.Keep)
+			}
 		}
-		touched += len(fam)
-		report.Merged = append(report.Merged, merge)
-		report.Changes = append(report.Changes, change)
-		report.Deleted = append(report.Deleted, merge.Dropped...)
-		if merge.Created {
-			report.Created = append(report.Created, merge.Keep)
+		if err != nil {
+			foldErr = err
+			break
 		}
 	}
 	sort.Strings(report.Created)
 	sort.Strings(report.Deleted)
+	sort.Strings(report.Patched)
 	report.Unchanged = report.Scanned - touched
 	report.After = report.Before - len(report.Deleted) + len(report.Created)
-	return report, nil
+	return report, foldErr
 }
 
 func (s *Store) foldOneFamilyLocked(fam []Skill) (FoldMerge, Change, error) {
@@ -326,18 +339,33 @@ func (s *Store) foldOneFamilyLocked(fam []Skill) (FoldMerge, Change, error) {
 		return FoldMerge{}, Change{}, err
 	}
 	dropped := droppedNames(names, keep)
-	if _, err := s.finishSkillMergeLocked(keep, fam, dropped); err != nil {
-		return FoldMerge{}, Change{}, err
+	if _, err = s.finishSkillMergeLocked(keep, fam, dropped); err != nil {
+		// RemoveAll may remove SKILL.md before failing on another child.
+		// An unreadable source is unknown, not proof that it was deleted.
+		var removed []string
+		for _, name := range dropped {
+			if _, statErr := os.Stat(s.skillPath(name)); os.IsNotExist(statErr) {
+				removed = append(removed, name)
+			}
+		}
+		dropped = removed
 	}
 	if dropped == nil {
 		dropped = []string{}
 	}
+	action, text := "merge", clipText(strings.Join(dropped, ", "))
+	if len(dropped) == 0 {
+		action, text = "patch", clipText(skill.Body)
+		if created {
+			action, text = "create", clipText(skill.Description)
+		}
+	}
 	return FoldMerge{Keep: skill.Name, Dropped: dropped, Created: created}, Change{
 		Target: ToolSkillManage,
-		Action: "merge",
+		Action: action,
 		Name:   skill.Name,
-		Text:   clipText(strings.Join(dropped, ", ")),
-	}, nil
+		Text:   text,
+	}, err
 }
 
 // MergeSkills folds sources into keep. keep may be new. An empty description
@@ -512,7 +540,9 @@ func foldFamilyContent(keep string, members []Skill) (description, body string) 
 		if text == "" {
 			continue
 		}
-		if keeper != nil && noteCoveredBy(text, keeper.Body) {
+		// Shared words cannot prove that negation, counts, conditions or
+		// ordering survived. Omit only a complete already-retained body.
+		if keeper != nil && strings.Contains(preservedText(keeper.Body), preservedText(text)) {
 			continue
 		}
 		if b.Len() > 0 {

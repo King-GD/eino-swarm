@@ -88,6 +88,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Memory capacity warnings allow writes that fit the actual budget. Skill folding
+  preserves complete source instructions and reports writes that landed before a
+  later cleanup failure. (`F-420`, `C-025`)
+
 - Desktop, Web and paired phone chats identify model response read timeouts.
   The failed model-call Trace records received bytes, the last read time and
   a Gateway request ID when available. (`F-130`, `C-012`, `C-029`)

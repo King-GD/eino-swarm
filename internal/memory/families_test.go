@@ -142,26 +142,56 @@ func TestFoldSkillFamiliesReportNamesCreatedDeletedAndUnchanged(t *testing.T) {
 }
 
 func TestFoldSkillFamiliesReportDoesNotCountAnExistingKeeperAsCreated(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "memory")
-	s := New(dir, 2000)
-	plantSkill(t, dir, "weekly-rollup", "when cutting a weekly summary", "1. gather")
-	plantSkill(t, dir, "weekly-rollup-send", "when sending", "1. send it")
-
-	rep, err := s.FoldSkillFamiliesReport()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(rep.Created) != 0 {
-		t.Fatalf("an existing keeper is not new: created=%v", rep.Created)
-	}
-	if strings.Join(rep.Deleted, ",") != "weekly-rollup-send" {
-		t.Fatalf("deleted=%v", rep.Deleted)
-	}
-	if len(rep.Merged) != 1 || rep.Merged[0].Created || rep.Merged[0].Keep != "weekly-rollup" {
-		t.Fatalf("merged=%+v", rep.Merged)
-	}
-	if rep.After != 1 {
-		t.Fatalf("after=%d", rep.After)
+	for _, test := range []struct {
+		name, keeper, source string
+		contained            bool
+	}{
+		{"different steps", "1. gather", "1. send it", false},
+		{"negation", "Inspect every source record and verify the active generation before changing the completion state.", "Do not inspect every source record and verify the active generation before changing the completion state.", false},
+		{"number", "Inspect every source record and wait exactly 12 seconds before changing the completion state.", "Inspect every source record and wait exactly 24 seconds before changing the completion state.", false},
+		{"condition", "Inspect every source record and change the completion state only when the active owner is ready.", "Inspect every source record and change the completion state only when the active owner is not ready.", false},
+		{"execution order", "First inspect every source record, then change the active generation and verify the completion state.", "First change the active generation, then inspect every source record and verify the completion state.", false},
+		{"already contained", "Inspect every source record. Wait for the active owner before continuing. Retain verified receipts.", "Wait for the active owner before continuing.", true},
+		{"whitespace contained", "Inspect every source record.\nWait for the active owner before continuing.\nRetain verified receipts.", "Wait\tfor the active\nowner before  continuing.", true},
+		{"whitespace equal", "Inspect every source record before continuing.", "Inspect\tevery source\nrecord before  continuing.", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "memory")
+			store := New(dir, 2000)
+			plantSkill(t, dir, "weekly-rollup", "when cutting a weekly summary", test.keeper)
+			plantSkill(t, dir, "weekly-rollup-send", "when sending", test.source)
+			report, err := store.FoldSkillFamiliesReport()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(report.Created) != 0 {
+				t.Fatalf("an existing keeper is not new: created=%v", report.Created)
+			}
+			if strings.Join(report.Deleted, ",") != "weekly-rollup-send" {
+				t.Fatalf("deleted=%v", report.Deleted)
+			}
+			if len(report.Merged) != 1 || report.Merged[0].Created || report.Merged[0].Keep != "weekly-rollup" || len(report.Changes) != 1 {
+				t.Fatalf("merged=%+v changes=%+v", report.Merged, report.Changes)
+			}
+			if report.After != 1 {
+				t.Fatalf("after=%d", report.After)
+			}
+			kept, err := store.ReadSkill("weekly-rollup")
+			if err != nil {
+				t.Fatal(err)
+			}
+			normalized := strings.Join(strings.Fields(kept.Body), " ")
+			// Similar words cannot establish that a whole condition, negation,
+			// count or execution order survived the actual source deletion.
+			for _, original := range []string{test.keeper, test.source} {
+				if !strings.Contains(normalized, strings.Join(strings.Fields(original), " ")) {
+					t.Fatalf("fold deleted a source without preserving its complete body: %q", original)
+				}
+			}
+			if test.contained && strings.Contains(kept.Body, "## weekly-rollup-send") {
+				t.Fatal("a complete already-contained body was duplicated")
+			}
+		})
 	}
 }
 
