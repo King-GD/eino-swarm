@@ -116,6 +116,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
   Conversation graphs show referenced project prerequisites and flag older
   results with an incomplete basis. (`F-139`, `C-055`)
 
+- The expanded work graph fills its dialog and fits the available width while
+  keeping long paths scrollable. Work graphs show actual dependencies and
+  drop the decorative goal node. (`F-139`, `C-055`)
+
 - Engine replacement gives workers up to three seconds to summarize, leaving
   time for the final durable checkpoints. An in-flight tool keeps its unknown
   outcome, and completed workers keep their results. (`F-110`, `C-027`)

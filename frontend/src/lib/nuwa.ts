@@ -204,11 +204,7 @@ export function layoutNuwa<T extends NuwaPathNode>(input: T[]): {
 export type CollaborationNode = NuwaPathNode & { depends_on: string[] } & (
   | { type: "work"; record: NuwaNode }
   | { type: "loose"; kind: string; records: NuwaNode[] }
-  | { type: "goal" }
 )
-
-/** Stored work IDs use the nw_ prefix, so these view-only ids never collide. */
-export const NUWA_GOAL_ID = "__nuwa_goal__"
 
 const looseKindOrder = ["task", "fact", "artifact"]
 
@@ -302,18 +298,9 @@ export function nuwaPathFocus(nodes: NuwaNode[], selected?: string) {
   return new Set([...upstream, ...downstream])
 }
 
-/** Work records are the backbone, connected only by their saved dependencies.
- * Records with no dependency collapse into one row per kind. Those rows, and
- * the real chain terminals, share the goal so nothing is left floating. Who
- * recorded a result stays on the record, not a structural graph node. */
+/** Draw saved dependencies and group unlinked records by kind. */
 export function layoutNuwaCollaboration(nodes: NuwaNode[]) {
   const partitioned = partitionNuwaCollaboration(nodes)
-  const known = new Set(partitioned.path.map(({ id }) => id))
-  const dependedUpon = new Set<string>()
-  for (const node of partitioned.path)
-    for (const dependency of node.depends_on ?? [])
-      if (known.has(dependency)) dependedUpon.add(dependency)
-
   const entries: CollaborationNode[] = partitioned.path.map((record) => ({
     type: "work", id: record.id, record, created_at: record.created_at,
     depends_on: record.depends_on ?? [],
@@ -326,19 +313,6 @@ export function layoutNuwaCollaboration(nodes: NuwaNode[]) {
       depends_on: [],
     })
   })
-  const graph: CollaborationNode[] = [...entries]
-  if (entries.length) {
-    const terminals = partitioned.path
-      .filter(({ id, incomplete_basis }) => !dependedUpon.has(id) && !incomplete_basis)
-      .map(({ id }) => id)
-    const readyGroups = partitioned.groups.filter(({ records }) => records.some((record) => !record.incomplete_basis))
-    const created = entries.reduce((latest, node) =>
-      node.created_at > latest ? node.created_at : latest, entries[0].created_at)
-    graph.push({
-      type: "goal", id: NUWA_GOAL_ID, created_at: created,
-      depends_on: [...terminals, ...readyGroups.map(({ id }) => id)],
-    })
-  }
-  const laid = layoutNuwa(graph)
+  const laid = layoutNuwa(entries)
   return { ...laid, missing: [...new Set([...laid.missing, ...partitioned.missing])].sort() }
 }

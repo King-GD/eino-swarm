@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test"
 import { writeFile } from "node:fs/promises"
-import { NUWA_GOAL_ID, type NuwaNode, type NuwaSnapshot, type ThreadWorkSnapshot } from "../src/lib/nuwa"
+import type { NuwaNode, NuwaSnapshot, ThreadWorkSnapshot } from "../src/lib/nuwa"
 import { startNuwaFixture } from "./nuwa-fixture"
 import { composer, freshConversation, waitForDraftSaved } from "./session"
 
@@ -111,7 +111,6 @@ test("Nuwa creation shares live evidence paths and preserves them after disablin
     fixture.releaseTask()
     await expect(graph.getByRole("button", { name: /Review notes/ })).toBeVisible()
     await expect(graph.getByTestId("nuwa-edge")).toHaveCount(2)
-    await expect(graph.getByTestId("nuwa-goal-edge")).toHaveCount(1)
     await expect(page.getByRole("list", { name: "Shared work nodes", exact: true })).toHaveCount(0)
     const resultRow = graph.getByRole("button", { name: /Review notes/ })
     const statusBounds = await resultRow.getByText("Reported", { exact: true }).boundingBox()
@@ -356,17 +355,18 @@ test("published artifacts retain their recorded turn and publishers after reload
     expect(fact.depends_on).toEqual([task.id])
 
     const assertPath = async (graph: Locator, result: NuwaNode, author: string) => {
-      await expect(graph.getByTestId("nuwa-edge")).toHaveCount(2)
-      await expect(graph.getByTestId("nuwa-origin")).toHaveCount(0)
-      await expect(graph.getByTestId("nuwa-goal")).toHaveCount(1)
-      const edges = graph.getByTestId("nuwa-goal-edge")
-      await expect(edges).toHaveCount(1)
+      const nodes = graph.locator("[data-node-id]")
+      await expect(nodes).toHaveCount(3)
+      expect(await nodes.evaluateAll((cards) => cards.map((card) => card.getAttribute("data-node-id")).sort()))
+        .toEqual([task.id, fact.id, result.id].sort())
+      const edges = graph.getByTestId("nuwa-edge")
+      await expect(edges).toHaveCount(2)
       const routed = await edges.evaluateAll((paths) => paths.map((path) => [
         path.getAttribute("data-from"),
         path.getAttribute("data-to"),
         getComputedStyle(path).strokeDasharray !== "none",
       ]))
-      expect(routed).toEqual([[result.id, NUWA_GOAL_ID, true]])
+      expect(routed).toEqual(expect.arrayContaining([[task.id, fact.id, false], [fact.id, result.id, false]]))
       const card = graph.getByRole("button", { name: new RegExp(result.title) })
       await expect(card).toHaveAttribute("data-node-id", result.id)
       await expect(card).toHaveAccessibleDescription(new RegExp(author))
@@ -401,12 +401,44 @@ test("published artifacts retain their recorded turn and publishers after reload
     await page.getByRole("button", { name: "Expand graph", exact: true }).click()
     const dialog = page.getByRole("dialog", { name: collaborationPaths, exact: true })
     await assertPath(dialog.getByRole("region", { name: collaborationPaths, exact: true }), workerResult, worker.role)
-    await expect(dialog.getByText("Converges to goal", { exact: true })).toBeVisible()
+    await expect(dialog.getByText("Work dependency", { exact: true })).toBeVisible()
+    const canvas = dialog.getByRole("region", { name: collaborationGraph, exact: true })
+    const canvasFit = () => canvas.evaluate((viewport) => {
+      const dialog = viewport.closest("[role=dialog]")!
+      const shell = dialog.getBoundingClientRect()
+      const frame = viewport.getBoundingClientRect()
+      const style = getComputedStyle(dialog)
+      const cards = Array.from(viewport.querySelectorAll("[data-node-id]"), (card) => card.getBoundingClientRect())
+      return {
+        fillsWidth: Math.abs(frame.width - (dialog.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight))) < 2,
+        fillsHeight: Math.abs(shell.bottom - frame.bottom - parseFloat(style.paddingBottom)) < 3,
+        fitsPath: viewport.scrollWidth <= viewport.clientWidth + 1 &&
+          cards.every((card) => card.left >= frame.left && card.right <= frame.right && card.bottom <= frame.bottom),
+      }
+    })
+    await expect.poll(canvasFit, { timeout: 3_000 }).toEqual({ fillsWidth: true, fillsHeight: true, fitsPath: true })
     await writeFile(
       info.outputPath("nuwa-published-artifact-origins.png"),
-      await page.screenshot({ animations: "disabled" }),
+      await dialog.screenshot({ animations: "disabled" }),
       { mode: 0o600 }
     )
+    await page.setViewportSize({ width: 850, height: 650 })
+    await expect.poll(canvasFit).toEqual({ fillsWidth: true, fillsHeight: true, fitsPath: true })
+    const resultCard = canvas.getByRole("button", { name: new RegExp(workerResult.title) })
+    await resultCard.click()
+    await expect(dialog.getByTestId("nuwa-node-detail")).toBeVisible()
+    await expect.poll(canvasFit).toEqual({ fillsWidth: false, fillsHeight: true, fitsPath: true })
+    await page.setViewportSize({ width: 660, height: 590 })
+    await expect(dialog.getByTestId("nuwa-node-detail")).toBeVisible()
+    await expect.poll(canvasFit).toMatchObject({ fillsWidth: true, fitsPath: true })
+    await page.setViewportSize({ width: 340, height: 590 })
+    await expect.poll(canvasFit).toMatchObject({ fillsWidth: true, fitsPath: false })
+    const scrollLeft = await canvas.evaluate((viewport) => {
+      viewport.scrollLeft = viewport.scrollWidth
+      return viewport.scrollLeft
+    })
+    expect(scrollLeft).toBeGreaterThan(0)
+    await expect(resultCard).toBeInViewport({ ratio: 1, timeout: 3_000 })
     expect(fixture.workerModels.length).toBeGreaterThan(0)
     expect(fixture.errors).toEqual([])
   } finally {

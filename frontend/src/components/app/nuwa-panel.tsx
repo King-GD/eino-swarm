@@ -338,14 +338,19 @@ export function NuwaPanel({
             </section>
           ) : null}
           <Dialog open={graphOpen} onOpenChange={setGraphOpen}>
-            <DialogContent className="flex h-[90vh] max-h-[900px] w-[96vw] max-w-[1200px] flex-col">
+            <DialogContent className="flex h-[90vh] max-h-[900px] w-[96vw] max-w-[1200px] flex-col transition-none">
               <DialogHeader>
                 <DialogTitle>{t("nuwa.path")}</DialogTitle>
                 <DialogDescription>
                   {currentProject?.name ?? t("nuwa.tab")} · {t(effectiveScope === "thread" ? "nuwa.thread" : "nuwa.project")}
                 </DialogDescription>
               </DialogHeader>
-              <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[minmax(0,1fr)_280px]">
+              <div className={cn(
+                "grid min-h-0 flex-1 gap-4",
+                detail
+                  ? "grid-rows-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1fr)_280px] md:grid-rows-[minmax(0,1fr)]"
+                  : "grid-rows-[minmax(0,1fr)]",
+              )}>
                 <NuwaGraph
                   nodes={graphNodes}
                   collapsed={showPruned ? [] : collapsed}
@@ -355,8 +360,8 @@ export function NuwaPanel({
                   onSelect={setSelected}
                   expanded
                 />
-                <div className="thin-scrollbar min-h-0 overflow-y-auto">
-                  {detail ? (
+                {detail ? (
+                  <div className="thin-scrollbar max-h-[32vh] min-h-0 overflow-y-auto md:max-h-none">
                     <NodeDetail
                       key={detail.id}
                       node={detail}
@@ -373,10 +378,8 @@ export function NuwaPanel({
                         await openWorker(worker)
                       }}
                     />
-                  ) : (
-                    <p className="p-3 text-xs text-muted-foreground">{t("nuwa.selectNode")}</p>
-                  )}
-                </div>
+                  </div>
+                ) : null}
               </div>
             </DialogContent>
           </Dialog>

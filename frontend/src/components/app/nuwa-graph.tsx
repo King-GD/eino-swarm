@@ -1,7 +1,7 @@
 import { useId, useMemo, useState } from "react"
-import { ChevronRight, Maximize2, Target } from "lucide-react"
+import { ChevronRight, Maximize2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { compareNuwaRecent, isInactiveNuwaNode, layoutNuwaCollaboration, nuwaPathFocus, nuwaStatusTally, NUWA_GOAL_ID, type NuwaNode, type NuwaWorker } from "@/lib/nuwa"
+import { compareNuwaRecent, isInactiveNuwaNode, layoutNuwaCollaboration, nuwaPathFocus, nuwaStatusTally, type NuwaNode, type NuwaWorker } from "@/lib/nuwa"
 import { MANAGER_ID } from "@/lib/transcript-blocks"
 import { useT } from "@/lib/use-t"
 import { cn } from "@/lib/utils"
@@ -69,7 +69,7 @@ export function NuwaGraph({
   const selectedKind = loose.find((group) => group.records.some((record) => record.id === selected))?.kind
   const kindOpen = (kind: string) => openedKinds.includes(kind) || selectedKind === kind
   const emphasized = (id: string) => !focus || focus.has(id)
-  const hasDependencies = layout.edges.some(({ to }) => to !== NUWA_GOAL_ID)
+  const hasDependencies = layout.edges.length > 0
   const openGroups = loose.filter((group) => kindOpen(group.kind))
   const collapsedOpen = showCollapsed
   const compact = !expanded
@@ -77,8 +77,8 @@ export function NuwaGraph({
   const columnWidth = compact ? 176 : 232
   const columns = 1 + Math.max(0, ...layout.positions.map(({ column }) => column))
   const width = Math.max(280, PAD * 2 + (columns - 1) * columnWidth + cardWidth)
-  // Paths and cards share the same horizontal scale. Deeper graphs can scroll.
-  const minWidth = Math.min(width, columns * 96 + 20)
+  // Fit the available width while keeping a readable minimum for long paths.
+  const minWidth = Math.min(width, columns * (compact ? 96 : 112) + 20)
   const height = Math.max(
     112,
     ...layout.positions.map(({ row }) => PAD * 2 + row * ROW + CARD_HEIGHT)
@@ -88,38 +88,35 @@ export function NuwaGraph({
       className={cn("min-w-0", expanded && "flex min-h-0 flex-1 flex-col")}
       aria-label={t("nuwa.path")}
     >
-      <div className="mb-2 flex items-center justify-between gap-2">
+      {!expanded ? <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="text-xs font-medium text-muted-foreground">{t("nuwa.path")}</h3>
         {onExpand ? (
           <Button variant="ghost" size="icon-xs" aria-label={t("nuwa.expand")} onClick={onExpand}>
             <Maximize2 />
           </Button>
         ) : null}
-      </div>
+      </div> : null}
       {nodes.length ? (<>
-      <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-        {hasDependencies ? (
-          <span className="inline-flex items-center gap-1.5">
-            <span aria-hidden className="w-4 border-t-2 border-muted-foreground" />
-            {t("nuwa.dependencyEdge")}
-          </span>
-        ) : null}
-        <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden className="w-4 border-t-2 border-dashed border-primary/70" />
-          {t("nuwa.goalEdge")}
-        </span>
-      </div>
+      {hasDependencies ? (
+        <div className="mb-2 flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span aria-hidden className="w-4 border-t-2 border-muted-foreground" />
+          {t("nuwa.dependencyEdge")}
+        </div>
+      ) : null}
       <div
         role="region"
         aria-label={t("nuwa.graph")}
         tabIndex={0}
         className={cn(
-          "thin-scrollbar shrink-0 overflow-auto rounded-lg border border-border bg-muted/20",
-          expanded ? "max-h-[70vh]" : "max-h-72"
+          "thin-scrollbar overflow-auto rounded-lg border border-border bg-muted/20",
+          expanded ? "flex min-h-0 flex-1 flex-col" : "max-h-72 shrink-0"
         )}
       >
-        <div className="relative" style={{ width: compact ? `clamp(${minWidth}px, 100%, ${width}px)` : width, height }}>
-          <svg
+        <div
+          className={cn("relative", expanded && "m-auto shrink-0")}
+          style={{ width: `clamp(${minWidth}px, 100%, ${width}px)`, height }}
+        >
+          {hasDependencies ? <svg
             width="100%"
             height={height}
             viewBox={`0 0 ${width} ${height}`}
@@ -143,8 +140,7 @@ export function NuwaGraph({
             {layout.edges.map(({ from, to }) => {
               const a = positions.get(from)!,
                 b = positions.get(to)!
-              const goal = b.node.type === "goal"
-              const active = !focus || (goal ? focus.has(from) : focus.has(from) && focus.has(to))
+              const active = !focus || (focus.has(from) && focus.has(to))
               const x1 = PAD + a.column * columnWidth + cardWidth,
                 y1 = PAD + a.row * ROW + CARD_HEIGHT / 2
               const x2 = PAD + b.column * columnWidth,
@@ -152,7 +148,7 @@ export function NuwaGraph({
               return (
                 <path
                   key={`${from}:${to}`}
-                  data-testid={goal ? "nuwa-goal-edge" : "nuwa-edge"}
+                  data-testid="nuwa-edge"
                   data-from={from}
                   data-to={to}
                   data-emphasis={active ? "active" : "dim"}
@@ -161,14 +157,12 @@ export function NuwaGraph({
                   stroke="currentColor"
                   strokeWidth="1.5"
                   vectorEffect="non-scaling-stroke"
-                  strokeDasharray={goal ? "4 3" : undefined}
                   opacity={active ? 1 : 0.28}
-                  className={goal ? "text-primary/70" : undefined}
                   markerEnd={`url(#${marker})`}
                 />
               )
             })}
-          </svg>
+          </svg> : null}
           {layout.positions.map(({ node, column, row }) => {
             const style = {
               width: `${100 * cardWidth / width}%`,
@@ -177,28 +171,6 @@ export function NuwaGraph({
               top: PAD + row * ROW,
             }
             const active = emphasized(node.id)
-            if (node.type === "goal") {
-              const goalActive = !focus || layout.edges.some((edge) => edge.to === NUWA_GOAL_ID && focus.has(edge.from))
-              return (
-                <div
-                  key={node.id}
-                  data-testid="nuwa-goal"
-                  data-node-id={node.id}
-                  data-emphasis={goalActive ? "active" : "dim"}
-                  className={cn(
-                    "absolute flex flex-col justify-center gap-1 rounded-lg border border-dashed border-primary/50 bg-primary/5 px-3 py-2",
-                    !goalActive && "opacity-35"
-                  )}
-                  style={style}
-                >
-                  <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <Target className="size-3" aria-hidden />
-                    {t("nuwa.goalNode")}
-                  </span>
-                  <span className="truncate text-xs font-medium">{t(conversation ? "nuwa.threadGoal" : "nuwa.goal")}</span>
-                </div>
-              )
-            }
             if (node.type === "loose") {
               const kindLabel = nuwaKind(node.kind, t)
               const expanded = kindOpen(node.kind)
@@ -291,7 +263,7 @@ export function NuwaGraph({
         </Button>
       ) : null}
       {openGroups.length || collapsedOpen && collapsed.length ? (
-        <div className={cn("min-h-0", expanded && "flex-1 overflow-auto")}>
+        <div className={cn("min-h-0", expanded && "max-h-[35%] shrink-0 overflow-y-auto")}>
           {openGroups.map((group) => {
             const kindLabel = nuwaKind(group.kind, t)
             return (

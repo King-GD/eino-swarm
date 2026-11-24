@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { compareNuwaRecent, layoutNuwa, layoutNuwaCollaboration, nuwaLooseGroupID, nuwaPathFocus, nuwaStatusTally, NUWA_GOAL_ID, pruneNuwaNodes, type NuwaNode } from "./nuwa"
+import { compareNuwaRecent, layoutNuwa, layoutNuwaCollaboration, nuwaLooseGroupID, nuwaPathFocus, nuwaStatusTally, pruneNuwaNodes, type NuwaNode } from "./nuwa"
 
 const node = (id: string, depends_on: string[] = [], thread_id = "a", kind = "task"): NuwaNode => ({
   id, kind, title: id, summary: "", status: "pending", depends_on,
@@ -44,15 +44,12 @@ describe("Shared work paths", () => {
     ])
   })
 
-  it("collapses records with no dependency into one goal arrow per kind", () => {
+  it("groups unlinked records and draws only saved dependencies", () => {
     const result = layoutNuwaCollaboration([
       node("task"), node("fact", ["task"], "a", "fact"), node("aside"), node("note"),
     ])
-    const goal = result.positions.find(({ node }) => node.type === "goal")
-    expect(goal).toBeTruthy()
-    const toGoal = result.edges.filter(({ to }) => to === NUWA_GOAL_ID).map(({ from }) => from).sort()
-    expect(toGoal).toEqual([nuwaLooseGroupID("task"), "fact"].sort())
-    expect(result.edges).toContainEqual({ from: "task", to: "fact" })
+    expect(result.positions.map(({ node }) => node.id).sort()).toEqual([nuwaLooseGroupID("task"), "fact", "task"].sort())
+    expect(result.edges).toEqual([{ from: "task", to: "fact" }])
     const loose = result.positions.find(({ node }) => node.type === "loose")
     expect(loose?.node.type === "loose" && loose.node.records.map((record) => record.id).sort()).toEqual(["aside", "note"])
   })
@@ -72,11 +69,7 @@ describe("Shared work paths", () => {
     const groups = result.positions.flatMap(({ node }) => node.type === "loose" ? [[node.kind, node.records.length]] : [])
     expect(cards.sort()).toEqual(["audit", "cve", "loose-task", "matrix", "poc", "verify"])
     expect(groups).toEqual([["fact", 8], ["artifact", 16]])
-    const toGoal = result.edges.filter(({ to }) => to === NUWA_GOAL_ID).map(({ from }) => from).sort()
-    expect(toGoal).toEqual([
-      nuwaLooseGroupID("artifact"), nuwaLooseGroupID("fact"), "loose-task", "poc", "verify",
-    ].sort())
-    expect(result.edges.filter(({ to }) => to !== NUWA_GOAL_ID).sort((a, b) => a.from.localeCompare(b.from))).toEqual([
+    expect(result.edges.sort((a, b) => a.from.localeCompare(b.from))).toEqual([
       { from: "audit", to: "cve" },
       { from: "cve", to: "verify" },
       { from: "matrix", to: "poc" },
@@ -98,7 +91,7 @@ describe("Shared work paths", () => {
     )).toBeGreaterThan(0)
   })
 
-  it("adds no goal node for an empty collaboration graph", () => {
+  it("keeps an empty collaboration graph empty", () => {
     const result = layoutNuwaCollaboration([])
     expect(result.positions).toHaveLength(0)
     expect(result.edges).toHaveLength(0)

@@ -5,7 +5,7 @@ import { NuwaGraph } from "./nuwa-graph"
 import { useApp } from "@/store/app"
 import { useTraceFocus } from "@/store/trace-focus"
 import { nuwaAPI, subscribeNuwa } from "@/lib/nuwa-api"
-import { nuwaLooseGroupID, NUWA_GOAL_ID, type NuwaNode, type NuwaSnapshot } from "@/lib/nuwa"
+import type { NuwaNode, NuwaSnapshot } from "@/lib/nuwa"
 import type { Project } from "@/lib/types"
 import { publishWorkEvent } from "@/lib/nuwa-events"
 
@@ -79,7 +79,9 @@ describe("Nuwa shared work", () => {
     render(<NuwaPanel project={project} threadId="a" onSelectAgent={vi.fn()} />)
     const card = await screen.findByRole("button", { name: /Node legacy/ })
     expect(card).toHaveTextContent("Incomplete basis")
-    expect(screen.queryByTestId("nuwa-goal-edge")).toBeNull()
+    const graph = screen.getByRole("region", { name: "Shared work collaboration graph" })
+    expect(graph.querySelectorAll("[data-node-id]")).toHaveLength(1)
+    expect(within(graph).queryByTestId("nuwa-edge")).toBeNull()
     fireEvent.click(card)
     expect(within(screen.getByTestId("nuwa-node-detail")).getByText("This result is missing a linked active task or reported fact.")).toBeInTheDocument()
   })
@@ -91,7 +93,7 @@ describe("Nuwa shared work", () => {
     expect(screen.getByText("Executor model: executor-model")).toBeInTheDocument()
   })
 
-  it("shows recorder and model on each record and converges isolated records to the goal", async () => {
+  it("groups isolated records and shows each record's recorder and model", async () => {
     mockNuwaSnapshot({
       ...snapshot,
       nodes: [
@@ -106,7 +108,7 @@ describe("Nuwa shared work", () => {
     fireEvent.click(screen.getByRole("button", { name: "Entire project" }))
     const path = await screen.findByRole("region", { name: "Collaboration paths" })
     const graph = within(path).getByRole("region", { name: "Shared work collaboration graph" })
-    // Four isolated results share one row and one dashed arrow, not a card each.
+    // Four isolated results share one expandable row.
     expect(within(graph).queryByTestId("nuwa-origin")).toBeNull()
     expect(within(graph).queryByTestId("nuwa-edge")).toBeNull()
     expect(within(graph).queryByRole("button", { name: /Node right/ })).toBeNull()
@@ -114,10 +116,7 @@ describe("Nuwa shared work", () => {
     expect(group).toHaveAttribute("data-kind", "artifact")
     expect(group).toHaveAttribute("data-count", "4")
     expect(group).toHaveTextContent("4 Pending")
-    expect(within(graph).getByTestId("nuwa-goal")).toBeInTheDocument()
-    const goalEdges = within(graph).getAllByTestId("nuwa-goal-edge")
-    expect(goalEdges.map((edge) => edge.getAttribute("data-from"))).toEqual([nuwaLooseGroupID("artifact")])
-    expect(goalEdges.every((edge) => edge.getAttribute("data-to") === NUWA_GOAL_ID)).toBe(true)
+    expect(graph.querySelectorAll("[data-node-id]")).toHaveLength(1)
     fireEvent.click(group)
     const rightCard = within(path).getByRole("button", { name: /Node right/ })
     expect(rightCard).toHaveAccessibleDescription("Recorded by researcher in turn turn1")
@@ -282,14 +281,13 @@ describe("Nuwa shared work", () => {
     expect(factGroup?.className).toContain("bg-nuwa-fact-bg")
     expect(within(graph).queryByRole("button", { name: /artifact-0/ })).toBeNull()
     expect(within(graph).getAllByTestId("nuwa-edge")).toHaveLength(3)
-    expect(within(graph).getAllByTestId("nuwa-goal-edge")).toHaveLength(5)
     expect(within(graph).getByRole("button", { name: /poc/ })).toHaveAttribute("data-emphasis", "active")
     expect(within(graph).getByRole("button", { name: /matrix/ })).toHaveAttribute("data-emphasis", "active")
     expect(within(graph).getByRole("button", { name: /audit/ })).toHaveAttribute("data-emphasis", "dim")
     expect(within(graph).getByRole("button", { name: /verify/ })).toHaveAttribute("data-emphasis", "dim")
     const pocEdge = within(graph).getAllByTestId("nuwa-edge").find((edge) => edge.getAttribute("data-to") === "poc")
     expect(pocEdge).toHaveAttribute("data-emphasis", "active")
-    const verifyEdge = within(graph).getAllByTestId("nuwa-goal-edge").find((edge) => edge.getAttribute("data-from") === "verify")
+    const verifyEdge = within(graph).getAllByTestId("nuwa-edge").find((edge) => edge.getAttribute("data-to") === "verify")
     expect(verifyEdge).toHaveAttribute("data-emphasis", "dim")
   })
 
