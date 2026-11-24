@@ -79,6 +79,12 @@ and projects sort by last update; drag a row to pin a custom order. On the
 desktop window, drag the title bar to move it; double-click to zoom or
 restore, like Finder.
 
+**Task panels** appears in the inspector when a panel is collecting or has
+published results. Choose **Close panel instance** to remove the selected
+instance from this conversation, including after restart. A running source
+for that instance is interrupted while the conversation continues. Hiding the
+inspector keeps its panels available.
+
 On the Mac, an independent native controller checks actual painted pixels.
 A window that stays one flat colour counts as not painted. It tries one
 reload, then replaces the window on the same engine if needed.

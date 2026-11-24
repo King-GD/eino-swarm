@@ -76,7 +76,7 @@ func TestTaskPanelInvalidCallsReturnRecoverableFeedbackAtModelHTTP(t *testing.T)
 					case "source-missing-panel":
 						toolName, args = "run_panel_source", `{"panel_id":"absent-panel","input":{"query":"fixture"}}`
 					case "source-busy":
-						e.panelRuns.Store(panel.ID, true)
+						e.panelRuns.Store(panel.ID, context.CancelFunc(func() {}))
 						t.Cleanup(func() { e.panelRuns.Delete(panel.ID) })
 						toolName, args = "run_panel_source", fmt.Sprintf(`{"panel_id":%q,"input":{"query":"fixture"}}`, panel.ID)
 					case "source-run-failure":

@@ -35,7 +35,7 @@ func (s *Store) TaskPanelManifests(ctx context.Context, threadID string, limit i
 			}
 			return e
 		}
-		if e := tx.Model(&TaskPanelRow{}).Select("id, thread_id, plugin_id, revision, source_status, json_extract(definition_json, '$.version') AS plugin_version").Where("thread_id = ? AND hidden = ?", threadID, false).Order("created_at, id").Limit(limit + 1).Scan(&out).Error; e != nil {
+		if e := tx.Model(&TaskPanelRow{}).Select("id, thread_id, plugin_id, revision, source_status, json_extract(definition_json, '$.version') AS plugin_version").Where("thread_id = ?", threadID).Where(taskPanelVisibleSQL).Order("created_at, id").Limit(limit + 1).Scan(&out).Error; e != nil {
 			return e
 		}
 		more = len(out) > limit
@@ -49,7 +49,7 @@ func (s *Store) TaskPanelManifests(ctx context.Context, threadID string, limit i
 func (s *Store) TaskPanelReadForTransfer(ctx context.Context, threadID, panelID string, base *int64) (panel taskpanel.Panel, change *taskpanel.Change, err error) {
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var row TaskPanelRow
-		if e := tx.Where("id = ? AND thread_id = ? AND hidden = ? AND EXISTS (SELECT 1 FROM threads WHERE id = ?)", panelID, threadID, false, threadID).Take(&row).Error; e != nil {
+		if e := tx.Where("id = ? AND thread_id = ? AND EXISTS (SELECT 1 FROM threads WHERE id = ?)", panelID, threadID, threadID).Where(taskPanelVisibleSQL).Take(&row).Error; e != nil {
 			if errors.Is(e, gorm.ErrRecordNotFound) {
 				return ErrNotFound
 			}
@@ -94,6 +94,6 @@ func (s *Store) TaskPanelReadForTransfer(ctx context.Context, threadID, panelID 
 // TaskPanelVisible checks lifetime without loading an instance's bulk state.
 func (s *Store) TaskPanelVisible(ctx context.Context, threadID, panelID string) (bool, error) {
 	var count int64
-	err := s.db.WithContext(ctx).Model(&TaskPanelRow{}).Where("id = ? AND thread_id = ? AND hidden = ? AND EXISTS (SELECT 1 FROM threads WHERE id = ?)", panelID, threadID, false, threadID).Count(&count).Error
+	err := s.db.WithContext(ctx).Model(&TaskPanelRow{}).Where("id = ? AND thread_id = ? AND EXISTS (SELECT 1 FROM threads WHERE id = ?)", panelID, threadID, threadID).Where(taskPanelVisibleSQL).Count(&count).Error
 	return count > 0, err
 }

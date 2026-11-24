@@ -48,8 +48,29 @@ func TestTaskPanelHTTPSettingsAndConversationIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.json(http.MethodGet, "/api/threads/"+thread+"/panels/"+panel.ID, nil, http.StatusOK)
+	path := "/api/threads/" + thread + "/panels/" + panel.ID
+	h.json(http.MethodGet, path, nil, http.StatusNotFound)
+	if _, err = h.app.Store.StartTaskPanelSource(t.Context(), panel.Source, panel.ID); err != nil {
+		t.Fatal(err)
+	}
+	h.json(http.MethodGet, path, nil, http.StatusOK)
 	h.json(http.MethodGet, "/api/threads/"+other+"/panels/"+panel.ID, nil, http.StatusNotFound)
+	h.json(http.MethodDelete, "/api/threads/"+other+"/panels/"+panel.ID, nil, http.StatusNotFound)
+	for range 2 {
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, h.srv.URL+path, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response, err := h.srv.Client().Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != http.StatusNoContent {
+			t.Fatal(response.Status)
+		}
+	}
+	h.json(http.MethodGet, path, nil, http.StatusNotFound)
 	h.json(http.MethodGet, "/api/threads/missing/panels", nil, http.StatusNotFound)
 }
 
@@ -117,8 +138,8 @@ func TestTaskPanelSSEDeliversCommittedPatchWithoutChatSequence(t *testing.T) {
 		t.Fatalf("stream ended: %v", scanner.Err())
 		return ""
 	}
-	if !strings.Contains(next(), panel.ID) {
-		t.Fatal("ready snapshot omitted panel")
+	if strings.Contains(next(), panel.ID) {
+		t.Fatal("ready snapshot exposed an instance with only initial state")
 	}
 	changed, err := h.app.Store.PublishTaskPanel(t.Context(), source, taskpanel.Update{ProtocolVersion: 1, PanelID: panel.ID, OperationID: "live-patch", BaseRevision: panel.Revision, Kind: "patch", Operations: json.RawMessage(`[{"op":"replace","path":"/collection/phase","value":"finished"}]`)})
 	if err != nil {

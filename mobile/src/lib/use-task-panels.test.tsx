@@ -7,7 +7,7 @@ import type { TaskPanel } from "../../../frontend/src/task-panels/types"
 
 const calls = vi.hoisted(() => ({ list: vi.fn(), read: vi.fn() }))
 vi.mock("./remote-task-panels", async (original) => ({ ...await original<typeof import("./remote-task-panels")>(), listTaskPanels: calls.list, readTaskPanel: calls.read }))
-const link = () => ({ alive: () => true }) as unknown as RemoteLink
+const link = (rpc = vi.fn()) => ({ alive: () => true, rpc }) as unknown as RemoteLink
 const panel = (id = "p", revision = 1, thread = "t"): TaskPanel => ({ id, thread_id: thread, plugin_id: "demo", plugin_version: "1", revision,
   state: { count: revision }, definition: { id: "demo", version: "1", name: "Demo", description: "Demo", entry: "task-panels/demo.html", schema: {} } })
 const manifest = (value: TaskPanel) => ({ id: value.id, thread_id: value.thread_id, plugin_id: value.plugin_id, plugin_version: value.plugin_version, revision: value.revision })
@@ -125,4 +125,88 @@ it("stops unsupported-host polls and does not read without a bound PC identity",
   expect(view.result.current.supported).toBe(false)
   await act(async () => { vi.advanceTimersByTime(5000) })
   expect(calls.list).toHaveBeenCalledTimes(1)
+})
+
+it("discards a frozen body from before close and keeps the sibling instance", async () => {
+  const rpc = vi.fn().mockResolvedValue({ ok: true })
+  const pc = link(rpc)
+  const first = panel(), sibling = panel("q")
+  calls.list.mockResolvedValue([manifest(first), manifest(sibling)])
+  calls.read.mockResolvedValueOnce({ panel: first }).mockResolvedValueOnce({ panel: sibling })
+  const view = renderHook(() => useTaskPanels(pc, "t", "pc", true))
+  await waitFor(() => expect(view.result.current.panels).toEqual([first, sibling]))
+
+  const newer = panel("p", 2)
+  let sendOldBody!: (value: unknown) => void
+  const body = new Promise((resolve) => { sendOldBody = resolve })
+  calls.list.mockResolvedValueOnce([manifest(newer), manifest(sibling)]).mockResolvedValue([manifest(sibling)])
+  calls.read.mockReturnValueOnce(body)
+  let refresh!: Promise<void>
+  act(() => { refresh = view.result.current.refresh() })
+  await waitFor(() => expect(calls.read).toHaveBeenLastCalledWith(pc, "t", "p", 1, expect.any(AbortSignal)))
+
+  await act(async () => { await view.result.current.closePanel("p") })
+  expect(rpc).toHaveBeenCalledWith({ op: "task_panel_close", thread_id: "t", panel_id: "p" }, expect.anything())
+  expect(view.result.current.panels).toEqual([sibling])
+
+  // Hold the next manifest so it cannot conceal resurrection from the old body.
+  let sendFreshManifest!: (items: ReturnType<typeof manifest>[]) => void
+  calls.list.mockReturnValueOnce(new Promise((resolve) => { sendFreshManifest = resolve }))
+  try {
+    await act(async () => {
+      sendOldBody({ change: { thread_id: "t", panel_id: "p", revision: 2, base_revision: 1, cursor: 2, kind: "patch",
+        operations: [{ op: "replace", path: "/count", value: 2 }] } })
+    })
+    expect(view.result.current.panels).toEqual([sibling])
+    expect(view.result.current.changes.p).toBeUndefined()
+  } finally {
+    await act(async () => { sendFreshManifest([manifest(sibling)]); await refresh })
+  }
+})
+
+it("does not offer the entry when a pre-close manifest arrives after close", async () => {
+  const pc = link(vi.fn().mockResolvedValue({ ok: true }))
+  const first = panel()
+  calls.list.mockResolvedValue([manifest(first)])
+  calls.read.mockResolvedValue({ panel: first })
+  const view = renderHook(() => useTaskPanels(pc, "t", "pc", true))
+  await waitFor(() => expect(view.result.current.panels).toEqual([first]))
+
+  type Manifest = ReturnType<typeof manifest>[]
+  let sendOld!: (items: Manifest) => void
+  let sendFresh!: (items: Manifest) => void
+  calls.list.mockReturnValueOnce(new Promise<Manifest>((resolve) => { sendOld = resolve }))
+    .mockReturnValueOnce(new Promise<Manifest>((resolve) => { sendFresh = resolve }))
+    .mockResolvedValue([])
+  let refresh!: Promise<void>
+  act(() => { refresh = view.result.current.refresh() })
+  await act(async () => { await view.result.current.closePanel(first.id) })
+  expect(view.result.current.available).toBe(false)
+
+  try {
+    // Until the fresh manifest returns, only the close acknowledgement can
+    // prevent the captured listing from bringing back the entry.
+    await act(async () => { sendOld([manifest(first)]) })
+    expect(view.result.current).toMatchObject({ available: false, panels: [] })
+  } finally {
+    await act(async () => { sendFresh([]); await refresh })
+  }
+})
+
+it("does not apply an old PC close acknowledgement to a same-ID instance on the new PC", async () => {
+  let acknowledge!: (response: { ok: boolean }) => void
+  const old = link(vi.fn(() => new Promise((resolve) => { acknowledge = resolve })))
+  const replacement = link()
+  const first = panel(), fresh = panel("p", 2)
+  calls.list.mockImplementation(async (pc) => [manifest(pc === old ? first : fresh)])
+  calls.read.mockImplementation(async (pc) => ({ panel: pc === old ? first : fresh }))
+  const view = renderHook(({ pc, owner }) => useTaskPanels(pc, "t", owner, true), { initialProps: { pc: old, owner: "old" } })
+  await waitFor(() => expect(view.result.current.panels).toEqual([first]))
+
+  let pending!: Promise<void>
+  act(() => { pending = view.result.current.closePanel(first.id) })
+  view.rerender({ pc: replacement, owner: "replacement" })
+  await waitFor(() => expect(view.result.current.panels).toEqual([fresh]))
+  await act(async () => { acknowledge({ ok: true }); await pending })
+  expect(view.result.current.panels).toEqual([fresh])
 })

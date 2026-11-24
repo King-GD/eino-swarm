@@ -51,6 +51,17 @@ no cgo and no system SQLite to install. The file is opened with
 `journal_mode=WAL`, `busy_timeout=5000` and `foreign_keys=1`: WAL is what keeps
 the UI's reads from blocking behind a write-heavy streaming turn.
 
+`task_panel_rows.closed` records a human close for the conversation and instance.
+It defaults to false for existing rows and survives restart, rewind and backup.
+A close atomically persists the marker, interrupts any durable running source,
+and appends a deletion to `task_panel_change_rows`. Presentation uses the
+running source marker or a retained observation in `task_panel_mutations`.
+The indexed `task_panel_mutations.observation` marker lets manifests and transfer
+continuations check visibility without decoding publication bodies. Migration
+classifies existing receipts from their update envelopes. Opening mutations
+have an empty operation ID. Empty patches, including legacy source claims, do
+not count as observations.
+
 Phone preview and live-edge reads use `idx_turn_thread_seq` on
 `turns(thread_id, seq)`, `idx_evt_thread_turn_seq` on
 `events(thread_id, turn_id, seq)` and `idx_evt_thread_turn_kind_seq` on

@@ -76,6 +76,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - Opening PC or Web Models and Speech settings no longer prompts for microphone access. The microphone picker can request access when opened explicitly. (`F-148`, `C-048`)
 - In LOCAL, new conversations with the account source selected start on the original Gateway chat catalog when available. A scoped conversation binding can explicitly set the default model. (`F-171`, `C-040`)
 
+- Desktop, Web and paired phones show a task panel only while its source runs or it has a committed observation. **Close panel instance** persists across visits and restarts and interrupts only that instance's source. (`F-137`, `C-050`)
+
 - A restarted EASM source no longer leaves the panel spinning: loading follows the host's `source_status`, so an interrupted collection stops even though the steps it stored still say running.
 
 - EASM retries only unfinished steps for the same query and keeps earlier valid counts. The summary requires both asset and distinct-IP totals in one valid response. Partial receipts identify the missing count and remain eligible for retry.

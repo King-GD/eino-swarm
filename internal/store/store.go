@@ -86,6 +86,10 @@ func Open(path string) (*Store, error) {
 	if err := db.AutoMigrate(&Project{}, &Thread{}, &Message{}, &Turn{}, &Event{}, &LLMCall{}, &Attachment{}, &Followup{}, &Schedule{}, &ScheduleRun{}, &RemoteDevice{}, &ThreadWakeDecision{}, &ComposerDraft{}, &ComposerDraftBlob{}, &PendingScheduleAnswer{}, &NuwaNode{}, &NuwaRevision{}, &NuwaVerifySlot{}, &TaskPanelRow{}, &TaskPanelMutation{}, &TaskPanelChangeRow{}, &ProjectDistillation{}); err != nil {
 		return nil, fmt.Errorf("store: migrate: %w", err)
 	}
+	if err := backfillTaskPanelObservations(db); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("store: backfill task panel observations: %w", err)
+	}
 	if err := s.ensureThreadOwnership(); err != nil {
 		return nil, err
 	}

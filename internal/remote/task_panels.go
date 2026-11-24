@@ -7,10 +7,10 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/LubyRuffy/eino-swarm/internal/store"
 	"strings"
 
 	"github.com/LubyRuffy/eino-swarm/internal/engine"
+	"github.com/LubyRuffy/eino-swarm/internal/store"
 	"github.com/LubyRuffy/eino-swarm/internal/taskpanel"
 )
 
@@ -103,6 +103,8 @@ func (p *LinkPump) dispatchTaskPanels(req Request) {
 		}
 	case OpTaskPanelRead:
 		resp = p.readTaskPanelLocked(req)
+	case OpTaskPanelClose:
+		resp = p.closeTaskPanelLocked(req)
 	}
 	p.panelMu.Unlock()
 	resp = withHost(resp, p.cfg)
@@ -110,6 +112,22 @@ func (p *LinkPump) dispatchTaskPanels(req Request) {
 		resp = fail(req.ID, p.path, p.sessionID, "too_large", "panel reply exceeds the phone frame limit")
 	}
 	p.reply(resp)
+}
+
+func (p *LinkPump) closeTaskPanelLocked(req Request) Response {
+	if req.PanelID == "" || req.PanelTransferID != "" || req.PanelBaseRevision != nil || req.Offset != 0 {
+		return fail(req.ID, p.path, p.sessionID, "bad_request", "invalid panel close request")
+	}
+	if err := requireStartupReady(p.eng, req.Op); err != nil {
+		return mapErr(req.ID, p.path, p.sessionID, err)
+	}
+	if err := p.eng.CloseTaskPanel(context.Background(), req.ThreadID, req.PanelID); err != nil {
+		return mapErr(req.ID, p.path, p.sessionID, err)
+	}
+	if transfer := p.panelTransfer; transfer != nil && transfer.threadID == req.ThreadID && transfer.panelID == req.PanelID {
+		p.panelTransfer = nil
+	}
+	return okBase(req.ID, p.path, p.sessionID)
 }
 
 func (p *LinkPump) readTaskPanelLocked(req Request) Response {

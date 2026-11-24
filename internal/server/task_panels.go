@@ -19,6 +19,7 @@ func (s *Server) registerTaskPanels(api *gin.RouterGroup) {
 	api.GET("/threads/:id/panels", s.getTaskPanels)
 	api.GET("/threads/:id/panels/events", s.streamTaskPanels)
 	api.GET("/threads/:id/panels/:panel", s.getTaskPanel)
+	api.DELETE("/threads/:id/panels/:panel", s.closeTaskPanel)
 }
 
 func (s *Server) getTaskPanelCatalog(c *gin.Context) {
@@ -102,12 +103,20 @@ func (s *Server) getTaskPanels(c *gin.Context) {
 }
 
 func (s *Server) getTaskPanel(c *gin.Context) {
-	panel, err := s.engine.Store().TaskPanel(c.Request.Context(), c.Param("id"), c.Param("panel"))
+	panel, err := s.engine.Store().VisibleTaskPanel(c.Request.Context(), c.Param("id"), c.Param("panel"))
 	if err != nil {
 		s.taskPanelReadError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, panel)
+}
+
+func (s *Server) closeTaskPanel(c *gin.Context) {
+	if err := s.engine.CloseTaskPanel(c.Request.Context(), c.Param("id"), c.Param("panel")); err != nil {
+		s.taskPanelReadError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func (s *Server) taskPanelReadError(c *gin.Context, err error) {

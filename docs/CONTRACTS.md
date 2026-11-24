@@ -899,7 +899,8 @@ multimodal System messages and a second refusal do not authorize another retry.
 ## C-050 Task panels preserve instance, state and producer identity
 
 - 状态：active；类型：API/schema/lifecycle；关联功能：`F-137`。面板由会话拥有，版本化快照/JSON Patch原子提交状态、幂等回执和独立投递游标；先持久化后通知。重复操作返回原回执，冲突/非法状态不写入。来源只能来自真实运行时，插件不直接获取凭据或执行工具。
-- HTML/JS代码随构建发布，版本/Schema不兼容时拒绝加载；增量更新不重载iframe，缺口以快照修复。关闭面板不停止任务；Stop与启动孤儿恢复以精确来源记录中断，不自动重复外部操作。回退重建状态并递增版本，删除会话后迟到写入不得重建数据。FOFA例子的地理数据为采集来源报告，验活只表示本次HTTP观察。
+- HTML/JS代码随构建发布，版本/Schema不兼容时拒绝加载；增量更新不重载iframe，缺口以快照修复。隐藏检查器或退出手机面板页面只改变展示；Stop与启动孤儿恢复以精确来源记录中断，不自动重复外部操作。回退重建状态并递增版本，删除会话后迟到写入不得重建数据。FOFA例子的地理数据为采集来源报告，验活只表示本次HTTP观察。
+- 宿主只展示数据源正在运行或有已提交观测的实例。初始快照和空补丁不计为观测，已提交的零结果保留。显式关闭按会话与实例持久保存，原子写入删除通知并结算其运行中来源，提交后仅取消该实例的数据源。会话任务继续，迟到更新和重复打开不能恢复已关闭实例；目录插件统一适用。
 - 注册source运行期间以完整来源身份独占新写入，其他发布者冲突，历史相同操作仍可读原回执。面板恢复失败只阻止所属会话执行，其他会话继续恢复并聚合报告。浏览器按面板版本与删除游标合并快照，发送版本不能冒充插件已应用确认，隐藏期间的失败仍须保留重同步。
-- 配对手机复用随包插件与iframe协议，仅经加密Pairlink读取；不访问PC的Gin接口，不执行采集。每连接至多一份64MiB不可变传输，以36KiB原字节分块，完整身份/版本/offset/hash校验后才应用。旧token取消不能删除后继传输，新manifest不改变在途字节；PC/会话/数据库代次切换隔离迟到响应。关闭手机面板仅隐藏展示，保留缩放；恢复读取不重做外部操作。超限明确报错，不静默裁剪。
+- 配对手机复用随包插件与iframe协议，仅经加密Pairlink读取；不访问PC的Gin接口，不执行采集。每连接至多一份64MiB不可变传输，以36KiB原字节分块，完整身份/版本/offset/hash校验后才应用。旧token取消不能删除后继传输，新manifest不改变在途字节；PC/会话/数据库代次切换隔离迟到响应。返回手机会话仅隐藏展示，保留缩放；关闭实例使用配对链路的独立操作；恢复读取不重做外部操作。超限明确报错，不静默裁剪。
 - 证据：实现 `internal/taskpanel/protocol.go`、`internal/store/task_panels.go`、`internal/engine/task_panels.go`、`internal/server/task_panels.go`、`internal/panelplugins/fofaworld`、`frontend/src/task-panels`；验证 `models/panels/TaskPanel.tla`、`internal/engine/task_panel_http_test.go`、`internal/server/task_panels_test.go`。详细约定见[Task panels](TASK_PANELS.md)；变更类型：Added。

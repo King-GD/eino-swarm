@@ -116,7 +116,7 @@ type Engine struct {
 	// remoteRoutes holds this turn's progressive catalog names until the
 	// manager run copies them into its context. They are not persisted.
 	remoteRoutes sync.Map
-	panelRuns    sync.Map // one registered source per panel instance
+	panelRuns    sync.Map // panel instance → registered source cancel function
 
 	// now is the wall clock the ticker reads. Tests install a fake so a
 	// wait does not sleep a real cadence. Default is time.Now.

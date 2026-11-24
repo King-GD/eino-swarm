@@ -2,7 +2,7 @@
 
 Task panels are bundled HTML/JS applications. Each panel owns its layout and may use D3, Canvas or another bundled library. The host supplies conversation identity, versioned data and appearance; it does not interpret business fields. Desktop and Web use the same implementation. This is the local Task Panel Protocol v1, not a claim of MCP Apps compatibility.
 
-The paired mobile app bundles the same plugin HTML/JS and iframe host. A PC conversation with a panel gains a Task panels button and opens the first available panel once. The phone uses a full-screen sheet with touch interaction and multiple-panel selection; closing it preserves the frame and zoom without stopping the PC task. A replacement connection to the same PC/thread/database generation retains the last validated projection data while fencing old RPC replies; the source is not restarted. A conversation without a panel has no panel entry. PC selection, conversation selection and database-generation changes invalidate old reads. A phone-only direct-model chat does not run the PC's registered sources.
+The paired mobile app bundles the same plugin HTML/JS and iframe host. A PC conversation with a visible instance gains a Task panels button and opens the first available panel once. The phone uses a full-screen sheet with touch interaction and multiple-panel selection. Returning to the conversation preserves the frame and zoom. **Close panel instance** removes the selected instance persistently on every client and interrupts its own running source while the PC task continues. A replacement connection to the same PC/thread/database generation retains the last validated projection data while fencing old RPC replies; the source is not restarted. A conversation without a panel has no panel entry. PC selection, conversation selection and database-generation changes invalidate old reads. A phone-only direct-model chat does not run the PC's registered sources.
 
 ## Using the example
 
@@ -68,7 +68,14 @@ A running registered source exclusively owns new writes to its panel using its c
 
 The host transfers one MessageChannel after verifying the iframe window identity. Version/patch capability negotiation precedes data delivery; plugins acknowledge applied revisions. A patch with the wrong base requests a snapshot. Failed callbacks allow a bounded resynchronization; startup/apply timeout surfaces a local error with explicit retry. Hidden panes do not accumulate an unbounded render queue and catch up from current state when shown.
 
-Read endpoints: `GET /api/task-panels/catalog`, `GET /api/threads/:id/panels`, `GET /api/threads/:id/panels/:panel`. Browser clients opt into `GET /api/threads/:id/events?panels=1`: this existing conversation SSE carries named `panel_ready`, `panel_update` and `panel_error` frames alongside chat. Panel frames never set SSE id; their monotonic cursor remains inside the body and cannot overwrite chat Last-Event-ID. Reusing the physical connection leaves HTTP/1 connection capacity for two-window draft saves. Legacy chat clients are unchanged. Explicit API consumers may use `GET /api/threads/:id/panels/events`, starting with `ready {panels,cursor}` from one atomic read. Reconnect repairs from a fresh snapshot without rerunning tools.
+An instance becomes visible when a source starts or a publication commits an
+observation. The open receipt, initial snapshot and empty ownership patches
+supply no observation. A committed data snapshot can explicitly report zero
+even if its bytes match the initial state. An empty instance disappears when
+its source finishes or is recovered as interrupted. The host applies this rule
+to all catalog entries. Updates and reconnects keep the user's tab selection.
+
+Read endpoints: `GET /api/task-panels/catalog`, `GET /api/threads/:id/panels`, `GET /api/threads/:id/panels/:panel`. `DELETE /api/threads/:id/panels/:panel` closes one instance persistently. Browser clients opt into `GET /api/threads/:id/events?panels=1`: this existing conversation SSE carries named `panel_ready`, `panel_update` and `panel_error` frames alongside chat. Panel frames never set SSE id; their monotonic cursor remains inside the body and cannot overwrite chat Last-Event-ID. Reusing the physical connection leaves HTTP/1 connection capacity for two-window draft saves. Legacy chat clients are unchanged. Explicit API consumers may use `GET /api/threads/:id/panels/events`, starting with `ready {panels,cursor}` from one atomic read. Reconnect repairs from a fresh snapshot without rerunning tools.
 
 ### Paired mobile transport
 
@@ -76,7 +83,7 @@ Mobile data uses the existing sealed Pairlink connection, never the PC's Gin HTT
 
 The reply's `panel_transfer` contains `{id,thread_id,panel_id,revision,size,sha256,offset,next_offset,data,more}`. Each `data` is base64 of at most 36KiB, within the 64KiB sealed frame. The complete JSON envelope is limited to 64MiB, including its definition. Continuations use `task_panel_read {thread_id,panel_id,transfer_id,offset}`. All chunks retain the same identity, revision, size and SHA-256. The phone checks ordering and the complete hash/JSON/identity before applying data. It never renders a partial body, changes chat seq, loads HTML from the PC, or invokes a producer.
 
-Each connection owns one frozen transfer. A successful new first read replaces it; failed first reads retain the previous valid transfer. `task_panel_cancel {thread_id,panel_id,transfer_id}` releases only that exact transfer; old cancellation cannot remove a successor. Link close releases the cache. Invalid scope/offset, expired tokens and oversized replies fail explicitly; the manifest is never silently clipped. Continuations verify visibility using a narrow metadata query rather than copying the entire live state again.
+Each connection owns one frozen transfer. A successful new first read replaces it; failed first reads retain the previous valid transfer. `task_panel_cancel {thread_id,panel_id,transfer_id}` releases only that exact transfer; old cancellation cannot remove a successor. Link close releases the cache. `task_panel_close {thread_id,panel_id}` closes the host instance and invalidates its transfer. A closed instance refuses later publication or reopening. Invalid scope/offset, expired tokens and oversized replies fail explicitly; the manifest is never silently clipped. Continuations verify visibility using a narrow metadata query rather than copying the entire live state again.
 
 Manifests continue while the sheet is closed, but after initial discovery hidden panels do not start more bulk reads. Reopening reads the latest committed version. Failed patch application falls back to a complete snapshot; an older PC that returns `unknown_op` simply has no panel entry. The transfer limit is not acceptance of 64MiB per panel across an arbitrary number of mounted mobile plugins; large multi-panel memory and device performance require separate measurement.
 
@@ -142,6 +149,11 @@ The renderer shows the graph, attention trend and component table and keeps all 
 ## Validation
 
 `go test -race ./internal/taskpanel ./internal/store ./internal/panelplugins/fofaworld ./internal/panelplugins/easm ./internal/engine ./internal/server` covers protocol, storage, producer and real model/HTTP boundaries. Producer fixtures include the real installed CLI against a loopback fake FOFA API and local HTTP/HTTPS targets: no real account or public asset is needed. `make model-check` includes task-panel ownership, commit-before-delivery, idempotency, cleanup identity and orphan-recovery counterexamples. EASM producer tests use a fake tool caller per aggregation plus merge fixtures (incremental batches, confirmation, unknown parents, subject reset, domain budget, certificates) and one engine test through the real model → two `run_panel_source` calls → MCP streamable HTTP boundary; every published state is validated against the catalog schema, and an already stored panel of the previous pipeline still validates. `frontend/e2e/easm.spec.ts` drives the native renderer with served panel state and real SSE patches, including a restart whose stored steps still say running while the host reports the source interrupted. Frontend unit tests and the task-panel Playwright case exercise the packaged iframe, incremental map, zoom retention, full snapshots, version refusal and failed-plugin handling. Native desktop acceptance remains a separate ci-macOS gate.
+
+The [instance close audit](../models/panels/README.md#instance-close-audit)
+checks the commit, scoped cancellation, acknowledgement and asynchronous
+delivery boundaries. It pairs each modeled rule with a Store, engine, sealed
+transport or client regression.
 
 The [model mapping and bounds](../models/panels/README.md) cover competing writers, source ownership, per-conversation recovery isolation, snapshot/SSE crossings, iframe acknowledgements and probe receipt cancellation. These checks prove finite protocol properties under their stated assumptions; they do not replace implementation race tests, native acceptance or establish that every possible failure is absent.
 

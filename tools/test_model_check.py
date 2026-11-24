@@ -41,9 +41,12 @@ def family_cases(model: mc.Model) -> list[mc.Case]:
 
 
 class CaseTable(unittest.TestCase):
-    def test_easm_protocol_models_remain_in_the_full_suite(self):
+    def test_panel_protocol_models_remain_in_the_full_suite(self):
         # Removing a whole family would evade checks which only iterate MODELS.
         for name, filename in (("panel-mcp-admission", "PanelMCPAdmission.tla"),
+                               ("panel-instance", "PanelInstance.tla"),
+                               ("panel-close-ordering", "PanelCloseOrdering.tla"),
+                               ("panel-close-delivery", "PanelCloseDelivery.tla"),
                                ("easm-collection", "EASMCollection.tla"),
                                ("easm-collection-interleaving", "EASMCollection.tla")):
             with self.subTest(model=name):
@@ -130,7 +133,9 @@ class RegistrationGuards(unittest.TestCase):
                      "panel-projection-omitted",
                      "panel-ownership-steal", "panel-ownership-recovery",
                      "panel-producer-stop", "panel-producer-early-return",
-                     "panel-producer-origin-identity"):
+                     "panel-producer-origin-identity",
+                     "panel-close-ordering-rollback", "panel-close-ordering-publication",
+                     "panel-close-delivery-stale-payload", "panel-close-delivery-stale-ack"):
             remaining = [c for c in mc.CASES if c.name != name]
             with self.subTest(case=name):
                 self.assert_case_table_fails("test_every_switch_is_shown_to_break_an_invariant", remaining)
@@ -141,6 +146,7 @@ class RegistrationGuards(unittest.TestCase):
                      "panel-projection-reach-new-panel", "panel-ownership-reach-recovery",
                      "panel-projection-reach-omitted",
                      "panel-producer-reach-stop", "reach-refused-panel-recovery",
+                     "panel-close-ordering-reach-crash", "panel-close-delivery-reach-ack-crossing",
                      "mobile-panel-reach-snapshot", "mobile-panel-reach-patch", "mobile-panel-reach-visit", "mobile-panel-reach-refresh"):
             remaining = [c for c in mc.CASES if c.name != name]
             with self.subTest(case=name):

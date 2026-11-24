@@ -58,6 +58,7 @@ const (
 	OpTaskPanels          = "task_panels"
 	OpTaskPanelRead       = "task_panel_read"
 	OpTaskPanelCancel     = "task_panel_cancel"
+	OpTaskPanelClose      = "task_panel_close"
 	OpTranslateSelection  = "translate_selection"
 	OpCancelTranslation   = "cancel_translation"
 	OpRefreshCapabilities = "refresh_capabilities"

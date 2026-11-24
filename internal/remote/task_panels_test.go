@@ -38,11 +38,38 @@ func phonePanelFixture(t *testing.T) (*engine.Engine, taskpanel.Panel, taskpanel
 // Exercise sealed pairlink frames and the production dispatcher, rather than
 // calling an HTTP handler that the phone cannot reach.
 func TestPhoneTaskPanelManifestUsesExistingSealedLink(t *testing.T) {
-	e, panel, _ := phonePanelFixture(t)
+	e, panel, source := phonePanelFixture(t)
 	relay := newFollowupRelay(t, e)
-	got := relay.rpc(t, Request{ID: "task-panel-manifest", Op: "task_panels", ThreadID: panel.ThreadID})
-	if !got.OK || got.TaskPanels == nil || len(*got.TaskPanels) != 1 {
-		t.Fatalf("paired phone cannot read panel manifest: %+v", got)
+	list := func(id string, want int) {
+		t.Helper()
+		got := relay.rpc(t, Request{ID: id, Op: OpTaskPanels, ThreadID: panel.ThreadID})
+		if !got.OK || got.TaskPanels == nil || len(*got.TaskPanels) != want {
+			t.Fatalf("manifest %s: %+v", id, got)
+		}
+	}
+	list("initial-state-only", 0)
+	panel = phonePanelPublish(t, e, panel, source, "observed-zero", map[string]any{"count": 0})
+	list("zero-is-an-observation", 1)
+	first := relay.rpc(t, Request{ID: "read-zero", Op: OpTaskPanelRead, ThreadID: panel.ThreadID, PanelID: panel.ID})
+	panelChunkBytes(t, first)
+	if got := relay.rpc(t, Request{ID: "foreign-close", Op: OpTaskPanelClose, ThreadID: "other", PanelID: panel.ID}); got.OK || got.Code != "not_found" {
+		t.Fatalf("foreign close succeeded: %+v", got)
+	}
+	if got := relay.rpc(t, Request{ID: "transfer-is-not-an-instance", Op: OpTaskPanelClose, ThreadID: panel.ThreadID, PanelID: panel.ID, PanelTransferID: first.PanelTransfer.ID}); got.OK || got.Code != "bad_request" {
+		t.Fatalf("close accepted a transfer token: %+v", got)
+	}
+	e.BeginRestore()
+	if got := relay.rpc(t, Request{ID: "close-during-restore", Op: OpTaskPanelClose, ThreadID: panel.ThreadID, PanelID: panel.ID}); got.OK || got.Code != "restoring" {
+		t.Fatalf("close admitted during restore: %+v", got)
+	}
+	e.FinishRestore()
+	if got := relay.rpc(t, Request{ID: "close", Op: OpTaskPanelClose, ThreadID: panel.ThreadID, PanelID: panel.ID}); !got.OK {
+		t.Fatalf("close failed: %+v", got)
+	}
+	list("closed", 0)
+	got := relay.rpc(t, Request{ID: "frozen-transfer", Op: OpTaskPanelRead, ThreadID: panel.ThreadID, PanelID: panel.ID, PanelTransferID: first.PanelTransfer.ID})
+	if got.OK || got.Code != "transfer_expired" {
+		t.Fatalf("closed transfer was revived: %+v", got)
 	}
 }
 
@@ -178,7 +205,7 @@ func TestPhoneTaskPanelEmptyAndOversizedManifestsAreExplicit(t *testing.T) {
 	var rows []store.TaskPanelRow
 	for i := range 160 {
 		definition, _ := json.Marshal(taskpanel.Definition{Version: strings.Repeat("v", 512)})
-		rows = append(rows, store.TaskPanelRow{ID: fmt.Sprintf("manifest-%d", i), ThreadID: panel.ThreadID, PluginID: fmt.Sprintf("manifest-plugin-%d", i), DefinitionJSON: definition, Revision: 1})
+		rows = append(rows, store.TaskPanelRow{ID: fmt.Sprintf("manifest-%d", i), ThreadID: panel.ThreadID, PluginID: fmt.Sprintf("manifest-plugin-%d", i), DefinitionJSON: definition, Revision: 1, SourceStatus: "running"})
 	}
 	if err = e.Store().DB().CreateInBatches(rows, 32).Error; err != nil {
 		t.Fatal(err)

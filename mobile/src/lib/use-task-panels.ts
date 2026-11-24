@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { applyJsonPatch } from "../../../frontend/src/task-panels/json-patch"
 import type { PanelChange, TaskPanel } from "../../../frontend/src/task-panels/types"
 import type { RemoteLink } from "./link"
-import { listTaskPanels, readTaskPanel, TaskPanelReadError } from "./remote-task-panels"
+import { closeTaskPanel, listTaskPanels, readTaskPanel, TaskPanelReadError } from "./remote-task-panels"
 
 type Scope = { link: RemoteLink | undefined; threadId: string; ownerKey: string }
 type State = Scope & {
@@ -10,6 +10,8 @@ type State = Scope & {
   changes: Record<string, PanelChange>
   loading: boolean
   error?: string
+  closeError?: boolean
+  closingPanelId?: string
   supported: boolean
   available: boolean
   connected: boolean
@@ -30,6 +32,8 @@ export function useTaskPanels(link: RemoteLink | undefined, threadId: string, ow
   latestState.current = state
   const refreshRef = useRef<() => Promise<void>>(async () => undefined)
   const refresh = useCallback(() => refreshRef.current(), [])
+  const closeRef = useRef<(id: string) => Promise<void>>(async () => undefined)
+  const closePanel = useCallback((id: string) => closeRef.current(id), [])
 
   useEffect(() => {
     const scope = { link, threadId, ownerKey }
@@ -37,13 +41,17 @@ export function useTaskPanels(link: RemoteLink | undefined, threadId: string, ow
     const retained = sameBinding(previous, scope)
     if (!link || !threadId || !ownerKey) {
       setState(retained ? { ...previous, ...scope, connected: false, loading: false } : blank(scope)); refreshRef.current = async () => undefined
+      closeRef.current = async () => undefined
       return
     }
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | undefined
     let pending: Promise<void> | undefined
     let again = false, unsupported = false
+    let closingPanelId: string | undefined
+    const closed = new Set<string>()
     let panels: TaskPanel[] = retained ? previous.panels : [], changes: Record<string, PanelChange> = retained ? previous.changes : {}
+    let ids = new Set(panels.map((panel) => panel.id))
     const current = () => !controller.signal.aborted && sameScope(scope, active.current)
     const update = (value: Partial<State>) => { if (current()) setState((old) => ({ ...(sameScope(old, scope) ? old : blank(scope)), ...value })) }
     const tick = async (): Promise<void> => {
@@ -56,14 +64,15 @@ export function useTaskPanels(link: RemoteLink | undefined, threadId: string, ow
           if (!link?.alive()) { update({ connected: false, loading: false }); return }
           update({ loading: panels.length === 0, connected: true })
           try {
-            const manifest = await listTaskPanels(link, threadId, controller.signal)
+            const manifest = (await listTaskPanels(link, threadId, controller.signal)).filter((panel) => !closed.has(panel.id))
             if (!current()) return
-            const ids = new Set(manifest.map((panel) => panel.id))
+            ids = new Set(manifest.map((panel) => panel.id))
             panels = panels.filter((panel) => ids.has(panel.id))
             changes = Object.fromEntries(Object.entries(changes).filter(([id]) => ids.has(id)))
             update({ panels, changes, available: manifest.length > 0, supported: true, error: undefined })
             for (const item of manifest) {
               if (!current()) return
+              if (closed.has(item.id)) continue
               const before = panels.find((panel) => panel.id === item.id)
               if ((before && before.revision >= item.revision) || (!shown.current && panels.length > 0)) continue
               let payload = await readTaskPanel(link, threadId, item.id, before?.revision, controller.signal)
@@ -83,6 +92,7 @@ export function useTaskPanels(link: RemoteLink | undefined, threadId: string, ow
                   panel = payload.panel
                 }
               }
+              if (closed.has(item.id)) continue
               if (panel.revision < (before?.revision ?? 0)) throw new TaskPanelReadError("invalid_panel_data", "Panel revision went backwards")
               panels = before ? panels.map((old) => old.id === item.id ? panel : old) : [...panels, panel]
               changes = payload.change ? { ...changes, [item.id]: payload.change } : Object.fromEntries(Object.entries(changes).filter(([id]) => id !== item.id))
@@ -104,11 +114,31 @@ export function useTaskPanels(link: RemoteLink | undefined, threadId: string, ow
     }
     setState({ ...blank(scope), panels, changes, available: retained && previous.available })
     refreshRef.current = tick
+    closeRef.current = async (id) => {
+      if (!current() || closingPanelId || !panels.some((panel) => panel.id === id)) return
+      closingPanelId = id
+      update({ closingPanelId, closeError: undefined })
+      try {
+        await closeTaskPanel(link, threadId, id, controller.signal)
+        if (!current()) return
+        closed.add(id)
+        ids.delete(id)
+        panels = panels.filter((panel) => panel.id !== id)
+        changes = Object.fromEntries(Object.entries(changes).filter(([panelId]) => panelId !== id))
+        update({ panels, changes, available: ids.size > 0 })
+        void tick()
+      } catch {
+        update({ closeError: true })
+      } finally {
+        closingPanelId = undefined
+        update({ closingPanelId })
+      }
+    }
     void tick()
     return () => { controller.abort(); clearTimeout(timer) }
   }, [link, threadId, ownerKey])
 
   useEffect(() => { if (visible) void refresh() }, [visible, refresh])
   const value = sameBinding(state, active.current) ? state : blank(active.current)
-  return { ...value, connected: sameScope(value, active.current) && value.connected && Boolean(link?.alive()), refresh }
+  return { ...value, connected: sameScope(value, active.current) && value.connected && Boolean(link?.alive()), refresh, closePanel }
 }

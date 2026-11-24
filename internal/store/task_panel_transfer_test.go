@@ -12,13 +12,16 @@ import (
 func TestTaskPanelTransferSelectsOnlyExactCurrentPatch(t *testing.T) {
 	f := newPanelFixture(t)
 	opened := f.open(t)
-	snapshot, change, err := f.s.TaskPanelReadForTransfer(t.Context(), f.thread.ID, opened.ID, nil)
-	if err != nil || change != nil || snapshot.ID != opened.ID || string(snapshot.State) != string(opened.State) {
-		t.Fatal(snapshot, change, err)
+	if _, _, err := f.s.TaskPanelReadForTransfer(t.Context(), f.thread.ID, opened.ID, nil); !errors.Is(err, ErrNotFound) {
+		t.Fatal(err)
 	}
 	updated, err := f.s.PublishTaskPanel(t.Context(), f.src, f.update(opened, "new", 1))
 	if err != nil {
 		t.Fatal(err)
+	}
+	snapshot, change, err := f.s.TaskPanelReadForTransfer(t.Context(), f.thread.ID, opened.ID, nil)
+	if err != nil || change != nil || snapshot.ID != updated.ID || string(snapshot.State) != string(updated.State) {
+		t.Fatal(snapshot, change, err)
 	}
 	_, change, err = f.s.TaskPanelReadForTransfer(t.Context(), f.thread.ID, opened.ID, &opened.Revision)
 	if err != nil || change == nil || change.Kind != "patch" || change.BaseRevision != opened.Revision || change.Revision != updated.Revision {
@@ -79,6 +82,9 @@ func TestTaskPanelTransferWithoutCurrentJournalOrDefinitionOpeningFallsBack(t *t
 func TestTaskPanelManifestOmitsBulkAndVisibleCheckTracksLifetime(t *testing.T) {
 	f := newPanelFixture(t)
 	opened := f.open(t)
+	if _, err := f.s.StartTaskPanelSource(t.Context(), f.src, opened.ID); err != nil {
+		t.Fatal(err)
+	}
 	rows, more, err := f.s.TaskPanelManifests(t.Context(), f.thread.ID, 1)
 	if err != nil || more || len(rows) != 1 || rows[0].PluginVersion != f.def.Version {
 		t.Fatal(rows, more, err)
@@ -95,7 +101,11 @@ func TestTaskPanelManifestOmitsBulkAndVisibleCheckTracksLifetime(t *testing.T) {
 	}
 	second := f.def
 	second.ID = "other"
-	if _, err = f.s.OpenTaskPanel(t.Context(), second, f.src); err != nil {
+	other, err := f.s.OpenTaskPanel(t.Context(), second, f.src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.s.StartTaskPanelSource(t.Context(), f.src, other.ID); err != nil {
 		t.Fatal(err)
 	}
 	if rows, more, err = f.s.TaskPanelManifests(t.Context(), f.thread.ID, 1); err != nil || !more || len(rows) != 2 {

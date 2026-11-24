@@ -2,7 +2,7 @@ import { sha256 } from "@noble/hashes/sha2.js"
 import catalog from "../../../frontend/src/task-panels/catalog.json"
 import type { PanelChange, TaskPanel } from "../../../frontend/src/task-panels/types"
 import { bytesToHex } from "./bytes"
-import { OpTaskPanelCancel, OpTaskPanelRead, OpTaskPanels, type RemoteRequest, type RemoteResponse } from "./rpc"
+import { OpTaskPanelCancel, OpTaskPanelClose, OpTaskPanelRead, OpTaskPanels, type RemoteRequest, type RemoteResponse } from "./rpc"
 
 type Request = Omit<RemoteRequest, "v" | "id">
 type Transfer = { id: string; threadId: string; panelId: string; revision: number; bytes: Uint8Array; sha256: string }
@@ -83,12 +83,20 @@ export function resetMockTaskPanels() {
 export function releaseMockTaskPanels(owner: object) { transfers.delete(owner) }
 
 export function mockTaskPanelRPC(owner: object, request: Request, threadExists: boolean): Partial<RemoteResponse> | undefined {
-  if (![OpTaskPanels, OpTaskPanelRead, OpTaskPanelCancel].includes(request.op)) return
+  if (![OpTaskPanels, OpTaskPanelRead, OpTaskPanelCancel, OpTaskPanelClose].includes(request.op)) return
   initialize()
   const error = (code: string): Partial<RemoteResponse> => ({ ok: false, code, error: code })
   if (!threadExists) return error("not_found")
   if (request.op === OpTaskPanels) return { task_panels: [...panels.values()].filter((panel) => panel.thread_id === request.thread_id).map(({ id, thread_id, plugin_id, plugin_version, revision, source_status }) => ({ id, thread_id, plugin_id, plugin_version, revision, source_status })) }
   let transfer = transfers.get(owner)
+  if (request.op === OpTaskPanelClose) {
+    const panel = panels.get(request.panel_id ?? "")
+    if (!panel || panel.thread_id !== request.thread_id) return error("not_found")
+    panels.delete(panel.id)
+    changes.delete(panel.id)
+    if (transfer?.panelId === panel.id) transfers.delete(owner)
+    return { ok: true }
+  }
   if (request.transfer_id) {
     if (!transfer || transfer.id !== request.transfer_id || transfer.threadId !== request.thread_id || transfer.panelId !== request.panel_id) return error("transfer_expired")
     if (request.op === OpTaskPanelCancel) { transfers.delete(owner); return { ok: true } }

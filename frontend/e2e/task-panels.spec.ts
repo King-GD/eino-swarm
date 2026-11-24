@@ -136,3 +136,32 @@ test("two map windows leave HTTP connections available for durable draft saves",
     }
   } finally { await other.close() }
 })
+
+test("closing a panel instance removes its tab and preserves the conversation on reload", async ({ page }) => {
+  const title = `Close panel ${Date.now()}`
+  const { thread } = await (await page.request.post("/api/threads", { data: { title } })).json()
+  const panel = { id: "close-map", thread_id: thread.id, plugin_id: definition.id, plugin_version: definition.version,
+    revision: 1, definition, state: definition.initial_state }
+  let closed = false
+  await page.route(`**/api/threads/${thread.id}/panels`, (route) => route.fulfill({ json: { panels: closed ? [] : [panel], cursor: closed ? 2 : 1 } }))
+  await page.route(`**/api/threads/${thread.id}/panels/${panel.id}`, (route) => {
+    expect(route.request().method()).toBe("DELETE")
+    closed = true
+    return route.fulfill({ status: 204 })
+  })
+  const selectThread = async () => {
+    await page.getByTestId("dest-chats").click()
+    await page.getByRole("button", { name: title, exact: true }).click()
+  }
+  await page.goto("/")
+  await selectThread()
+  const tab = page.getByRole("tab", { name: "Task panels", exact: true })
+  await expect(tab).toHaveAttribute("aria-selected", "true")
+  await page.getByRole("button", { name: "Close panel instance" }).click()
+  await expect(tab).toHaveCount(0)
+  await expect(composer(page)).toBeEditable()
+  await page.reload()
+  await selectThread()
+  await expect(tab).toHaveCount(0)
+  await expect(composer(page)).toBeEditable()
+})

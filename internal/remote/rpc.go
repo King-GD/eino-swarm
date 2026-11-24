@@ -80,7 +80,7 @@ func dispatch(eng *engine.Engine, cfg config.RemoteConfig, stage *Staging, req R
 		return fail(req.ID, path, sessionID, "not_found", "task not found")
 	case OpTaskPanels:
 		return handleTaskPanels(eng, req, path, sessionID)
-	case OpTaskPanelRead, OpTaskPanelCancel:
+	case OpTaskPanelRead, OpTaskPanelCancel, OpTaskPanelClose:
 		return fail(req.ID, path, sessionID, "link_required", "panel transfers require a paired link")
 	case OpFiles:
 		return handleFiles(eng, req, path, sessionID)

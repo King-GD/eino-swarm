@@ -124,7 +124,7 @@ func (p *LinkPump) Dispatch(msg []byte) {
 		return
 	}
 	switch strings.TrimSpace(req.Op) {
-	case OpTaskPanels, OpTaskPanelRead, OpTaskPanelCancel:
+	case OpTaskPanels, OpTaskPanelRead, OpTaskPanelCancel, OpTaskPanelClose:
 		p.dispatchTaskPanels(req)
 	case OpWatch:
 		p.reply(p.startWatch(req))

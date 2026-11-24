@@ -98,13 +98,12 @@ Recent desktop/mobile differences are tracked in [the parity audit](../docs/MOBI
 Paired PC conversations can show the same task panels as desktop. A matching
 panel opens once, and **Task panels** in the conversation header reopens it.
 The full-screen view supports touch zoom, rotation and switching between
-available panels. Closing keeps the map position and does not stop collection
-on the PC. Progress and asset points update through the existing encrypted
+available panels. Returning to the conversation keeps the map position and collection continues. **Close panel instance** removes the selected instance across app restarts and interrupts only its collection. Progress and asset points update through the existing encrypted
 connection; reconnecting reads saved results without restarting collection.
 Conversations without a panel keep their ordinary header. An incompatible
 plugin reports an update requirement rather than loading different code.
 In the EASM panel, Android Back closes an open supply-chain detail first.
-The next Back closes the task panel and returns to the underlying screen.
+The next Back hides the panel sheet and returns to the underlying screen.
 See [Task panels](../docs/TASK_PANELS.md) for plugin authoring and data rules.
 
 Conversation Mermaid fences open as fit-to-width/height diagrams with touch zoom,

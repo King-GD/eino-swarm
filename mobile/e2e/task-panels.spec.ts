@@ -151,9 +151,10 @@ test("a bundled version mismatch reports a local failure without loading plugin 
 test("a failed initial body retains an entry and Retry can display the panel", async ({ page }) => {
   await page.goto("/?mock=1&tick=0&panels=failed")
   const entry = page.getByRole("button", { name: "Task panels", exact: true })
-  await expect(entry).toBeVisible()
-  await entry.click()
   const sheet = page.getByRole("dialog", { name: "Task panels" })
+  await expect(entry).toBeVisible()
+  // The next manifest may recover and auto-open the sheet before this click.
+  await Promise.any([entry.click({ timeout: 5_000 }), sheet.waitFor()])
   await sheet.getByRole("button", { name: "Retry", exact: true }).click()
   await expect(page.frameLocator('[data-testid="phone-task-panels"] iframe').locator("body")).toHaveAttribute("data-revision", "1")
 })
@@ -164,4 +165,20 @@ test("a complete multi-chunk panel renders from the paired RPC body", async ({ p
   await expect(frame.locator("body")).toHaveAttribute("data-revision", "1")
   await expect(frame.locator("#phase")).toContainText("3 collected")
   await expect(frame.locator(".countries path")).toHaveCount(177)
+})
+
+test("the phone closes the selected instance while keeping its paired conversation", async ({ page }) => {
+  await page.goto("/?mock=1&tick=0&panels=delayed")
+  await expect(page.getByTestId("transcript")).toBeVisible()
+  await control(page, "show")
+  const sheet = page.getByRole("dialog", { name: "Task panels" })
+  const entry = page.getByRole("button", { name: "Task panels", exact: true })
+  await expect(sheet).toBeVisible()
+  await sheet.getByRole("button", { name: "Close", exact: true }).click()
+  await expect(entry).toBeVisible()
+  await entry.click()
+  await sheet.getByRole("button", { name: "Close panel instance", exact: true }).click()
+  await expect(sheet).toHaveCount(0)
+  await expect(entry).toHaveCount(0)
+  await expect(page.getByTestId("transcript")).toBeVisible()
 })

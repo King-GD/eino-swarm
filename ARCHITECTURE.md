@@ -3008,8 +3008,12 @@ The desktop and Web inspector resolves registered entries against the active
 project or conversation and uses the result to render both the tab and its
 content. Nuwa is a project-owned React entry gated by mode or retained history;
 it uses the existing project GET/SSE and mounts when selected. The conversation
-Task panels entry groups agent-opened iframe instances and keeps them mounted
-behind other tabs. The host registry controls presentation; the embedded
+Task panels entry groups visible instances and keeps them mounted behind other
+tabs. The store admits a visible projection when the instance has committed
+observations or a running source. Open writes initial state for runtime tools.
+HTTP and sealed Pairlink close use the same engine operation, committing a
+conversation-scoped close marker and deletion before cancelling the instance's
+producer context. The host registry controls presentation; the embedded
 HTML/JS plugin catalog remains the source for builds and Agent tools. The paired
 phone continues to use its conversation panel surface and does not register the
 Nuwa graph.

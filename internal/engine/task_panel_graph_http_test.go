@@ -70,7 +70,7 @@ func TestEASMDirectPublishRefusesNewCycleAtomically(t *testing.T) {
 		t.Fatalf("state=%s err=%v", panels[0].State, err)
 	}
 	changes, err := e.store.TaskPanelChanges(t.Context(), thread.ID, 0)
-	if err != nil || len(changes) != 2 || changes[1].Revision != 2 {
+	if err != nil || len(changes) != 1 || changes[0].Revision != 2 {
 		t.Fatalf("changes=%+v err=%v", changes, err)
 	}
 }
@@ -203,7 +203,7 @@ func TestEASMDirectPublishPreservesSavedFirstSources(t *testing.T) {
 				t.Errorf("durable mutations changed after publication: %+v", mutations)
 			}
 			changes, err := e.store.TaskPanelChanges(t.Context(), thread.ID, 0)
-			if err != nil || len(changes) != int(wantRevision) || changes[len(changes)-1].Revision != wantRevision {
+			if err != nil || len(changes) != int(wantRevision)-1 || changes[len(changes)-1].Revision != wantRevision {
 				t.Fatalf("changes=%+v err=%v", changes, err)
 			}
 		})
