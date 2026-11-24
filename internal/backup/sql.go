@@ -23,6 +23,7 @@ var copyOrder = []string{
 	"threads",
 	"turns",
 	"events",
+	"wiki_source_scans",
 	"project_distillation_sources",
 	"messages",
 	"attachments",
@@ -290,6 +291,11 @@ func projectFilter(table, projectID string) (string, []any, bool, error) {
 		return `project_id = ? OR (scope = 'thread' AND thread_id IN (` + threads + `))`, []any{projectID, projectID}, false, nil
 	case "nuwa_revisions":
 		return `project_id = ? OR (project_id = '' AND thread_id IN (` + threads + `))`, []any{projectID, projectID}, false, nil
+	case "wiki_source_scans":
+		// The event deletion trigger invalidates cache entries under any
+		// project, including a moved conversation's previous owner.
+		return `project_id = ? OR event_id IN (SELECT id FROM main.events WHERE thread_id IN (` + threads + `))`,
+			[]any{projectID, projectID}, false, nil
 	case "nuwa_verify_slots", "project_distillations", "project_wiki_builds", "project_distillation_sources":
 		return `project_id = ?`, []any{projectID}, false, nil
 	case "composer_drafts", "composer_draft_blobs":
@@ -300,6 +306,35 @@ func projectFilter(table, projectID string) (string, []any, bool, error) {
 	default:
 		return "", nil, false, invalidf("no project filter for %s", table)
 	}
+}
+
+func projectReviewStateTable(table string) bool {
+	switch table {
+	case "project_distillations", "project_wiki_builds", "project_distillation_sources", "wiki_source_scans":
+		return true
+	default:
+		return false
+	}
+}
+
+// stripWikiScanCache keeps portable databases free of event-ID-bound
+// acknowledgements and their dependent triggers. Store.Open installs an
+// empty cache and trusted triggers when an archive is opened for restoration.
+func stripWikiScanCache(ctx context.Context, q queryer, schema string) error {
+	if !identRe.MatchString(schema) {
+		return invalidf("schema")
+	}
+	for _, statement := range []string{
+		"PRAGMA " + schema + ".secure_delete = ON",
+		"DROP TRIGGER IF EXISTS " + schema + ".wiki_source_scan_changed",
+		"DROP TRIGGER IF EXISTS " + schema + ".wiki_source_scan_deleted",
+		"DROP TABLE IF EXISTS " + schema + ".wiki_source_scans",
+	} {
+		if _, err := q.ExecContext(ctx, statement); err != nil {
+			return fmt.Errorf("backup: remove derived Wiki scan cache: %w", err)
+		}
+	}
+	return nil
 }
 
 func deleteProjectRows(ctx context.Context, q queryer, projectID string) error {
@@ -379,7 +414,7 @@ func exportProjectRows(ctx context.Context, conn *sql.Conn, projectID, dest stri
 		return err
 	}
 	for _, table := range copyOrder {
-		if (table == "project_distillations" || table == "project_wiki_builds" || table == "project_distillation_sources") && !rollbackSnapshot {
+		if !rollbackSnapshot && projectReviewStateTable(table) {
 			continue
 		}
 		where, args, skip, err := projectFilter(table, projectID)
@@ -423,6 +458,10 @@ func exportProjectRows(ctx context.Context, conn *sql.Conn, projectID, dest stri
 }
 
 func replaceAll(ctx context.Context, conn *sql.Conn, incomingPath string) error {
+	return replaceAllRows(ctx, conn, incomingPath, false)
+}
+
+func replaceAllRows(ctx context.Context, conn *sql.Conn, incomingPath string, rollbackSnapshot bool) error {
 	if err := failNext(); err != nil {
 		return err
 	}
@@ -451,6 +490,9 @@ func replaceAll(ctx context.Context, conn *sql.Conn, incomingPath string) error 
 				}
 			}
 			for _, table := range copyOrder {
+				if table == "wiki_source_scans" && !rollbackSnapshot {
+					continue
+				}
 				if err := copyTable(ctx, tx, "incoming", "main", table, "", nil, 0); err != nil {
 					return err
 				}
@@ -513,7 +555,7 @@ func applyProject(ctx context.Context, conn *sql.Conn, incomingPath, projectID s
 				}
 			}
 			for _, table := range copyOrder {
-				if table == "remote_devices" || table == "project_distillations" || table == "project_wiki_builds" || table == "project_distillation_sources" {
+				if table == "remote_devices" || projectReviewStateTable(table) {
 					continue
 				}
 				if err := copyTable(ctx, tx, "incoming", "main", table, "", nil, offset); err != nil {

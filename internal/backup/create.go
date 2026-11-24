@@ -90,6 +90,11 @@ func buildFull(ctx context.Context, conn *sql.Conn, dataDir string, omit bool, s
 		cleanup()
 		return Manifest{}, nil, nil, err
 	}
+	if err := stripWikiScanCache(ctx, conn, "snap"); err != nil {
+		detach(context.Background(), conn, "snap")
+		cleanup()
+		return Manifest{}, nil, nil, err
+	}
 	counts, err := countSchema(ctx, conn, "snap")
 	if err != nil {
 		detach(context.Background(), conn, "snap")
@@ -155,6 +160,9 @@ func buildProject(ctx context.Context, conn *sql.Conn, dataDir, projectID string
 	}
 	defer detach(context.Background(), conn, "dst")
 	if err := omitThreads(ctx, conn, "dst", omittedIDs(skipped)); err != nil {
+		return fail(err)
+	}
+	if err := stripWikiScanCache(ctx, conn, "dst"); err != nil {
 		return fail(err)
 	}
 	counts, err := countSchema(ctx, conn, "dst")
