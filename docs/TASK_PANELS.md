@@ -48,11 +48,13 @@ The Vite task-panel builder bundles scripts/styles/data into one HTML document. 
 
 宿主上下文包含面板和会话 ID、版本、主题、语言、尺寸、可见性和数据源状态。工具结果始终按数据处理，不作为可执行 HTML 或指令。
 
+第一方面板也可以不用 iframe：catalog 中设置 `renderer: "native"` 且 `entry` 为空，再在 [native-task-panels.tsx](../frontend/src/components/app/native-task-panels.tsx) 按插件 ID 注册 React 组件。桌面、Web 和配对手机共用这份注册表；未注册的 native 定义显示不兼容提示，不会回退到 iframe。组件只读面板 state，文案放进自己的 en/zh 词表，跟随用户语言。
+
 ### 后端开发：选择数据入口并发布状态
 
 **复用现有工具结果。** Agent 调用 `open_task_panel({plugin_id})` 拿到 `panel_id`，再用 `read_panel_state({panel_id})` 读取当前版本和 Schema。把已有结构化结果经 `publish_panel_update` 发布：全量用 `snapshot`，局部变化用 JSON Patch。请求带当前 `base_revision` 和唯一 `operation_id`；相同请求重试保留原 ID 和请求体，版本冲突时重新读状态、按新版本生成新操作。此路径不配置 `source`，无需新增 Go producer。
 
-**注册 Go producer。** 需要程序直接持续发布进度时，在 catalog 中声明 `source.id` 和 `source.input_schema`，并在 [panelProducerFor](../internal/engine/task_panel_sources.go) 注册同一 source ID 的适配器。Agent 打开面板后调用 `run_panel_source({panel_id,input})`。producer 校验业务输入，遵守任务的 `context`、取消和资源限制；将每批结果折叠为符合 Schema 的完整状态，串行调用 `publish(ctx, state)` 并处理错误。引擎比较状态生成 patch，补丁比完整状态大或操作过多时改用 snapshot，并负责身份、版本、持久化和通知。producer 不直接操作 SQLite、SSE 或 Pairlink；配对手机只读同步同一份已提交状态。
+**注册 Go producer。** 需要程序直接持续发布进度时，在 catalog 中声明 `source.id` 和 `source.input_schema`，并在 [panelProducerFor](../internal/engine/task_panel_sources.go) 注册同一 source ID 的适配器（业务代码放在 `internal/panelplugins/<id>`，引擎只保留这一处接线）。Agent 打开面板后调用 `run_panel_source({panel_id,input})`。producer 校验业务输入，遵守任务的 `context`、取消和资源限制；将每批结果折叠为符合 Schema 的完整状态，串行调用 `publish(ctx, state)` 并处理错误。引擎比较状态生成 patch，补丁比完整状态大或操作过多时改用 snapshot，并负责身份、版本、持久化和通知。producer 不直接操作 SQLite、SSE 或 Pairlink；配对手机只读同步同一份已提交状态。
 
 后端验收使用隔离数据，经真实工具入口覆盖首次打开、幂等重试、版本冲突；专用 producer 另外覆盖输入拒绝、运行进度、取消和失败。端到端检查见 [Validation](#validation)。
 
@@ -86,9 +88,60 @@ Startup settles sources separately for each conversation before its ordinary rec
 
 Stop preserves an HTTP observation already returned to the source reducer, but does not grant permission to publish new data after cancellation. A failed final flush can leave the display at its last committed state; source metadata marks the incomplete work. A recorded collection failure keeps its known reason rather than being relabeled as user cancellation.
 
+## EASM portrait
+
+`easm-asset-portrait` is a native panel with a registered source. The agent confirms the subject (asking the user when it is ambiguous), opens the panel, does the discovery lookups with its own MCP tools and pushes what it found. The producer never discovers anything itself.
+
+`run_panel_source` takes one batch of that work:
+
+```text
+{subject,
+ description?, logo?, website?,
+ companies?:    [{name, parent?, relation?, share?, registry_id?, confirmed?, source, via?}],
+ domains?:      [{domain, parent?, confirmed?, source, via?}],
+ certificates?: [{serial, domain, issuer?, subject_cn?, subject_org?, names?, not_before?, not_after?, valid?, match?, expired?, source, via?}],
+ query?}
+```
+
+`subject` is required, and `source` is required on every company, domain and certificate: it is the tool that reported the entry, stored as that node's evidence. `parent` names the upper company; omitting it hangs the entry under the subject. `query` is the final FOFA asset query; only a batch that carries it starts the totals, attention trend and components. The catalog's `input_schema` bounds every list and every field length, and refuses unknown fields.
+
+Batches are cumulative for the confirmed subject. Use its full name for every batch. A unique confirmed company row for that subject can bind its registry ID to the root. The same registry identity can continue a portrait, while a conflicting registry ID or different unverified subject starts a new portrait. A company row that matches the subject's identity enriches the root. Name-only ownership requires a unique eligible candidate. Unresolved or ambiguous parent names are counted in `unresolved_parents` and kept as unconfirmed clues. Domains are bounded by `max_domains` across the whole portrait; entries over it are counted in `refused_domains`.
+
+Each clue retains its first source edge. A later observation can enrich the clue and upgrade confirmation for a relationship reachable from the subject. Both the registered source and direct updates check new relationships for reachability from the single subject root. Older graph records and detached clues stay in stored state, and their detached sources are skipped on follow-up batches. Desktop and phone render only the portion reachable from the subject. Domains use one IDNA normalization. Node evidence is structured as `detail.basis[] = {source, via?, date?}`; the renderer words it in the user's language and shows unrecognized tool names as stored.
+
+Updates to the same subject must preserve saved first-source edges, their
+target clues and any recorded confirmation. Ordinary snapshot and patch
+publication cannot change `confirmed: true` to `false` or omit it; the whole
+update is refused before state, revision, mutation or delivery writes. The same
+rule applies to newly confirmed relationships in later batches. Confirmation
+upgrades and detail enrichment remain allowed. A previously unsourced clue can
+receive its first valid source. Replacing a portrait uses a valid root for the
+new subject. An empty snapshot is accepted while the portrait has no saved
+sources.
+
+- Companies take the reporting tool's `registry_id` as their identity when it gives one, otherwise their name. `relation` and `share` are shown on the card as reported.
+- Domains hang under their company, or under the subject when none is named or the named one is not on the graph.
+- Certificates are deduplicated by serial within the portrait. Each appears under its first discovery domain, including on that domain's card. An explicitly reported discovery domain can enter as a pending clue under the subject. Covered names stay as certificate evidence. A valid, matching, unexpired observation confirms the domain → certificate relationship.
+
+With `query` set, the producer runs unfinished `summary`, `heat` and `components` steps concurrently and publishes each completion. Retrying the same query retains completed results. Changing the query clears the old range's results and runs every step. A batch without `query` only merges observations. `collection.steps[]` reports status and a stable code, for example `tool_error`, `missing_ip_total` or `not_configured`. Stop marks unfinished steps `interrupted`. The producer uses the tool bindings in the turn's MCP mount receipt. Enabling a service or changing a role takes effect at the next turn. Account restrictions, disabled servers and immediate tool switches can still prevent calls. A restored legacy turn without recorded EASM bindings reports those steps unavailable. See [Configuration](CONFIG.md#task-panels).
+
+For a Worker call, each aggregation also requires its direct MCP tool or the
+matching server's call proxy in the calling Worker's registered tools. The
+producer can merge supplied observations even when a Worker is limited to
+listing tools or an aggregation is unavailable. Ordinary manager calls use
+the bindings admitted for their turn.
+
+- `summary` finishes when a single valid response contains the exact asset and distinct-IP totals. Zero is valid. Partial responses retain any exact count they carry and name the missing total in the receipt. Legacy summaries marked complete with only one total remain eligible for retry. `clues` counts saved observations beyond the root.
+- `heat` requires strictly ascending `YYYY-MM-DD` points.
+- `components` aggregates only hardware (`product1`) and applications (`product5`) for the supply chain, excluding the operating-system, service and support layers. FOFA merges the two requested layers into one `product` list. When the product-rule role is configured, the producer resolves numeric rule IDs to names; a failed name lookup keeps the IDs. These fields are selected by the Go producer; changing an agent Skill does not change its MCP requests.
+
+The receipt returns counts, step outcomes and what could not be placed (`nodes`, `edges`, `components`, `steps`, `unresolved_parents`, `refused_domains`). Bulk data stays in the panel. Collection receipts carry `next`, asking the agent to summarize the panel and end the turn. If a step failed or was unavailable, the receipt identifies it. A refused direct update leaves the last committed revision available.
+
+The renderer shows the graph, attention trend and component table and keeps all copy in `frontend/src/lib/easm/messages.ts`. Each section with data always shows it. Without data it shows the same spinner while the host reports the source `running` and its step is pending or running, or while the owning conversation is still running and the step has not finished (a first batch may be followed by one with a query). The host's `source_status` decides whether a producer is collecting now: a stored step that still says `running` after an engine restart or Stop proves nothing on its own. The graph is filled by whole batches, so no step owns it: it waits while a source call is collecting or the owning task can still push another batch. "No data" appears only once nothing more can arrive. The side panel and expanded graph share this loading behavior. Component trending days and KEV/CVE tags have no configured source yet and stay empty.
+
 ## Validation
 
-`go test -race ./internal/taskpanel ./internal/store ./internal/panelplugins/fofaworld ./internal/engine ./internal/server` covers protocol, storage, producer and real model/HTTP boundaries. Producer fixtures include the real installed CLI against a loopback fake FOFA API and local HTTP/HTTPS targets: no real account or public asset is needed. `make model-check` includes task-panel ownership, commit-before-delivery, idempotency, cleanup identity and orphan-recovery counterexamples. Frontend unit tests and the task-panel Playwright case exercise the packaged iframe, incremental map, zoom retention, full snapshots, version refusal and failed-plugin handling. Native desktop acceptance remains a separate ci-macOS gate.
+`go test -race ./internal/taskpanel ./internal/store ./internal/panelplugins/fofaworld ./internal/panelplugins/easm ./internal/engine ./internal/server` covers protocol, storage, producer and real model/HTTP boundaries. Producer fixtures include the real installed CLI against a loopback fake FOFA API and local HTTP/HTTPS targets: no real account or public asset is needed. `make model-check` includes task-panel ownership, commit-before-delivery, idempotency, cleanup identity and orphan-recovery counterexamples. EASM producer tests use a fake tool caller per aggregation plus merge fixtures (incremental batches, confirmation, unknown parents, subject reset, domain budget, certificates) and one engine test through the real model → two `run_panel_source` calls → MCP streamable HTTP boundary; every published state is validated against the catalog schema, and an already stored panel of the previous pipeline still validates. `frontend/e2e/easm.spec.ts` drives the native renderer with served panel state and real SSE patches, including a restart whose stored steps still say running while the host reports the source interrupted. Frontend unit tests and the task-panel Playwright case exercise the packaged iframe, incremental map, zoom retention, full snapshots, version refusal and failed-plugin handling. Native desktop acceptance remains a separate ci-macOS gate.
 
 The [model mapping and bounds](../models/panels/README.md) cover competing writers, source ownership, per-conversation recovery isolation, snapshot/SSE crossings, iframe acknowledgements and probe receipt cancellation. These checks prove finite protocol properties under their stated assumptions; they do not replace implementation race tests, native acceptance or establish that every possible failure is absent.
 

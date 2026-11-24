@@ -120,7 +120,7 @@ export function ThreadScreen({
   ]
   const [agentPage, setAgentPage] = useState("chat")
   const showingRoster = agentPage === "agents"
-  const taskPanels = usePhoneTaskPanelView(fileLink, detail.id, panelOwnerKey)
+  const taskPanels = usePhoneTaskPanelView(fileLink, detail.id, panelOwnerKey, Boolean(detail.running))
   const turnId = detail.running?.turn_id
   const destinations = pairedTurnDestinations(detail.turns ?? [], manager, turnId)
   const suppliedPreviews = new Set(detail.turns?.filter((turn) => turn.user_text).map((turn) => turn.id))
@@ -168,12 +168,14 @@ export function ThreadScreen({
     setAgentPage(page)
   }
 
-  useEffect(() => installAndroidBack(() => {
-    if (taskPanels.open) { taskPanels.close(); return true }
-    if (agentPage === "chat" || agentPage === "files") return false
-    changePage(agentPage === "agents" ? "chat" : "agents")
-    return true
-  }), [agentPage, taskPanels.open, taskPanels.close])
+  useEffect(() => {
+    // The task panel sheet handles Back for its own dialogs before closing.
+    if (taskPanels.open || agentPage === "chat" || agentPage === "files") return
+    return installAndroidBack(() => {
+      changePage(agentPage === "agents" ? "chat" : "agents")
+      return true
+    })
+  }, [agentPage, taskPanels.open])
 
   useEffect(() => {
     if (!canSelectTranscript) return
@@ -324,7 +326,7 @@ export function ThreadScreen({
 
   if (agentPage === "files" && fileLink) {
     return <><div className="flex min-h-0 flex-1 flex-col" inert={taskPanels.open} aria-hidden={taskPanels.open}>
-      <FileBrowser key={`${detail.id}:${panelOwnerKey ?? ""}`} link={fileLink} threadId={detail.id} running={running} onClose={() => changePage("chat")}
+      <FileBrowser key={`${detail.id}:${panelOwnerKey ?? ""}`} link={fileLink} threadId={detail.id} running={running} covered={taskPanels.open} onClose={() => changePage("chat")}
         status={<GoalBanner detail={detail} running={running} />} />
     </div><PhoneTaskPanelSheet view={taskPanels} /></>
   }

@@ -12,6 +12,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Added
 
+- Task panels can show an enterprise asset portrait (EASM). The agent confirms the subject, performs the discovery lookups itself, and pushes each finished batch of companies, domains and certificates into the panel, which merges the batches into one graph; on the batch that carries the final asset query the panel collects the asset totals, attention trend and components itself. Each aggregation shows its own progress and a failure never stops the others. The panel follows the app language on PC, Web and paired phones.
+
 - PC and Web projects can keep a Markdown knowledge base with linked pages,
   sources, relationship views and a pending queue. (`F-138`, `C-053`, #185)
 
@@ -32,6 +34,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
+- EASM batches retain the confirmed subject and its first-source relationships. A confirmed registry row can enrich the root. The collection receipt prompts the agent to summarize the available results.
+- The EASM panel takes the agent's own findings instead of looking them up: the Go producer no longer queries the company, investment, branch, filing, asset-rule or certificate sources, and the certificates the agent reports never add domains on their own. `task_panels.easm` binds only `stats`, `heat` and `product_rules`; retired roles in an existing configuration are dropped when it loads, and `max_domains` now bounds the domain nodes of the whole portrait instead of the certificate lookups of one run.
+
+- Settings → Tools → Task panels shows the common panel options. EASM lookup bindings and limits are managed through `task_panels.easm` in the configuration file.
 - Automatic review after an eligible successful turn now includes the enabled
   project wiki in the same proposal as notes and Skills. Knowledge writes
   appear in the original turn receipt and refresh the open Knowledge panel.
@@ -62,6 +68,23 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- A restarted EASM source no longer leaves the panel spinning: loading follows the host's `source_status`, so an interrupted collection stops even though the steps it stored still say running.
+
+- EASM retries only unfinished steps for the same query and keeps earlier valid counts. The summary requires both asset and distinct-IP totals in one valid response. Partial receipts identify the missing count and remain eligible for retry.
+
+- EASM uses the MCP service and tool bindings admitted for the turn. Later enablement takes effect on the next turn, and existing disable controls still apply immediately.
+
+- EASM aggregations called by a Worker respect that Worker's registered MCP tools. A Worker can still publish observations when a remote aggregation is unavailable.
+
+- The EASM graph shows clues reachable from the confirmed subject and keeps ambiguous ownership unconfirmed. Shared certificates appear only under their first discovery domain. On Android, Back closes supply-chain detail before closing the task panel.
+
+- EASM updates for the same subject preserve saved clues, their first source relationships and confirmed status across revisions. Direct snapshots and patches that downgrade or omit a saved confirmation are refused atomically.
+
+- The phone app builds from a clean install: its TypeScript paths resolve the shared frontend packages from `mobile/node_modules` instead of requiring `frontend/node_modules`.
+
+- EASM supply-chain collection again requests only FOFA `product1,product5`, excluding service and support products that were unintentionally added.
+
+- The EASM asset graph shows the same loading spinner as attention trend and supply chain while waiting for its first data, and stops spinning when an empty collection ends.
 - Scrolling up in desktop and Web history now reaches the previous visible message even across dense tool activity. Older thought and tool folds fetch details when opened. (`F-120`, `C-003`)
 
 - 独立定时任务复用已有结果会话。会话列表显示任务 ID 和来源，静默运行不会顶起已有发现。 (`F-150`, `C-009`)

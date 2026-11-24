@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { ChevronLeft, PanelsTopLeft, RefreshCw, X } from "lucide-react"
+import { isNativeTaskPanel, NativeTaskPanel } from "../../../frontend/src/components/app/native-task-panels"
 import { TaskPanelFrame } from "../../../frontend/src/components/app/task-panel-frame"
 import { panelText } from "../../../frontend/src/task-panels/messages"
 import { Button } from "./ui/button"
@@ -12,7 +13,7 @@ import { useTaskPanels } from "@/lib/use-task-panels"
 const opened = new Set<string>()
 
 /** Closing only changes presentation; the paired PC retains task ownership. */
-export function usePhoneTaskPanelView(link: RemoteLink | undefined, threadId: string, ownerKey: string) {
+export function usePhoneTaskPanelView(link: RemoteLink | undefined, threadId: string, ownerKey: string, active = false) {
   const scope = `${ownerKey}\0${threadId}`
   const [view, setView] = useState({ scope, open: false, selected: "" })
   const open = view.scope === scope && view.open
@@ -29,7 +30,7 @@ export function usePhoneTaskPanelView(link: RemoteLink | undefined, threadId: st
     }
   }, [scope, panels, data.available, data.loading, view.scope])
   return {
-    ...data, available: Boolean(ownerKey && link && data.available), panels, current, scope, open, close,
+    ...data, available: Boolean(ownerKey && link && data.available), panels, current, scope, open, close, active,
     show: () => setView({ scope, open: true, selected: current?.id ?? "" }),
     select: (id: string) => setView({ scope, open: true, selected: id }),
   }
@@ -46,27 +47,36 @@ export function PhoneTaskPanelButton({ view }: { view: PanelView }) {
 }
 
 export function PhoneTaskPanelSheet({ view }: { view: PanelView }) {
+  // The sheet element is state so a native panel can portal its own dialogs
+  // into it; outside the sheet they would be inert behind its modal layer.
+  const [dialog, setDialog] = useState<HTMLElement | null>(null)
   const close = useRef(view.close), closeButton = useRef<HTMLButtonElement>(null)
-  const dialog = useRef<HTMLElement>(null)
   close.current = view.close
   useEffect(() => {
-    if (!view.open) return
+    const backButton = closeButton.current
+    if (!view.open || !dialog || !backButton) return
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    closeButton.current?.focus({ preventScroll: true })
-    const back = installAndroidBack(() => { close.current(); return true })
+    backButton.focus({ preventScroll: true })
+    // A panel dialog open inside the sheet owns the first Back press.
+    const back = installAndroidBack(() => {
+      const inner = dialog.querySelector<HTMLButtonElement>('[role="dialog"] [data-dialog-close]')
+      if (inner) inner.click()
+      else close.current()
+      return true
+    })
     const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { event.stopPropagation(); close.current() }
+      if (event.key === "Escape" && !event.defaultPrevented) { event.stopPropagation(); close.current() }
     }
     const focus = (event: FocusEvent) => {
-      if (event.target instanceof Node && !dialog.current?.contains(event.target)) closeButton.current?.focus({ preventScroll: true })
+      if (event.target instanceof Node && !dialog.contains(event.target)) backButton.focus({ preventScroll: true })
     }
     window.addEventListener("keydown", escape)
     document.addEventListener("focusin", focus)
     return () => { back(); window.removeEventListener("keydown", escape); document.removeEventListener("focusin", focus); if (previous?.isConnected) previous.focus({ preventScroll: true }) }
-  }, [view.open])
+  }, [view.open, dialog])
   if (!view.available && !view.panels.length) return null
   const locale = getLocale(), caption = panelText(locale, "tab")
-  return createPortal(<section ref={dialog} role={view.open ? "dialog" : undefined} aria-modal={view.open || undefined} aria-label={caption}
+  return createPortal(<section ref={setDialog} role={view.open ? "dialog" : undefined} aria-modal={view.open || undefined} aria-label={caption}
     aria-hidden={!view.open} inert={!view.open} data-testid="phone-task-panels"
     className={`${view.open ? "flex" : "hidden"} fixed inset-0 z-50 min-h-0 min-w-0 flex-col bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]`}>
     <header className="flex min-h-12 shrink-0 items-center gap-2 border-b border-border px-1">
@@ -86,7 +96,9 @@ export function PhoneTaskPanelSheet({ view }: { view: PanelView }) {
       </select>
     </label> : null}
     {view.panels.map((panel) => <div key={`${view.scope}:${panel.id}`} className={panel.id === view.current?.id ? "flex min-h-0 min-w-0 flex-1 flex-col" : "hidden"}>
-      <TaskPanelFrame panel={panel} change={view.changes[panel.id]} visible={view.open && panel.id === view.current?.id} locale={locale} />
+      {isNativeTaskPanel(panel)
+        ? <NativeTaskPanel panel={panel} visible={view.open && panel.id === view.current?.id} locale={locale} sheet={dialog} active={view.active} />
+        : <TaskPanelFrame panel={panel} change={view.changes[panel.id]} visible={view.open && panel.id === view.current?.id} locale={locale} />}
     </div>)}
   </section>, document.body)
 }

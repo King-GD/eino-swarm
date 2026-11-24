@@ -189,3 +189,20 @@ func TestPatchUsesStandardPointersAcrossHostAndPlugin(t *testing.T) {
 		t.Fatal(e)
 	}
 }
+
+// A native renderer is drawn by bundled app code, so it must not also name an
+// iframe entry, and an unknown renderer value cannot fall back to either.
+func TestNativeRendererReplacesTheIframeEntry(t *testing.T) {
+	d := definition()
+	d.Entry, d.Renderer = "", RendererNative
+	if err := ValidateDefinition(d); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []Definition{{Renderer: RendererNative, Entry: "test/index.html"}, {Renderer: "react", Entry: ""}} {
+		candidate := definition()
+		candidate.Entry, candidate.Renderer = bad.Entry, bad.Renderer
+		if !errors.Is(ValidateDefinition(candidate), ErrInvalid) {
+			t.Fatalf("accepted renderer=%q entry=%q", bad.Renderer, bad.Entry)
+		}
+	}
+}

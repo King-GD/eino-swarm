@@ -2,13 +2,15 @@ import { readFile } from "node:fs/promises"
 import path from "node:path"
 import type { build as viteBuild, Plugin } from "vite"
 
-interface Definition { id: string; entry: string }
+interface Definition { id: string; entry: string; renderer?: string }
 const csp = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; worker-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
 
 /** Produce self-contained plugin documents; opaque iframe origins need no CORS. */
 export function taskPanelBuild(root: string, build: typeof viteBuild, directory = path.join(root, "src/task-panels")): Plugin {
   async function definitions(): Promise<Definition[]> {
-    return JSON.parse(await readFile(path.join(directory, "catalog.json"), "utf8")) as Definition[]
+    const catalog: Definition[] = JSON.parse(await readFile(path.join(directory, "catalog.json"), "utf8"))
+    // Native renderers ship inside the app bundle and have no plugin document.
+    return catalog.filter((definition) => definition.renderer !== "native")
   }
   async function document(definition: Definition): Promise<string> {
     if (!/^[a-z0-9-]+$/.test(definition.id) || definition.entry !== `task-panels/${definition.id}.html`) throw new Error("Invalid task panel build entry")

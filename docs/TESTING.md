@@ -9640,6 +9640,34 @@ appear there. See the [panel model bounds](../models/panels/README.md).
 
 Protocol and source tests use versioned state plus actual Registry/model HTTP, CLI and local HTTP boundaries. `internal/panelplugins/fofaworld` tests the installed compatible CLI only against a loopback fake API, with fictional credentials and no public targets. Two-batch blocking verifies actual overlap; counters and accepted receipts distinguish errors/unknown/cancellation from completion. `frontend/e2e/task-panels.spec.ts` verifies the actual bundled iframe and map without reloading on data updates. See [Task panels](TASK_PANELS.md) for the protocol and remaining native acceptance gate.
 
+EASM producer fixtures feed one published state back into `Run` for the next batch. They cover subject changes, same-name ownership ambiguity, source relationships, detached historical clues and certificate serial deduplication. Aggregation fixtures verify concurrent progress, same-query heat-only retries with zero statistics calls, exact zero counts, partial replies, legacy incomplete summaries and query changes. The catalog tests validate current, previous and resumed snapshots against the bundled schema.
+
+`models/panels/PanelMCPAdmission.tla` and `EASMCollection.tla` add the EASM
+admission and collection refinements to `make model-check`. Both use normal,
+named-fault and `Never*` reachability cases; the collection's two bounded input
+variants each check the complete safety list. The runner registration tests
+also require these families to remain present. See `models/panels/README.md`
+for implementation mappings, historical calibration and the finite scope.
+`FuzzPortraitPublicationKeepsSavedSources` generates retained and rejected
+multi-edit publications through both actual snapshot and patch application. Its
+confirmed-edge generator and upgrade-then-downgrade seed preserve confirmation
+across successful and refused edits, including saved detached records.
+`task_panel_collection_http_test.go` checks Stop/late-result and failed-write
+behavior through the real model, Registry, MCP HTTP and SQLite boundary.
+Manager cancellation is not evidence that the source or remote service joined.
+
+`internal/engine/task_panel_easm_http_test.go` drives the real model, Registry, streamable MCP HTTP and durable panel. It checks restricted account refusal, zero HTTP contact for a server enabled after model dispatch, successful next-turn admission, restored binding identity and immediate tool disable. `internal/engine/task_panel_graph_http_test.go` exercises direct publication through the model tool. It checks that cycles, removal of a saved source or its target, and a rootless replacement leave the stored revision and original source intact. Confirmation-downgrade cases include patches, whole-edge replacement, snapshots, omitted confirmation and valid enrichment mixed with a downgrade; refusal preserves state, revision, source, mutation rows and the delivery journal. It also covers retained confirmation, enrichment, confirmation upgrades, first sources for previously unsourced clues and a new subject. `internal/mcpclient/producer_test.go` covers exact text replies and isolation from task execution failures.
+
+`internal/engine/task_panel_worker_scope_http_test.go` exercises the actual
+Nuwa Worker model and panel source with a counted loopback MCP endpoint. A
+Worker with an empty selection or a listing-only proxy still publishes its
+observations, and the aggregation is unavailable with zero MCP requests during
+the panel call. The call proxy and the matching direct tool allow collection.
+A Worker with only the direct heat tool cannot use the same server's statistics
+binding.
+
+The desktop and phone E2E specs exercise the same saved graph with detached clues and duplicate historical certificate serials. They check the first discovery's card, hide detached and duplicate observations, then publish another batch and reopen the panel. `mobile/src/components/task-panels.test.tsx` uses the real conversation, EASM sheet and supply-chain detail and calls the JavaScript entry used by Android Back. It checks detail → sheet after initial open and reopening, including a refreshed sheet over Outputs. After triggering the real lazy EASM import, the test waits for `vi.dynamicImportSettled()` inside `act` before querying the detail button. The outer sheet alone is not a readiness signal. A controlled 2400ms module-evaluation delay in an isolated source copy reproduces the old 8/10 result and passes 10/10 with this wait; each of the three entries also passes in its own cold test process. This calibrates the test waiting gap, without establishing the cause of every historical failure or accepting native phone behavior.
+
 The task-panel [formal model map](../models/panels/README.md) states finite bounds and the exact implementation boundaries. Current cases and guard-removal counterexamples cover operation digests/CAS, running source ownership, recovery failure isolation, overlapping GET/SSE per-panel revisions/deletions, hidden iframe resynchronization and observed HTTP result delivery before join. Every model has reachable witness cases. The independent audit regressions preserve the original failing order; protocol model success is not a SQLite atomicity, cancelled final-flush durability, wall-clock or native presentation proof.
 
 Paired mobile coverage adds `internal/remote/task_panels_test.go` and the Store transfer tests for actual sealed frames, frozen multi-chunk data during updates, exact patches, invalid scope/old cleanup, deletion and oversize refusal. `mobile/src/lib/remote-task-panels.test.ts` and `use-task-panels.test.tsx` verify complete body checks, cancellation, hidden reads, repair and PC/visit fencing. `mobile/e2e/task-panels.spec.ts` uses the same bundled plugin on Chromium/WebKit phone profiles with touch zoom, snapshot/patch identity, hidden/reopen, rotation, multiple panels and failure/version states. Tests use synthetic data; native packaged-app and physical-device acceptance remain separate. An isolated only-mobile dependency build checks that the shared plugin does not secretly need frontend node_modules. `MobileTaskPanel.tla` plus isolated client guard mutations cover the transport refinement; they do not prove arbitrary multi-panel memory or network timing.

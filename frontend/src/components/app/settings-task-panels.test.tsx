@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest"
 import { TaskPanelSettings } from "./settings-task-panels"
 
-const settings = { enabled: true, fofa_client: "fofa", max_assets: 1000, batch_size: 100, concurrency: 16, timeout_seconds: 8, flush_interval_ms: 100, max_state_bytes: 8388608, max_update_bytes: 1048576 }
+const settings = { enabled: true, fofa_client: "fofa", max_assets: 1000, batch_size: 100, concurrency: 16, timeout_seconds: 8, flush_interval_ms: 100, max_state_bytes: 8388608, max_update_bytes: 1048576, easm: { server_id: "", tools: { organizations: "org_tool", heat: "" }, max_domains: 20, max_components: 20 } }
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 it("saves only plugin settings and retains edits on failure", async () => {
@@ -12,6 +12,8 @@ it("saves only plugin settings and retains edits on failure", async () => {
   vi.stubGlobal("fetch", fetcher)
   render(<TaskPanelSettings query="" />)
   const field = await screen.findByLabelText("Concurrent HTTP checks")
+  expect(screen.queryByText("EASM portrait lookups")).not.toBeInTheDocument()
+  expect(screen.queryByLabelText("EASM MCP server")).not.toBeInTheDocument()
   fireEvent.change(field, { target: { value: "4" } })
   fireEvent.click(screen.getByRole("button", { name: "Save panel settings" }))
   expect(await screen.findByRole("alert")).toHaveTextContent("Invalid concurrency")

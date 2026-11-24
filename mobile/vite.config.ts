@@ -17,7 +17,11 @@ export default defineConfig({
   },
   plugins: [react(), taskPanelBuild(__dirname, build, path.resolve(__dirname, "../frontend/src/task-panels"))],
   resolve: {
-    dedupe: ["react", "react-dom", "shiki", "mermaid", "mdast-util-from-markdown"],
+    dedupe: [
+      "react", "react-dom", "shiki", "mermaid", "mdast-util-from-markdown",
+      "@radix-ui/react-dialog", "@radix-ui/react-slot", "@radix-ui/react-tooltip", "class-variance-authority",
+      "force-graph", "lucide-react", "recharts",
+    ],
     alias: { "@": path.resolve(__dirname, "./src") },
   },
   server: { fs: { allow: [path.resolve(__dirname, "..")] } },

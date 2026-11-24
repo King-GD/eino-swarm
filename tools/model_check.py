@@ -121,6 +121,18 @@ MODELS = {
         Model("panel-ownership", ROOT / "models" / "panels" / "PanelOwnership.tla",
               ("StealRunningSource", "AbortAllRecovery"),
               ("TypeOK", "RunningOwnerKept", "HealthyThreadsRecover"), ()),
+        Model("panel-mcp-admission", ROOT / "models" / "panels" / "PanelMCPAdmission.tla",
+              ("BindLatestSettings", "RestoreOtherDestination", "SkipSourcePolicy", "IgnoreWorkerScope",
+               "SkipSessionAdmission", "SkipRemoteRecheck"),
+              ("TypeOK", "TurnBindingFrozen", "RestoreDestinationKept", "SourcePolicyRequired",
+               "WorkerScopeRequired", "SessionAdmissionRequired", "RemoteRecheckRequired"), ()),
+        *(Model(name, ROOT / "models" / "panels" / "EASMCollection.tla",
+                ("KeepOldQueryData", "RetryCompleted", "MergePartialTotals", "ClaimCompleteOnSettled",
+                 "ReturnBeforeJoin", "PublishUnlocked", "InventFailedPersistence", "TrustStoredRunning", "CollectWithoutQuery"),
+                ("TypeOK", "QueryDataOwned", "DoneStepsNotRepeated", "SummaryDoneHasWholeReply",
+                 "CompletionClaimRequiresAllSteps", "ReturnWaitsForJoin", "LockedPublicationStable",
+                 "FailedPublishKeepsDurable", "NoQueryStartsNoCalls", "TerminalObservationSettles"), (("Variant", variant),))
+          for name, variant in (("easm-collection", 1), ("easm-collection-interleaving", 2))),
         Model("panel-frame", ROOT / "models" / "panels" / "PanelFrameDelivery.tla",
               ("ForgetHiddenResync", "AckBeforeApply", "ExecuteIncompatible", "SilentTimeout"),
               ("TypeOK", "AcknowledgedWasApplied", "RecoveryRemainsSendable", "OnlyCompatibleExecutes", "FailureIsVisible"), ()),
@@ -513,6 +525,49 @@ CASES: tuple[Case, ...] = (
     *(_case("panel-ownership-reach-" + name, "owned source and independent recovery reachability", witness=witness, model="panel-ownership")
       for name, witness in (("running", "NeverRunningSource"), ("refusal", "NeverRejectedOtherPublisher"),
                             ("recovery", "NeverHealthyRecovery"))),
+    _case("panel-mcp-current", "frozen turn bindings, actual worker execution scope and sampled call admission", model="panel-mcp-admission"),
+    *(_case("panel-mcp-" + name, source, (switch,), invariant, model="panel-mcp-admission")
+      for name, source, switch, invariant in (
+          ("latest-settings", "guard: resolveMCPSurface must use the captured MCPAdmission", "BindLatestSettings", "TurnBindingFrozen"),
+          ("restore-retarget", "guard: bindPanelMCP compares the recorded destination digest", "RestoreOtherDestination", "RestoreDestinationKept"),
+          ("source-policy", "historical before 387f62c: panel source bypassed the turn's MCP admission", "SkipSourcePolicy", "SourcePolicyRequired"),
+          ("worker-scope", "historical before b71b592: panel source borrowed tools absent from the calling worker", "IgnoreWorkerScope", "WorkerScopeRequired"),
+          ("session-admission", "guard: Manager.acquire checks enabled destination fingerprints", "SkipSessionAdmission", "SessionAdmissionRequired"),
+          ("remote-recheck", "guard: callOnce checks live tool switches again after session/catalog acquisition", "SkipRemoteRecheck", "RemoteRecheckRequired"))),
+    *(_case("panel-mcp-reach-" + name, "sampled admission and late-revocation reachability", witness=witness, model="panel-mcp-admission")
+      for name, witness in (
+          ("direct", "NeverDirectWorkerCall"), ("proxy", "NeverProxyWorkerCall"),
+          ("list-refusal", "NeverListOnlyRefusal"), ("late-role", "NeverLateRoleIgnored"),
+          ("restricted", "NeverRestrictedSource"), ("restore-refusal", "NeverRestoreDestinationRefused"),
+          ("remote-refusal", "NeverRemoteRecheckRefused"), ("session-refusal", "NeverSessionAdmissionRefused"),
+          ("late-disable", "NeverLateRemoteDisableCompletes"), ("late-policy", "NeverAdmittedPolicyChangeCompletes"),
+          ("retired-session", "NeverRetiredSessionCompletes"), ("restored", "NeverRestoredCall"))),
+    _case("easm-collection-current", "serial same-query retries, partial totals and query replacement", model="easm-collection"),
+    _case("easm-collection-interleaving-current", "concurrent apply/publication, cancellation and independent failed writes", model="easm-collection-interleaving"),
+    *(_case("easm-collection-" + name, source, (switch,), invariant, model=model)
+      for name, source, switch, invariant, model in (
+          ("old-query-data", "guard: planMetrics clears data when the query changes", "KeepOldQueryData", "QueryDataOwned", "easm-collection"),
+          ("repeat-done", "guard: planMetrics only retries unfinished same-query steps", "RetryCompleted", "DoneStepsNotRepeated", "easm-collection"),
+          ("partial-totals", "seeded: cumulative totals from separate responses imply summary completion", "MergePartialTotals", "SummaryDoneHasWholeReply", "easm-collection"),
+          ("false-completion", "historical before 4937728: a settled source always claimed complete aggregations", "ClaimCompleteOnSettled", "CompletionClaimRequiresAllSteps", "easm-collection"),
+          ("early-return", "guard: collect waits for its started goroutines", "ReturnBeforeJoin", "ReturnWaitsForJoin", "easm-collection-interleaving"),
+          ("unlocked-publish", "guard: flush holds mu through its synchronous publisher", "PublishUnlocked", "LockedPublicationStable", "easm-collection-interleaving"),
+          ("failed-persistence", "guard: a failed publication leaves durable state unchanged", "InventFailedPersistence", "FailedPublishKeepsDurable", "easm-collection-interleaving"),
+          ("stored-spinner", "historical before 4937728: stale running snapshots kept loading after interruption", "TrustStoredRunning", "TerminalObservationSettles", "easm-collection-interleaving"),
+          ("no-query", "guard: batches without a query merge findings without collecting", "CollectWithoutQuery", "NoQueryStartsNoCalls", "easm-collection"))),
+    *(_case("easm-collection-reach-" + name, "collection progress, partial snapshots and failed-write reachability", witness=witness, model=model)
+      for name, witness, model in (
+          ("retry-keeps-done", "NeverRetryKeepsDone", "easm-collection"),
+          ("partial-retry", "NeverPartialSummaryRetried", "easm-collection"),
+          ("changed-query", "NeverChangedQueryCleared", "easm-collection"),
+          ("no-query", "NeverUnqueriedBatch", "easm-collection"),
+          ("missing-step", "NeverSettledWithMissing", "easm-collection"),
+          ("complete", "NeverAllSucceeded", "easm-collection-interleaving"),
+          ("partial-publication", "NeverAppliedBeforeOutcome", "easm-collection-interleaving"),
+          ("failed-write", "NeverFailedPublication", "easm-collection-interleaving"),
+          ("failed-finish", "NeverFailedFinishReturns", "easm-collection-interleaving"),
+          ("interrupt-writes-fail", "NeverBothInterruptWritesFail", "easm-collection-interleaving"),
+          ("interrupted-reload", "NeverInterruptedReload", "easm-collection-interleaving"))),
     _case("panel-frame-current", "separate sent/applied/acknowledged revisions and retain hidden resynchronization", model="panel-frame"),
     *(_case("panel-frame-" + name, source, (switch,), invariant, model="panel-frame")
       for name, source, switch, invariant in (

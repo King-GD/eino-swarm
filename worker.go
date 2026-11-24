@@ -68,6 +68,7 @@ func (r *Registry) startWorker(ctx context.Context, h *Handle, task, message, in
 		h.pushInbox(seed)
 	}
 	extraTools = r.workerTools(config, r.bindSendCaller(extraTools, id, role))
+	caller.workerTools = extraTools
 
 	receiptScope := rand.Text()
 	go func() {

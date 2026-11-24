@@ -2,7 +2,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { X } from "lucide-react"
 import * as React from "react"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/cn"
 
 const Dialog = DialogPrimitive.Root
 const DialogTrigger = DialogPrimitive.Trigger
@@ -29,9 +29,11 @@ const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     hideClose?: boolean
+    /** Portal target; the phone sheet keeps dialogs inside its own layer. */
+    container?: HTMLElement | null
   }
->(({ className, children, hideClose = false, ...props }, ref) => (
-  <DialogPortal>
+>(({ className, children, hideClose = false, container, ...props }, ref) => (
+  <DialogPortal container={container}>
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
@@ -43,7 +45,7 @@ const DialogContent = React.forwardRef<
     >
       {children}
       {hideClose ? null : (
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-60 transition-opacity hover:opacity-100 focus:outline-hidden focus:ring-2 focus:ring-ring">
+        <DialogPrimitive.Close data-dialog-close className="absolute right-4 top-4 rounded-sm opacity-60 transition-opacity hover:opacity-100 focus:outline-hidden focus:ring-2 focus:ring-ring">
           <X className="size-4" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>

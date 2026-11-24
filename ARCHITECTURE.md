@@ -3016,6 +3016,20 @@ Nuwa graph.
 
 `internal/taskpanel` defines the versioned state protocol; `internal/store/task_panels.go` persists conversation-owned projections and a separate delivery journal. Runtime tools provide trusted provenance and bounded producer publication. Repository HTML/JS plugins under `frontend/src/task-panels` own their layout and run in dedicated opaque-origin iframes through an acknowledged SDK channel. The FOFA example producer uses CLI batches and locally owned HTTP checks; no asset fields enter the generic host protocol. See [Task panels](docs/TASK_PANELS.md), `F-137` and `C-050`.
 
+A catalog definition with `renderer:"native"` has no iframe entry; its state is drawn by a bundled React component registered in `frontend/src/components/app/native-task-panels.tsx`, which the desktop, Web and phone hosts share. The EASM portrait is the one native panel. Its producer, `internal/panelplugins/easm`, takes two inputs from `run_panel_source`: the batch of findings the agent's own lookups produced, and the panel state the call starts from. It merges that batch into the graph already in the panel and, when the batch carries the final asset query, collects the totals, trend and components itself through the configured MCP tools:
+
+```
+agent lookups (its own MCP tools) → run_panel_source({subject, companies?, domains?, certificates?, query?})
+  engine registry (task_panel_sources.go) → easm.Run(input, settings, currentState, caller, publish)
+    restore observations and first sources → merge the batch → publish(state)
+    query given → unfinished aggregations in parallel (role → turn's admitted MCP binding)
+    each step → publish(state) → engine diff → store revision → SSE / Pairlink → EASM renderer
+```
+
+The agent confirms the subject and supplies company, domain and certificate evidence. For the same subject, every saved relationship keeps its target and first source through publication. A different subject starts a new portrait with its own root, and a certificate serial belongs to its first discovery in that portrait. Both registered sources and direct updates validate these relationships before their state commits. Existing detached observations and their original links survive replay. The shared React renderer walks from the confirmed subject, so desktop and phone show the same rooted graph. Domain nodes are bounded by `max_domains`; entries over it are refused and counted in the receipt.
+
+The engine captures EASM role bindings with the turn's MCP tool surface. The mount receipt retains role, tool and server identities and a destination digest. When a Worker calls the producer, each binding also requires the corresponding direct tool or that server's call proxy on the calling Worker's executor. The runtime supplies this registration through the tool-call context. Current account and MCP disable checks still apply. Later enablement applies at the next turn. Step status travels in the ordinary panel state revision to desktop and phone. Same-query retries preserve completed steps and their data. A summary step completes when one valid response contains both totals.
+
 The paired phone bundles the same plugin documents and `TaskPanelFrame` host.
 `mobile/src/lib/use-task-panels.ts` polls small manifests over the existing
 sealed link and reads a complete snapshot or exact-base patch through
