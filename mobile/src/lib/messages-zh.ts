@@ -261,6 +261,8 @@ export const zh: Record<MessageKey, string> = {
   "thread.message": "消息",
   "thread.plan": "规划中",
   "thread.image": "图片",
+  "thread.viewImage": "查看图片",
+  "thread.imageLoadFailed": "图片加载失败。",
   "thread.running": "运行中",
   "thread.waiting": "等待中",
   "thread.earlier": "更早",

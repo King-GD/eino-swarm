@@ -456,6 +456,8 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-220 Read and control PC conversations
 
+- PC 发送或插入消息附带的图片在配对手机上各显示一个「查看图片」按钮，包括实时消息和较早历史。点击后只读取选中的图片并在气泡中显示，失败可重试。重新打开会话恢复为按钮。仅收到旧版「有图片」标记时显示占位文字。关联 `C-006`；证据 `internal/remote/input_images_test.go`、`mobile/e2e/transcript-images.spec.ts`。
+
 - 手机打开「子 Agent」列表或从子智能体日志返回时从顶部开始，先显示运行中的分组；浏览列表不随聊天贴底。证据：`mobile/src/components/thread-screen.tsx`、`mobile/e2e/agent-roster.spec.ts`。
 
 - 收件箱忽略旧版 PC 随列表返回的本地客户端任务，也不发起目录或详情 RPC。证据：`mobile/src/app.test.tsx`、`mobile/e2e/composer-layout.spec.ts`。关联 `C-006`。

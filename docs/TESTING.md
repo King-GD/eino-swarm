@@ -8671,6 +8671,18 @@ opened preview and returned transcript screens. Read Android attachments
 from the reported app-private directory with `adb shell run-as` on the
 disposable debug installation.
 
+PC input images use `TestPCInputImagesReachPairedPhoneLiveAndInHistory` to
+send two images and an image-only steer through the engine and verify the
+encrypted Pairlink watch, reopen and paged history. The test reassembles a
+decodable multi-chunk PNG and verifies its dimensions, MIME and exact bytes.
+`mobile/src/components/transcript-image.test.tsx` observes zero chunk requests
+before a click and checks cancellation on PC switch. On Chromium and iPhone WebKit,
+`mobile/e2e/transcript-images.spec.ts` opens, scrolls and reopens the transcript,
+then taps each attachment separately and verifies decoded dimensions and byte hashes.
+The packaged iOS case uses `ios-transcript-images.swift`,
+`IOS_LAYOUT_QUERY='/?mock=1&tick=0&history=input-images'`, Local mode and
+`AppUITests/BindFlowTests/testPCAttachedImagesLoadOnlyAfterTappingView`.
+
 The EPUB cases in `mobile/e2e/file-preview-controls.spec.ts` open a packaged
 book through Outputs and turn pages within and across chapters using taps.
 They check that showing the controls keeps the page in place and compare the

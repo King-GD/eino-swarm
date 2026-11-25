@@ -60,8 +60,14 @@ func eventView(ev store.Event, cfg config.RemoteConfig) EventView {
 		text = truncate(ev.Text, eventChars(cfg))
 	}
 	var image *store.ImageRef
+	var imageIDs []string
 	if ev.Kind == "image_generation" && len(ev.Images) == 1 {
 		image = &ev.Images[0]
+	}
+	if ev.Kind == engine.KindUser || ev.Kind == engine.KindSteer {
+		for _, ref := range ev.Images {
+			imageIDs = append(imageIDs, ref.ID)
+		}
 	}
 	return EventView{
 		SourceThreadID: ev.SourceThreadID,
@@ -77,6 +83,7 @@ func eventView(ev store.Event, cfg config.RemoteConfig) EventView {
 		MessageID:      ev.MessageID,
 		Err:            ev.Err,
 		HasImages:      len(ev.Images) > 0,
+		ImageIDs:       imageIDs,
 		GeneratedImage: image,
 		CreatedAt:      ev.CreatedAt,
 	}
@@ -107,6 +114,10 @@ func encodeEventPushStatus(path, sessionID, threadID string, ev store.Event, cfg
 			return raw, true
 		}
 		if view.Text == "" || view.Text == "…" {
+			if len(view.ImageIDs) != 0 {
+				view.ImageIDs = nil
+				continue
+			}
 			if view.Seq == 0 {
 				return nil, false
 			}

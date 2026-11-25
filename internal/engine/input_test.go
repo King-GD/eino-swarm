@@ -380,6 +380,44 @@ func TestReadInputImageRejectsACraftedId(t *testing.T) {
 	}
 }
 
+func TestOpenInputImageSurfacesUnreadableStorage(t *testing.T) {
+	e := newTestEngine(t)
+	th, err := e.CreateThread("Input image storage", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := e.Config().ThreadInputsDir(th.ID)
+	if err := os.MkdirAll(filepath.Dir(root), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(root, []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const id = "img_ab"
+	if f, _, err := e.OpenInputImage(th.ID, id); f != nil || err == nil || errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("an unusable media directory must report its cause: %v", err)
+	}
+	if err := os.Remove(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, id)
+	if err := os.WriteFile(path, generatedPNG(t), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	if f, err := os.Open(path); err == nil {
+		_ = f.Close()
+		t.Skip("local permissions allow reading mode 000 files")
+	} else if !errors.Is(err, os.ErrPermission) {
+		t.Fatal(err)
+	}
+	if f, _, err := e.OpenInputImage(th.ID, id); f != nil || !errors.Is(err, os.ErrPermission) {
+		t.Fatalf("an unreadable media file must preserve its permission error: %v", err)
+	}
+}
+
 func TestSchemaUserKeepsTheCaptionWhenTheFileIsGone(t *testing.T) {
 	e := newTestEngine(t)
 	th, _ := e.CreateThread("", "", "")

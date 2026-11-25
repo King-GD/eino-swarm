@@ -4,15 +4,14 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
-
-	"github.com/LubyRuffy/eino-swarm/internal/engine"
+	"os"
 )
 
-func handleGeneratedImageChunk(eng *engine.Engine, req Request, path, sessionID string) Response {
+func handleImageChunk(openImage func(threadID, imageID string) (*os.File, string, error), req Request, path, sessionID string) Response {
 	if req.Before < 0 {
 		return fail(req.ID, path, sessionID, "bad_request", "image offset is negative")
 	}
-	file, mime, err := eng.OpenGeneratedImage(req.ThreadID, req.ImageID)
+	file, mime, err := openImage(req.ThreadID, req.ImageID)
 	if err != nil {
 		return mapErr(req.ID, path, sessionID, err)
 	}

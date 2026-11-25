@@ -1,5 +1,5 @@
 import type { RemoteLink } from "./link"
-import { OpFileChunk, OpFiles, OpGeneratedImageChunk, type RemoteRequest, type WorkspaceFile } from "./rpc"
+import { OpFileChunk, OpFiles, OpGeneratedImageChunk, OpInputImageChunk, type RemoteRequest, type WorkspaceFile } from "./rpc"
 import { documentFormat } from "../../../frontend/src/lib/documents/kind"
 import type { FileLocation, FileView } from "../../../frontend/src/lib/types"
 
@@ -88,6 +88,15 @@ export async function readGeneratedImage(link: RemoteLink, threadId: string, ima
     { op: OpGeneratedImageChunk, thread_id: threadId, image_id: imageId }, maxInlinePreviewBytes, { signal })
   if (!["image/png", "image/jpeg", "image/webp"].includes(mime) || bytes.length === 0) {
     throw new RemoteFileError("image_invalid_response", "invalid generated image")
+  }
+  return new Blob([bytes], { type: mime })
+}
+
+export async function readInputImage(link: RemoteLink, threadId: string, imageId: string, signal: AbortSignal): Promise<Blob> {
+  const { bytes, mime } = await readFileChunks(link, imageId,
+    { op: OpInputImageChunk, thread_id: threadId, image_id: imageId }, maxInlinePreviewBytes, { signal })
+  if (!bytes.length || previewKind("", mime, bytes.length) !== "image") {
+    throw new RemoteFileError("image_invalid_response", "invalid input image")
   }
   return new Blob([bytes], { type: mime })
 }

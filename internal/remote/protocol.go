@@ -57,6 +57,7 @@ const (
 	OpClientRead          = "client_read"
 	OpFiles               = "files"
 	OpFileChunk           = "file_chunk"
+	OpInputImageChunk     = "input_image_chunk"
 	OpGeneratedImageChunk = "generated_image_chunk"
 	OpThreadWork          = "thread_work"
 	OpTaskPanels          = "task_panels"
@@ -355,6 +356,7 @@ type EventView struct {
 	MessageID      string          `json:"message_id,omitempty"`
 	Err            string          `json:"err,omitempty"`
 	HasImages      bool            `json:"has_images,omitempty"`
+	ImageIDs       []string        `json:"image_ids,omitempty"`
 	GeneratedImage *store.ImageRef `json:"generated_image,omitempty"`
 	CreatedAt      time.Time       `json:"created_at"`
 }
