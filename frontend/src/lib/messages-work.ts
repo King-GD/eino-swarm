@@ -1,3 +1,5 @@
+export type WorkTranslate = (key: keyof typeof workEn, vars?: Record<string, string | number>) => string
+
 export const workEn = {
   "nuwa.scopeThread": "Conversation record",
   "nuwa.scopeProject": "Project record",
@@ -19,6 +21,9 @@ export const workEn = {
   "nuwa.thread": "This conversation",
   "nuwa.scope": "Work records scope",
   "nuwa.loading": "Loading shared work…",
+  "nuwa.loadFailed": "Could not load work records. Try again.",
+  "nuwa.workDisabled": "Work records are turned off on the PC.",
+  "nuwa.workTooLarge": "This graph is too large to open on the phone. View it on the PC.",
   "nuwa.empty": "Shared work will appear here as agents record tasks, facts, and results.",
   "nuwa.threadEmpty": "No work records in this conversation yet.",
   "nuwa.lastTurn": "Latest turn in this conversation",
@@ -100,6 +105,9 @@ export const workZh = {
   "nuwa.thread": "当前会话",
   "nuwa.scope": "工作记录范围",
   "nuwa.loading": "正在加载共享工作…",
+  "nuwa.loadFailed": "无法加载工作记录，请重试。",
+  "nuwa.workDisabled": "电脑已关闭工作记录。",
+  "nuwa.workTooLarge": "工作图过大，请在电脑上查看。",
   "nuwa.empty": "Agent 记录的任务、事实与成果将在这里实时呈现。",
   "nuwa.threadEmpty": "当前会话暂无工作记录。",
   "nuwa.lastTurn": "当前会话最近一轮",

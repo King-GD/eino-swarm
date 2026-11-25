@@ -55,6 +55,7 @@ const (
 	OpFiles               = "files"
 	OpFileChunk           = "file_chunk"
 	OpGeneratedImageChunk = "generated_image_chunk"
+	OpThreadWork          = "thread_work"
 	OpTaskPanels          = "task_panels"
 	OpTaskPanelRead       = "task_panel_read"
 	OpTaskPanelCancel     = "task_panel_cancel"
@@ -208,6 +209,7 @@ type Response struct {
 	Models                []ModelView                `json:"models,omitempty"`
 	ReasoningLevels       []string                   `json:"reasoning_levels,omitempty"`
 	WebExecutionSupported bool                       `json:"web_execution_supported,omitempty"`
+	WorkRecordsAvailable  bool                       `json:"work_records_available,omitempty"`
 	Put                   *PutView                   `json:"put,omitempty"`
 	Groups                []ThreadGroup              `json:"groups,omitempty"`
 	Followups             *[]FollowupView            `json:"followups,omitempty"`
@@ -217,6 +219,7 @@ type Response struct {
 	FileView              *engine.WorkspaceView      `json:"file_view,omitempty"`
 	FileChunk             *FileChunkView             `json:"file_chunk,omitempty"`
 	TaskPanels            *[]store.TaskPanelManifest `json:"task_panels,omitempty"`
+	WorkSnapshot          *store.WorkSnapshot        `json:"work_snapshot,omitempty"`
 	PanelTransfer         *PanelTransferView         `json:"panel_transfer,omitempty"`
 
 	Project             *ProjectSettings          `json:"project,omitempty"`

@@ -816,6 +816,7 @@ export function PhoneApp() {
             onReadVisibility={(visible) => { managerVisible.current = visible }}
             fileLink={link ?? undefined}
             panelOwnerKey={activeFp ? `${activeFp}:${startup?.data_generation ?? 0}` : ""}
+            workRecordsGeneration={startup?.startup === "ready" && startup.work_records_available ? startup.data_generation : undefined}
             blocks={view.blocks}
             followups={view.followups}
             onSteerFollowup={(id, mode, turnId) => mode && turnId

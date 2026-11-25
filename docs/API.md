@@ -1793,6 +1793,13 @@ Both work snapshot endpoints set `incomplete_basis` on a reported artifact
 whose visible prerequisite chain lacks an active task or a reported fact.
 New writes of reported artifacts require both prerequisites.
 
+Paired phones use the encrypted `thread_work` RPC with `thread_id`.
+The reply includes `work_snapshot` and `data_generation`. Only the
+conversation's private records and its current project's shared records
+are eligible. A compatible PC with work records enabled advertises
+`work_records_available` in `meta`. The RPC returns `work_disabled` when
+disabled and `work_too_large` when the full graph exceeds the frame budget.
+
 ### `GET /api/threads/:id/work/events`
 
 Sends a named `nuwa_updated` frame for the current thread, project, revision pair

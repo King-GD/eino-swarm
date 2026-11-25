@@ -1,11 +1,11 @@
 import { useId, useMemo, useState } from "react"
 import { ChevronRight, Maximize2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { compareNuwaRecent, isInactiveNuwaNode, layoutNuwaCollaboration, nuwaPathFocus, nuwaStatusTally, type NuwaNode, type NuwaWorker } from "@/lib/nuwa"
-import { MANAGER_ID } from "@/lib/transcript-blocks"
-import { useT } from "@/lib/use-t"
-import { cn } from "@/lib/utils"
-import { Input } from "@/components/ui/input"
+import { Button } from "../ui/button"
+import { compareNuwaRecent, isInactiveNuwaNode, layoutNuwaCollaboration, nuwaPathFocus, nuwaStatusTally, type NuwaNode, type NuwaWorker } from "../../lib/nuwa"
+import { MANAGER_ID } from "../../lib/transcript-blocks"
+import type { WorkTranslate } from "../../lib/messages-work"
+import { cn } from "../../lib/cn"
+import { Input } from "../ui/input"
 import { NuwaStatus, NuwaStale, nuwaKind, nuwaKindSurface, nuwaStatusLabel } from "./nuwa-status"
 
 const CARD_HEIGHT = 88
@@ -38,6 +38,7 @@ export function nuwaRecorder(record: NuwaNode, workers: NuwaWorker[]) {
 
 /** Buttons overlay the SVG paths so work records remain keyboard accessible. */
 export function NuwaGraph({
+  t,
   nodes,
   collapsed = [],
   conversation = false,
@@ -47,6 +48,7 @@ export function NuwaGraph({
   onExpand,
   expanded = false,
 }: {
+  t: WorkTranslate
   nodes: NuwaNode[]
   collapsed?: NuwaNode[]
   conversation?: boolean
@@ -56,7 +58,6 @@ export function NuwaGraph({
   onExpand?: () => void
   expanded?: boolean
 }) {
-  const t = useT()
   const marker = useId().replace(/:/g, "")
   const [openedKinds, setOpenedKinds] = useState<string[]>([])
   const [showCollapsed, setShowCollapsed] = useState(false)
@@ -240,8 +241,8 @@ export function NuwaGraph({
                   {record.title}
                 </span>
                 <span className="flex max-w-full items-center gap-1">
-                  <NuwaStatus status={record.status} kind={record.kind} />
-                  <NuwaStale node={record} />
+                  <NuwaStatus t={t} status={record.status} kind={record.kind} />
+                  <NuwaStale t={t} node={record} />
                 </span>
               </button>
             )
@@ -268,6 +269,7 @@ export function NuwaGraph({
             const kindLabel = nuwaKind(group.kind, t)
             return (
               <NuwaGroupRecords
+                t={t}
                 key={group.id}
                 records={group.records}
                 filterId={`${filterBase}-${group.kind}`}
@@ -283,6 +285,7 @@ export function NuwaGraph({
           })}
           {collapsedOpen && collapsed.length ? (
             <NuwaGroupRecords
+              t={t}
               records={collapsed}
               filterId={`${filterBase}-pruned`}
               filterLabel={t("nuwa.prunedFilter")}
@@ -311,8 +314,9 @@ export function NuwaGraph({
 }
 
 function NuwaGroupRecords({
-  records, filterId, filterLabel, listLabel, query, onQuery, workers, selected, onSelect,
+  t, records, filterId, filterLabel, listLabel, query, onQuery, workers, selected, onSelect,
 }: {
+  t: WorkTranslate
   records: NuwaNode[]
   filterId: string
   filterLabel: string
@@ -323,7 +327,6 @@ function NuwaGroupRecords({
   selected?: string
   onSelect: (id: string) => void
 }) {
-  const t = useT()
   const needle = query.trim().toLowerCase()
   const matching = [...records].sort(compareNuwaRecent)
     .filter((record) => !needle || record.title.toLowerCase().includes(needle) || record.summary.toLowerCase().includes(needle))
@@ -362,7 +365,7 @@ function NuwaGroupRecords({
                 <span className="min-w-0 flex-1 truncate text-xs font-medium" title={record.title}>
                   {record.title}
                 </span>
-                <NuwaStatus status={record.status} kind={record.kind} />
+                <NuwaStatus t={t} status={record.status} kind={record.kind} />
               </button>
             </li>
           )

@@ -45,6 +45,7 @@ func dispatch(eng *engine.Engine, cfg config.RemoteConfig, stage *Staging, req R
 			return mapErr(req.ID, path, sessionID, genErr)
 		}
 		resp.DataGeneration = &generation
+		resp.WorkRecordsAvailable = eng.Config().SwarmSnapshot().WorkLedger
 		resp.ProductMode = eng.Config().Snapshot().Product.Resolved()
 		policy := eng.Providers().ModelPolicy()
 		resp.ModelPolicy = &policy
@@ -80,6 +81,8 @@ func dispatch(eng *engine.Engine, cfg config.RemoteConfig, stage *Staging, req R
 		return fail(req.ID, path, sessionID, "not_found", "task not found")
 	case OpTaskPanels:
 		return handleTaskPanels(eng, req, path, sessionID)
+	case OpThreadWork:
+		return handleThreadWork(eng, req, path, sessionID)
 	case OpTaskPanelRead, OpTaskPanelCancel, OpTaskPanelClose:
 		return fail(req.ID, path, sessionID, "link_required", "panel transfers require a paired link")
 	case OpFiles:

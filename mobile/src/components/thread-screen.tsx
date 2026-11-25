@@ -1,6 +1,6 @@
 import { parseSlashSubmit } from "../../../frontend/src/lib/slash-core"
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
-import { ArrowDown, ChevronLeft, ChevronRight, FileText, Loader2, UsersRound } from "lucide-react"
+import { ArrowDown, ChevronLeft, ChevronRight, FileText, GitBranch, Loader2, UsersRound } from "lucide-react"
 
 import type { ComposerPrediction } from "../../../frontend/src/lib/composer-prediction"
 import type { InsertMode } from "../../../frontend/src/lib/delivery-mode"
@@ -15,6 +15,7 @@ import { SelectionActions } from "@/components/selection-actions"
 import { ThreadLog } from "@/components/thread-blocks"
 import { pairedTurnDestinations, scrollToTranscriptRow, TurnNavigation } from "@/components/turn-navigation"
 import { PhoneTaskPanelButton, PhoneTaskPanelSheet, usePhoneTaskPanelView } from "@/components/task-panels"
+import { PhoneWorkRecords, phoneWorkText } from "@/components/work-records"
 import { Button } from "@/components/ui/button"
 import { agentRosterText } from "@/lib/agent-label"
 import { installAndroidBack } from "@/lib/android-back"
@@ -36,6 +37,7 @@ export function ThreadScreen({
   onReadVisibility,
   fileLink,
   panelOwnerKey = "",
+  workRecordsGeneration,
   blocks,
   historyWork,
   historyBefore,
@@ -73,6 +75,7 @@ export function ThreadScreen({
   onReadVisibility?: (visible: boolean) => void
   fileLink?: RemoteLink
   panelOwnerKey?: string
+  workRecordsGeneration?: number
   blocks: CompactBlock[]
   historyWork?: HistoryWork[]
   historyBefore?: number
@@ -121,6 +124,11 @@ export function ThreadScreen({
   const [agentPage, setAgentPage] = useState("chat")
   const showingRoster = agentPage === "agents"
   const taskPanels = usePhoneTaskPanelView(fileLink, detail.id, panelOwnerKey, Boolean(detail.running))
+  const [workView, setWorkView] = useState<{ owner: string; link: RemoteLink }>()
+  const workOwner = panelOwnerKey && workRecordsGeneration !== undefined ? `${panelOwnerKey}\0${detail.id}` : ""
+  const workOpen = Boolean(fileLink && workOwner && workView?.owner === workOwner && workView.link === fileLink)
+  const closeWork = useCallback(() => setWorkView(undefined), [])
+  useEffect(() => { if (!workOpen) closeWork() }, [closeWork, workOpen])
   const turnId = detail.running?.turn_id
   const destinations = pairedTurnDestinations(detail.turns ?? [], manager, turnId)
   const suppliedPreviews = new Set(detail.turns?.filter((turn) => turn.user_text).map((turn) => turn.id))
@@ -128,7 +136,7 @@ export function ThreadScreen({
     caughtUp && hasMore && destinations.length >= 3 ? fileLink : undefined,
     detail.id, historyBefore, destinations.filter((turn) => !suppliedPreviews.has(turn.id)),
   )
-  useLayoutEffect(() => { onReadVisibility?.(agentPage === "chat" && !taskPanels.open) }, [agentPage, onReadVisibility, taskPanels.open])
+  useLayoutEffect(() => { onReadVisibility?.(agentPage === "chat" && !taskPanels.open && !workOpen) }, [agentPage, onReadVisibility, taskPanels.open, workOpen])
   const selectedAgent = agents.find((agent) => agent.id === agentPage)
   const ask = pendingAsk(manager)
   const opening = !caughtUp && blocks.length === 0
@@ -324,6 +332,14 @@ export function ThreadScreen({
     }
   }
 
+  if (workOpen && fileLink && workRecordsGeneration !== undefined) {
+    return <>
+      <PhoneWorkRecords key={workOwner} link={fileLink} threadId={detail.id} generation={workRecordsGeneration}
+        covered={taskPanels.open} onBack={closeWork} />
+      <PhoneTaskPanelSheet view={taskPanels} />
+    </>
+  }
+
   if (agentPage === "files" && fileLink) {
     return <><div className="flex min-h-0 flex-1 flex-col" inert={taskPanels.open} aria-hidden={taskPanels.open}>
       <FileBrowser key={`${detail.id}:${panelOwnerKey ?? ""}`} link={fileLink} threadId={detail.id} running={running} covered={taskPanels.open} onClose={() => changePage("chat")}
@@ -362,6 +378,12 @@ export function ThreadScreen({
           ) : null}
         </div>
         <PhoneTaskPanelButton view={taskPanels} />
+        {agentPage === "chat" && workOwner && fileLink ? (
+          <Button type="button" variant="ghost" className="size-10 shrink-0 px-0"
+            aria-label={phoneWorkText("nuwa.tab")} onClick={() => setWorkView({ owner: workOwner, link: fileLink })}>
+            <GitBranch className="size-5" aria-hidden />
+          </Button>
+        ) : null}
         {agentPage === "chat" && onOpenAccount ? <AccountButton onClick={onOpenAccount} /> : null}
       </header>
       <GoalBanner

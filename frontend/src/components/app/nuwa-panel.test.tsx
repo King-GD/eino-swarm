@@ -6,10 +6,13 @@ import { useApp } from "@/store/app"
 import { useTraceFocus } from "@/store/trace-focus"
 import { nuwaAPI, subscribeNuwa } from "@/lib/nuwa-api"
 import type { NuwaNode, NuwaSnapshot } from "@/lib/nuwa"
+import { t as translate } from "@/lib/i18n"
+import type { WorkTranslate } from "@/lib/messages-work"
 import type { Project } from "@/lib/types"
 import { publishWorkEvent } from "@/lib/nuwa-events"
 
 vi.mock("@/lib/nuwa-api", () => ({ nuwaAPI: { snapshot: vi.fn(), threadSnapshot: vi.fn(), promote: vi.fn(), distill: vi.fn() }, subscribeNuwa: vi.fn() }))
+const workText: WorkTranslate = (key, vars) => translate("en", key, vars)
 const project: Project = {
   id: "p", name: "Shared project", system_prompt: "", workdir: "", resolved_workdir: "",
   memory_enabled: false, memory_dir: "", nuwa_enabled: true, created_at: "", updated_at: "",
@@ -270,7 +273,7 @@ describe("Nuwa shared work", () => {
       node("matrix", { kind: "fact" }),
       node("poc", { kind: "artifact", depends_on: ["matrix"] }),
     ]
-    render(<NuwaGraph nodes={[...loose, ...chain]} onSelect={vi.fn()} selected="poc" />)
+    render(<NuwaGraph t={workText} nodes={[...loose, ...chain]} onSelect={vi.fn()} selected="poc" />)
     const graph = screen.getByRole("region", { name: "Shared work collaboration graph" })
     expect(within(graph).getAllByTestId("nuwa-loose-group")).toHaveLength(2)
     expect(within(graph).getByRole("button", { name: /loose-task/ })).toHaveAttribute("data-node-id", "loose-task")
@@ -295,7 +298,7 @@ describe("Nuwa shared work", () => {
     const records = Array.from({ length: 9 }, (_, index) => node(`artifact-${index}`, {
       kind: "artifact", summary: index === 3 ? "unique-summary" : "shared",
     }))
-    render(<NuwaGraph nodes={records} onSelect={vi.fn()} />)
+    render(<NuwaGraph t={workText} nodes={records} onSelect={vi.fn()} />)
     const path = screen.getByRole("region", { name: "Collaboration paths" })
     fireEvent.click(within(path).getByTestId("nuwa-loose-group"))
     const filter = screen.getByRole("textbox", { name: "Filter Results" })
@@ -309,14 +312,14 @@ describe("Nuwa shared work", () => {
   })
 
   it("leaves an unknown collaboration kind on the ordinary card", () => {
-    render(<NuwaGraph nodes={[node("note", { kind: "note" })]} onSelect={vi.fn()} />)
+    render(<NuwaGraph t={workText} nodes={[node("note", { kind: "note" })]} onSelect={vi.fn()} />)
     const card = screen.getByRole("button", { name: /Node note/ })
     expect(card.className).toContain("bg-card")
     expect(card.className).not.toMatch(/bg-nuwa-(task|fact|artifact)-bg/)
   })
 
   it("keeps unknown states visible and exposes every cyclic graph node", () => {
-    render(<NuwaGraph nodes={[node("a", { depends_on: ["b"], status: "future-status" }), node("b", { depends_on: ["a"] })]} onSelect={vi.fn()} />)
+    render(<NuwaGraph t={workText} nodes={[node("a", { depends_on: ["b"], status: "future-status" }), node("b", { depends_on: ["a"] })]} onSelect={vi.fn()} />)
     expect(screen.getByText("future-status")).toBeInTheDocument()
     expect(screen.getByRole("status")).toHaveTextContent("cycle")
     expect(screen.getAllByRole("button")).toHaveLength(2)

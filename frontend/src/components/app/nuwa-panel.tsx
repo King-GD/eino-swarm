@@ -257,6 +257,7 @@ export function NuwaPanel({
           ) : null}
           {nodes.length ? (
             <NuwaGraph
+              t={t}
               nodes={graphNodes}
               collapsed={showPruned ? [] : collapsed}
               conversation={effectiveScope === "thread"}
@@ -289,7 +290,7 @@ export function NuwaPanel({
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-medium">{t("nuwa.lastTurn")}</span>
                     <span role="status">
-                      <NuwaStatus status={activity.status === "error" ? "failed" : activity.status} />
+                      <NuwaStatus t={t} status={activity.status === "error" ? "failed" : activity.status} />
                     </span>
                   </div>
                   <div className="mt-1 flex flex-wrap gap-1">
@@ -352,6 +353,7 @@ export function NuwaPanel({
                   : "grid-rows-[minmax(0,1fr)]",
               )}>
                 <NuwaGraph
+                  t={t}
                   nodes={graphNodes}
                   collapsed={showPruned ? [] : collapsed}
                   conversation={effectiveScope === "thread"}
@@ -415,7 +417,7 @@ function WorkerRow({ worker, onOpen }: { worker: NuwaWorker; onOpen: () => void 
           </span>
         ) : null}
       </span>
-      <NuwaStatus status={worker.status} />
+      <NuwaStatus t={t} status={worker.status} />
     </button>
   )
 }
@@ -453,7 +455,7 @@ function NodeDetail({
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <h3 className="wrap-break-word text-(length:--chrome-font-size) font-medium">{node.title}</h3>
-        <NuwaStatus status={node.status} kind={node.kind} />
+        <NuwaStatus t={t} status={node.status} kind={node.kind} />
       </div>
       <p className="whitespace-pre-wrap wrap-break-word text-xs text-muted-foreground">
         {node.summary}

@@ -43,6 +43,7 @@ export const OpFiles = "files"
 export const OpFileChunk = "file_chunk"
 export const OpGeneratedImageChunk = "generated_image_chunk"
 export const OpTaskPanels = "task_panels"
+export const OpThreadWork = "thread_work"
 export const OpTaskPanelRead = "task_panel_read"
 export const OpTaskPanelCancel = "task_panel_cancel"
 export const OpTaskPanelClose = "task_panel_close"
@@ -277,6 +278,7 @@ export type EngineStartup = {
   startup?: "restoring" | "ready"
   restore?: { completed: number; total: number; failed?: number }
   data_generation?: number
+  work_records_available?: boolean
   model_policy?: ModelPolicy
   product_mode?: "fofa" | "local"
 }
@@ -335,6 +337,7 @@ export type RemoteResponse = EngineStartup & {
   file_view?: import("../../../frontend/src/lib/types").FileView
   file_chunk?: FileChunk
   task_panels?: TaskPanelManifest[]
+  work_snapshot?: Pick<import("../../../frontend/src/lib/nuwa").ThreadWorkSnapshot, "thread_id" | "project_id" | "nodes">
   panel_transfer?: TaskPanelTransfer
   translation?: string
   speech?: import("../../../frontend/src/lib/speech-types").SpeechSnapshot

@@ -5,6 +5,7 @@ import { MockProductMode } from "./mock-product-mode"
 import { MockSpeech } from "./mock-speech"
 import { MOCK_FLAG, mockTickMs, mockPauseOpenMs, mockPauseClientsMs } from "./mock-link-timing"
 import { mockTaskPanelRPC, releaseMockTaskPanels, resetMockTaskPanels } from "./mock-task-panels"
+import { mockThreadWork, mockWorkRecordsMeta } from "./mock-work-records"
 export { wantsMock, mockTickMs, mockPauseOpenMs } from "./mock-link-timing"
 import { mockFileChunk, mockListedFiles, mockOutputFiles, mockScopedFiles } from "./mock-files"
 import { iterationLimitHistory, iterationSnapshotOnly, mockAwaitingContinue, mockContinueIteration } from "./mock-iteration-limit"
@@ -29,6 +30,7 @@ import {
   OpFollowupSteer,
   OpHello,
   OpMeta,
+  OpThreadWork,
   OpClientRead,
   OpClients,
   OpList,
@@ -860,8 +862,10 @@ export class MockLink {
       case OpMeta: {
         const search = new URLSearchParams(location.search)
         const [completed, total] = (search.get("restore") ?? "0,0").split(",").map(Number)
-        return this.ok({ id, startup: search.get("startup") === "restoring" ? "restoring" : "ready", restore: { completed, total }, web_execution_supported: true, web_execution_status: { preference: "auto", execution: "local", cloud_account: "sign_in_required" } })
+        return this.ok({ id, ...mockWorkRecordsMeta(), startup: search.get("startup") === "restoring" ? "restoring" : "ready", restore: { completed, total }, web_execution_supported: true, web_execution_status: { preference: "auto", execution: "local", cloud_account: "sign_in_required" } })
       }
+      case OpThreadWork:
+        return this.ok({ id, ...mockThreadWork(thread()) })
       case OpHello:
         return this.ok({ id })
       case OpUnwatch:

@@ -493,6 +493,11 @@ failed preconditions and retraction/restoration. Exercise draft saves from a
 second window while both work panels receive native chat-stream invalidations.
 The Playwright run uses an isolated server, data directory and evidence output.
 
+For the paired phone, `TestPairedPhoneWorkRecords*` exercises scope, the PC
+switch, and frame budget through a sealed link. `mobile/e2e/work-records.spec.ts`
+checks the path, details, scope switching, and the live PC setting on phone
+viewports.
+
 For native acceptance, prepare the matching AX helpers on the host.
 
 ```bash

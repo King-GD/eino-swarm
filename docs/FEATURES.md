@@ -233,7 +233,7 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-139 Conversation work records
 
-- 入口：PC／Web 右侧工作记录、宿主 `read_work`／`record_work` 与会话工作接口展示并保存任务、事实、成果及可核验来源。新记录默认归会话，可单向合并到所属项目并保留身份、历史和依赖。规划回合只读。非法共享、版本冲突和存储故障有明确反馈。见 `C-055` 和 [工作记录](WORK.md)。
+- 入口：PC／Web 右侧工作记录、配对手机会话顶部的工作记录、宿主 `read_work`／`record_work` 与会话工作接口。手机可以只读查看当前会话和项目协作路径。新记录默认归会话，可单向合并到所属项目并保留身份、历史和依赖。规划回合只读。非法共享、版本冲突和存储故障有明确反馈。见 `C-055` 和 [工作记录](WORK.md)。
 - 面板默认展示会话私有记录，可切换至项目共享记录。没有自有工作记录的历史会话可提炼。Agent 与模型默认折叠，选择节点打开单独详情。保留 worker、Trace 和文件入口。可展开发现已剪枝记录，状态恢复时自动回显，仍需要重新确认的依赖有独立提示。实现证据：`internal/store/nuwa.go`、`internal/engine/nuwa_tools.go`、`internal/server/nuwa.go`、`frontend/src/components/app/nuwa-panel.tsx` 和 `frontend/e2e/nuwa.spec.ts`。
 
 ### F-138 Project Markdown knowledge base
