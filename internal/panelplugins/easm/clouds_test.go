@@ -255,3 +255,54 @@ func TestCloudsFollowTheQueryTheyWereCollectedFor(t *testing.T) {
 		t.Fatalf("clouds survived another query: %+v", changed.Clouds)
 	}
 }
+
+// A panel stored before the table existed has neither a clouds field nor a
+// clouds step. Repeating its query must collect only the providers: the totals,
+// trend and components it already holds stay and cost no further requests.
+func TestRepeatingQueryOnAPanelStoredBeforeTheTableRunsOnlyClouds(t *testing.T) {
+	settings := onlyRoles(RoleStats, RoleHeat)
+	input := Input{Subject: "Subject", Query: metricQuery}
+	heat := `{"hot_trend":[{"date":"2026-01-02","value":2}]}`
+	first, _, err := push(t, nil, input, settings, aggregationReplies(`{"size":7,"distinct":{"ip":3}}`, heat))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var stored map[string]any
+	if err := json.Unmarshal(stateJSON(t, first), &stored); err != nil {
+		t.Fatal(err)
+	}
+	delete(stored, "clouds")
+	collection := stored["collection"].(map[string]any)
+	var steps []any
+	for _, step := range collection["steps"].([]any) {
+		if step.(map[string]any)["id"] != string(StepClouds) {
+			steps = append(steps, step)
+		}
+	}
+	collection["steps"] = steps
+	legacy, err := json.Marshal(stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	retry := aggregationReplies(`{"size":7,"distinct":{"ip":3}}`, heat)
+	state, _, err := push(t, legacy, input, settings, retry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := requestsFor(retry, RoleStats, "cloud_name"); got != 1 || len(retry.requests(RoleStats)) != 1 || len(retry.requests(RoleHeat)) != 0 {
+		t.Fatalf("stats requests = %v, heat requests = %v", retry.requests(RoleStats), retry.requests(RoleHeat))
+	}
+	for _, step := range Steps {
+		if got := stepStatus(state, step); got.Status != statusDone {
+			t.Errorf("%s = %+v", step, got)
+		}
+	}
+	if state.Summary == nil || state.Summary.FOFAAssets == nil || *state.Summary.FOFAAssets != 7 || len(state.Heat) != 1 || len(state.Components) != 1 {
+		t.Fatalf("retained results = summary %+v, heat %+v, components %+v", state.Summary, state.Heat, state.Components)
+	}
+	if state.Clouds == nil {
+		t.Fatal("clouds were not published as a list")
+	}
+}
