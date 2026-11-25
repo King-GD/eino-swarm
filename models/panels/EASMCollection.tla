@@ -4,8 +4,8 @@ EXTENDS Naturals, FiniteSets
 (* One panel, three steps, two queries and at most two serial source calls.
    The producer's fourth step, clouds, is not modeled separately: like
    components it has no partial-result semantics, assembles its replies
-   off-lock (its per-provider requests and total check stay inside the step)
-   and applies once before the shared outcome/flush, so it adds states but
+   off-lock (its bounded per-provider service lookups are joined inside the
+   step) and applies once before the shared outcome/flush, so it adds states but
    no new interleaving. A per-row publication would change that and needs
    the model first.
    Variant 1 checks query/retry decisions; variant 2 checks concurrent steps,

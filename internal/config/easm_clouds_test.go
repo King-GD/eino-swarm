@@ -5,15 +5,24 @@ import (
 	"testing"
 )
 
-// The table is a lookup keyed by lowercase source names: an uppercase key would
-// never match and the provider would show untranslated under a blank category.
+// The table is code, not user configuration, so its shape is checked here
+// rather than when settings load: an uppercase or untrimmed key would never
+// match, an empty display name would show a blank provider, and a category
+// outside the published set would reach the renderer as a blank cell.
 func TestCloudLabelsAreAddressable(t *testing.T) {
-	if err := validateCloudLabels(EASMCloudLabels); err != nil {
-		t.Fatal(err)
+	known := make(map[string]bool, len(EASMCloudCategories))
+	for _, category := range EASMCloudCategories {
+		known[category] = true
 	}
 	for name, label := range EASMCloudLabels {
-		if name != strings.ToLower(name) || label.Display != strings.TrimSpace(label.Display) {
-			t.Fatalf("label %q = %+v is not addressable", name, label)
+		if name == "" || name != strings.ToLower(strings.TrimSpace(name)) {
+			t.Errorf("key %q must be trimmed lowercase", name)
+		}
+		if label.Display == "" || label.Display != strings.TrimSpace(label.Display) {
+			t.Errorf("%s: display name %q must be nonempty and trimmed", name, label.Display)
+		}
+		if !known[label.Category] {
+			t.Errorf("%s: unpublished category %q", name, label.Category)
 		}
 	}
 }
@@ -34,51 +43,6 @@ func TestUnmappedCloudNamesStayUncategorised(t *testing.T) {
 	compute, mail := CloudLabelFor("Tencent"), CloudLabelFor("Tencent Mail")
 	if compute.Category != CloudCategoryCompute || mail.Category != CloudCategoryMail || compute.Display == mail.Display {
 		t.Fatalf("tencent = %+v/%+v", compute, mail)
-	}
-}
-
-// Vendor names leak into product buckets as their own labels. A Latin name of
-// three characters or fewer also occurs inside real product names, so it stays
-// out of the set.
-func TestCloudVendorNamesSkipAmbiguousShortLabels(t *testing.T) {
-	names := CloudVendorNames()
-	for _, want := range []string{"白山云", "金山云", "阿里云", "cloudfront"} {
-		if !names[want] {
-			t.Fatalf("%q is not recognised as a vendor label", want)
-		}
-	}
-	for _, ambiguous := range []string{"360", "aws", "263"} {
-		if names[ambiguous] {
-			t.Fatalf("%q would match real product names", ambiguous)
-		}
-	}
-}
-
-// The category is the only part the renderer words; a value outside the
-// published set reaches it as a blank cell.
-func TestCloudLabelsUsePublishedCategories(t *testing.T) {
-	known := make(map[string]bool, len(EASMCloudCategories))
-	for _, category := range EASMCloudCategories {
-		known[category] = true
-	}
-	for name, label := range EASMCloudLabels {
-		if !known[label.Category] {
-			t.Fatalf("%s: unpublished category %q", name, label.Category)
-		}
-	}
-}
-
-// A table that cannot be used as a lookup must fail the settings check instead
-// of publishing blank cells.
-func TestCloudLabelTableRefusesUnusableEntries(t *testing.T) {
-	for name, labels := range map[string]map[string]CloudLabel{
-		"uppercase key":    {"AWS": {"AWS", CloudCategoryCompute}},
-		"empty display":    {"aws": {"", CloudCategoryCompute}},
-		"unknown category": {"aws": {"AWS", "iaas"}},
-	} {
-		if err := validateCloudLabels(labels); err == nil {
-			t.Fatalf("%s was accepted", name)
-		}
 	}
 }
 

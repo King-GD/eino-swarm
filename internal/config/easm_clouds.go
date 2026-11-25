@@ -1,9 +1,6 @@
 package config
 
-import (
-	"strings"
-	"unicode"
-)
+import "strings"
 
 // Hosting categories of the portrait's cloud table. FOFA reports only a
 // cloud_name string, so what a name means for the reader is maintained here
@@ -273,32 +270,4 @@ func CloudLabelFor(name string) CloudLabel {
 		return CloudLabel{Category: CloudCategoryUnknown}
 	}
 	return label
-}
-
-// CloudVendorNames lists the display names used to recognise a vendor label
-// that leaked into another aggregation, e.g. "金山云-CDN" among product
-// buckets. Short Latin names are left out: "360" and "AWS" also occur inside
-// real product names, while a two-character CJK name such as "网宿" does not.
-func CloudVendorNames() map[string]bool {
-	names := make(map[string]bool, len(EASMCloudLabels))
-	for _, label := range EASMCloudLabels {
-		if unambiguousVendorName(label.Display) {
-			names[strings.ToLower(label.Display)] = true
-		}
-	}
-	return names
-}
-
-func unambiguousVendorName(display string) bool {
-	ascii := true
-	for _, r := range display {
-		if r > unicode.MaxASCII {
-			ascii = false
-			break
-		}
-	}
-	if ascii {
-		return len(display) >= 4
-	}
-	return len([]rune(display)) >= 2
 }

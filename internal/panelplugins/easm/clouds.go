@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 )
@@ -19,41 +20,46 @@ func init() {
 // known after the whole list is in.
 const cloudBucketLimit = 100
 
-// cloudTotalMismatch reports a provider whose filtered total disagrees with the
-// buckets it was built from. The row's numbers would describe an asset range
-// the table never showed, so the step fails instead of publishing them.
-const cloudTotalMismatch = "cloud_total_mismatch"
-
-// cloudServiceFloor is the smallest bucket request the stats backend accepts;
-// only its other mode goes lower. max_services may be configured below this, so
-// the request asks for the floor and the published list is trimmed afterwards.
+// cloudServiceFloor is the smallest bucket request the stats API accepts.
+// max_services may be configured below it, so the request asks for the floor
+// and the published list is trimmed afterwards.
 const cloudServiceFloor = 5
 
+// cloudServiceLookups bounds the per-provider service requests in flight. The
+// stats backend is rate limited to five requests a second; FOFA AI uses the
+// same bound for its chart requests.
+const cloudServiceLookups = 4
+
+// cloudBucket is one cloud_name bucket. uniq carries the bucket's own distinct
+// IP count because the request asks for uniq_count=ip.
+type cloudBucket struct {
+	Name  string          `json:"name"`
+	Count json.RawMessage `json:"count"`
+	Uniq  struct {
+		IP json.RawMessage `json:"ip"`
+	} `json:"uniq"`
+}
+
 // cloudRow accumulates the buckets that name the same provider. names keeps
-// every distinct source spelling so the detail filter covers exactly those
-// buckets, rather than trusting the source to treat "aws" and "Amazon AWS"
-// alike. Case variants collapse: the filter matched both spellings of one name,
-// and the filtered total still has to agree with the buckets it came from.
+// every distinct source spelling so the service filter covers exactly those
+// buckets rather than trusting the source to treat "aws" and "Amazon AWS" alike.
 type cloudRow struct {
 	label  config.CloudLabel
 	key    string
 	names  []string
 	assets int64
+	ips    int64
 }
 
-// clouds aggregates the query's assets by hosting provider and then asks each
-// shown provider for its own total and services. The second request per row is
-// what makes the numbers self-consistent: bucket counts cannot be summed into
-// an IP total, and a case-insensitive filter covers spellings the bucket list
-// splits apart.
+// clouds aggregates the query's assets by hosting provider. One request gives
+// every row its asset and distinct-IP counts; each shown provider then gets one
+// filtered request for its services. A provider whose service lookup fails
+// keeps its counts with an empty service list: the counts do not depend on it.
 func (r *run) clouds(ctx context.Context) error {
 	var reply struct {
 		Query json.RawMessage `json:"query"`
 		Aggs  struct {
-			CloudName *[]struct {
-				Name  string          `json:"name"`
-				Count json.RawMessage `json:"count"`
-			} `json:"cloud_name"`
+			CloudName *[]cloudBucket `json:"cloud_name"`
 		} `json:"aggs"`
 	}
 	arguments := map[string]any{
@@ -76,25 +82,46 @@ func (r *run) clouds(ctx context.Context) error {
 	if len(rows) > r.settings.MaxClouds {
 		rows = rows[:r.settings.MaxClouds]
 	}
-	clouds := make([]Cloud, 0, len(rows))
-	for _, row := range rows {
-		cloud, err := r.cloudDetail(ctx, row)
-		if err != nil {
-			return err
+	clouds := make([]Cloud, len(rows))
+	slots := make(chan struct{}, cloudServiceLookups)
+	var wg sync.WaitGroup
+	for i, row := range rows {
+		clouds[i] = Cloud{
+			Name:        row.names[0],
+			DisplayName: row.label.Display,
+			Category:    row.label.Category,
+			Assets:      row.assets,
+			IPs:         row.ips,
+			Services:    []CloudService{},
 		}
-		clouds = append(clouds, cloud)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case slots <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
+			defer func() { <-slots }()
+			if services, err := r.cloudServices(ctx, row); err == nil {
+				clouds[i].Services = services
+			}
+		}()
+	}
+	wg.Wait()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	r.apply(func(state *State) { state.Clouds = clouds })
 	return nil
 }
 
 // mergeCloudRows folds the source's spellings into one row per provider and
-// orders them by asset count. Ties break on the merge key so two runs over the
-// same reply publish the same order.
-func mergeCloudRows(buckets []struct {
-	Name  string          `json:"name"`
-	Count json.RawMessage `json:"count"`
-}) ([]cloudRow, error) {
+// orders them by asset count. Merged IP counts are summed: an address reported
+// under two spellings of one provider is counted twice, which the documentation
+// states. Ties break on the merge key so two runs over the same reply publish
+// the same order.
+func mergeCloudRows(buckets []cloudBucket) ([]cloudRow, error) {
 	byKey := map[string]*cloudRow{}
 	var rows []*cloudRow
 	for _, bucket := range buckets {
@@ -105,6 +132,10 @@ func mergeCloudRows(buckets []struct {
 		count, ok, err := exactCount(bucket.Count)
 		if err != nil || !ok {
 			return nil, fmt.Errorf("malformed cloud bucket")
+		}
+		ips, ok, err := exactCount(bucket.Uniq.IP)
+		if err != nil || !ok {
+			return nil, fmt.Errorf("cloud bucket carries no distinct ip count")
 		}
 		label := config.CloudLabelFor(name)
 		key := strings.ToLower(label.Display)
@@ -120,6 +151,7 @@ func mergeCloudRows(buckets []struct {
 			rows = append(rows, row)
 		}
 		row.assets += count
+		row.ips += ips
 		if !containsFold(row.names, name) {
 			row.names = append(row.names, name)
 		}
@@ -146,67 +178,59 @@ func containsFold(values []string, value string) bool {
 	return false
 }
 
-// cloudDetail asks for one provider's own totals and services inside the run's
-// query. The filtered total must equal the buckets it was built from; anything
-// else means the filter reached a wider asset range than the table shows.
-func (r *run) cloudDetail(ctx context.Context, row cloudRow) (Cloud, error) {
+// cloudServices asks for one provider's most common services inside the run's
+// query and keeps the first max_services. The buckets are shown as reported.
+func (r *run) cloudServices(ctx context.Context, row cloudRow) ([]CloudService, error) {
 	query, err := cloudFilterQuery(r.input.Query, row.names)
 	if err != nil {
-		return Cloud{}, err
+		return nil, err
 	}
 	var reply struct {
-		Query    json.RawMessage            `json:"query"`
-		Size     json.RawMessage            `json:"size"`
-		Distinct map[string]json.RawMessage `json:"distinct"`
-		Aggs     struct {
+		Query json.RawMessage `json:"query"`
+		Aggs  struct {
 			Product *[]struct {
 				Name  json.RawMessage `json:"name"`
 				Count json.RawMessage `json:"count"`
 			} `json:"product"`
 		} `json:"aggs"`
 	}
-	size := r.settings.MaxServices
-	if size < cloudServiceFloor {
-		size = cloudServiceFloor
-	}
 	arguments := map[string]any{
-		"query": query, "fields": "product3", "uniq_count": "ip",
-		"tool": fofaSource, "size": size,
+		"query": query, "fields": "product3", "tool": fofaSource,
+		"size": max(r.settings.MaxServices, cloudServiceFloor),
 	}
 	if err := r.call(ctx, RoleStats, arguments, &reply); err != nil {
-		return Cloud{}, err
+		return nil, err
 	}
 	if err := queryMatches(reply.Query, query); err != nil {
-		return Cloud{}, err
+		return nil, err
 	}
-	assets, ok, err := exactCount(reply.Size)
-	if err != nil || !ok {
-		return Cloud{}, fmt.Errorf("cloud reply carries no total")
+	if reply.Aggs.Product == nil {
+		return []CloudService{}, nil
 	}
-	if assets != row.assets {
-		return Cloud{}, &ToolError{Code: cloudTotalMismatch}
+	services := make([]CloudService, 0, len(*reply.Aggs.Product))
+	seen := map[string]bool{}
+	for _, bucket := range *reply.Aggs.Product {
+		name, _ := productName(bucket.Name)
+		count, ok, err := exactCount(bucket.Count)
+		if name == "" || err != nil || !ok {
+			return nil, fmt.Errorf("malformed cloud service bucket")
+		}
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		services = append(services, CloudService{Name: name, Count: count})
 	}
-	ips, ok, err := exactCount(reply.Distinct["ip"])
-	if err != nil || !ok {
-		return Cloud{}, fmt.Errorf("cloud reply carries no distinct ip total")
-	}
-	services, err := cloudServices(reply.Aggs.Product)
-	if err != nil {
-		return Cloud{}, err
-	}
-	// The request asks for the backend's floor; the table shows only what the
-	// setting allows, counted after vendor labels are dropped.
+	sort.SliceStable(services, func(i, j int) bool {
+		if services[i].Count != services[j].Count {
+			return services[i].Count > services[j].Count
+		}
+		return services[i].Name < services[j].Name
+	})
 	if len(services) > r.settings.MaxServices {
 		services = services[:r.settings.MaxServices]
 	}
-	return Cloud{
-		Name:        row.names[0],
-		DisplayName: row.label.Display,
-		Category:    row.label.Category,
-		Assets:      assets,
-		IPs:         ips,
-		Services:    services,
-	}, nil
+	return services, nil
 }
 
 // cloudFilterQuery narrows the portrait's query to one provider's buckets. Each
@@ -220,67 +244,5 @@ func cloudFilterQuery(base string, names []string) (string, error) {
 		}
 		terms = append(terms, `cloud_name="`+name+`"`)
 	}
-	if len(terms) == 0 {
-		return "", fmt.Errorf("cloud row has no source name")
-	}
 	return "(" + base + ") && (" + strings.Join(terms, " || ") + ")", nil
-}
-
-// cloudServices returns the provider's most common services. A bucket naming a
-// hosting vendor is dropped: the product table describes the edge that answered,
-// so "金山云-CDN" under an Aliyun asset is the edge's label, not the services
-// the company runs there.
-func cloudServices(buckets *[]struct {
-	Name  json.RawMessage `json:"name"`
-	Count json.RawMessage `json:"count"`
-}) ([]CloudService, error) {
-	if buckets == nil {
-		return []CloudService{}, nil
-	}
-	vendors := config.CloudVendorNames()
-	services := make([]CloudService, 0, len(*buckets))
-	seen := map[string]int64{}
-	for _, bucket := range *buckets {
-		name, _ := productName(bucket.Name)
-		count, ok, err := exactCount(bucket.Count)
-		if name == "" || err != nil || !ok {
-			return nil, fmt.Errorf("malformed cloud service bucket")
-		}
-		if vendorLabel(name, vendors) {
-			continue
-		}
-		if previous, duplicate := seen[name]; duplicate {
-			if previous != count {
-				return nil, fmt.Errorf("conflicting cloud service bucket")
-			}
-			continue
-		}
-		seen[name] = count
-		services = append(services, CloudService{Name: name, Count: count})
-	}
-	sort.SliceStable(services, func(i, j int) bool {
-		if services[i].Count != services[j].Count {
-			return services[i].Count > services[j].Count
-		}
-		return services[i].Name < services[j].Name
-	})
-	return services, nil
-}
-
-// vendorLabel reports whether a service name is a hosting vendor's own label.
-// Names split on punctuation so "白山云科技-白山云" and "金山云-CDN" match while
-// the real product "Cdn-Cache-Server" does not.
-func vendorLabel(name string, vendors map[string]bool) bool {
-	lower := strings.ToLower(name)
-	if strings.HasSuffix(lower, "-cdn") {
-		return true
-	}
-	for _, part := range strings.FieldsFunc(lower, func(r rune) bool {
-		return r == '-' || r == '_' || r == ' ' || r == '/' || r == '.' || r == '(' || r == ')'
-	}) {
-		if vendors[part] {
-			return true
-		}
-	}
-	return false
 }

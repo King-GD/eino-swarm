@@ -1,18 +1,24 @@
 package easm
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
-// cloudCaller answers the distribution, the per-provider detail and the other
-// stats consumers of one run, so a test sees the requests a real step sends.
+// cloudCaller answers the provider distribution, the per-provider service
+// lookups and the other stats consumers of one run. Service lookups run
+// concurrently, so the recorded requests are guarded.
 type cloudCaller struct {
 	distribution string
-	detail       func(query string) (string, error)
+	services     func(query string) (string, error)
+	mu           sync.Mutex
 	sent         []string
 	sizes        []any
 }
@@ -25,9 +31,11 @@ func (c *cloudCaller) caller() *fakeCaller {
 				return c.distribution, nil
 			case "product3":
 				query, _ := arguments["query"].(string)
+				c.mu.Lock()
 				c.sent = append(c.sent, query)
 				c.sizes = append(c.sizes, arguments["size"])
-				return c.detail(query)
+				c.mu.Unlock()
+				return c.services(query)
 			case "ip":
 				return `{"size":1,"distinct":{"ip":1}}`, nil
 			default:
@@ -37,41 +45,42 @@ func (c *cloudCaller) caller() *fakeCaller {
 	}}
 }
 
-// cloudDetailReply echoes the filtered query, because a reply describing another
-// range is refused.
-func cloudDetailReply(query string, assets, ips int64, products string) (string, error) {
+// cloudServiceReply echoes the filtered query, because a reply describing
+// another range is refused.
+func cloudServiceReply(query, products string) (string, error) {
 	echoed, err := json.Marshal(query)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`{"query":%s,"size":%d,"distinct":{"ip":%d},"aggs":{"product":%s}}`, echoed, assets, ips, products), nil
+	return fmt.Sprintf(`{"query":%s,"aggs":{"product":%s}}`, echoed, products), nil
 }
 
-// The table shows the company's assets behind each provider, not the provider's
-// own footprint: each row's totals come from a request filtered to that
-// provider. Spellings that name one provider become one row, while Tencent and
-// Tencent Mail stay apart because one is compute and the other is mail.
+// Each row's asset and IP counts come from its cloud_name buckets, so the
+// numbers describe the company's assets behind that provider. Spellings of one
+// provider become one row with summed counts, while Tencent and Tencent Mail
+// stay apart because one is compute and the other is mail. Services are shown
+// as the source reported them.
 func TestCloudsMergeSpellingsIntoOneRowPerProvider(t *testing.T) {
 	distribution := `{"query":"org=\"Subject\"","aggs":{"cloud_name":[
-		{"name":"BaiShanCloud","count":1131},
-		{"name":"BaishanCloud","count":4},
-		{"name":"Tencent","count":278},
-		{"name":"Tencent Mail","count":56},
-		{"name":"Cloudfront","count":25},
-		{"name":"cloudfront","count":1},
-		{"name":"Aliyun","count":26}]}}`
-	caller := &cloudCaller{distribution: distribution, detail: func(query string) (string, error) {
+		{"name":"BaiShanCloud","count":1131,"uniq":{"ip":130}},
+		{"name":"BaishanCloud","count":4,"uniq":{"ip":1}},
+		{"name":"Tencent","count":278,"uniq":{"ip":90}},
+		{"name":"Tencent Mail","count":56,"uniq":{"ip":40}},
+		{"name":"Cloudfront","count":25,"uniq":{"ip":20}},
+		{"name":"cloudfront","count":1,"uniq":{"ip":1}},
+		{"name":"Aliyun","count":26,"uniq":{"ip":20}}]}}`
+	caller := &cloudCaller{distribution: distribution, services: func(query string) (string, error) {
 		switch {
 		case strings.Contains(query, "BaiShanCloud"):
-			return cloudDetailReply(query, 1135, 131, `[{"name":"NGINX","count":980},{"name":"白山云科技-白山云","count":36},{"name":"OpenResty","count":54},{"name":"金山云-CDN","count":31},{"name":"fasthttp","count":14}]`)
+			return cloudServiceReply(query, `[{"name":"NGINX","count":980},{"name":"白山云科技-白山云","count":36},{"name":"OpenResty","count":54}]`)
 		case strings.Contains(query, "Tencent Mail"):
-			return cloudDetailReply(query, 56, 40, `[{"name":"Exchange","count":30}]`)
+			return cloudServiceReply(query, `[{"name":"Exchange","count":30}]`)
 		case strings.Contains(query, `"Tencent"`):
-			return cloudDetailReply(query, 278, 90, `[{"name":"OpenResty","count":200}]`)
+			return cloudServiceReply(query, `[{"name":"OpenResty","count":200}]`)
 		case strings.Contains(query, "Aliyun"):
-			return cloudDetailReply(query, 26, 20, `[{"name":"Tengine","count":9}]`)
+			return cloudServiceReply(query, `[{"name":"Tengine","count":9}]`)
 		default:
-			return cloudDetailReply(query, 26, 21, `[{"name":"NGINX","count":12}]`)
+			return cloudServiceReply(query, `[{"name":"NGINX","count":12}]`)
 		}
 	}}
 	state := runMetrics(t, nil, onlyRoles(RoleStats), caller.caller())
@@ -81,7 +90,7 @@ func TestCloudsMergeSpellingsIntoOneRowPerProvider(t *testing.T) {
 	// Equal totals break on the merge key, so two runs over one reply order the
 	// same way.
 	want := []Cloud{
-		{Name: "BaiShanCloud", DisplayName: "白山云", Category: "cdn", Assets: 1135, IPs: 131, Services: []CloudService{{"NGINX", 980}, {"OpenResty", 54}, {"fasthttp", 14}}},
+		{Name: "BaiShanCloud", DisplayName: "白山云", Category: "cdn", Assets: 1135, IPs: 131, Services: []CloudService{{"NGINX", 980}, {"OpenResty", 54}, {"白山云科技-白山云", 36}}},
 		{Name: "Tencent", DisplayName: "腾讯云", Category: "cloud", Assets: 278, IPs: 90, Services: []CloudService{{"OpenResty", 200}}},
 		{Name: "Tencent Mail", DisplayName: "腾讯企业邮箱", Category: "mail", Assets: 56, IPs: 40, Services: []CloudService{{"Exchange", 30}}},
 		{Name: "Cloudfront", DisplayName: "CloudFront", Category: "cdn", Assets: 26, IPs: 21, Services: []CloudService{{"NGINX", 12}}},
@@ -90,15 +99,9 @@ func TestCloudsMergeSpellingsIntoOneRowPerProvider(t *testing.T) {
 	if !reflect.DeepEqual(state.Clouds, want) {
 		t.Fatalf("clouds = %+v", state.Clouds)
 	}
-	// Distinct spellings each become their own term, because the producer does
-	// not assume the backend treats "aws" and "Amazon AWS" alike. Case variants
-	// collapse: the filter matched both spellings of one name in practice, and
-	// the total check below would catch it if it did not.
-	if len(caller.sent) != len(want) {
-		t.Fatalf("detail requests = %v", caller.sent)
-	}
-	if !containsString(caller.sent, `(org="Subject") && (cloud_name="BaiShanCloud")`) {
-		t.Fatalf("merged filter = %v", caller.sent)
+	// Distinct spellings each become their own term; case variants collapse.
+	if len(caller.sent) != len(want) || !containsString(caller.sent, `(org="Subject") && (cloud_name="BaiShanCloud")`) {
+		t.Fatalf("service requests = %v", caller.sent)
 	}
 }
 
@@ -111,14 +114,14 @@ func containsString(values []string, want string) bool {
 	return false
 }
 
-// max_services can be configured below the five buckets the stats backend
-// accepts, so the request must ask for the floor and the row keeps only the
-// configured number: sending the configured value would fail every portrait.
+// max_services can be configured below the five buckets the stats API accepts,
+// so the request asks for the floor and the row keeps only the configured
+// number: sending the configured value would fail every lookup.
 func TestCloudsRequestTheBackendFloorAndTrimServices(t *testing.T) {
 	caller := &cloudCaller{
-		distribution: `{"query":"org=\"Subject\"","aggs":{"cloud_name":[{"name":"AWS","count":10}]}}`,
-		detail: func(query string) (string, error) {
-			return cloudDetailReply(query, 10, 4, `[{"name":"NGINX","count":6},{"name":"Envoy","count":5},{"name":"Apache","count":4},{"name":"Caddy","count":3},{"name":"HAProxy","count":2}]`)
+		distribution: `{"query":"org=\"Subject\"","aggs":{"cloud_name":[{"name":"AWS","count":10,"uniq":{"ip":4}}]}}`,
+		services: func(query string) (string, error) {
+			return cloudServiceReply(query, `[{"name":"NGINX","count":6},{"name":"Envoy","count":5},{"name":"Apache","count":4},{"name":"Caddy","count":3},{"name":"HAProxy","count":2}]`)
 		},
 	}
 	settings := testSettings()
@@ -136,40 +139,82 @@ func TestCloudsRequestTheBackendFloorAndTrimServices(t *testing.T) {
 	}
 }
 
-// A filtered total that disagrees with the buckets it came from means the filter
-// reached a wider asset range than the table shows; publishing it would put two
-// different populations in one row.
-func TestCloudsRefuseAProviderWhoseFilteredTotalDisagrees(t *testing.T) {
+// The table shows the largest max_clouds providers. A repeated service bucket
+// is shown once, equal counts order by name so two runs agree, and a reply
+// without service buckets leaves the row's services empty.
+func TestCloudsKeepTheLargestProvidersAndOrderServicesStably(t *testing.T) {
 	caller := &cloudCaller{
-		distribution: `{"query":"org=\"Subject\"","aggs":{"cloud_name":[{"name":"AWS","count":10}]}}`,
-		detail: func(query string) (string, error) {
-			return cloudDetailReply(query, 11, 3, `[]`)
+		distribution: `{"query":"org=\"Subject\"","aggs":{"cloud_name":[{"name":"AWS","count":10,"uniq":{"ip":4}},{"name":"Aliyun","count":5,"uniq":{"ip":2}},{"name":"Fastly","count":1,"uniq":{"ip":1}}]}}`,
+		services: func(query string) (string, error) {
+			if strings.Contains(query, "Aliyun") {
+				return `{"aggs":{}}`, nil
+			}
+			return cloudServiceReply(query, `[{"name":"Zeus","count":3},{"name":"Apache","count":3},{"name":"Zeus","count":3}]`)
 		},
 	}
-	state := runMetrics(t, nil, onlyRoles(RoleStats), caller.caller())
-	if got := stepStatus(state, StepClouds); got.Status != statusFailed || got.Code != cloudTotalMismatch {
-		t.Fatalf("clouds step = %+v", got)
+	settings := onlyRoles(RoleStats)
+	settings.MaxClouds = 2
+	state := runMetrics(t, nil, settings, caller.caller())
+	want := []Cloud{
+		{Name: "AWS", DisplayName: "AWS", Category: "cloud", Assets: 10, IPs: 4, Services: []CloudService{{"Apache", 3}, {"Zeus", 3}}},
+		{Name: "Aliyun", DisplayName: "阿里云", Category: "cloud", Assets: 5, IPs: 2, Services: []CloudService{}},
 	}
-	if len(state.Clouds) != 0 {
-		t.Fatalf("a mismatched row was published: %+v", state.Clouds)
+	if !reflect.DeepEqual(state.Clouds, want) || len(caller.sent) != 2 {
+		t.Fatalf("clouds = %+v, requests = %v", state.Clouds, caller.sent)
 	}
 }
 
-// A provider that the source names but the table cannot filter, or a bucket that
-// is not an exact count, would leave a row nobody can verify.
+// The counts come from the distribution, so a service lookup that fails or
+// returns malformed buckets leaves only that row's services empty. The other
+// rows and the step itself still finish.
+func TestCloudsKeepCountsWhenOneServiceLookupFails(t *testing.T) {
+	for name, broken := range map[string]func(string) (string, error){
+		"tool error":       func(string) (string, error) { return "", errors.New("unreachable") },
+		"error envelope":   func(string) (string, error) { return `{"error":true,"errmsg":"limit"}`, nil },
+		"another query":    func(string) (string, error) { return `{"query":"other","aggs":{"product":[]}}`, nil },
+		"unnamed service":  func(query string) (string, error) { return cloudServiceReply(query, `[{"name":"","count":1}]`) },
+		"fractional count": func(query string) (string, error) { return cloudServiceReply(query, `[{"name":"A","count":1.5}]`) },
+	} {
+		caller := &cloudCaller{
+			distribution: `{"query":"org=\"Subject\"","aggs":{"cloud_name":[{"name":"AWS","count":10,"uniq":{"ip":4}},{"name":"Aliyun","count":3,"uniq":{"ip":2}}]}}`,
+			services: func(query string) (string, error) {
+				if strings.Contains(query, "AWS") {
+					return broken(query)
+				}
+				return cloudServiceReply(query, `[{"name":"Tengine","count":3}]`)
+			},
+		}
+		state := runMetrics(t, nil, onlyRoles(RoleStats), caller.caller())
+		if got := stepStatus(state, StepClouds); got.Status != statusDone {
+			t.Fatalf("%s: clouds step = %+v", name, got)
+		}
+		want := []Cloud{
+			{Name: "AWS", DisplayName: "AWS", Category: "cloud", Assets: 10, IPs: 4, Services: []CloudService{}},
+			{Name: "Aliyun", DisplayName: "阿里云", Category: "cloud", Assets: 3, IPs: 2, Services: []CloudService{{"Tengine", 3}}},
+		}
+		if !reflect.DeepEqual(state.Clouds, want) {
+			t.Fatalf("%s: clouds = %+v", name, state.Clouds)
+		}
+	}
+}
+
+// The distribution carries every row's counts. A bucket without a name, an
+// exact count or its distinct IP count cannot become a row, so the step fails
+// instead of publishing a table with invented numbers.
 func TestCloudsRefuseBucketsThatCannotBeShown(t *testing.T) {
 	for name, distribution := range map[string]string{
-		"unnamed bucket":    `{"aggs":{"cloud_name":[{"name":"","count":1}]}}`,
-		"fractional count":  `{"aggs":{"cloud_name":[{"name":"AWS","count":1.5}]}}`,
-		"negative count":    `{"aggs":{"cloud_name":[{"name":"AWS","count":-1}]}}`,
-		"missing buckets":   `{"aggs":{}}`,
-		"null buckets":      `{"aggs":{"cloud_name":null}}`,
-		"another query":     `{"query":"other","aggs":{"cloud_name":[]}}`,
-		"unfilterable name": `{"aggs":{"cloud_name":[{"name":"a\"b","count":1}]}}`,
+		"unnamed bucket":   `{"aggs":{"cloud_name":[{"name":"","count":1,"uniq":{"ip":1}}]}}`,
+		"fractional count": `{"aggs":{"cloud_name":[{"name":"AWS","count":1.5,"uniq":{"ip":1}}]}}`,
+		"negative count":   `{"aggs":{"cloud_name":[{"name":"AWS","count":-1,"uniq":{"ip":1}}]}}`,
+		"missing ip count": `{"aggs":{"cloud_name":[{"name":"AWS","count":1}]}}`,
+		"fractional ips":   `{"aggs":{"cloud_name":[{"name":"AWS","count":1,"uniq":{"ip":0.5}}]}}`,
+		"missing buckets":  `{"aggs":{}}`,
+		"null buckets":     `{"aggs":{"cloud_name":null}}`,
+		"another query":    `{"query":"other","aggs":{"cloud_name":[]}}`,
 	} {
 		state := runMetrics(t, nil, onlyRoles(RoleStats), (&cloudCaller{
 			distribution: distribution,
-			detail:       func(query string) (string, error) { return cloudDetailReply(query, 1, 1, `[]`) },
+			services:     func(query string) (string, error) { return cloudServiceReply(query, `[]`) },
 		}).caller())
 		if got := stepStatus(state, StepClouds); got.Status != statusFailed || got.Code != "malformed_reply" {
 			t.Fatalf("%s: clouds step = %+v", name, got)
@@ -177,40 +222,120 @@ func TestCloudsRefuseBucketsThatCannotBeShown(t *testing.T) {
 	}
 }
 
-// The detail reply carries the row's numbers; without an exact total or an IP
-// count there is nothing to show, and a conflicting duplicate bucket cannot be
-// reconciled.
-func TestCloudsRefuseMalformedDetailReplies(t *testing.T) {
-	valid := `{"query":"org=\"Subject\"","aggs":{"cloud_name":[{"name":"AWS","count":10}]}}`
-	for name, reply := range map[string]string{
-		"missing total":         `{"distinct":{"ip":3},"aggs":{"product":[]}}`,
-		"missing ips":           `{"size":10,"aggs":{"product":[]}}`,
-		"fractional total":      `{"size":10.5,"distinct":{"ip":3},"aggs":{"product":[]}}`,
-		"unnamed service":       `{"size":10,"distinct":{"ip":3},"aggs":{"product":[{"name":"","count":1}]}}`,
-		"conflicting duplicate": `{"size":10,"distinct":{"ip":3},"aggs":{"product":[{"name":"A","count":1},{"name":"A","count":2}]}}`,
-	} {
-		state := runMetrics(t, nil, onlyRoles(RoleStats), (&cloudCaller{
-			distribution: valid,
-			detail:       func(string) (string, error) { return reply, nil },
-		}).caller())
-		if got := stepStatus(state, StepClouds); got.Status != statusFailed || got.Code != "malformed_reply" {
-			t.Fatalf("%s: clouds step = %+v", name, got)
-		}
+// A name the filter cannot quote still has its counts; only its services are
+// unavailable.
+func TestCloudsShowAnUnfilterableProviderWithoutServices(t *testing.T) {
+	caller := &cloudCaller{
+		distribution: `{"query":"org=\"Subject\"","aggs":{"cloud_name":[{"name":"a\"b","count":2,"uniq":{"ip":1}}]}}`,
+		services:     func(query string) (string, error) { return cloudServiceReply(query, `[{"name":"NGINX","count":2}]`) },
 	}
-}
-
-// A provider with no tagged assets still finishes the step: the table is empty
-// because the source had nothing to report, not because collection failed.
-func TestCloudsAcceptAnEmptyDistribution(t *testing.T) {
-	state := runMetrics(t, nil, onlyRoles(RoleStats), (&cloudCaller{
-		distribution: `{"query":"org=\"Subject\"","aggs":{"cloud_name":[]}}`,
-		detail:       func(query string) (string, error) { return cloudDetailReply(query, 0, 0, `[]`) },
-	}).caller())
+	state := runMetrics(t, nil, onlyRoles(RoleStats), caller.caller())
 	if got := stepStatus(state, StepClouds); got.Status != statusDone {
 		t.Fatalf("clouds step = %+v", got)
 	}
-	if state.Clouds == nil || len(state.Clouds) != 0 {
-		t.Fatalf("clouds = %+v", state.Clouds)
+	if len(caller.sent) != 0 || len(state.Clouds) != 1 || state.Clouds[0].Assets != 2 || len(state.Clouds[0].Services) != 0 {
+		t.Fatalf("requests = %v, clouds = %+v", caller.sent, state.Clouds)
+	}
+}
+
+// The stats backend is rate limited, so a full table must not send every
+// service lookup at once.
+func TestCloudServiceLookupsStayWithinTheConcurrencyBound(t *testing.T) {
+	var buckets []string
+	for i := range 20 {
+		buckets = append(buckets, fmt.Sprintf(`{"name":"Provider %02d","count":%d,"uniq":{"ip":1}}`, i, 100-i))
+	}
+	distribution := `{"query":"org=\"Subject\"","aggs":{"cloud_name":[` + strings.Join(buckets, ",") + `]}}`
+	var mu sync.Mutex
+	inFlight, peak := 0, 0
+	caller := &cloudCaller{distribution: distribution, services: func(query string) (string, error) {
+		mu.Lock()
+		inFlight++
+		peak = max(peak, inFlight)
+		mu.Unlock()
+		time.Sleep(5 * time.Millisecond)
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+		return cloudServiceReply(query, `[]`)
+	}}
+	settings := onlyRoles(RoleStats)
+	settings.MaxClouds = 20
+	state := runMetrics(t, nil, settings, caller.caller())
+	if got := stepStatus(state, StepClouds); got.Status != statusDone || len(state.Clouds) != 20 {
+		t.Fatalf("clouds step = %+v, rows = %d", got, len(state.Clouds))
+	}
+	if len(caller.sent) != 20 || peak > cloudServiceLookups || peak < 2 {
+		t.Fatalf("requests = %d, peak concurrency = %d", len(caller.sent), peak)
+	}
+	// Rows keep the distribution's order regardless of which lookup finished first.
+	for i, cloud := range state.Clouds {
+		if cloud.Name != fmt.Sprintf("Provider %02d", i) {
+			t.Fatalf("row %d = %s", i, cloud.Name)
+		}
+	}
+}
+
+// Stop while service lookups are in flight must not publish a table whose
+// services were cut short as if it were complete: the step ends interrupted.
+func TestStopDuringServiceLookupsInterruptsTheStep(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	started := make(chan struct{})
+	var once sync.Once
+	caller := CallerFunc(func(callCtx context.Context, _ string, arguments map[string]any) (json.RawMessage, error) {
+		switch arguments["fields"] {
+		case "cloud_name":
+			return json.RawMessage(`{"query":"org=\"Subject\"","aggs":{"cloud_name":[{"name":"AWS","count":10,"uniq":{"ip":4}}]}}`), nil
+		case "product3":
+			once.Do(func() { close(started) })
+			<-callCtx.Done()
+			return nil, callCtx.Err()
+		}
+		return nil, ErrUnavailable
+	})
+	var out published
+	returned := make(chan error, 1)
+	go func() {
+		_, err := Run(ctx, Input{Subject: "Subject", Query: metricQuery}, onlyRoles(RoleStats), nil, caller, out.publish)
+		returned <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("service lookup never started")
+	}
+	cancel()
+	select {
+	case err := <-returned:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Run returned %v, want cancellation", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return after Stop")
+	}
+	last := out.last()
+	if got := stepStatus(last, StepClouds); got.Status != statusInterrupted {
+		t.Fatalf("clouds step = %+v", got)
+	}
+	if len(last.Clouds) != 0 {
+		t.Fatalf("an interrupted table was published: %+v", last.Clouds)
+	}
+}
+
+// A query with no tagged assets still finishes the step: the table is empty
+// because the source had nothing to report, not because collection failed.
+func TestCloudsAcceptAnEmptyDistribution(t *testing.T) {
+	caller := &cloudCaller{
+		distribution: `{"query":"org=\"Subject\"","aggs":{"cloud_name":[]}}`,
+		services:     func(query string) (string, error) { return cloudServiceReply(query, `[]`) },
+	}
+	state := runMetrics(t, nil, onlyRoles(RoleStats), caller.caller())
+	if got := stepStatus(state, StepClouds); got.Status != statusDone {
+		t.Fatalf("clouds step = %+v", got)
+	}
+	if state.Clouds == nil || len(state.Clouds) != 0 || len(caller.sent) != 0 {
+		t.Fatalf("clouds = %+v, requests = %v", state.Clouds, caller.sent)
 	}
 }
 
@@ -218,10 +343,8 @@ func TestCloudsAcceptAnEmptyDistribution(t *testing.T) {
 // query drops them rather than showing two asset ranges in one table.
 func TestCloudsFollowTheQueryTheyWereCollectedFor(t *testing.T) {
 	stats := (&cloudCaller{
-		distribution: `{"query":"org=\"Subject\"","aggs":{"cloud_name":[{"name":"AWS","count":10}]}}`,
-		detail: func(query string) (string, error) {
-			return cloudDetailReply(query, 10, 4, `[{"name":"NGINX","count":6}]`)
-		},
+		distribution: `{"query":"org=\"Subject\"","aggs":{"cloud_name":[{"name":"AWS","count":10,"uniq":{"ip":4}}]}}`,
+		services:     func(query string) (string, error) { return cloudServiceReply(query, `[{"name":"NGINX","count":6}]`) },
 	}).caller()
 	stats.replies[RoleHeat] = fixed(`{"hot_trend":[{"date":"2026-01-02","value":1}]}`)
 	stats.replies[RoleProductRules] = fixed(`{"results":[]}`)
@@ -230,11 +353,8 @@ func TestCloudsFollowTheQueryTheyWereCollectedFor(t *testing.T) {
 		t.Fatal(err)
 	}
 	current := stateJSON(t, out.last())
-	if len(out.last().Clouds) != 1 {
-		t.Fatalf("clouds = %+v", out.last().Clouds)
-	}
-	if got := out.last().Collection.Status; got != statusDone {
-		t.Fatalf("collection = %s", got)
+	if len(out.last().Clouds) != 1 || out.last().Collection.Status != statusDone {
+		t.Fatalf("clouds = %+v, collection = %s", out.last().Clouds, out.last().Collection.Status)
 	}
 
 	// Every step is done for this query, so the continuation publishes the panel

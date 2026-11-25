@@ -153,27 +153,5 @@ func (c EASMPanelConfig) validate() error {
 	if c.ServerID != strings.TrimSpace(c.ServerID) {
 		return fmt.Errorf("invalid EASM settings: server_id must be trimmed")
 	}
-	return validateCloudLabels(EASMCloudLabels)
-}
-
-// validateCloudLabels keeps the label table usable as a lookup: a key that is
-// not lowercase would never match, and a category outside the published set
-// would reach the renderer as a blank cell.
-func validateCloudLabels(labels map[string]CloudLabel) error {
-	known := make(map[string]bool, len(EASMCloudCategories))
-	for _, category := range EASMCloudCategories {
-		known[category] = true
-	}
-	for name, label := range labels {
-		if name == "" || name != strings.ToLower(strings.TrimSpace(name)) {
-			return fmt.Errorf("invalid EASM cloud label %q: keys must be trimmed lowercase", name)
-		}
-		if strings.TrimSpace(label.Display) == "" {
-			return fmt.Errorf("invalid EASM cloud label %q: display name is empty", name)
-		}
-		if !known[label.Category] {
-			return fmt.Errorf("invalid EASM cloud label %q: unknown category %q", name, label.Category)
-		}
-	}
 	return nil
 }
