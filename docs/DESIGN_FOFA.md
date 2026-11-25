@@ -113,7 +113,7 @@
 | 运行中的点、进度指示 | `--running` | — |
 | 进行中的文字（含浅色） | `--accent-text` | 用 `--running` 写字（浅色对比不足） |
 | 待确认问题 | 2px `--ask` 左边条 + `--ask` 标题 | 青色或透明底 |
-| 选中会话 | `--primary` 约 12% 渐隐底（无左侧竖条） | 整块 `--accent` |
+| 选中会话 | `--sidebar-accent` 纯色底 | — |
 | 主按钮 | `--primary` 底 + `--primary-foreground` 字 | 渐变 |
 | 输入区描边 | `--brand-from` → `--brand-to` 渐变 | 纯色 |
 | 发送按钮 | `--primary` 底 + `--primary-foreground` 字 | 渐变 |
@@ -160,8 +160,7 @@
   `formatClockTime`）。工具块目前没有完成时间，因此不显示耗时；不要用相邻
   事件推算。
 - 表格：`.md` 内只留横向细线，表头无底色、左右零内边距，列间留 12px。
-- 选中会话：`[data-testid="thread-row"][aria-current="true"]` 12% 青色渐隐底，
-  不再整块 `--accent`，也不加左侧竖条。
+- 当时的选中会话样式为 12% 青色渐隐底，现采用第 4 节的纯色底规则。
 - 圆角分级：控件 4px（`--radius-md`，由现有 `--radius: 0.375rem` 派生）、
   面板 8px（fofa 块内 `--radius-lg: 0.5rem`）、输入框 15px（既有
   `[data-composer-box]` 规则）、弹窗 16px（`[role="dialog"]` /
@@ -173,7 +172,7 @@
 控件的计算圆角小于 zwai、面板 `--radius-lg` 为 0.5rem。
 
 其中 `.md` 表头无底色、发送按钮渐变、弹窗 16px 三项已被第 6 节（阶段 5）取代；
-日志时间轴、选中会话渐隐底继续有效。
+日志时间轴继续有效。
 
 ### 阶段 3：数据呈现
 
@@ -232,7 +231,7 @@ FOFA 的界面全部由 element-plus 组件组成。fofa 配色不发明新形�
 | `Badge` | `--color-tag-bg` 标签 | 底新增 `--tag`（`#051728` / `#f0f3f5`），无边框、4px、高 20px、11px；默认字 `--accent-text`；变体只换字色（ask / done / failed / muted）。 |
 | `Dialog` | `.el-dialog` | 20px；底 `--card`；标题 18px `--foreground`，头部下边框 `--border`；正文 14px；底部主按钮通栏 42px、16px 字、4px；遮罩深色 `rgba(4,10,22,.8)`、浅色 `rgba(255,255,255,.72)`。 |
 | `Tooltip` | `.el-popper.is-dark` | 黑底白字、12px、4px、内边距 5px 9px、最大宽 350px；两个主题相同。 |
-| `Switch` | `.el-switch` | 轨道 36×20 全圆角；关 `--secondary`、开 `--primary`；滑块 16px 白色。 |
+| `Switch` | `.el-switch` | 标准轨道 36×20 全圆角，关闭用蓝灰 `--switch-off-track`，开启用 `--primary`。滑块为白色，标准尺寸 16px。 |
 | Toast | `.el-message` | 底 `--card`、6px、轻阴影、`--secondary-foreground` 字；状态只染图标。 |
 | Composer | 首页搜索框 | 15px、96° 渐变描边（深色 青→蓝 / 浅色 蓝→青）、`--card` 底、内文 15–16px；后缀控件为 link 按钮，排在右下角；发送 = 小号主按钮，运行中换成描边停止按钮。 |
 | 分段控件 | `.search-mode-switch` | 轨道 `--secondary` 全圆角、内边距 2px；项 12px 全圆角；选中底 `--card` + `--accent-text`；当前模式主色底 + 深字。 |
@@ -244,7 +243,7 @@ FOFA 的界面全部由 element-plus 组件组成。fofa 配色不发明新形�
   补 `data-variant` / `data-size` 属性；zwai 的 DOM 外观不变。
 - 被本节取代的阶段 2 规则：`.md` 表头无底色 → FOFA 表头带；发送按钮渐变 →
   实心主色；弹窗 16px → 20px。
-- 不改：用户气泡、日志时间轴与等宽时钟、选中会话的 12% 渐隐底。
+- 沿用用户气泡、日志时间轴与等宽时钟。
 
 ### 6.4 验收
 

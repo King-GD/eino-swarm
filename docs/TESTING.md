@@ -352,7 +352,9 @@ built-in tools together and starts them open, starts each MCP connection
 folded, filters by name, shows an enabled connection as its own group rather
 than a server switch, leaves a Settings-disabled server out, clears Read file,
 reloads, and restores the original tool settings. Tool settings at the bottom
-of the menu opens Settings → Tools on the Built-in tab.
+of the menu opens Settings → Tools on the Built-in tab. The FOFA theme
+regression checks white switch thumbs in the compact menu and in Settings,
+including checked and unchecked states across dark and light modes.
 
 The SDK HTTP progress regression holds the final response until the client
 observes the matched notification. It also checks that progress cannot cross

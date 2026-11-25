@@ -81,6 +81,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 - FOFA 主题首页的“要做什么？”在深浅模式下统一使用 FOFA VIP 的亮青到亮蓝文字渐变。
 
+- FOFA 主题的开关在深浅模式均使用白色滑块，关闭轨道使用蓝灰色。
+
 - 图表悬停改为主题色十字线与描边高亮点，提示框数值右对齐；纵轴刻度使用紧凑数字、不带单位，窄宽度下不再被单位挤断。
 
 - 侧栏底部不再常驻显示版本号，版本与运行模式仍在设置的关于页；侧栏搜索按钮带有可读名称。
@@ -93,7 +95,7 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 - “完整权限”标识恢复为与工具栏其他控件相同的字号和字重，盾牌图标同步放大，不再显得像次要说明。
 
-- The FOFA theme now carries FOFA's console structure. Colors: answers use the blue-gray body color under white headings, links get a dedicated color, the rail sits a step away from the canvas, and running / waiting-on-you / done keep separate colors. Form: your request keeps its bubble, each tool line gets a monospace clock on a dashed rail, tables keep horizontal rules only, the selected conversation gets a cyan fading wash, controls sit at 4px with 8px panels and 16px dialogs, and the send button carries the brand gradient. The zwai theme is unchanged and stays the default.
+- The FOFA theme now carries FOFA's console structure. Colors: answers use the blue-gray body color under white headings, links get a dedicated color, the rail sits a step away from the canvas, and running / waiting-on-you / done keep separate colors. Form: your request keeps its bubble, each tool line gets a monospace clock on a dashed rail, tables keep horizontal rules only, the selected conversation uses the rail's solid accent block (no cyan wash, which turned muddy on the dark rail), controls sit at 4px with 8px panels and 16px dialogs, and the send button carries the brand gradient. The zwai theme is unchanged and stays the default.
 
 - Local verification starts with the affected tests. Full suites run when the
   impact cannot be bounded or the integration or release workflow requires them.

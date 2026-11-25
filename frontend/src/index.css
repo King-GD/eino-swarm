@@ -855,6 +855,7 @@
     --secondary-foreground: 234 30% 18%;
     --muted: 204 20% 95%;
     --muted-foreground: 210 8% 46%;
+    --switch-off-track: #7e8e9e;
     --accent: 204 20% 95%;
     --accent-foreground: 234 30% 18%;
     --destructive: 0 72% 51%;
@@ -1224,12 +1225,6 @@ html[data-palette="fofa"] .md tr:last-child td {
   border-bottom: 0;
 }
 
-/* The selected conversation is marked by a fading wash, not an edge bar. */
-html[data-palette="fofa"] [data-testid="thread-row"][aria-current="true"] {
-  background-color: transparent;
-  background-image: linear-gradient(90deg, hsl(var(--primary) / 0.12), transparent 72%);
-}
-
 html[data-palette="fofa"] [role="dialog"],
 html[data-palette="fofa"] [role="alertdialog"] {
   border-radius: 20px;
@@ -1439,5 +1434,8 @@ html[data-palette="fofa"] [data-slot="toast"] {
   color: hsl(var(--secondary-foreground));
 }
 html[data-palette="fofa"] [data-slot="switch"][data-state="unchecked"] {
-  background-color: hsl(var(--secondary));
+  background-color: var(--switch-off-track);
+}
+html[data-palette="fofa"] [data-slot="switch-thumb"] {
+  background-color: var(--color-white);
 }
