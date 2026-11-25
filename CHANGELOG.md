@@ -6,6 +6,12 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ## Unreleased
 
+### Changed
+
+- The FOFA palette now restyles components through tokens the components read, instead of global overrides outside the cascade layers. A class passed by a caller (for example a round voice button) keeps working under FOFA. Palette tokens moved to `frontend/src/styles/palettes.css`; zwai looks the same.
+
+- Under FOFA, the context-usage hover card uses the ordinary dark tooltip instead of a bordered solid panel, its ring icon has no hover slab, and a card waiting on your answer keeps a neutral border with the orange heading.
+
 ### Removed
 
 - Removed two superseded FOFA design prototypes and unused styles for inspector tab groups.

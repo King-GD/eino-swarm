@@ -36,7 +36,7 @@ function ToastCard({ toast }: { toast: AppToast }) {
     <div
       role="alert"
       data-slot="toast"
-      className="pointer-events-auto flex items-start gap-2 rounded-lg border border-destructive/40 bg-popover/95 px-3 py-2 text-sm text-destructive shadow-lg backdrop-blur-md motion-safe:animate-rise-in"
+      className="pointer-events-auto flex items-start gap-2 rounded-[var(--radius-surface,var(--radius-lg))] border border-[var(--toast-border,hsl(var(--destructive)/0.4))] bg-[var(--toast-bg,hsl(var(--popover)/0.95))] px-3 py-2 text-sm text-[var(--toast-ink,hsl(var(--destructive)))] shadow-lg backdrop-blur-md motion-safe:animate-rise-in"
     >
       <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
       <div className="min-w-0 flex-1">

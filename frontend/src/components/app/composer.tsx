@@ -644,7 +644,9 @@ export function Composer({
           <div
             data-composer-box=""
             className={
-              "relative rounded-2xl border border-border bg-card shadow-sm transition-shadow focus-within:border-ring focus-within:shadow-md" +
+              // A palette may swap the hairline for a gradient rim painted
+              // under the padding box; the card fill stays on top of it.
+              "relative rounded-[var(--composer-radius,1rem)] border border-[var(--composer-border,hsl(var(--border)))] bg-card bg-[image:var(--composer-rim,none)] [background-clip:var(--composer-clip,border-box)] [background-origin:border-box] shadow-sm transition-shadow [--tw-shadow-color:var(--composer-shadow)] focus-within:border-[var(--composer-border,hsl(var(--ring)))] focus-within:shadow-md" +
               (armed || adding ? " min-h-36" : "")
             }
           >
@@ -927,7 +929,7 @@ export function Composer({
                 <Button
                   size="icon"
                   data-send-button=""
-                  className="size-8 rounded-full motion-safe:animate-pop-in"
+                  className="size-8 rounded-[var(--send-radius,9999px)] motion-safe:animate-pop-in"
                   disabled={sendDisabled}
                   onClick={() => void submit()}
                   aria-label={t("composer.send")}

@@ -13,7 +13,7 @@ const TabsList = React.forwardRef<
     ref={ref}
     data-slot="tabs-list"
     className={cn(
-      "inline-flex h-8 items-center justify-center rounded-md bg-muted p-0.5 text-muted-foreground",
+      "inline-flex h-[var(--tabs-height,2rem)] items-center justify-center rounded-[var(--radius-tabs,var(--radius-md))] bg-[var(--tabs-bg,hsl(var(--muted)))] p-[var(--tabs-pad,0.125rem)] text-muted-foreground",
       className,
     )}
     {...props}
@@ -29,7 +29,9 @@ const TabsTrigger = React.forwardRef<
     ref={ref}
     data-slot="tabs-trigger"
     className={cn(
-      "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded px-2.5 py-1 text-xs font-medium transition-[color,background-color,box-shadow] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs",
+      // The indicator bar exists in every palette; it is transparent unless
+      // the palette sets --tabs-indicator.
+      "relative inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--radius-tabs,0.25rem)] px-2.5 py-1 text-xs font-medium text-[var(--tabs-ink,inherit)] transition-[color,background-color,box-shadow] after:pointer-events-none after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 data-[state=inactive]:hover:text-[var(--tabs-hover-ink,inherit)] data-[state=active]:bg-[var(--tabs-active-bg,hsl(var(--background)))] data-[state=active]:text-[var(--tabs-active-ink,hsl(var(--foreground)))] data-[state=active]:shadow-xs data-[state=active]:[--tw-shadow-color:var(--tabs-active-shadow)] data-[state=active]:after:bg-[var(--tabs-indicator,transparent)]",
       className,
     )}
     {...props}

@@ -48,7 +48,7 @@ export function ContextMeter({
           type="button"
           data-testid="context-meter"
           aria-label={label}
-          className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-[var(--button-icon-hover-bg,hsl(var(--accent)))] hover:text-foreground"
         >
           <Ring className={tone} fill={fill} />
         </button>
@@ -56,23 +56,23 @@ export function ContextMeter({
       <TooltipContent
         side="top"
         align="end"
-        className="max-w-56 border border-border bg-popover px-3 py-2 text-popover-foreground"
+        className="max-w-56 border border-[var(--hint-border,hsl(var(--border)))] bg-[var(--hint-bg,hsl(var(--popover)))] px-3 py-2 text-[var(--hint-ink,hsl(var(--popover-foreground)))]"
       >
         <p className="text-(length:--chrome-font-size) font-medium">{label}</p>
         {limit > 0 ? (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-[var(--hint-muted,hsl(var(--muted-foreground)))]">
             {t("usage.tokensOf", {
               used: formatTokens(used),
               limit: formatTokens(limit),
             })}
           </p>
         ) : (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-[var(--hint-muted,hsl(var(--muted-foreground)))]">
             {t("usage.tokens", { used: formatTokens(used) })}
           </p>
         )}
         {pct === undefined ? (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-[var(--hint-muted,hsl(var(--muted-foreground)))]">
             {t("usage.setWindow")}
           </p>
         ) : null}
@@ -93,7 +93,7 @@ function TurnLine({
   const line = formatTurnBits(usage.turn, locale)
   if (!line) return null
   return (
-    <p className="mt-1.5 text-xs text-muted-foreground">
+    <p className="mt-1.5 text-xs text-[var(--hint-muted,hsl(var(--muted-foreground)))]">
       {t("usage.turnBilled", { line })}
     </p>
   )

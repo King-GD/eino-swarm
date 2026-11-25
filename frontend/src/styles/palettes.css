@@ -1,0 +1,498 @@
+/* Colour palettes: zwai (default) and the opt-in FOFA palette, each in light
+   and dark. Components read these tokens; a palette never restyles a
+   component from outside. */
+
+@layer base {
+  :root {
+    --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+      "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --font-content: var(--font-sans);
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+    --background: 0 0% 100%;
+    --foreground: 240 10% 8%;
+    /* Answer body vs. emphasis. zwai keeps them equal, so its transcript
+       reads exactly as before; the fofa palette separates them. */
+    --content-foreground: 240 10% 8%;
+    --link: 240 10% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 8%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 8%;
+    --primary: 240 6% 12%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 5% 96%;
+    --secondary-foreground: 240 6% 12%;
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 46%;
+    --accent: 240 5% 94%;
+    --accent-foreground: 240 6% 12%;
+    --destructive: 0 72% 46%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 6% 90%;
+    --input: 240 6% 90%;
+    --ring: 240 5% 65%;
+    --radius: 0.65rem;
+
+    --sidebar: 240 5% 97%;
+    --sidebar-foreground: 240 6% 20%;
+    --sidebar-accent: 240 5% 92%;
+    --sidebar-border: 240 6% 89%;
+
+    --running: 38 92% 50%;
+    --done: 142 62% 38%;
+    --failed: 0 72% 46%;
+    /* ask_user waiting on the human. Distinct from --running: a question
+       is not "still working". */
+    --ask: 252 55% 46%;
+
+    /* In-conversation find. Distinct from --running: a hit is not "working". */
+    --find: 48 96% 72%;
+    --find-foreground: 240 10% 8%;
+    --find-active: 32 98% 58%;
+    --find-active-foreground: 240 10% 8%;
+
+    /* Charts in the transcript. Same family as the file glyphs so a
+       plot is not a second palette. */
+    --chart-1: 211 70% 42%;
+    --chart-2: 152 40% 36%;
+    --chart-3: 38 80% 42%;
+    --chart-4: 252 40% 48%;
+    --chart-5: 28 75% 42%;
+
+    /* Files tree glyphs. Distinct enough to scan, quiet enough that a
+       repository listing does not turn into a sticker sheet. */
+    --file-folder: 38 80% 42%;
+    --file-code: 211 70% 42%;
+    --file-doc: 252 40% 48%;
+    --file-config: 28 75% 42%;
+    --file-image: 152 40% 36%;
+
+    /* Collaboration kinds. A fact and a result used to share one fill, so
+       the panel could not be scanned by kind. These are quiet surfaces,
+       not status colors: a reported result must not look finished. */
+    --nuwa-task-bg: 211 75% 88%;
+    --nuwa-fact-bg: 262 65% 91%;
+    --nuwa-artifact-bg: 168 48% 84%;
+
+    /* Shell highlighting on exec rows. Same hues as the file glyphs so
+       light/dark stay in one family; a hardcoded theme would break one of them. */
+    --syntax-keyword: 252 45% 46%;
+    --syntax-command: 211 72% 38%;
+    --syntax-string: 152 48% 32%;
+    --syntax-comment: 240 4% 50%;
+    --syntax-operator: 28 70% 40%;
+    --syntax-flag: 211 40% 40%;
+    --syntax-variable: 38 80% 38%;
+    --syntax-prompt: 252 40% 52%;
+
+    /* Edit hunks in the transcript. Same hues as --done / --destructive so
+       a light/dark swap cannot leave additions looking like deletions. */
+    --diff-add: 142 62% 32%;
+    --diff-add-bg: 142 40% 94%;
+    --diff-del: 0 72% 42%;
+    --diff-del-bg: 0 70% 96%;
+
+    /* Width of the macOS traffic lights plus a gap. The desktop shell
+       overwrites this from the native button frames; the fallback is only
+       for the first paint and for unit tests. */
+    --traffic-light-inset: 78px;
+
+    --titlebar-height: calc(var(--chrome-font-size) * 3 + 3px);
+    /* Only the macOS desktop row must match internal/desktop.TitlebarHeight. */
+    --macos-titlebar-height: 46px;
+    --titlebar-control: 28px;
+    --titlebar-icon: 16px;
+
+    /* Visible lines of a live thought. Keep THOUGHT_VISIBLE_LINES in sync. */
+    --thought-lines: 10;
+
+    /* Space the transcript leaves under the last line so it is not hiding
+       behind the composer. The composer overwrites this from its own height;
+       the fallback is only the first paint and jsdom. */
+    --composer-pad: 7.5rem;
+
+    /* Join above the composer slab. Pixels, not rem: conversation size is
+       html rem, and a rem overhang used to wash out the last answer. */
+    --composer-fade-overhang: 96px;
+
+    /* Conversation column. comfortable is max-w-3xl; Settings / the title
+       bar overwrite this when the human picks full width. */
+    --content-max: 48rem;
+    --content-gutter: 2rem;
+    --ui-font-size: 13px;
+    --code-font-size: 13px;
+    /* Sidebar / Settings / title bar / composer controls. Follows UI font size. */
+    --chrome-font-size: 13px;
+
+    /* Directory tracks chrome size. html rem is the transcript; using it
+       here packed titles whenever conversation size was 13px. applyAppearance
+       overwrites these with rounded px so 13px chrome is a 28px row. */
+    --sidebar-row-height: calc(var(--chrome-font-size) * 2.15);
+    --sidebar-row-px: calc(var(--chrome-font-size) * 0.62);
+    --sidebar-row-gap: 2px;
+    --sidebar-folder-gap: calc(var(--chrome-font-size) * 0.46);
+    --sidebar-section-gap: calc(var(--chrome-font-size) * 0.77);
+    --sidebar-section-label-height: calc(var(--chrome-font-size) * 1.7);
+    /* List gutter. Wider than a row's own padding so titles do not sit
+       on the rail divider the way a 10px gutter did. */
+    --sidebar-list-px: calc(var(--chrome-font-size) * 1.23);
+    /* Icon rail. A short pad keeps the column narrow; equal on both sides. */
+    --dest-rail-pad: calc(var(--chrome-font-size) * 0.38);
+    --dest-rail-width: calc(var(--sidebar-row-height) + var(--dest-rail-pad) * 2);
+    --sidebar-kind: calc(var(--chrome-font-size) * 1.23);
+
+    /* Pairing QR plate. A camera needs a white field even in dark chrome. */
+    --qr-plate: 0 0% 100%;
+  }
+
+  .dark {
+    --background: 240 8% 6%;
+    --foreground: 0 0% 95%;
+    --content-foreground: 0 0% 95%;
+    --link: 0 0% 95%;
+    --card: 240 7% 9%;
+    --card-foreground: 0 0% 95%;
+    --popover: 240 7% 10%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 0 0% 96%;
+    --primary-foreground: 240 8% 10%;
+    --secondary: 240 5% 15%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 240 5% 15%;
+    --muted-foreground: 240 5% 62%;
+    --accent: 240 5% 18%;
+    --accent-foreground: 0 0% 95%;
+    --destructive: 0 70% 56%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5% 18%;
+    --input: 240 5% 20%;
+    --ring: 240 5% 40%;
+
+    --sidebar: 240 8% 8%;
+    --sidebar-foreground: 240 5% 78%;
+    --sidebar-accent: 240 5% 15%;
+    --sidebar-border: 240 5% 16%;
+
+    --running: 38 92% 56%;
+    --done: 142 58% 48%;
+    --failed: 0 70% 58%;
+    --ask: 252 58% 72%;
+
+    --find: 48 70% 38%;
+    --find-foreground: 0 0% 98%;
+    --find-active: 32 90% 52%;
+    --find-active-foreground: 240 10% 8%;
+
+    --chart-1: 210 70% 68%;
+    --chart-2: 152 40% 56%;
+    --chart-3: 40 75% 62%;
+    --chart-4: 250 45% 72%;
+    --chart-5: 32 70% 62%;
+
+    --file-folder: 40 75% 62%;
+    --file-code: 210 70% 68%;
+    --file-doc: 250 45% 72%;
+    --file-config: 32 70% 62%;
+    --file-image: 152 40% 56%;
+
+    --nuwa-task-bg: 211 45% 24%;
+    --nuwa-fact-bg: 262 38% 28%;
+    --nuwa-artifact-bg: 168 36% 22%;
+
+    --syntax-keyword: 252 55% 78%;
+    --syntax-command: 211 75% 72%;
+    --syntax-string: 152 45% 62%;
+    --syntax-comment: 240 5% 55%;
+    --syntax-operator: 32 70% 62%;
+    --syntax-flag: 211 50% 70%;
+    --syntax-variable: 40 75% 62%;
+    --syntax-prompt: 252 50% 75%;
+
+    --diff-add: 142 50% 58%;
+    --diff-add-bg: 142 35% 12%;
+    --diff-del: 0 70% 62%;
+    --diff-del-bg: 0 40% 14%;
+
+    --qr-plate: 0 0% 100%;
+  }
+
+  /* FOFA palette. Colors come from FOFA's main site (var.scss and the home
+     search box); values intentionally depart from its hexes where contrast
+     requires it.
+     shadcn names stay; --brand-from / --brand-to are the cyan↔blue gradient. */
+  html[data-palette="fofa"] {
+    --background: 210 20% 98%;
+    --foreground: 234 30% 18%;
+    --content-foreground: 202 12% 36%;
+    --link: 181 94% 26%;
+    --accent-text: 181 94% 26%;
+    --dropdown: 0 0% 100%;
+    --tag: 204 20% 95%;
+    --tips: 0 0% 0%;
+    --tips-foreground: 0 0% 100%;
+    --card: 0 0% 100%;
+    --card-foreground: 234 30% 18%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 234 30% 18%;
+    --primary: 180 95% 37%;
+    --primary-foreground: 222 77% 7%;
+    --secondary: 204 20% 95%;
+    --secondary-foreground: 234 30% 18%;
+    --muted: 204 20% 95%;
+    --muted-foreground: 210 8% 46%;
+    --accent: 204 20% 95%;
+    --accent-foreground: 234 30% 18%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 224 15% 86%;
+    --input: 224 15% 86%;
+    --ring: 180 95% 37%;
+    --radius: 0.375rem;
+    /* Radius tiers: controls keep --radius-md's 4px, panels 8px, dialogs
+       16px; the composer keeps its own 15px. */
+    --radius-lg: 0.5rem;
+    --brand-from: 213 99% 57%;
+    --brand-to: 180 96% 48%;
+    --brand-mark: 180 95% 37%;
+
+    /* White rail against the #f9fafb canvas, like FOFA's white nav. */
+    --sidebar: 0 0% 100%;
+    --sidebar-foreground: 202 12% 41%;
+    --sidebar-accent: 204 20% 95%;
+    --sidebar-border: 223 18% 92%;
+
+    /* Running is the cyan signal; waiting on a human is FOFA's orange. */
+    --running: 180 95% 37%;
+    --done: 155 72% 30%;
+    --failed: 0 72% 51%;
+    --ask: 23 77% 49%;
+
+    --find: 180 60% 82%;
+    --find-foreground: 222 77% 7%;
+    --find-active: 180 95% 37%;
+    --find-active-foreground: 222 77% 7%;
+
+    --chart-1: 180 95% 37%;
+    --chart-2: 213 99% 57%;
+    --chart-3: 180 93% 27%;
+    --chart-4: 221 43% 40%;
+    --chart-5: 32 95% 44%;
+
+    --file-folder: var(--content-foreground);
+    --file-code: 180 95% 32%;
+    --file-doc: 221 43% 40%;
+    --file-config: 32 95% 44%;
+    --file-image: 180 93% 27%;
+
+    --nuwa-task-bg: 213 80% 88%;
+    --nuwa-fact-bg: 262 60% 91%;
+    --nuwa-artifact-bg: 168 48% 84%;
+
+    --syntax-keyword: 214 90% 42%;
+    --syntax-command: 180 95% 32%;
+    --syntax-string: 181 70% 28%;
+    --syntax-comment: 202 12% 48%;
+    --syntax-operator: 32 95% 40%;
+    --syntax-flag: 214 50% 38%;
+    --syntax-variable: 180 80% 30%;
+    --syntax-prompt: 213 99% 45%;
+
+    --diff-add: 142 76% 32%;
+    --diff-add-bg: 142 40% 94%;
+    --diff-del: 0 72% 46%;
+    --diff-del-bg: 0 70% 96%;
+
+    /* Component tokens. Primitives read these with the zwai value as their
+       fallback, so a caller's className still overrides them. */
+    --home-title-from: 180 96% 48.4%;
+    --home-title-to: 217.2 91.2% 59.8%;
+    --radius-surface: var(--radius);
+    --radius-menu-item: 0px;
+    --radius-tabs: 0px;
+    --radius-dialog: 20px;
+    --radius-tooltip: 4px;
+    --button-quiet-bg: transparent;
+    --button-quiet-ink: hsl(var(--secondary-foreground));
+    --button-quiet-hover-bg: transparent;
+    --button-hover-border: hsl(var(--primary));
+    --button-hover-ink: hsl(var(--accent-text));
+    --button-icon-hover-bg: transparent;
+    --button-focus-ring: 1px;
+    --button-focus-color: hsl(var(--accent-text) / 0.7);
+    --button-focus-offset: 0px;
+    --field-bg: hsl(var(--card));
+    --field-focus-border: hsl(var(--primary));
+    --field-focus-ring: 0px;
+    --menu-bg: hsl(var(--dropdown));
+    --menu-item-ink: hsl(var(--secondary-foreground));
+    --menu-item-checked-ink: hsl(var(--accent-text));
+    --tabs-height: auto;
+    --tabs-pad: 0px;
+    --tabs-bg: transparent;
+    --tabs-ink: hsl(var(--secondary-foreground));
+    --tabs-hover-ink: hsl(var(--accent-text));
+    --tabs-active-bg: transparent;
+    --tabs-active-ink: hsl(var(--accent-text));
+    --tabs-active-shadow: transparent;
+    --tabs-indicator: hsl(var(--primary));
+    --dialog-bg: hsl(var(--card));
+    --dialog-scrim: hsl(var(--background) / 0.8);
+    --dialog-header-rule: 1px;
+    --dialog-header-pad: 14px;
+    --dialog-title-size: 18px;
+    --dialog-title-weight: 500;
+    --badge-height: 20px;
+    --badge-font-size: 11px;
+    --badge-leading: 1;
+    --badge-bg: hsl(var(--tag));
+    --badge-ink: hsl(var(--accent-text));
+    --badge-outline-border: transparent;
+    --tooltip-max-width: 350px;
+    --tooltip-pad: 5px 9px;
+    --tooltip-bg: hsl(var(--tips));
+    --tooltip-ink: hsl(var(--tips-foreground));
+    --tooltip-font-size: 12px;
+    /* Richer hover cards (context usage) read as ordinary tooltips. */
+    --hint-border: transparent;
+    --hint-bg: var(--tooltip-bg);
+    --hint-ink: var(--tooltip-ink);
+    --hint-muted: hsl(var(--tips-foreground) / 0.7);
+    /* Waiting on you is the orange heading; the card keeps a neutral rim. */
+    --ask-card-border: hsl(var(--border));
+    --toast-bg: hsl(var(--card));
+    --toast-border: hsl(var(--border));
+    --toast-ink: hsl(var(--secondary-foreground));
+    --switch-track-off: hsl(210 14.2% 55.7%);
+    --switch-thumb: hsl(0 0% 100%);
+    /* Official search rim: cyan-to-blue gradient under a card fill. */
+    --composer-radius: 15px;
+    --composer-border: transparent;
+    --composer-shadow: transparent;
+    --composer-rim: linear-gradient(hsl(var(--card)), hsl(var(--card))),
+      linear-gradient(96deg, hsl(var(--brand-to)) 0%, hsl(var(--brand-from)) 99%);
+    --composer-clip: padding-box, border-box;
+    --send-radius: 4px;
+    /* Execution log: dashed rail plus a monospace clock on each row. */
+    --work-rail: 1px;
+    --work-rail-pad: 14px;
+    --tool-time-display: inline;
+    /* el-table: a header band over transparent, ruled rows. */
+    --md-cell-rule: 0 0 1px;
+    --md-cell-pad: 9px 12px;
+    --md-last-rule: 0px;
+    --md-head-bg: hsl(var(--secondary));
+    --md-head-ink: hsl(var(--secondary-foreground));
+    --md-head-size: 12px;
+    --md-head-weight: 400;
+    --md-row-hover: hsl(var(--accent));
+    /* Chart glass lets the plot show through a tighter blur. */
+    --chart-tip-bg: hsl(var(--popover) / 95%);
+    --chart-tip-border: hsl(var(--border));
+    --chart-tip-shadow: 0 0 10px hsl(var(--tips) / 30%);
+    --chart-tip-filter: blur(10px);
+    --chart-tip-series-ink: hsl(var(--popover-foreground));
+  }
+
+  html[data-palette="fofa"].dark {
+    --background: 222 77% 7%;
+    --foreground: 0 0% 100%;
+    /* Answers use FOFA's blue-gray body text; headings stay pure white. */
+    --content-foreground: 210 31% 74%;
+    --link: 180 96% 48%;
+    /* FOFA keeps cyan for shapes; cyan *text* on light stays the darker link. */
+    --accent-text: 180 96% 48%;
+    --dropdown: 223 38% 15%;
+    --tag: 209 78% 9%;
+    --tips: 0 0% 0%;
+    --tips-foreground: 0 0% 100%;
+    --card: 222 50% 10%;
+    --card-foreground: 0 0% 100%;
+    --popover: 222 50% 10%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 180 96% 48%;
+    --primary-foreground: 222 77% 7%;
+    --secondary: 221 42% 14%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 221 42% 14%;
+    --muted-foreground: 210 12% 56%;
+    --accent: 221 33% 20%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 222 25% 18%;
+    --input: 220 18% 23%;
+    --ring: 180 96% 48%;
+    --radius: 0.375rem;
+    /* Radius tiers: controls keep --radius-md's 4px, panels 8px, dialogs
+       16px; the composer keeps its own 15px. */
+    --radius-lg: 0.5rem;
+    --brand-from: 213 99% 57%;
+    --brand-to: 180 96% 48%;
+    --brand-mark: 214 100% 63%;
+
+    /* The rail sits one step below the canvas, like FOFA's #030a17 nav. */
+    --sidebar: 222 77% 5%;
+    --sidebar-foreground: 210 31% 74%;
+    --sidebar-accent: 221 42% 14%;
+    --sidebar-border: 222 25% 18%;
+
+    /* Running is the cyan signal; waiting on a human is FOFA's orange. */
+    --running: 180 96% 48%;
+    --done: 156 49% 49%;
+    --failed: 0 87% 69%;
+    --ask: 23 91% 56%;
+
+    --find: 180 50% 22%;
+    --find-foreground: 0 0% 100%;
+    --find-active: 180 96% 48%;
+    --find-active-foreground: 222 77% 7%;
+
+    --chart-1: 180 96% 48%;
+    --chart-2: 214 100% 63%;
+    --chart-3: 210 31% 74%;
+    --chart-4: 180 93% 40%;
+    --chart-5: 38 92% 50%;
+
+    --file-folder: var(--content-foreground);
+    --file-code: 180 96% 48%;
+    --file-doc: 210 31% 74%;
+    --file-config: 38 92% 50%;
+    --file-image: 180 93% 40%;
+
+    --nuwa-task-bg: 213 50% 24%;
+    --nuwa-fact-bg: 262 38% 28%;
+    --nuwa-artifact-bg: 168 36% 22%;
+
+    --syntax-keyword: 214 90% 72%;
+    --syntax-command: 180 96% 48%;
+    --syntax-string: 181 55% 58%;
+    --syntax-comment: 210 14% 56%;
+    --syntax-operator: 38 92% 50%;
+    --syntax-flag: 214 50% 70%;
+    --syntax-variable: 180 70% 62%;
+    --syntax-prompt: 213 99% 70%;
+
+    --diff-add: 142 71% 45%;
+    --diff-add-bg: 142 40% 10%;
+    --diff-del: 0 84% 60%;
+    --diff-del-bg: 0 40% 12%;
+
+    --chart-tip-bg: hsl(var(--popover) / 60%);
+    --chart-tip-border: hsl(var(--popover-foreground) / 25%);
+  }
+}
+
+@layer components {
+  @supports ((background-clip: text) or (-webkit-background-clip: text)) {
+    @media (forced-colors: none) {
+      html[data-palette="fofa"] .home-title-gradient {
+        display: inline-block;
+        background-image: linear-gradient(90deg, hsl(var(--home-title-from)), hsl(var(--home-title-to)));
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+    }
+  }
+}

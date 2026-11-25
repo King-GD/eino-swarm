@@ -235,7 +235,7 @@ function ChartTooltip({
 }: TooltipProps<number, string> & { unit?: string }) {
   if (!active || !payload?.length) return null
   return (
-    <div className={cn("min-w-40 rounded-lg px-3 py-2 text-xs text-popover-foreground", chartTooltipSurface)}>
+    <div className={cn("min-w-40 rounded-[var(--radius-surface,var(--radius-lg))] px-3 py-2 text-xs text-popover-foreground", chartTooltipSurface)}>
       {label != null && label !== "" ? (
         <div className="mb-1 font-medium">{String(label)}</div>
       ) : null}
@@ -246,7 +246,7 @@ function ChartTooltip({
               className="size-2 shrink-0 rounded-sm"
               style={{ background: String(row.color ?? CHART_SERIES_PAINT[0]) }}
             />
-            <span className="chart-tooltip-series text-muted-foreground">{row.name}</span>
+            <span className="text-[var(--chart-tip-series-ink,hsl(var(--muted-foreground)))]">{row.name}</span>
             <span className="ml-auto tabular-nums">{formatTick(Number(row.value), unit ?? "")}</span>
           </li>
         ))}

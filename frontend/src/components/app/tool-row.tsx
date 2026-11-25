@@ -94,10 +94,10 @@ export function ToolRow({ block, reveal, defaultCollapsed = false }: {
             <EditCountMarks added={view.diff.added} removed={view.diff.removed} />
           ) : null}
           <span className="ml-auto flex shrink-0 items-center gap-1.5">
-            {/* The fofa palette reads the log as timestamped lines; zwai
-                keeps the bare row. */}
+            {/* Hidden unless the palette reads the log as timestamped
+                lines (--tool-time-display). */}
             {block.at ? (
-              <time data-tool-time="" dateTime={block.at} title={block.at} className="hidden">
+              <time data-tool-time="" dateTime={block.at} title={block.at} className="[display:var(--tool-time-display,none)] font-mono text-[10px] leading-none tabular-nums text-muted-foreground">
                 {formatClockTime(block.at)}
               </time>
             ) : null}

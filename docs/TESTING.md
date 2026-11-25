@@ -7917,7 +7917,7 @@ Several things are tested here, some as pure logic and some in jsdom:
   writes `--chrome-font-size` and the directory density tokens
   (`src/lib/chrome-density.ts`); content size writes `--ui-font-size`
   (`ui` follows chrome) and must not change row height. Code size writes `--code-font-size`.
-  `palette` writes `data-palette` so `index.css` can swap the FOFA token sheet
+  `palette` writes `data-palette` so `styles/palettes.css` can swap the FOFA token sheet
   (DESIGN 7.2 / fofa.info: page matches the list, cyan `--primary`, blue
   `--brand-from`, composer `[data-composer-box]` gets the official search rim).
   `beginThemeRepaint` holds colour transitions off for the two frames a
