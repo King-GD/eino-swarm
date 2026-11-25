@@ -27,6 +27,7 @@ export async function listWorkspaceFiles(
 
 export async function listWorkspaceView(
   link: RemoteLink, threadId: string, directory = "", query = "", location?: FileLocation,
+  signal?: AbortSignal,
 ): Promise<{ files: WorkspaceFile[]; view?: FileView }> {
   const files: WorkspaceFile[] = []
   const seen = new Set<string>()
@@ -34,7 +35,8 @@ export async function listWorkspaceView(
   let view: FileView | undefined
   let root = location?.root
   for (let page = 0; page < maxListPages; page++) {
-    const resp = await link.rpc({
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
+    const req: Omit<RemoteRequest, "v" | "id"> = {
       op: OpFiles,
       thread_id: threadId,
       cursor: cursor || undefined,
@@ -42,7 +44,9 @@ export async function listWorkspaceView(
       text: query || undefined,
       ...(location?.scope === "project" ? { file_scope: location.scope } : {}),
       ...(root ? { file_root: root } : {}),
-    })
+    }
+    const resp = await (signal ? link.rpc(req, { signal }) : link.rpc(req))
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
     if (!resp.ok) throw new RemoteFileError(resp.code || "remote_error", resp.error || "file listing failed")
     if ((root && resp.file_view?.root !== root) || (location?.scope === "project" && !resp.file_view)) {
       throw new RemoteFileError("file_root_changed", "File directory changed; refresh the file list")

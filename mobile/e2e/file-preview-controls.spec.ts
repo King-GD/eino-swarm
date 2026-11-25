@@ -10,6 +10,38 @@ async function openOutput(page: Page, name: string, url = "/?mock=1&tick=0") {
   return page.getByTestId("phone-file-preview")
 }
 
+test("paired file links open the current task preview directly from the transcript", async ({ page }) => {
+  const url = "/?mock=1&tick=0&history=file-links&file-preview=task-workspaces"
+  await page.goto(url)
+  const transcript = page.getByTestId("transcript")
+  const preview = page.getByTestId("phone-file-preview")
+  const result = transcript.getByRole("button", { name: "the task result" })
+  const publicReference = transcript.getByRole("link", { name: "Public reference" })
+  await expect(publicReference).toHaveAttribute("href", "https://example.invalid/report.txt#zwai-file:draft.txt")
+  await expect(transcript.getByText("Outside task")).toBeVisible()
+  await expect(transcript.getByRole("button", { name: "Outside task" })).toHaveCount(0)
+
+  await result.tap()
+  await expect(preview.getByText("Current task deliverable")).toBeVisible()
+  expect((await downloadBytes(page)).bytes.toString()).toBe("Current task deliverable")
+  await page.getByRole("button", { name: "返回", exact: true }).tap()
+  await expect(result).toBeFocused()
+
+  await transcript.getByRole("button", { name: "report.txt", exact: true }).tap()
+  await expect(page.getByText("请选择要打开的文件")).toBeVisible()
+  await expect(preview).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "results/report.txt", exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "work/report.txt", exact: true }).tap()
+  await expect(preview.getByText("Working copy of report")).toBeVisible()
+  await page.getByRole("button", { name: "返回", exact: true }).tap()
+
+  await transcript.getByRole("button", { name: "missing.txt", exact: true }).tap()
+  await expect(preview.getByRole("alert")).toBeVisible()
+  await page.getByRole("button", { name: "返回", exact: true }).tap()
+  await expect(result).toBeVisible()
+  await expect(page).toHaveURL(url)
+})
+
 test("paired Files opens task results first and switches to the read-only project root", async ({ page }) => {
   await page.goto("/?mock=1&tick=0&file-preview=task-workspaces")
   await page.getByRole("button", { name: "产出物", exact: true }).click()

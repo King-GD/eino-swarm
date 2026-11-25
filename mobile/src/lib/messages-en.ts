@@ -180,6 +180,8 @@ export const en = {
   "files.refresh": "Refresh files",
   "files.search": "Search files",
   "files.searching": "Searching…",
+  "files.openPreview": "Open {path}",
+  "files.chooseMatch": "Choose a file",
   "files.loadingDir": "Loading this directory…",
   "files.loading": "Reading file…",
   "files.progressLabel": "File load progress",

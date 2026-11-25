@@ -1,6 +1,7 @@
 import { mockGeneratedImageChunk, mockGeneratedImageTurn } from "./mock-generated-image"
 import { compactHistoryFixture, compactHistoryRunning, compactHistorySteps, compactTurnSummaries, mockCompactPage } from "./mock-compact-history"
 import { MockProjects } from "./mock-projects"
+import { mockTurnID, olderThreadSeed, threadSeed, transcriptFileLinksSeed, type MockThread } from "./mock-threads"
 import { MockProductMode } from "./mock-product-mode"
 import { MockSpeech } from "./mock-speech"
 import { MOCK_FLAG, mockTickMs, mockPauseOpenMs, mockPauseClientsMs } from "./mock-link-timing"
@@ -15,7 +16,7 @@ import { backoffHistory } from "./mock-backoff"
 import { longAgentRosterHistory } from "./mock-agent-roster"
 import { workerCollectionHistory, workerCollectionStopHistory, workerCollectionPaged } from "./mock-worker-collection"
 import { predictionTurn, reasoningOnlyTurn, scriptedTurn, type Step } from "./mock-turn"
-import { mockGoalDetail, mockGoalFixture, resumeMockGoal, type MockGoalFields } from "./mock-goal"
+import { mockGoalDetail, mockGoalFixture, resumeMockGoal } from "./mock-goal"
 import {
   OpAnswer,
   OpCancelWait,
@@ -56,7 +57,6 @@ import {
   PROTOCOL_V,
   type TimeoutSettings,
   type TimeoutSettingsPatch,
-  type FollowupView,
   type RemoteEvent,
   type RemoteRequest,
   type RemoteResponse,
@@ -74,104 +74,6 @@ import { stopReplayEnd, stopReplayStart } from "./mock-stop-replay"
  *  two sockets is still one PC — and React's strict mode opens two. */
 
 const MOCK_HOST = "Walkthrough PC"
-
-type MockThread = MockGoalFields & {
-  id: string
-  title: string
-  projectID: string
-  scheduleSource?: ThreadView["schedule_source"]
-  summary: string
-  running: boolean
-  waiting: boolean
-  action: string
-  askUser: boolean
-  minutesAgo: number
-  providerID?: string
-  model?: string
-  reasoning?: string
-  events: RemoteEvent[]
-  completedSeq?: number
-  readSeq?: number
-  followups?: FollowupView[]
-  pendingInputs?: RemoteEvent[]
-  script?: number
-  finishingSeed?: boolean
-}
-
-
-function mockTurnID(thread: MockThread): string {
-  for (let i = thread.events.length - 1; i >= 0; i--) {
-    const id = thread.events[i].turn_id
-    if (id) return id
-  }
-  return thread.id + "-live"
-}
-
-function threadSeed(): MockThread[] {
-  return [
-    {
-      id: "t-live",
-      title: "Trim the layout pass",
-      projectID: "p-platform",
-      summary: "",
-      running: true,
-      waiting: false,
-      action: "Reading src/lib/layout.ts",
-      askUser: false,
-      minutesAgo: 0,
-      events: [],
-    },
-    {
-      id: "t-wait",
-      title: "Watch the nightly export",
-      projectID: "p-platform",
-      summary: "Checking again after the next run",
-      running: false,
-      waiting: true,
-      action: "",
-      askUser: false,
-      minutesAgo: 6,
-      goal: "Keep the export green and report anything that breaks",
-      events: [],
-    },
-    {
-      id: "t-recent",
-      title: "Sweep the unused exports",
-      projectID: "p-platform",
-      summary: "Removed four dead helpers and kept the tests green",
-      running: false,
-      waiting: false,
-      action: "",
-      askUser: false,
-      minutesAgo: 52,
-      events: [],
-    },
-    {
-      id: "t-notes",
-      title: "Summarise this week",
-      projectID: "p-notes",
-      summary: "Wrote the digest into the notes folder",
-      running: false,
-      waiting: false,
-      action: "",
-      askUser: false,
-      minutesAgo: 20 * 60,
-      events: [],
-    },
-    {
-      id: "t-loose",
-      title: "Name the release",
-      projectID: "",
-      summary: "Three candidates, one of them survives a trademark check",
-      running: false,
-      waiting: false,
-      action: "",
-      askUser: false,
-      minutesAgo: 3 * 24 * 60,
-      events: [],
-    },
-  ]
-}
 
 type Watcher = { threadID: string; deliver: (resp: RemoteResponse) => void }
 
@@ -252,6 +154,8 @@ export class MockHost {
         this.seed(live, workerCollectionHistory(state, new URLSearchParams(location.search).get("stop_order")), state !== "done" && state !== "stopped")
       } else if (new URLSearchParams(location.search).get("history") === "long-agent-roster") {
         this.seed(live, longAgentRosterHistory(), true)
+      } else if (new URLSearchParams(location.search).get("history") === "file-links") {
+        this.seed(live, transcriptFileLinksSeed(), true)
       } else if (new URLSearchParams(location.search).get("history") === "streamed-agents") {
         this.seed(live, [
           { kind: "agent_message", agentID: "manager", text: "Older manager answer" },
@@ -540,18 +444,7 @@ export class MockHost {
   }
 
   older(): ThreadView {
-    return this.view({
-      id: "t-older",
-      title: "Page past the first",
-      projectID: "",
-      summary: "",
-      running: false,
-      waiting: false,
-      action: "",
-      askUser: false,
-      minutesAgo: 90,
-      events: [],
-    })
+    return this.view(olderThreadSeed())
   }
 
   at(th: MockThread): string {
@@ -904,7 +797,7 @@ export class MockLink {
       case OpFiles: {
         if (!thread()) return this.missing(id)
         if (new URLSearchParams(location.search).get("file-preview") === "task-workspaces") {
-          const { files, folders, view } = mockScopedFiles(req.file_scope === "project")
+          const { files, folders, view } = mockScopedFiles(req.file_scope === "project", location.search)
           if (req.file_root && req.file_root !== view.root) return this.ok({ id, ok: false, code: "file_root_changed" })
           return this.ok({ id, files: mockListedFiles(files, req.directory, req.text, folders), file_view: view, more: false })
         }
@@ -918,7 +811,7 @@ export class MockLink {
       case OpFileChunk: {
         if (!thread()) return this.missing(id)
         if (new URLSearchParams(location.search).get("file-preview") === "task-workspaces") {
-          const { files, view } = mockScopedFiles(req.file_scope === "project")
+          const { files, view } = mockScopedFiles(req.file_scope === "project", location.search)
           if (req.file_root !== view.root) return this.ok({ id, ok: false, code: "file_root_changed" })
           const file_chunk = await mockFileChunk(files, req.file_path ?? "", req.before ?? 0)
           return file_chunk ? this.ok({ id, file_chunk, file_view: view }) : this.missing(id)

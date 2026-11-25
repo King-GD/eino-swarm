@@ -74,7 +74,7 @@ export function renderBlock(b: CompactBlock) {
     if (!text) return null
     return (
       <div data-quote-text="" className={cn("mr-4 min-w-0 wrap-break-word text-sm leading-snug", b.streaming && "opacity-90")}>
-        <PhoneMarkdown text={text} />
+        <PhoneMarkdown text={text} streaming={b.streaming} />
         {!b.streaming ? <SpeechActions id={b.id} text={text} /> : null}
       </div>
     )

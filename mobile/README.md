@@ -438,6 +438,9 @@ an ordinary message, then submit again explicitly.
 Ordinary quoted requests, paths and literal command text keep their usual
 behavior. Pure-text commands still use the PC engine's existing semantics.
 **Outputs** above the message box lists the paired PC conversation’s files.
+Tap a file path in a paired conversation to open its task preview from the
+message. When several files match a name, choose the full path. Back returns
+to the message or worker log and keeps the draft and scroll position.
 Tasks with their own file root open to **Results**. Tap a folder to load its
 complete contents, or search to list every match. A search does not show a shorter list first. Open a
 file to preview Markdown (.md/.markdown/.mdx) as a document, known source

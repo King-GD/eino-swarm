@@ -743,6 +743,38 @@ final class BindFlowTests: XCTestCase {
     recordAgentPage(app, name: "large-image-decoded")
   }
 
+  func testTranscriptFileLinkOpensTaskPreview() {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launch()
+    let result = app.buttons["the task result"]
+    XCTAssertTrue(result.waitForExistence(timeout: 12))
+    result.tap()
+    XCTAssertTrue(app.staticTexts["Current task deliverable"].waitForExistence(timeout: 8))
+    recordAgentPage(app, name: "transcript-file-link-preview")
+    app.buttons["Back"].firstMatch.tap()
+    XCTAssertTrue(result.waitForExistence(timeout: 8))
+    let report = app.buttons["report.txt"]
+    report.tap()
+    let workingCopy = app.buttons["work/report.txt"]
+    XCTAssertTrue(workingCopy.waitForExistence(timeout: 8))
+    workingCopy.tap()
+    XCTAssertTrue(app.staticTexts["Working copy of report"].waitForExistence(timeout: 8))
+    let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.03, dy: 0.5))
+    let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.91, dy: 0.5))
+    start.press(forDuration: 0.05, thenDragTo: end)
+    XCTAssertTrue(result.waitForExistence(timeout: 8))
+    XCTAssertFalse(app.staticTexts["Working copy of report"].exists)
+    result.tap()
+    XCTAssertTrue(app.staticTexts["Current task deliverable"].waitForExistence(timeout: 8))
+    let center = app.coordinate(withNormalizedOffset: CGVector(dx: 0.45, dy: 0.5))
+    let right = app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5))
+    center.press(forDuration: 0.05, thenDragTo: right)
+    XCTAssertTrue(result.waitForExistence(timeout: 8))
+    XCTAssertFalse(app.staticTexts["Current task deliverable"].exists)
+    recordAgentPage(app, name: "transcript-file-link-return")
+  }
+
   func testPhoneOutputPreview() throws {
     continueAfterFailure = false
     let app = XCUIApplication()

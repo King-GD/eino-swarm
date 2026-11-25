@@ -12,6 +12,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Added
 
+- Paired phones open task files directly from conversation messages and worker
+  logs. When several files share a name, choose the path before opening the
+  preview. (`F-224`, `C-015`, `C-020`)
+
 - Paired phones can view conversation and project work records with their
   collaboration paths. (`F-139`, `C-055`)
 - Paired phones can search and read project knowledge pages, follow Wiki links,

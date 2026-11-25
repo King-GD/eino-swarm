@@ -198,6 +198,8 @@ export const zh: Record<MessageKey, string> = {
   "files.refresh": "刷新文件列表",
   "files.search": "搜索文件",
   "files.searching": "正在查找…",
+  "files.openPreview": "打开 {path}",
+  "files.chooseMatch": "请选择要打开的文件",
   "files.loadingDir": "正在读取这个目录…",
   "files.loading": "正在读取文件…",
   "files.progressLabel": "文件加载进度",

@@ -36,24 +36,32 @@ import { HighlightedLines } from "../../../frontend/src/lib/highlighted-lines"
 
 import { mermaidFenceIsClosed } from "../../../frontend/src/lib/markdown-mermaid"
 import { knowledgePageFromHref, remarkKnowledgeLinks } from "../../../frontend/src/lib/knowledge-link-ref"
+import { remarkWorkspaceFiles, workspaceFileFromHref, workspaceFileHref, workspaceFilePath } from "../../../frontend/src/lib/workspace-file-ref"
 
 const MarkdownSource = createContext("")
 const KnowledgePageOpen = createContext<((id: string) => void) | undefined>(undefined)
+export const PhoneFileLinkContext = createContext<((path: string, trigger: HTMLElement) => void) | undefined>(undefined)
 const Mermaid = lazy(() => import("./phone-mermaid").then((mod) => ({ default: mod.PhoneMermaid })))
 
 const PLUGINS = [remarkGfm, remarkMath]
+const FILE_PLUGINS = [...PLUGINS, remarkWorkspaceFiles]
 const KNOWLEDGE_PLUGINS = [...PLUGINS, remarkKnowledgeLinks]
 const MATH_LANGS = new Set(["math", "latex", "tex", "katex"])
 
-export function PhoneMarkdown({ text, className, onKnowledgePage }: {
-  text: string; className?: string; onKnowledgePage?: (id: string) => void
+export function PhoneMarkdown({ text, className, streaming = false, onKnowledgePage }: {
+  text: string; className?: string; streaming?: boolean; onKnowledgePage?: (id: string) => void
 }) {
+  const openFile = useContext(PhoneFileLinkContext)
+  const fileLinks = Boolean(openFile) && !streaming && !onKnowledgePage
+  const plugins = onKnowledgePage ? KNOWLEDGE_PLUGINS : fileLinks ? FILE_PLUGINS : PLUGINS
   return (
     <div className={cn("md-body wrap-break-word text-sm", className)}>
       <KnowledgePageOpen.Provider value={onKnowledgePage}>
-      <MarkdownSource.Provider value={text}><Markdown remarkPlugins={onKnowledgePage ? KNOWLEDGE_PLUGINS : PLUGINS} components={COMPONENTS} urlTransform={safeUrl}>
-        {text}
-      </Markdown></MarkdownSource.Provider>
+        <MarkdownSource.Provider value={text}>
+          <Markdown remarkPlugins={plugins} components={COMPONENTS} urlTransform={fileLinks ? workspaceUrl : safeUrl}>
+            {text}
+          </Markdown>
+        </MarkdownSource.Provider>
       </KnowledgePageOpen.Provider>
     </div>
   )
@@ -66,9 +74,21 @@ function PhoneLink({
   ...props
 }: ComponentPropsWithoutRef<"a"> & { node?: unknown }) {
   const open = useContext(KnowledgePageOpen)
+  const openFile = useContext(PhoneFileLinkContext)
   const pageId = open && knowledgePageFromHref(href)
   if (open && pageId) {
     return <button type="button" className="inline break-words text-left text-primary underline underline-offset-2" onClick={() => open(pageId)}>{children}</button>
+  }
+  if (href?.startsWith(workspaceFileHref(""))) {
+    const path = workspaceFileFromHref(href)
+    if (!path || !openFile) return <>{children}</>
+    return (
+      <button type="button" title={t("files.openPreview", { path })}
+        className="inline max-w-full cursor-pointer whitespace-normal break-all text-left align-baseline font-[inherit] text-primary underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={(event) => openFile(path, event.currentTarget)}>
+        {children}
+      </button>
+    )
   }
   const origin = typeof window === "undefined" ? "http://127.0.0.1" : window.location.origin
   const action = classifyHref(href, origin)
@@ -125,7 +145,22 @@ function classifyHref(href: string | null | undefined, origin: string): "stay" |
 }
 
 function safeUrl(url: string): string {
+  if (url.startsWith(workspaceFileHref(""))) return ""
   return classifyHref(url, "http://127.0.0.1") === "block" ? "" : url
+}
+
+function workspaceUrl(url: string, attribute: string): string {
+  if (attribute === "href") {
+    if (url.startsWith(workspaceFileHref(""))) return url
+    try {
+      const decoded = decodeURIComponent(url)
+      const path = /[?#%\x00-\x1f\x7f]/.test(decoded) ? null : workspaceFilePath(decoded)
+      if (path) return workspaceFileHref(path)
+    } catch {
+      // Malformed escapes follow the ordinary URL policy.
+    }
+  }
+  return safeUrl(url)
 }
 
 function PhonePre({
