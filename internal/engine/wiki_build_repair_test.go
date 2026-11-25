@@ -12,8 +12,8 @@ import (
 )
 
 func TestWikiReviewRepairsOnlyTheUnresolvedItemsAtTheModelBoundary(t *testing.T) {
-	const first = "North Station opened."
-	const second = "North Station hosted the Winter Session."
+	const first = "North Station opened. Status: waiting for input."
+	const second = "North Station hosted the Winter Session. I will check the records."
 	e, calls := distillWire(t, func(w http.ResponseWriter, req scheduleCompletionRequest, step int) {
 		switch step {
 		case 1:
@@ -21,8 +21,14 @@ func TestWikiReviewRepairsOnlyTheUnresolvedItemsAtTheModelBoundary(t *testing.T)
 				"reviewed":[1],
 				"nodes":[
 					{"key":"station","title":"North Station","kind":"entity","category":"place","evidence":{"seq":1,"quote":"North Station opened."}},
-					{"key":"session","title":"Winter Session","kind":"event","category":"meeting","evidence":{"seq":2,"quote":"Winter Session was planned."}}],
-				"links":[{"from":"station","to":"session","evidence":{"seq":2,"quote":"North Station hosted the Winter Session."}}]
+					{"key":"session","title":"Winter Session","kind":"event","category":"meeting","evidence":{"seq":2,"quote":"Winter Session was planned."}},
+					{"key":"status","title":"waiting for input","kind":"entity","category":"page_title","evidence":{"seq":1,"quote":"North Station opened. Status: waiting for input."}},
+					{"key":"workflow","title":"check the records","kind":"event","category":"meeting","evidence":{"seq":2,"quote":"check the records later."}}],
+				"links":[
+					{"from":"station","to":"session","evidence":{"seq":2,"quote":"North Station hosted the Winter Session."}},
+					{"from":"station","to":"status","evidence":{"seq":1,"quote":"North Station opened. Status: waiting for input."}},
+					{"from":"station","to":"workflow","evidence":{"seq":2,"quote":"North Station hosted the Winter Session. I will check the records."}}
+				]
 			}`)
 		case 2:
 			var receipt struct{ Note string }
@@ -31,14 +37,18 @@ func TestWikiReviewRepairsOnlyTheUnresolvedItemsAtTheModelBoundary(t *testing.T)
 			}
 			feedback := receipt.Note
 			if !strings.Contains(feedback, "Missing source numbers: [2]") || !strings.Contains(feedback, `node "session"`) ||
-				!strings.Contains(feedback, "retained") || strings.Contains(feedback, "North Station opened.") {
+				!strings.Contains(feedback, "retained") || strings.Contains(feedback, "North Station opened.") ||
+				strings.Contains(feedback, "status") || !strings.Contains(feedback, `node "workflow"`) {
 				t.Errorf("repair request lacks targeted feedback or repeats accepted evidence: %q", feedback)
 			}
 			// The first acknowledgement, valid node and dependent link are
 			// intentionally omitted. The host must retain and recheck them.
 			nuwaValidationTool(w, req, "corrected", wikiExtractTool, `{
 				"reviewed":[2],
-				"nodes":[{"key":"session","title":"Winter Session","kind":"event","category":"meeting","evidence":{"seq":2,"quote":"North Station hosted the Winter Session."}}]
+				"nodes":[
+					{"key":"session","title":"Winter Session","kind":"event","category":"meeting","evidence":{"seq":2,"quote":"North Station hosted the Winter Session."}},
+					{"key":"workflow","title":"check the records","kind":"event","category":"planned_action","evidence":{"seq":2,"quote":"I will check the records."}}
+				]
 			}`)
 		default:
 			t.Errorf("expected one targeted correction, got model call %d", step)

@@ -21,6 +21,7 @@ type Snapshot struct {
 	revision   string
 	pages      map[string]indexedPage
 	ambiguous  map[string]bool
+	reviewOnly map[string]bool
 	ordered    []string
 	names      map[string][]PageRef
 	outgoing   map[string][]Connection
@@ -136,6 +137,9 @@ func (s *Snapshot) SearchPage(query string, offset, limit int) []PageRef {
 	key := normalizedName(query)
 	matched := map[string]bool{}
 	for _, page := range s.names[key] {
+		if s.reviewOnly[page.ID] {
+			continue
+		}
 		add(page)
 		matched[page.ID] = true
 		if len(result) == limit {
@@ -143,6 +147,9 @@ func (s *Snapshot) SearchPage(query string, offset, limit int) []PageRef {
 		}
 	}
 	for _, id := range s.ordered {
+		if s.reviewOnly[id] {
+			continue
+		}
 		page := s.pages[id].page
 		if !matched[id] && pageContains(page, key) {
 			add(page.ref())
@@ -237,6 +244,13 @@ func (s *Snapshot) derive() {
 	})
 	for _, id := range s.ordered {
 		page := s.pages[id].page
+		if isWikiReviewOnly(page) {
+			if s.reviewOnly == nil {
+				s.reviewOnly = make(map[string]bool)
+			}
+			s.reviewOnly[id] = true
+			s.issues = append(s.issues, Issue{Kind: "wiki_non_subject", PageID: id, Detail: page.Title})
+		}
 		s.indexPageNames(page)
 		s.indexPageLinks(page)
 	}

@@ -3,18 +3,20 @@ import { Maximize, Minus, Plus } from "lucide-react"
 import { useEffect, useRef } from "react"
 
 import { Button } from "@/components/ui/button"
-import type { KnowledgeGraph } from "@/lib/knowledge"
+import type { KnowledgeLayoutGraph, KnowledgeLayoutNode } from "@/lib/knowledge-layout"
 import { useT } from "@/lib/use-t"
 
 interface LayoutNode extends NodeObject {
   id: string
   title: string
   label: string
+  kind: KnowledgeLayoutNode["kind"]
 }
 
 interface LayoutLink extends LinkObject<LayoutNode> {
   relations?: string[]
   wikilink?: boolean
+  membership?: true
 }
 
 type Layout = InstanceType<typeof ForceGraph<LayoutNode, LayoutLink>>
@@ -34,19 +36,24 @@ function titleLabel(title: string) {
   return characters.length > 36 ? `${characters.slice(0, 35).join("")}…` : title
 }
 
-function layoutData(graph: KnowledgeGraph) {
-  const nodes = graph.nodes.map(({ id, title }): LayoutNode => ({ id, title, label: titleLabel(title) }))
+function layoutData(graph: KnowledgeLayoutGraph) {
+  const nodes = graph.nodes.map(({ id, title, kind }): LayoutNode => ({
+    id, title, kind, label: titleLabel(title),
+    ...(kind === "root" ? { fx: 0, fy: 0 } : {}),
+  }))
   const links = graph.edges.map((edge): LayoutLink => ({ ...edge }))
   return { nodes, links }
 }
 
-export default function KnowledgeForceLayout({ graph, selected, onPage }: {
-  graph: KnowledgeGraph
+export default function KnowledgeForceLayout({ graph, selected, onPage, onGroup }: {
+  graph: KnowledgeLayoutGraph
   selected?: string
   onPage: (id: string) => void
+  onGroup: () => void
 }) {
   const t = useT()
   const wikiLabel = t("knowledge.graphWikilink")
+  const membershipLabel = t("knowledge.graphMembership")
   const stage = useRef<HTMLDivElement>(null)
   const layout = useRef<Layout | null>(null)
   const focus = useRef<(id: string) => void>(() => undefined)
@@ -58,7 +65,8 @@ export default function KnowledgeForceLayout({ graph, selected, onPage }: {
     const { nodes, links } = layoutData(graph)
     const large = nodes.length > LARGE_GRAPH_SIZE
     const byId = new Map(nodes.map((node) => [node.id, node]))
-    const nodeColor = (node: LayoutNode) => node.id === active.current ? colors.highlight : colors.node
+    const nodeColor = (node: LayoutNode) => node.kind !== "page" || node.id === active.current ? colors.highlight : colors.node
+    const nodeWeight = (node: LayoutNode) => node.kind === "root" ? 4 : node.kind === "group" ? 2 : 1
     const readColors = () => {
       const style = getComputedStyle(host)
       const color = (token: string) => `hsl(${style.getPropertyValue(token).trim()})`
@@ -73,12 +81,12 @@ export default function KnowledgeForceLayout({ graph, selected, onPage }: {
     const instance = new ForceGraph<LayoutNode, LayoutLink>(host)
       .width(host.clientWidth).height(host.clientHeight)
       .minZoom(MIN_ZOOM).maxZoom(MAX_ZOOM).cooldownTicks(large ? 60 : 160)
-      .nodeRelSize(NODE_RADIUS).nodeColor(nodeColor)
+      .nodeRelSize(NODE_RADIUS).nodeVal(nodeWeight).nodeColor(nodeColor)
       .nodeLabel((node) => tooltip(node.title))
       .nodeCanvasObjectMode(() => "after")
       .nodeCanvasObject((node, ctx, zoom) => {
         if (node.x == null || node.y == null) return
-        if ((large || (nodes.length > 50 && zoom < 0.85)) && node.id !== active.current) return
+        if (node.kind === "page" && node.id !== active.current && (large || (nodes.length > 50 && zoom < 0.85))) return
         const fontSize = 12 / zoom
         ctx.save()
         if (node.id === active.current) {
@@ -94,7 +102,7 @@ export default function KnowledgeForceLayout({ graph, selected, onPage }: {
         ctx.lineJoin = "round"
         ctx.strokeStyle = colors.background
         ctx.fillStyle = colors.text
-        const gap = NODE_RADIUS + 4 / zoom
+        const gap = NODE_RADIUS * Math.sqrt(nodeWeight(node)) + 4 / zoom
         const { a: scale, e: offset } = ctx.getTransform()
         const fitsOnRight = (node.x + gap + ctx.measureText(node.label).width) * scale + offset < ctx.canvas.width
         ctx.textAlign = fitsOnRight ? "left" : "right"
@@ -104,10 +112,15 @@ export default function KnowledgeForceLayout({ graph, selected, onPage }: {
         ctx.restore()
       })
       .linkColor(() => colors.edge)
-      .linkLineDash((link) => link.relations?.length ? null : [3, 3])
-      .linkLabel((link) => tooltip([...(link.relations ?? []), ...(link.wikilink ? [wikiLabel] : [])].join(" · ")))
+      .linkLineDash((link) => link.membership ? [1, 5] : link.relations?.length ? null : [3, 3])
+      .linkLabel((link) => tooltip(link.membership ? membershipLabel
+        : [...(link.relations ?? []), ...(link.wikilink ? [wikiLabel] : [])].join(" · ")))
       .linkCurvature(({ source, target }) => source === target ? 0.7 : 0)
-      .onNodeClick((node) => onPage(node.id))
+      .onNodeClick((node) => {
+        if (node.kind === "root") instance.zoomToFit(250, 54)
+        else if (node.kind === "group") onGroup()
+        else onPage(node.id)
+      })
       .onNodeHover((node) => { host.style.cursor = node ? "pointer" : "grab" })
       .onEngineStop(() => {
         if (fitted || moved) return
@@ -143,7 +156,7 @@ export default function KnowledgeForceLayout({ graph, selected, onPage }: {
       instance._destructor()
       layout.current = null
     }
-  }, [graph, onPage, wikiLabel])
+  }, [graph, onPage, onGroup, wikiLabel, membershipLabel])
 
   useEffect(() => {
     active.current = selected

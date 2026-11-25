@@ -138,7 +138,7 @@ function ProjectKnowledge({ project, thread, onOpenThread, onTrace }: KnowledgeP
               <SelectItem value={KNOWLEDGE_PENDING_VIEW}>{t("knowledge.pending")}</SelectItem>
             </SelectContent>
           </Select>
-          <KnowledgeNetwork projectId={project.id} refresh={refresh} onPage={current} />
+          <KnowledgeNetwork projectId={project.id} projectTitle={project.name} refresh={refresh} onPage={current} />
           {distillMenu}
           {wikiMenu}
           {canReveal ? (

@@ -37,6 +37,9 @@ func (s *Snapshot) Tree(id string, now time.Time) (Tree, error) {
 	case typeView:
 		grouped := make(map[string][]TreeNode)
 		for _, id := range s.ordered {
+			if s.reviewOnly[id] {
+				continue
+			}
 			page := s.pages[id].page
 			grouped[page.Type] = append(grouped[page.Type], pageNode(page))
 		}
@@ -53,7 +56,7 @@ func (s *Snapshot) Tree(id string, now time.Time) (Tree, error) {
 		counter := treeCounter{remaining: maxTreeNodes}
 		path := map[string]bool{}
 		for _, id := range s.ordered {
-			if s.pages[id].page.Type == view.RootType && counter.take() {
+			if !s.reviewOnly[id] && s.pages[id].page.Type == view.RootType && counter.take() {
 				tree.Nodes = append(tree.Nodes, s.viewNode(id, view, view.Depth, path, &counter))
 			}
 		}
@@ -95,7 +98,7 @@ func (s *Snapshot) viewNode(id string, view View, depth int, path map[string]boo
 		group := TreeNode{ID: rel, Label: rel, Kind: "relation"}
 		relation := s.index.relations[rel]
 		for _, out := range s.outgoing[id] {
-			if out.Relation != rel || !resolvedEndpoint(out, relation) {
+			if s.reviewOnly[out.Target] || out.Relation != rel || !resolvedEndpoint(out, relation) {
 				continue
 			}
 			if (len(group.Children) == 0 && !counter.take()) || !counter.take() {

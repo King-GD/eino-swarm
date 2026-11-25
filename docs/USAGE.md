@@ -843,12 +843,15 @@ Page sources distinguish primary material, unverified analysis and external
 links. Removed or rewound history remains listed as unavailable. An available
 last-update link opens its conversation or Trace.
 
-Open **Graph** for the whole project wiki. Each node shows a page title.
+Open **Graph** to browse the wiki from the project root. Dotted membership
+lines connect each relationship cluster and unlinked page to the project.
 Each pair of pages shares one undirected line. A solid line shows a defined
-relationship. A dashed line shows a Wiki link with no defined relationship.
-Search by title or alias to focus a page. Select any node to open it, or
-use the open button beside the search field. **Fit the whole knowledge
-graph** restores the overview.
+relationship, and a dashed line shows a Wiki link with no defined relationship.
+Large groups of unlinked pages share an **Unlinked pages** entry. Open it to
+browse those pages, or search by title or alias across browsable pages.
+Selecting a result shows its path in the graph. Click a page node or use
+the open button beside search to read it. **Fit the whole knowledge graph**
+restores the overview.
 
 On a paired phone, tap **Knowledge** beside a project or in a project
 conversation header. Search or page through the results, open a document
@@ -891,6 +894,11 @@ undirected line per pair. For large graphs the overview lays out a bounded
 selection, and search can find every node in the project. Once observations
 are verified, the builder appends them to the documents in batches and
 preserves existing prose.
+
+Generated workflow messages, waiting prompts and section or table labels
+are excluded from the graph. Older generated pages recognized as those
+labels appear in **Pending**, where you can open their saved text and
+original citations.
 
 The panel tracks scanned records, source review and document updates.
 Pause and resume use the saved positions, and subsequent builds reuse

@@ -6,13 +6,15 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input"
 import { api } from "@/lib/api"
 import { matchKnowledgeGraphNodes, type KnowledgeGraph } from "@/lib/knowledge"
+import { rootKnowledgeGraph, visibleKnowledgeGraph } from "@/lib/knowledge-layout"
 import { useT } from "@/lib/use-t"
 import { errorMessage } from "@/store/toasts"
 
 const ForceLayout = lazy(() => import("./knowledge-force-layout"))
 
-export function KnowledgeNetwork({ projectId, refresh, onPage }: {
+export function KnowledgeNetwork({ projectId, projectTitle, refresh, onPage }: {
   projectId: string
+  projectTitle: string
   refresh: number
   onPage: (id: string) => void
 }) {
@@ -33,14 +35,15 @@ export function KnowledgeNetwork({ projectId, refresh, onPage }: {
           <DialogTitle>{t("knowledge.graph")}</DialogTitle>
           <DialogDescription className="sr-only">{t("knowledge.graphDescription")}</DialogDescription>
         </DialogHeader>
-        {open ? <NetworkBody projectId={projectId} refresh={refresh} onPage={openPage} /> : null}
+        {open ? <NetworkBody projectId={projectId} projectTitle={projectTitle} refresh={refresh} onPage={openPage} /> : null}
       </DialogContent>
     </Dialog>
   )
 }
 
-function NetworkBody({ projectId, refresh, onPage }: {
+function NetworkBody({ projectId, projectTitle, refresh, onPage }: {
   projectId: string
+  projectTitle: string
   refresh: number
   onPage: (id: string) => void
 }) {
@@ -70,24 +73,41 @@ function NetworkBody({ projectId, refresh, onPage }: {
           </Button>
         </div>
       ) : null}
-      {graph ? graph.nodes.length ? <NetworkExplorer graph={graph} onPage={onPage} /> : (
+      {graph ? graph.nodes.length ? <NetworkExplorer graph={graph} projectTitle={projectTitle} onPage={onPage} /> : (
         <p className="text-sm text-muted-foreground">{t("knowledge.noPages")}</p>
       ) : !error ? <p role="status" className="text-sm text-muted-foreground">{t("knowledge.loading")}</p> : null}
     </>
   )
 }
 
-function NetworkExplorer({ graph, onPage }: { graph: KnowledgeGraph; onPage: (id: string) => void }) {
+const PAGE_RESULTS = 8
+
+function NetworkExplorer({ graph, projectTitle, onPage }: { graph: KnowledgeGraph; projectTitle: string; onPage: (id: string) => void }) {
   const t = useT()
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState<string | undefined>()
-  const searching = Boolean(query.trim())
-  const matches = useMemo(() => searching ? matchKnowledgeGraphNodes(graph.nodes, query) : [], [graph.nodes, query, searching])
+  const [groupOpen, setGroupOpen] = useState(false)
+  const [resultLimit, setResultLimit] = useState(PAGE_RESULTS)
+  const rooted = useMemo(() => rootKnowledgeGraph(graph, projectTitle,
+    (count) => t("knowledge.graphUnlinked", { count })), [graph, projectTitle, t])
+  const unlinked = rooted.groupedPages
+  const browsing = groupOpen && unlinked.length > 0
+  const showResults = browsing || Boolean(query.trim())
+  const searchNodes = browsing ? unlinked : graph.nodes
+  const matches = useMemo(() => showResults ? matchKnowledgeGraphNodes(searchNodes, query) : [], [searchNodes, query, showResults])
   const selection = graph.nodes.find(({ id }) => id === selected)
-  const shortlist = matches.slice(0, 8)
+  const groupedSelection = selected && rooted.groupedIDs.has(selected) ? selected : undefined
+  const layout = useMemo(() => visibleKnowledgeGraph(rooted, groupedSelection), [rooted, groupedSelection])
+  const shortlist = matches.slice(0, browsing ? resultLimit : PAGE_RESULTS)
+  const toggleGroup = useCallback(() => {
+    setGroupOpen((previous) => !previous)
+    setQuery("")
+    setResultLimit(PAGE_RESULTS)
+  }, [])
   const choose = (node: KnowledgeGraph["nodes"][number]) => {
     setSelected(node.id)
     setQuery("")
+    setGroupOpen(false)
   }
 
   return (
@@ -100,12 +120,12 @@ function NetworkExplorer({ graph, onPage }: { graph: KnowledgeGraph; onPage: (id
           <Input
             type="search"
             value={query}
-            onChange={(event) => setQuery(event.currentTarget.value)}
+            onChange={(event) => { setQuery(event.currentTarget.value); setResultLimit(PAGE_RESULTS) }}
             placeholder={t("knowledge.graphSearch")}
             aria-label={t("knowledge.graphSearch")}
           />
-          {searching ? (
-            <ul className="absolute inset-x-0 top-full z-10 mt-1 rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+          {showResults ? (
+            <ul className="absolute inset-x-0 top-full z-10 mt-1 max-h-[min(45vh,20rem)] overflow-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
               {shortlist.length ? shortlist.map((node) => (
                 <li key={node.id}>
                   <Button type="button" variant="ghost" className="h-auto w-full justify-start" onClick={() => choose(node)}>
@@ -114,9 +134,19 @@ function NetworkExplorer({ graph, onPage }: { graph: KnowledgeGraph; onPage: (id
                   </Button>
                 </li>
               )) : <li className="px-2 py-1 text-sm text-muted-foreground">{t("knowledge.noMatches")}</li>}
+              {browsing && matches.length > shortlist.length ? (
+                <li><Button type="button" variant="ghost" className="w-full" onClick={() => setResultLimit((count) => count + PAGE_RESULTS)}>
+                  {t("sidebar.showMore")}
+                </Button></li>
+              ) : null}
             </ul>
           ) : null}
         </form>
+        {unlinked.length > 0 ? (
+          <Button variant="outline" size="sm" aria-expanded={browsing} onClick={toggleGroup}>
+            {t("knowledge.graphUnlinked", { count: unlinked.length })}
+          </Button>
+        ) : null}
         {selection ? (
           <Button variant="secondary" size="sm" className="min-w-0 max-w-full" onClick={() => onPage(selection.id)}>
             <span className="truncate">{t("knowledge.graphOpenPage", { title: selection.title })}</span>
@@ -127,11 +157,12 @@ function NetworkExplorer({ graph, onPage }: { graph: KnowledgeGraph; onPage: (id
         </p>
       </div>
       <Suspense fallback={<p role="status" className="text-sm text-muted-foreground">{t("knowledge.loading")}</p>}>
-        <ForceLayout graph={graph} selected={selection?.id} onPage={onPage} />
+        <ForceLayout graph={layout} selected={selection?.id} onPage={onPage} onGroup={toggleGroup} />
       </Suspense>
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5"><span className="w-4 border-t border-current" />{t("knowledge.graphRelation")}</span>
         <span className="flex items-center gap-1.5"><span className="w-4 border-t border-dashed border-current" />{t("knowledge.graphWikilink")}</span>
+        <span className="flex items-center gap-1.5"><span className="w-4 border-t border-dotted border-current" />{t("knowledge.graphMembership")}</span>
       </div>
     </>
   )

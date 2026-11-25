@@ -2688,6 +2688,17 @@ updates, resolves and classifies historical sources, and injects a bounded
 schema summary at turn setup. HTTP reads reuse the same index. The right
 inspector uses existing tool results and turn completion to refresh.
 
+The PC and Web graph draws navigation from a virtual project root. The
+layout attaches one page per connected component using membership lines and
+groups large sets of unlinked pages. Search and group browsing retain every
+browsable page reference. A selected grouped page is added to the visible graph with
+its route to the root. The saved graph and HTTP response contain the actual
+page relationships and Wiki links.
+
+Wiki review omits workflow and editorial labels and links that depend on
+them. The index flags older generated pages with the same rule for review
+and keeps the Markdown and citations accessible by page ID.
+
 Paired phones read the same project index through explicit knowledge RPCs in
 `internal/remote/knowledge.go`. The inbox and project-conversation actions
 open the same mobile browser. Search lists bounded page references and loads
