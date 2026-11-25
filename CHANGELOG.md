@@ -42,6 +42,12 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 - 侧栏与面板的拖拽分隔条保留 8px 拖动区域，悬停或键盘聚焦时只画 2px 细线，不再出现整条粗色块。
 
+- 文件树的文件夹图标改用正文蓝灰色（`--content-foreground`），不再用高饱和亮蓝；其他文件类型色保持。
+
+- 下拉选择器只在键盘聚焦时显示焦点环；用鼠标选中后不再把青色边框留在触发器上。
+
+- “完整权限”标识恢复为与工具栏其他控件相同的字号和字重，盾牌图标同步放大，不再显得像次要说明。
+
 - The FOFA theme now carries FOFA's console structure. Colors: answers use the blue-gray body color under white headings, links get a dedicated color, the rail sits a step away from the canvas, and running / waiting-on-you / done keep separate colors. Form: your request keeps its bubble, each tool line gets a monospace clock on a dashed rail, tables keep horizontal rules only, the selected conversation gets a cyan fading wash, controls sit at 4px with 8px panels and 16px dialogs, and the send button carries the brand gradient. The zwai theme is unchanged and stays the default.
 
 - Local verification starts with the affected tests. Full suites run when the

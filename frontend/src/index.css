@@ -887,7 +887,7 @@
     --chart-4: 221 43% 40%;
     --chart-5: 32 95% 44%;
 
-    --file-folder: 213 99% 45%;
+    --file-folder: var(--content-foreground);
     --file-code: 180 95% 32%;
     --file-doc: 221 43% 40%;
     --file-config: 32 95% 44%;
@@ -972,7 +972,7 @@
     --chart-4: 180 93% 40%;
     --chart-5: 38 92% 50%;
 
-    --file-folder: 214 100% 63%;
+    --file-folder: var(--content-foreground);
     --file-code: 180 96% 48%;
     --file-doc: 210 31% 74%;
     --file-config: 38 92% 50%;

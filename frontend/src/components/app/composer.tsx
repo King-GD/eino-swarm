@@ -891,8 +891,14 @@ export function Composer({
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <Badge variant="outline" className={cn(chromeTypeClass, "h-7 gap-1 border-transparent px-2")}>
-                  <ShieldCheck className="size-3" />
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    chromeTypeClass,
+                    "h-7 gap-1.5 border-transparent px-2 text-[length:var(--chrome-font-size)] font-medium text-content-foreground",
+                  )}
+                >
+                  <ShieldCheck className="size-3.5" />
                   {t("composer.fullAccess")}
                 </Badge>
               </TooltipTrigger>
