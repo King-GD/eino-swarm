@@ -1436,7 +1436,10 @@ worker before closing SQLite.
    `UserInputMultiContent` (caption in a text part, not also on `Content` —
    OpenAI cannot marshal both), not as workspace files. The conversation's
    model receives the multimodal input and the transcript retains image
-   references for later turns. A `/goal <objective>`
+   references for later turns. Pairlink sends the stored image IDs on user and
+   steer events, including history. The phone shows a View image button for
+   each attachment and issues conversation-scoped `input_image_chunk` requests
+   for the chosen image after a tap. A `/goal <objective>`
    body (identifier split, glued CJK, fullwidth `／`, IME punctuation `、`) pins the standing
    objective and starts or steers; the stored user message is the objective.
    One turn per conversation

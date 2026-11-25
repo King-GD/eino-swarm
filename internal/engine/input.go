@@ -3,7 +3,9 @@ package engine
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -290,29 +292,54 @@ func safeImageID(id string) bool {
 // and a later turn can send them again. The id is the only path component;
 // anything else is not found rather than a traversal.
 func (e *Engine) ReadInputImage(threadID, id string) ([]byte, string, error) {
+	file, mime, err := e.OpenInputImage(threadID, id)
+	if err != nil {
+		return nil, "", err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, "", fmt.Errorf("engine: read image: %w", err)
+	}
+	return data, mime, nil
+}
+
+// OpenInputImage opens the conversation's stored raster image for bounded
+// reads. The caller owns the descriptor. ReadAt leaves it at the beginning.
+func (e *Engine) OpenInputImage(threadID, id string) (*os.File, string, error) {
 	if _, err := e.store.GetThread(threadID); err != nil {
 		return nil, "", err
 	}
 	if !safeImageID(id) {
 		return nil, "", store.ErrNotFound
 	}
-	root := e.cfg.ThreadInputsDir(threadID)
-	path := filepath.Join(root, id)
-	if rel, err := filepath.Rel(root, path); err != nil || strings.HasPrefix(rel, "..") {
+	root, err := os.OpenRoot(e.cfg.ThreadInputsDir(threadID))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, "", store.ErrNotFound
+		}
+		return nil, "", fmt.Errorf("engine: open conversation inputs: %w", err)
+	}
+	defer root.Close()
+	info, err := root.Lstat(id)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > int64(maxImageBytes) {
 		return nil, "", store.ErrNotFound
 	}
-	data, err := os.ReadFile(path)
+	file, err := root.Open(id)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, "", store.ErrNotFound
 		}
-		return nil, "", fmt.Errorf("engine: read image: %w", err)
+		return nil, "", fmt.Errorf("engine: open image: %w", err)
 	}
-	mime := sniffImageMIME(data)
-	if mime == "" {
+	var prefix [12]byte
+	n, err := file.ReadAt(prefix[:], 0)
+	mime := sniffImageMIME(prefix[:n])
+	if err != nil && !errors.Is(err, io.EOF) || mime == "" {
+		_ = file.Close()
 		return nil, "", store.ErrNotFound
 	}
-	return data, mime, nil
+	return file, mime, nil
 }
 
 func (e *Engine) removeInputImages(threadID string) {

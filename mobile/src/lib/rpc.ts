@@ -45,6 +45,7 @@ export const OpClientRead = "client_read"
 export const OpFiles = "files"
 export const OpFileChunk = "file_chunk"
 export const OpGeneratedImageChunk = "generated_image_chunk"
+export const OpInputImageChunk = "input_image_chunk"
 export const OpTaskPanels = "task_panels"
 export const OpThreadWork = "thread_work"
 export const OpTaskPanelRead = "task_panel_read"
@@ -251,6 +252,7 @@ export type RemoteEvent = {
   tool_call_id?: string
   err?: string
   has_images?: boolean
+  image_ids?: string[]
   generated_image?: import("../../../frontend/src/lib/types").ImageRef
   created_at: string
 }

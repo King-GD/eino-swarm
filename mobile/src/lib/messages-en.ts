@@ -243,6 +243,8 @@ export const en = {
   "thread.message": "Message",
   "thread.plan": "Planning",
   "thread.image": "Image",
+  "thread.viewImage": "View image",
+  "thread.imageLoadFailed": "Could not load the image.",
   "thread.running": "running",
   "thread.waiting": "Waiting",
   "thread.earlier": "Earlier",

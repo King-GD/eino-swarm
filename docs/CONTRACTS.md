@@ -349,6 +349,8 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 
 ## C-006 Phone remote protocol
 
+- `user_message` 和 `steer` 的可选 `image_ids` 按消息里的原顺序传递已存图片 ID，`has_images` 保留旧客户端兼容。实时、重开和较早历史使用同一投影。用户点击「查看图片」或重试后，手机才用配对链路上的 `input_image_chunk` 读取对应图片。打开、重开、滚动会话和载入历史只显示按钮。按会话、图片 ID 和字节偏移读取，每帧最多 36 KiB 原始数据，按原样返回 PNG、JPEG、GIF 或 WebP。读取拒绝跨会话 ID、越界偏移及从私有图片目录跳出的路径。手机校验分块身份、大小和 MIME，最多组装 8 MiB。离开会话或切换连接时取消读取并释放显示资源，迟到响应不得更新当前会话。证据见 `internal/remote/input_images_test.go`、`mobile/src/components/transcript-image.test.tsx`、`mobile/e2e/transcript-images.spec.ts`。
+
 - 本地 Claude、Codex 和 Cursor 任务已禁用。PC 不扫描任务文件，所有手机收件箱响应省略 `clients`。仅旧手机显式调用 `clients` 时收到 `enabled:false`，无任务数据。旧 `client_read` 请求返回 `not_found`，负分页偏移仍返回 `bad_request`。新手机忽略旧 PC 返回的本地任务。证据：`internal/remote/clients_test.go`、`internal/server/clients_test.go`、`mobile/src/app.test.tsx`。
 
 - 轮次导航：PC 打开详情的 `turns[].user_text` 是可选的单行用户输入预览，受 `summary_chars` 限制；既有 `turns[].text` 的回复预览语义不变。运行轮次即使只有工具活动可见也进入导航；打开运行中的会话或跟随到实时末尾时高亮该轮，向上阅读仍按正文位置高亮。手机优先使用已加载的用户消息；运行轮次的输入不在实时页、或旧 PC 缺少输入预览时，对当前会话最多额外读取八页历史，按轮次 ID 提取用户输入，且不改变正文、分页游标或阅读位置。没有已验证输入时显示「暂无输入预览」。点选配对会话的轮次时，已加载的回复仍可继续向前读取，直到找到该轮提问或确认到达轮次起点。没有提问时使用该轮第一条可见内容跟踪位置。跟随正文时，宽度足够便保持当前轮和上一轮完整可点。横滑导航条后保留浏览位置，重新滚动正文或选中轮次后恢复跟随。证据：`internal/remote/snapshot_reads_test.go`、`mobile/e2e/conversation-open.spec.ts`。

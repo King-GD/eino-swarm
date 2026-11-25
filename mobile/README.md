@@ -389,6 +389,11 @@ answer stays on screen and splits that row. The live tail is **Thinking**
 / **Planning next moves** / **Editing** / **Reading** / **Exec**; open
 the row for the pieces. A `progress` pulse is not a chat
 row. `wait_agents` is a status count, not the `elapsed_ms` roster.
+
+In a paired conversation, each attachment image has a **View image / 查看图片**
+button, including in older messages. Tap it to load the selected image. If a
+read fails, tap **Retry / 重试**.
+
 A conversation with sub-agents offers **Agents / 子 Agent** above the message
 box. Its number counts running workers. That entry and count are visible as
 soon as the conversation opens while any worker is still running, including

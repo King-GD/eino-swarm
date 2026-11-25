@@ -1274,7 +1274,7 @@ The slim RPC the phone sends over pairlink is not an HTTP API. Request ops:
 `resume_goal` / `project_get` / `project_create` / `project_update` / `catalog` / `refresh_catalog` / `get_timeouts` / `set_timeouts` / `set_product_mode` /
 `project_knowledge` / `project_knowledge_page` / `project_knowledge_cancel` /
 `tune` / `put` / `clients` / `files` /
-`file_chunk`. `hello` `{text}` is the phone's one-line model; the host
+`file_chunk` / `input_image_chunk`. `hello` `{text}` is the phone's one-line model; the host
 keys it by the pairlink fingerprint, not a client-supplied id.
 OK replies carry `host` (this PC's `remote.display_name`) so the phone can
 label the chip; an older host omits it and the phone falls back to a short
@@ -1662,6 +1662,18 @@ bytes land in the workspace. The PC decides what the turn is: text with no
 attachments while a turn runs is a follow-up; attachments while a turn
 runs steer; an idle conversation starts a turn. The phone uploads, then
 calls `send` or `steer`; it does not reimplement that policy.
+
+Pairlink `user_message` and `steer` events can include optional `image_ids`
+in attachment order. The PC sends the same IDs on live delivery and history
+replay and retains `has_images` for older clients. When the user requests
+one of those images, `input_image_chunk` takes
+`{thread_id, image_id, before?}` and returns `file_chunk` with the image ID
+in `path`. Each reply carries up to 36 KiB of original PNG, JPEG, GIF or
+WebP bytes in base64 with `mime`, `size`, `offset`, `next_offset` and
+`more`. Omit `before` to start at byte zero and use `next_offset` to continue.
+A missing image or one from another conversation returns `not_found`.
+Negative offsets and offsets beyond the end return `bad_request`.
+
 `files` `{thread_id, directory?, text?, cursor?, file_scope?, file_root?}` lists one complete directory,
 or every listed match when `text` is set. An empty or omitted `directory` is
 the workspace root. `cursor` pages that same result and must repeat

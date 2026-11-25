@@ -1,4 +1,5 @@
-import { mockGeneratedImageChunk, mockGeneratedImageTurn } from "./mock-generated-image"
+import { mockGeneratedImageTurn } from "./mock-generated-image"
+import { mockTranscriptImageHistory } from "./mock-transcript-images"
 import { compactHistoryFixture, compactHistoryRunning, compactHistorySteps, compactTurnSummaries, mockCompactPage } from "./mock-compact-history"
 import { MockProjects } from "./mock-projects"
 import { mockTurnID, olderThreadSeed, threadSeed, transcriptFileLinksSeed, type MockThread } from "./mock-threads"
@@ -8,7 +9,8 @@ import { MOCK_FLAG, mockTickMs, mockPauseOpenMs, mockPauseClientsMs } from "./mo
 import { mockTaskPanelRPC, releaseMockTaskPanels, resetMockTaskPanels } from "./mock-task-panels"
 import { mockThreadWork, mockWorkRecordsMeta } from "./mock-work-records"
 export { wantsMock, mockTickMs, mockPauseOpenMs } from "./mock-link-timing"
-import { mockFileChunk, mockListedFiles, mockOutputFiles, mockScopedFiles } from "./mock-files"
+import { mockOutputFiles } from "./mock-files"
+import { mockFileRPC } from "./mock-file-rpc"
 import { iterationLimitHistory, iterationSnapshotOnly, mockAwaitingContinue, mockContinueIteration } from "./mock-iteration-limit"
 import { restartAskHistory } from "./mock-ask-restart"
 import { generationHistory, modelFailureHistory } from "./mock-generation"
@@ -28,6 +30,7 @@ import {
   OpFiles,
   OpFileChunk,
   OpGeneratedImageChunk,
+  OpInputImageChunk,
   OpFollowupSteer,
   OpHello,
   OpMeta,
@@ -191,6 +194,8 @@ export class MockHost {
       const history = new URLSearchParams(location.search).get("history")
       if (history === "reasoning-only") {
         this.seed(done, reasoningOnlyTurn(false), false)
+      } else if (history === "input-images") {
+        this.seed(done, mockTranscriptImageHistory(), false)
       } else if (history === "model-response-error" || history === "model-read-timeout") {
         this.seed(done, modelFailureHistory(history === "model-read-timeout"), false)
       } else if (history === "model-request-blocked" || history === "legacy-model-request-blocked") {
@@ -684,6 +689,8 @@ export class MockHost {
       text: step.text ?? "",
       tool_call_id: callID,
       generated_image: step.generatedImage,
+      has_images: step.imageIDs?.length ? true : undefined,
+      image_ids: step.imageIDs,
       err: step.err,
       created_at: step.at ?? new Date().toISOString(),
     }
@@ -803,31 +810,11 @@ export class MockLink {
           return this.ok({ id, ...page })
         }
         return this.ok({ id, threads: [this.host.older()], more: false, next: "" })
-      case OpFiles: {
-        if (!thread()) return this.missing(id)
-        if (new URLSearchParams(location.search).get("file-preview") === "task-workspaces") {
-          const { files, folders, view } = mockScopedFiles(req.file_scope === "project", location.search)
-          if (req.file_root && req.file_root !== view.root) return this.ok({ id, ok: false, code: "file_root_changed" })
-          return this.ok({ id, files: mockListedFiles(files, req.directory, req.text, folders), file_view: view, more: false })
-        }
-        return this.ok({ id, files: mockListedFiles(this.outputFiles, req.directory, req.text), more: false })
-      }
-      case OpGeneratedImageChunk: {
-        if (!thread()) return this.missing(id)
-        const file_chunk = await mockGeneratedImageChunk(req.image_id, req.before ?? 0)
-        return file_chunk ? this.ok({ id, file_chunk }) : this.missing(id)
-      }
-      case OpFileChunk: {
-        if (!thread()) return this.missing(id)
-        if (new URLSearchParams(location.search).get("file-preview") === "task-workspaces") {
-          const { files, view } = mockScopedFiles(req.file_scope === "project", location.search)
-          if (req.file_root !== view.root) return this.ok({ id, ok: false, code: "file_root_changed" })
-          const file_chunk = await mockFileChunk(files, req.file_path ?? "", req.before ?? 0)
-          return file_chunk ? this.ok({ id, file_chunk, file_view: view }) : this.missing(id)
-        }
-        const file_chunk = await mockFileChunk(this.outputFiles, req.file_path ?? "", req.before ?? 0)
-        return file_chunk ? this.ok({ id, file_chunk }) : this.missing(id)
-      }
+      case OpFiles:
+      case OpFileChunk:
+      case OpGeneratedImageChunk:
+      case OpInputImageChunk:
+        return this.ok({ id, ...await mockFileRPC(req, thread()?.id, this.outputFiles) })
       case OpRefreshCatalog: {
         const scenario = new URLSearchParams(location.search).get("catalog")
         if (scenario === "legacy") return this.ok({ id, ok: false, code: "unknown_op" })

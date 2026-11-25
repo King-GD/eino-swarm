@@ -89,8 +89,10 @@ func dispatch(eng *engine.Engine, cfg config.RemoteConfig, stage *Staging, req R
 		return handleFiles(eng, req, path, sessionID)
 	case OpFileChunk:
 		return handleFileChunk(eng, req, path, sessionID)
+	case OpInputImageChunk:
+		return handleImageChunk(eng.OpenInputImage, req, path, sessionID)
 	case OpGeneratedImageChunk:
-		return handleGeneratedImageChunk(eng, req, path, sessionID)
+		return handleImageChunk(eng.OpenGeneratedImage, req, path, sessionID)
 	case OpOpen:
 		return handleOpen(eng, cfg, req, path, sessionID)
 	case OpRead:

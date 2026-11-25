@@ -45,6 +45,7 @@ export type CompactBlock = {
   callId?: string
   args?: string
   hasImages?: boolean
+  imageIDs?: string[]
   imageGeneration?: ImageGeneration
   questions?: AskQuestion[]
   answers?: Record<string, string>
@@ -194,10 +195,14 @@ function applyEventForAgent(blocks: CompactBlock[], ev: RemoteEvent): CompactBlo
         kind: "user",
         text: ev.text,
         hasImages: ev.has_images,
+        imageIDs: ev.image_ids,
       })
       return next
     case "steer":
-      next.push({ id: blockId(ev), kind: "steer", text: ev.text, pending: ev.role === "human" ? true : undefined, hasImages: ev.has_images })
+      next.push({
+        id: blockId(ev), kind: "steer", text: ev.text, pending: ev.role === "human" ? true : undefined,
+        hasImages: ev.has_images, imageIDs: ev.image_ids,
+      })
       return next
     case "steer_consumed": {
       const seq = Number(ev.text)

@@ -106,6 +106,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Paired phones show a View image button for each image sent in a PC
+  conversation. Tapping it loads just that image. Reopening the conversation
+  shows the buttons again. (`F-220`, `C-006`)
+
 - Gateway safety refusals show one localized chat notice on desktop, Web and
   paired phones. The blocked turn cannot be retried. (`F-130`, `C-035`)
 

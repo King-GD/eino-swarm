@@ -27,6 +27,7 @@ import {
 import { cn } from "@/lib/cn"
 import { SpeechActions } from "./speech-actions"
 import { GeneratedImageResult } from "./generated-image-result"
+import { TranscriptImage, type TranscriptImageOwner } from "./transcript-image"
 import { readGeneratedImage } from "@/lib/remote-files"
 import type { RemoteLink } from "@/lib/link"
 import type { HistoryWork } from "@/lib/rpc"
@@ -34,7 +35,7 @@ import { LazyHistoryWork } from "@/components/lazy-history-work"
 import { gatewayImageCode } from "@/lib/paired-image-generation"
 import { isModelRequestBlocked, visibleModelRequestNotices } from "../../../frontend/src/lib/model-request-blocked"
 
-export function renderBlock(b: CompactBlock) {
+export function renderBlock(b: CompactBlock, imageOwner?: TranscriptImageOwner) {
   if (b.kind === "turn_end") {
     const at = new Date(b.text)
     const valid = Number.isFinite(at.getTime())
@@ -46,27 +47,25 @@ export function renderBlock(b: CompactBlock) {
       </div>
     )
   }
-  if (b.kind === "user") {
+  if (b.kind === "user" || b.kind === "steer") {
     const text = dropPackedJson(b.text)
-    if (!text && !b.hasImages) return null
+    const images = imageOwner ? b.imageIDs : undefined
+    const steer = b.kind === "steer"
+    if (!text && !b.hasImages && !images?.length) return null
     return (
       // A bubble as wide as the screen for three words reads as a banner.
       // What you said hugs its own text and sits on the side you typed from.
-      <div data-quote-text="" className="ml-auto w-fit min-w-0 max-w-[85%] wrap-break-word rounded-2xl bg-secondary px-3 py-2 text-sm text-secondary-foreground">
-        {text ? <QuotedPhoneText text={text} /> : null}
-        {b.hasImages ? (
+      <div data-quote-text="" className={cn("ml-auto w-fit min-w-0 max-w-[85%] wrap-break-word rounded-2xl px-3 py-2 text-sm",
+        steer ? "bg-accent" : "bg-secondary text-secondary-foreground")}>
+        {imageOwner && images?.length ? (
+          <div className={cn("flex flex-col gap-2", text && "mb-2")}>
+            {images.map(id => <TranscriptImage key={id} id={id} owner={imageOwner} />)}
+          </div>
+        ) : b.hasImages ? (
           <p className="mt-1 text-xs text-muted-foreground">{t("thread.image")}</p>
         ) : null}
-      </div>
-    )
-  }
-  if (b.kind === "steer") {
-    const text = dropPackedJson(b.text)
-    if (!text && !b.hasImages) return null
-    return (
-      <div data-quote-text="" className="ml-auto w-fit min-w-0 max-w-[85%] wrap-break-word rounded-2xl bg-accent px-3 py-2 text-sm">
-        {text ? <QuotedPhoneText text={text} /> : t("thread.image")}
-        {b.pending !== undefined ? <p className="mt-1 text-xs text-muted-foreground">{t(b.pending ? "delivery.pending" : "delivery.consumed")}</p> : null}
+        {text ? <QuotedPhoneText text={text} /> : null}
+        {steer && b.pending !== undefined ? <p className="mt-1 text-xs text-muted-foreground">{t(b.pending ? "delivery.pending" : "delivery.consumed")}</p> : null}
       </div>
     )
   }
@@ -308,7 +307,7 @@ export function ThreadLog({
   onContinue?: (proceed: boolean) => Promise<void>
   continueDisabled?: boolean
   activeTurnId?: string
-  imageOwner?: { link: RemoteLink; threadId: string }
+  imageOwner?: TranscriptImageOwner
   historyWork?: HistoryWork[]
   historyAgent?: string
 }) {
@@ -357,7 +356,7 @@ export function ThreadLog({
         const node = item.block.imageGeneration
           ? <PairedImageResult data={item.block.imageGeneration} link={imageOwner?.link} threadId={imageOwner?.threadId} />
           : pause ? <IterationLimitCard pause={pause}
-              onContinue={actionable ? onContinue : undefined} disabled={continueDisabled} /> : renderBlock(item.block)
+              onContinue={actionable ? onContinue : undefined} disabled={continueDisabled} /> : renderBlock(item.block, imageOwner)
         return [...(lazy ?? []), ...(node ? [
           <div key={item.block.id} className="min-w-0 max-w-full"
             data-phone-turn={item.block.turnId} data-phone-prompt={item.block.kind === "user" ? "" : undefined}
