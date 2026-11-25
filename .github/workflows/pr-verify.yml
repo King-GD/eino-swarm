@@ -10,9 +10,11 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same pull request supersedes its older run.
+# Within one base revision a newer push supersedes the older run. A separate
+# CI-only revision moves the base SHA, so the earlier long suite keeps its
+# results instead of being cancelled.
 concurrency:
-  group: pr-verify-${{ github.event.pull_request.number }}
+  group: pr-verify-${{ github.event.pull_request.number }}-${{ github.event.pull_request.base.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -171,8 +173,10 @@ jobs:
   docs:
     name: Documentation and Python tools
     # Two tool regressions exercise macOS process identity (`libc.sysctl`,
-    # `/proc/1/exe`); the hosted macOS image has the matching system symbols.
-    runs-on: macos-26
+    # `/proc/1/exe`); a macOS image has the matching system symbols. The Intel
+    # image is pinned because GitHub's macOS ARM hosted capacity currently
+    # cancels these runs.
+    runs-on: macos-15-intel
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7

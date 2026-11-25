@@ -4,9 +4,11 @@ Pull-request verification for this repository. It runs on every pull request
 whose target branch is `ci/verify` (opened, synchronize, reopened, drafts
 included). The token is read-only (`contents: read`), no job uses a secret, and
 the checkout writes no credentials into `.git/config`. A newer push to the same
-pull request cancels the older run. Every job checks out
-`github.event.pull_request.head.sha`, so a failure names the contributor's own
-tree rather than the synthetic merge commit.
+pull request on the same base revision cancels the older run; when the base SHA
+changes, the earlier run keeps running so its cloud results survive a separate
+CI-only revision. Every job checks out `github.event.pull_request.head.sha`, so
+a failure names the contributor's own tree rather than the synthetic merge
+commit.
 
 | job | what it runs |
 |---|---|
@@ -23,7 +25,7 @@ tree rather than the synthetic merge commit.
 |---|---|---|
 | `ubuntu-24.04` | Go checks, PC/Web offline E2E | Some packages still link the native shell's Gtk 4 / WebKit 6 libraries even with the `server` tag, so both jobs install `libgtk-4-dev libwebkitgtk-6.0-dev libx11-dev` (their dependencies provide glib and libsoup) before the first Go build or test. The image is pinned because the dev package names follow the Ubuntu release. |
 | `ubuntu-latest` | Phone bundle, PC/Web checks, Upstream merge check | These jobs link no native shell package. |
-| `macos-26` | Documentation and Python tools | Two tool regressions exercise macOS process identity (`libc.sysctl`, and `/proc/1/exe` being refused), so `make docs-check` needs the matching system symbols rather than a Linux-only environment. |
+| `macos-15-intel` | Documentation and Python tools | Two tool regressions exercise macOS process identity (`libc.sysctl`, and `/proc/1/exe` being refused), so `make docs-check` needs the matching system symbols rather than a Linux-only environment. The Intel image is pinned because GitHub's macOS ARM hosted capacity currently cancels these runs; the full tool suite still runs there unchanged. |
 
 The Go and offline E2E jobs set `GOFLAGS=-tags=server`, which selects the
 headless server entry; Playwright's web server inherits it. CGO stays enabled
