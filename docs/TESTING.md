@@ -7362,7 +7362,10 @@ Several things are tested here, some as pure logic and some in jsdom:
   Chart / Table tabs (plot first; the table is the same rows, not a
   screen-reader-only dump); a live incomplete fence is a
   placeholder; fills and axes use `var(--chart-*)` / muted / border tokens
-  so a theme switch restyles the same plot. Re-rendering with a new but equal
+  so a theme switch restyles the same plot. Line and area fills fade toward
+  the baseline with chart-local SVG IDs. The phone plot shares those stops.
+  The EASM browser hover test checks the area fill and FOFA tooltip styles
+  in dark and light modes. Re-rendering with a new but equal
   spec object keeps the same SVG; the plot only redraws when the spec or the
   measured box size changes.
 - **`src/lib/stream-markdown.ts`**: trailing `**` / `` ` `` / `~~` in the

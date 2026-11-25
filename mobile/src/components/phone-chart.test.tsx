@@ -123,4 +123,17 @@ describe("PhoneChart", () => {
     expect(xs).toContain("p7")
     expect(xs.filter((text) => text?.startsWith("p"))).toHaveLength(5)
   })
+
+  it("fills below the line and fades to the zero baseline for mixed signs", () => {
+    render(<PhoneChart spec={spec({
+      type: "line", x: "k", y: "v",
+      data: [{ k: "a", v: -2 }, { k: "b", v: 2 }],
+    })} />)
+    const plot = screen.getByTestId("phone-chart-plot")
+    const gradient = plot.querySelector("linearGradient")
+    expect(gradient).not.toBeNull()
+    expect(gradient?.querySelector('stop[offset="0.5"]')).toHaveAttribute("stop-opacity", "0")
+    expect(plot.querySelector("path")).toHaveAttribute("fill", `url(#${gradient?.id})`)
+    expect(plot.querySelector("polyline")).toHaveAttribute("stroke", "hsl(var(--chart-1))")
+  })
 })

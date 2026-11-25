@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type ReactElement } from "react"
+import { memo, useEffect, useId, useRef, useState, type ReactElement } from "react"
 import {
   Area,
   AreaChart,
@@ -7,8 +7,6 @@ import {
   CartesianGrid,
   Cell,
   Legend,
-  Line,
-  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -18,9 +16,10 @@ import {
 } from "recharts"
 import type { TooltipProps } from "recharts"
 
+import { ChartAreaGradient } from "@/components/shared/chart-area-gradient"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { chartSpecsEqual, type ChartSpec } from "@/lib/chart-spec"
-import { glassSurface } from "@/lib/glass"
+import { chartTooltipSurface } from "@/lib/glass"
 import { useT } from "@/lib/use-t"
 import { cn } from "@/lib/utils"
 
@@ -95,18 +94,19 @@ function specPropsEqual(
  *  Spec equality is the only reason to paint again; box size is handled
  *  inside ResponsiveContainer, which already ignores unchanged dimensions. */
 const ChartPlot = memo(function ChartPlot({ spec }: { spec: ChartSpec }) {
+  const fillPrefix = useId()
   const animate = useRef(!prefersReducedMotion())
   useEffect(() => {
     animate.current = false
   }, [])
   return (
     <ResponsiveContainer width="100%" height="100%">
-      {renderMark(spec, animate.current)}
+      {renderMark(spec, animate.current, fillPrefix)}
     </ResponsiveContainer>
   )
 }, specPropsEqual)
 
-function renderMark(spec: ChartSpec, animate: boolean): ReactElement {
+function renderMark(spec: ChartSpec, animate: boolean, fillPrefix: string): ReactElement {
   if (spec.type === "pie") {
     return (
       <PieChart>
@@ -136,43 +136,37 @@ function renderMark(spec: ChartSpec, animate: boolean): ReactElement {
     data: spec.data,
     margin: { top: 8, right: 8, bottom: 4, left: 4 },
   }
-  if (spec.type === "line") {
-    return (
-      <LineChart {...shared}>
-        {axes}
-        {spec.y.map((key, i) => (
-          <Line
-            key={key}
-            type="monotone"
-            dataKey={key}
-            stroke={CHART_SERIES_PAINT[i % CHART_SERIES_PAINT.length]}
-            strokeWidth={2}
-            dot={false}
-            activeDot={{
-              r: 4,
-              fill: CHART_SERIES_PAINT[i % CHART_SERIES_PAINT.length],
-              stroke: "hsl(var(--background))",
-              strokeWidth: 2,
-            }}
-            isAnimationActive={animate}
-          />
-        ))}
-      </LineChart>
-    )
-  }
-  if (spec.type === "area") {
+  if (spec.type === "line" || spec.type === "area") {
+    const stacked = spec.type === "area" && spec.stacked
+    const series = spec.y.map((key, index) => ({
+      key,
+      id: `${fillPrefix}-area-${index}`,
+      color: CHART_SERIES_PAINT[index % CHART_SERIES_PAINT.length],
+    }))
     return (
       <AreaChart {...shared}>
+        <defs>
+          {series.map(({ key, id, color }) => (
+            <ChartAreaGradient
+              key={key}
+              id={id}
+              color={color}
+              values={stacked ? undefined : spec.data.map((row) => Number(row[key]))}
+            />
+          ))}
+        </defs>
         {axes}
-        {spec.y.map((key, i) => (
+        {series.map(({ key, id, color }) => (
           <Area
             key={key}
             type="monotone"
             dataKey={key}
-            fill={CHART_SERIES_PAINT[i % CHART_SERIES_PAINT.length]}
-            stroke={CHART_SERIES_PAINT[i % CHART_SERIES_PAINT.length]}
-            fillOpacity={0.28}
-            stackId={spec.stacked ? "s" : undefined}
+            fill={`url(#${id})`}
+            stroke={color}
+            fillOpacity={1}
+            strokeWidth={spec.type === "line" ? 2 : undefined}
+            activeDot={spec.type === "line" ? { r: 4, fill: color, stroke: "hsl(var(--background))", strokeWidth: 2 } : { fill: color }}
+            stackId={stacked ? "s" : undefined}
             isAnimationActive={animate}
           />
         ))}
@@ -241,7 +235,7 @@ function ChartTooltip({
 }: TooltipProps<number, string> & { unit?: string }) {
   if (!active || !payload?.length) return null
   return (
-    <div className={cn("min-w-40 rounded-lg px-3 py-2 text-xs text-popover-foreground", glassSurface)}>
+    <div className={cn("min-w-40 rounded-lg px-3 py-2 text-xs text-popover-foreground", chartTooltipSurface)}>
       {label != null && label !== "" ? (
         <div className="mb-1 font-medium">{String(label)}</div>
       ) : null}
@@ -252,7 +246,7 @@ function ChartTooltip({
               className="size-2 shrink-0 rounded-sm"
               style={{ background: String(row.color ?? CHART_SERIES_PAINT[0]) }}
             />
-            <span className="text-muted-foreground">{row.name}</span>
+            <span className="chart-tooltip-series text-muted-foreground">{row.name}</span>
             <span className="ml-auto tabular-nums">{formatTick(Number(row.value), unit ?? "")}</span>
           </li>
         ))}

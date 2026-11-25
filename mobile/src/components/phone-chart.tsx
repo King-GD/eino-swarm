@@ -1,4 +1,6 @@
-import { memo, useState, type ReactNode } from "react"
+import { memo, useId, useState, type ReactNode } from "react"
+
+import { ChartAreaGradient } from "../../../frontend/src/components/shared/chart-area-gradient"
 
 import { chartSpecsEqual, type ChartSpec } from "@/lib/chart-spec"
 import { t } from "@/lib/i18n"
@@ -170,22 +172,19 @@ function SeriesMark({
   yAt: (v: number) => number
   baseline: number
 }) {
+  const id = `${useId()}-area`
   const color = PAINT[series % PAINT.length]
-  const pts = spec.data.map((row, i) => `${xAt(i)},${yAt(Number(row[seriesKey]))}`)
-  if (spec.type === "area") {
-    const first = xAt(0)
-    const last = xAt(spec.data.length - 1)
-    return (
-      <path
-        d={`M ${first} ${baseline} L ${pts.join(" L ")} L ${last} ${baseline} Z`}
-        fill={color}
-        fillOpacity={0.28}
-        stroke={color}
-        strokeWidth={2}
-      />
-    )
-  }
-  return <polyline points={pts.join(" ")} fill="none" stroke={color} strokeWidth={2} />
+  const values = spec.data.map((row) => Number(row[seriesKey]))
+  const pts = values.map((value, i) => `${xAt(i)},${yAt(value)}`)
+  const first = xAt(0)
+  const last = xAt(pts.length - 1)
+  return (
+    <>
+      <defs><ChartAreaGradient id={id} color={color} values={values} /></defs>
+      <path d={`M ${first} ${baseline} L ${pts.join(" L ")} L ${last} ${baseline} Z`} fill={`url(#${id})`} />
+      <polyline points={pts.join(" ")} fill="none" stroke={color} strokeWidth={2} />
+    </>
+  )
 }
 
 function Bars({

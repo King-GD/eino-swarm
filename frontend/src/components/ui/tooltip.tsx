@@ -2,7 +2,7 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import * as React from "react"
 
 import { cn } from "@/lib/cn"
-import { glassSurface } from "@/lib/glass"
+import { glassSurface } from "../../lib/glass"
 
 const TooltipProvider = TooltipPrimitive.Provider
 const Tooltip = TooltipPrimitive.Root

@@ -4,3 +4,5 @@
  *  own tint instead of hardcoding a dark panel. */
 export const glassSurface =
   "border border-popover-foreground/10 bg-popover/70 shadow-xl backdrop-blur-xl backdrop-saturate-150"
+
+export const chartTooltipSurface = `${glassSurface} chart-tooltip-glass`

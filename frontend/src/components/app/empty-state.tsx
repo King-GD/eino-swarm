@@ -33,7 +33,7 @@ export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
     <div className="content-gutter flex w-full min-h-0 flex-1 flex-col justify-center pt-10 pb-composer">
       <div className="content-column">
         <h1 className="text-center text-3xl font-semibold tracking-tight">
-          {t("empty.title")}
+          <span className="home-title-gradient">{t("empty.title")}</span>
         </h1>
         <p
           className={cn(

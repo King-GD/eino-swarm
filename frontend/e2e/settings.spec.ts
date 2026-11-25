@@ -507,10 +507,14 @@ test("the Models tab does not clip the add-endpoint button's border", async ({
   // no bottom border. The scrollport keeps padding under the last control.
   expect(room).toBeGreaterThanOrEqual(1)
 })
-test("switches color palette and remembers it", async ({ page, request }) => {
+test("switches color palette and remembers it", async ({ page, request }, info) => {
   // Start from zwai even if an earlier crashed run left fofa behind.
   await request.put("/api/settings", { data: { ui: { palette: "zwai" } } })
+  await page.emulateMedia({ colorScheme: "light" })
   await page.goto("/")
+  const homeHeading = page.getByRole("heading", { name: "What should we work on?" })
+  const homeTitle = homeHeading.locator("span")
+  await expect(homeTitle).toHaveCSS("background-image", "none")
   // Control radius before the switch, for the component-form comparison below.
   const zwaiControlRadius = parseFloat(
     await page
@@ -529,6 +533,17 @@ test("switches color palette and remembers it", async ({ page, request }) => {
 
     const root = page.locator("html")
     await expect(root).toHaveAttribute("data-palette", "fofa")
+    await expect(homeTitle).toHaveCSS("background-clip", "text")
+    const vipGradient = /^linear-gradient\(90deg, rgb\(5, 242, 242\)(?: 0%)?, rgb\(59, 130, 246\)(?: 100%)?\)$/
+    await expect(homeTitle).toHaveCSS("background-image", vipGradient, { timeout: 3_000 })
+    await homeHeading.screenshot({ path: info.outputPath("fofa-home-title-light.png") })
+    await page.emulateMedia({ colorScheme: "dark" })
+    await expect(root).toHaveClass(/\bdark\b/)
+    await expect(homeTitle).toHaveCSS("background-image", vipGradient)
+    await homeHeading.screenshot({ path: info.outputPath("fofa-home-title-dark.png") })
+    await page.emulateMedia({ colorScheme: "light", forcedColors: "active" })
+    await expect(homeTitle).toHaveCSS("background-image", "none")
+    await page.emulateMedia({ forcedColors: "none" })
     const tokens = await root.evaluate((el) => {
       const s = getComputedStyle(el)
       return {
