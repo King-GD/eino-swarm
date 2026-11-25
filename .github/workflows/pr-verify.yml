@@ -161,6 +161,37 @@ jobs:
       - name: Race tests
         run: make test-go
 
+  model-check:
+    name: Model checks (TLC)
+    # Every case runs; a filter, skip or allowed failure would turn the formal
+    # checks into decoration. The tool downloads the pinned tla2tools.jar and
+    # verifies its SHA-256 itself, so no other action fetches it.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      # Each case keeps the tool's default 600-second budget. The explicit out
+      # directory is what the failure artifact below collects.
+      - name: Run every model case
+        run: python3 -u tools/model_check.py --fetch --out "$RUNNER_TEMP/model-check"
+      - name: Keep the TLC evidence for a failed case
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: model-check-evidence-pr-${{ github.event.pull_request.number }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/model-check/**/tlc.out
+            ${{ runner.temp }}/model-check/**/case.cfg
+          if-no-files-found: ignore
+          retention-days: 7
+
   docs:
     name: Documentation and Python tools
     # macOS supplies the process-identity symbols two tool regressions read.
