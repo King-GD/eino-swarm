@@ -176,11 +176,14 @@ export function mockListedFiles(
   return rows.filter((file) => file.path.startsWith(prefix) && !file.path.slice(prefix.length).includes("/") && file.path.length > prefix.length)
 }
 
-export function mockScopedFiles(project: boolean) {
+export function mockScopedFiles(project: boolean, search: string) {
   const text = (value: string) => ({ bytes: new TextEncoder().encode(value), mime: "text/plain" })
   const files: ReturnType<typeof mockOutputFiles> = project
     ? { "report.txt": text("Shared project file") }
     : { "results/report.txt": text("Current task deliverable"), "work/draft.txt": text("Current task draft") }
+  if (!project && new URLSearchParams(search).get("history") === "file-links") {
+    files["work/report.txt"] = text("Working copy of report")
+  }
   return {
     files,
     folders: project ? [".zwai-tasks"] : ["results", "work", "uploads"],

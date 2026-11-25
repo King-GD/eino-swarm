@@ -594,6 +594,8 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 - 允许行为：详情关闭后留在原列表，Android 再次从首页返回退出；禁止行为：详情可见时直接退出、iOS 位移不足／取消／垂直滑动返回、把导航条和表格等区域的横向滚动作为内容区返回；失败语义：返回动作不依赖网络请求成功；不变量：一个有效手势只消费当前最上层，iOS 在完成手势时读取当前返回处理器，后来打开的模型选择弹层优先关闭；边界条件：多层覆盖、组件卸载、根页面。
 - 证据：实现 `mobile/src/lib/android-back.ts`, `mobile/src/lib/ios-content-back.ts`, `mobile/ios/App/App/BridgeViewController.swift`, `mobile/src/components/model-picker.tsx`, `mobile/src/components/composer-menu.tsx`, `mobile/src/components/thread-screen.tsx`, `mobile/src/components/file-browser.tsx`, `mobile/src/app.tsx`；测试 `mobile/src/lib/android-back.test.ts`, `mobile/src/lib/ios-content-back.test.ts`, `mobile/src/components/thread-screen.test.tsx`, `mobile/src/components/composer-slash.test.tsx`, `mobile/src/app.test.tsx`, `mobile/src/components/file-browser.test.tsx`, `mobile/e2e/walkthrough.spec.ts`, `mobile/e2e/ios-wait-layout.swift`, `mobile/e2e/ios-conversation-open.swift`；变更规则：新增手机覆盖层须同步测试 Android 系统返回、iOS 左缘和内容区右滑及各自首页行为；来源：GitHub Issue #36、#48、#54、#75。
 
+- 从消息点开的文件预览和同名选择页返回到原消息所在的对话或子 Agent 日志。证据：`mobile/src/components/thread-screen.test.tsx`、`mobile/e2e/ios-wait-layout.swift`、`mobile/android/app/src/androidTest/java/com/lubyruffy/zwai/FilePreviewControlsTest.java`。
+
 ## C-016 Explicit PC selection opens its inbox
 
 - 状态：active；类型：lifecycle；作用范围：手机已绑定 PC 的切换与重连；关联功能：`F-220`。
@@ -634,6 +636,7 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 ## C-020 Phone workspace file reads
 
 - 状态：active；类型：security / compatibility；作用范围：PC remote 文件 RPC、手机预览；关联功能：`F-224`。
+- 对话内文件链接复用桌面工作区路径识别和匹配规则，只在配对对话内解析。使用任务范围搜索，先选精确路径，再使用唯一后缀匹配，多项匹配由用户选择。预览使用同一对话和搜索取得的文件根分块读取。关闭页面、切换对话或 PC 时取消该次查找及读取，忽略迟到响应。证据：`frontend/src/lib/workspace-file-ref.ts`、`mobile/src/components/file-browser.tsx`、`mobile/src/components/thread-screen.test.tsx`、`mobile/e2e/file-preview-controls.spec.ts`。
 - 契约内容：`files` 列出指定对话与 PC 文件面板相同的一个完整目录，或在 `text` 存在时列出每一个匹配；结果按密封帧分页。`file_chunk` 只读取该对话工作区内的普通文件，按字节偏移返回不超过 36 KiB 的 base64 分块及文件大小、MIME 和下一偏移。PC 必须拒绝路径穿越和通过符号链接逃出工作区。手机组装文件不超过 32 MiB，PNG／JPEG／GIF／WebP 可在此上限内预览。文本／PDF／HTML／CSV／TSV／DOCX／XLSX／PPTX／EPUB 预览不超过 8 MiB。HTML 使用与 PC 相同的沙箱 artifact，伴随资源通过既有文件 RPC 读取，不访问 PC loopback；SVG 仍只作为源码文本显示。
 - 手机以文件分块中的总大小为准，每个分块通过校验后按累计接收字节更新进度。每次请求下一分块时开启新的 15 秒等待窗口，到期仅提示仍在等待，原请求仍可接收迟到响应，共用的配对连接继续工作。主机明确拒绝、响应校验失败、连接关闭或图片解码失败时显示对应错误。加载中点击下载会等待同一读取完成后导出原始字节。离开预览或切换文件时取消当前读取及待下载请求，迟到响应不更新预览。见 `mobile/src/lib/client.ts`、`mobile/src/lib/client.test.ts`、`mobile/src/lib/remote-files.test.ts`、`mobile/e2e/file-preview-controls.spec.ts`。
 - 手机文件列表与 PC 相同：省略 `directory` 时返回工作区根的全部直接子项；`directory` 返回该目录的全部直接子项；`text` 搜索整个可列出工作区并返回每一个匹配。后续分页必须重复同一 `directory` 或 `text`。取消、遍历失败或未结束的分页不得当作一份较短的完整列表。点目录、`node_modules` 和 `vendor` 不列出。旧手机省略 `directory` 时只看到根目录，直到升级。证据：`internal/remote/files.go`、`internal/remote/files_test.go`、`mobile/src/lib/remote-files.ts`、`mobile/src/components/file-browser.tsx`、`mobile/src/components/file-browser.test.tsx`、`mobile/e2e/walkthrough.spec.ts`；变更类型：Changed。

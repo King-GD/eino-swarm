@@ -500,6 +500,8 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-224 Browse and preview PC conversation files on the phone
 
+- 配对手机可点按对话正文中的相对文件路径、行内代码文件名和 Markdown 文件链接，直接打开预览。精确路径优先，唯一匹配直接打开，多个同名匹配显示完整路径供选择。返回恢复原对话或子 Agent 日志，保留草稿与阅读位置。关联 `C-015`、`C-020`；证据：`mobile/src/components/markdown.tsx`、`mobile/src/components/thread-screen.tsx`、`mobile/e2e/file-preview-controls.spec.ts`。
+
 - 配对手机默认浏览当前任务成果，可切到项目目录；加密文件分页和预览沿用同一个文件根。旧 PC 不提供切换入口。关联 `C-052`；证据：`internal/remote/files.go`、`mobile/e2e/file-preview-controls.spec.ts`。
 
 - 目的：在已配对手机上查看 PC 对话的工作区产物；使用者：手机用户；入口：PC 对话页输入框上方 → Outputs／产出物；输入：工作区列表、文件选择与搜索；输出：可折叠文件树、按后缀渲染的 Markdown／源码高亮／纯文本／HTML 沙箱／CSV 表格／DOCX／XLSX／PPTX／EPUB／常见图片／PDF 预览及其他文件的下载入口；前置条件：PC 在线且该对话存在；失败表现：RPC 错误、文件过大或不支持的预览明确显示；关联契约：`C-004`, `C-006`, `C-015`, `C-020`；实现证据：`internal/remote/files.go`, `internal/remote/files_test.go`, `mobile/src/components/file-browser.tsx`, `mobile/src/lib/remote-files.ts`, `mobile/src/lib/remote-files.test.ts`, `mobile/e2e/walkthrough.spec.ts`, `mobile/e2e/ios-wait-layout.swift`。

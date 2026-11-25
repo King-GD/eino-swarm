@@ -2,6 +2,7 @@ package com.lubyruffy.zwai;
 
 import static org.junit.Assert.*;
 
+import android.accessibilityservice.AccessibilityService;
 import android.app.Activity;
 import android.app.Instrumentation;
 import android.app.UiAutomation;
@@ -47,6 +48,18 @@ public class FilePreviewControlsTest {
     private interface PreviewCase { void run() throws Exception; }
 
     private void runPreviewCase(String name, String query, PreviewCase test) throws Exception {
+        runFileCase(name, query, () -> {
+            waitNativeBack();
+            click("Back");
+            waitButton("Open Sweep the unused exports");
+            click("Open Sweep the unused exports");
+            waitButton("Outputs"); click("Outputs");
+            waitButton("outputs"); click("outputs");
+            test.run();
+        });
+    }
+
+    private void runFileCase(String name, String query, PreviewCase test) throws Exception {
         deadline = SystemClock.uptimeMillis() + 120000;
         evidenceDirectory = new File(instrumentation.getTargetContext().getExternalFilesDir(null),
             name + "-" + UUID.randomUUID());
@@ -71,12 +84,6 @@ public class FilePreviewControlsTest {
             .loadUrl("https://localhost/?mock=1&tick=0" + query));
         Throwable primary = null;
         try {
-            waitNativeBack();
-            click("Back");
-            waitButton("Open Sweep the unused exports");
-            click("Open Sweep the unused exports");
-            waitButton("Outputs"); click("Outputs");
-            waitButton("outputs"); click("outputs");
             test.run();
         } catch (Exception | AssertionError failure) {
             primary = failure;
@@ -87,6 +94,21 @@ public class FilePreviewControlsTest {
             try { instrumentation.runOnMainSync(activity::finish); }
             catch (RuntimeException cleanup) { if (primary != null) primary.addSuppressed(cleanup); else throw cleanup; }
         }
+    }
+
+    @Test
+    public void transcriptFileLinkOpensTaskPreview() throws Exception {
+        runFileCase("transcript-file-links", "&history=file-links&file-preview=task-workspaces", () -> {
+            waitNativeBack();
+            waitButton("the task result");
+            click("the task result");
+            waitState(s -> s.getJSONObject("text").getString("content").equals("Current task deliverable"));
+            capture("transcript-file-link-preview");
+            assertTrue("Android system Back must be admitted once", ui.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK));
+            waitButton("the task result");
+            assertEquals("", dom().getJSONObject("text").getString("content"));
+            capture("transcript-file-link-return");
+        });
     }
 
     @Test

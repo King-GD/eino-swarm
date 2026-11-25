@@ -8581,6 +8581,16 @@ AX trees, exact web/app/test-package identity and owned-device cleanup receipts.
 
 `mobile/src/components/file-browser.test.tsx` exercises the real read/preview path, including an HTML artifact whose sandbox excludes same-origin access. `document-preview.test.tsx` renders CSV, TSV, DOCX, XLSX, PPTX and EPUB. `text-file-preview.test.tsx` checks suffix selection, unknown/large/empty text, exact source preservation and inert SVG/MDX source. `mobile/e2e/walkthrough.spec.ts` checks Markdown structure and syntax colors in light/dark; the packaged `mobile/e2e/ios-wait-layout.swift` `testPhoneOutputPreview` reaches both documents through Outputs. Reuse `scripts/ios-layout-fixture.py` and select only that XCTest. Android uses a disposable offline package and isolated emulator, inspecting the same reached screens; a browser pass or native launch alone does not accept the changed flow.
 
+Transcript file links use `e2e/file-preview-controls.spec.ts -g 'paired file links'`
+on Chromium and iPhone WebKit. The case opens an exact task path, downloads its
+bytes, chooses between same-name files and returns after a missing-file error.
+`thread-screen.test.tsx` also checks the original draft, focus, RPC file root
+and discarded responses after a PC switch. For packaged iOS, use
+`IOS_LAYOUT_QUERY='/?mock=1&tick=0&history=file-links&file-preview=task-workspaces'`
+and select `AppUITests/BindFlowTests/testTranscriptFileLinkOpensTaskPreview`.
+Android selects `com.lubyruffy.zwai.FilePreviewControlsTest#transcriptFileLinkOpensTaskPreview`.
+The native cases retain the opened preview and returned transcript screens.
+
 The EPUB cases in `mobile/e2e/file-preview-controls.spec.ts` open a packaged
 book through Outputs and turn pages within and across chapters using taps.
 They check that showing the controls keeps the page in place and compare the

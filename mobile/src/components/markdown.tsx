@@ -35,19 +35,27 @@ import { t } from "@/lib/i18n"
 import { HighlightedLines } from "../../../frontend/src/lib/highlighted-lines"
 
 import { mermaidFenceIsClosed } from "../../../frontend/src/lib/markdown-mermaid"
+import { remarkWorkspaceFiles, workspaceFileFromHref, workspaceFileHref, workspaceFilePath } from "../../../frontend/src/lib/workspace-file-ref"
 
 const MarkdownSource = createContext("")
+export const PhoneFileLinkContext = createContext<((path: string, trigger: HTMLElement) => void) | undefined>(undefined)
 const Mermaid = lazy(() => import("./phone-mermaid").then((mod) => ({ default: mod.PhoneMermaid })))
 
 const PLUGINS = [remarkGfm, remarkMath]
+const FILE_PLUGINS = [...PLUGINS, remarkWorkspaceFiles]
 const MATH_LANGS = new Set(["math", "latex", "tex", "katex"])
 
-export function PhoneMarkdown({ text, className }: { text: string; className?: string }) {
+export function PhoneMarkdown({ text, className, streaming = false }: { text: string; className?: string; streaming?: boolean }) {
+  const openFile = useContext(PhoneFileLinkContext)
+  const fileLinks = Boolean(openFile) && !streaming
   return (
     <div className={cn("md-body wrap-break-word text-sm", className)}>
-      <MarkdownSource.Provider value={text}><Markdown remarkPlugins={PLUGINS} components={COMPONENTS} urlTransform={safeUrl}>
-        {text}
-      </Markdown></MarkdownSource.Provider>
+      <MarkdownSource.Provider value={text}>
+        <Markdown remarkPlugins={fileLinks ? FILE_PLUGINS : PLUGINS} components={COMPONENTS}
+          urlTransform={fileLinks ? workspaceUrl : safeUrl}>
+          {text}
+        </Markdown>
+      </MarkdownSource.Provider>
     </div>
   )
 }
@@ -58,6 +66,18 @@ function PhoneLink({
   node: _node,
   ...props
 }: ComponentPropsWithoutRef<"a"> & { node?: unknown }) {
+  const openFile = useContext(PhoneFileLinkContext)
+  if (href?.startsWith(workspaceFileHref(""))) {
+    const path = workspaceFileFromHref(href)
+    if (!path || !openFile) return <>{children}</>
+    return (
+      <button type="button" title={t("files.openPreview", { path })}
+        className="inline max-w-full cursor-pointer whitespace-normal break-all text-left align-baseline font-[inherit] text-primary underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={(event) => openFile(path, event.currentTarget)}>
+        {children}
+      </button>
+    )
+  }
   const origin = typeof window === "undefined" ? "http://127.0.0.1" : window.location.origin
   const action = classifyHref(href, origin)
   if (action === "block") {
@@ -113,7 +133,22 @@ function classifyHref(href: string | null | undefined, origin: string): "stay" |
 }
 
 function safeUrl(url: string): string {
+  if (url.startsWith(workspaceFileHref(""))) return ""
   return classifyHref(url, "http://127.0.0.1") === "block" ? "" : url
+}
+
+function workspaceUrl(url: string, attribute: string): string {
+  if (attribute === "href") {
+    if (url.startsWith(workspaceFileHref(""))) return url
+    try {
+      const decoded = decodeURIComponent(url)
+      const path = /[?#%\x00-\x1f\x7f]/.test(decoded) ? null : workspaceFilePath(decoded)
+      if (path) return workspaceFileHref(path)
+    } catch {
+      // Malformed escapes follow the ordinary URL policy.
+    }
+  }
+  return safeUrl(url)
 }
 
 function PhonePre({

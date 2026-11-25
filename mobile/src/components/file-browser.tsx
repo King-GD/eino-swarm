@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { TextFilePreview } from "@/components/text-file-preview"
 import { ImageFilePreview } from "@/components/image-file-preview"
 import { PhoneRichPreview } from "@/components/document-preview"
@@ -12,11 +12,13 @@ import { t } from "@/lib/i18n"
 import type { RemoteLink } from "@/lib/link"
 import { listWorkspaceView, previewKind, readWorkspaceFile, RemoteFileError } from "@/lib/remote-files"
 import { documentFormat, isHtmlPreviewPath, tableDelimiter } from "../../../frontend/src/lib/documents/kind"
+import { chooseWorkspaceFile } from "../../../frontend/src/lib/workspace-file-ref"
 import type { WorkspaceFile } from "@/lib/rpc"
 import type { FileLocation, FileScope, FileView } from "../../../frontend/src/lib/types"
 
 type LoadedFile = { url: string; kind: ReturnType<typeof previewKind>; text: string; bytes: Uint8Array; mime: string }
 type FileProgress = { loaded: number; total?: number; waiting?: boolean }
+type FileSelection = Pick<WorkspaceFile, "path" | "name"> & { location: FileLocation }
 
 function fileSize(size: number): string {
   if (size < 1024) return `${size} B`
@@ -32,13 +34,14 @@ function fileFailure(cause: unknown): string {
 
 // Files arrive over the sealed PC link. HTML is a sandboxed artifact.
 // EPUB stays script-free. Office packages are parsed, never executed.
-export function FileBrowser({ link, threadId, onClose, status, running, covered = false }: {
+export function FileBrowser({ link, threadId, onClose, status, running, covered = false, quickPath }: {
   link: RemoteLink
   threadId: string
   onClose: () => void
   status?: ReactNode
   running?: boolean
   covered?: boolean
+  quickPath?: string
 }) {
   const [scope, setScope] = useState<FileScope>("task")
   const [fileView, setFileView] = useState<FileView>()
@@ -55,13 +58,15 @@ export function FileBrowser({ link, threadId, onClose, status, running, covered 
   const [searchError, setSearchError] = useState("")
   const listedGeneration = useRef(0)
   const loadingDirs = useRef(new Set<string>())
-  const [selected, setSelected] = useState<(WorkspaceFile & { location: FileLocation }) | null>(null)
+  const [selected, setSelected] = useState<FileSelection | null>(null)
+  const [choices, setChoices] = useState<{ paths: string[]; location: FileLocation }>()
   const [file, setFile] = useState<LoadedFile | null>(null)
   const [readRevision, setReadRevision] = useState(0)
   const [progress, setProgress] = useState<FileProgress | null>(null)
   const [fileError, setFileError] = useState("")
 
   useEffect(() => {
+    if (quickPath) return
     const generation = ++listedGeneration.current
     loadingDirs.current.clear()
     let active = true
@@ -85,7 +90,27 @@ export function FileBrowser({ link, threadId, onClose, status, running, covered 
       if (active && listedGeneration.current === generation) setLoading(false)
     })
     return () => { active = false }
-  }, [link, threadId, revision, scope])
+  }, [link, threadId, revision, scope, quickPath])
+
+  useEffect(() => {
+    if (!quickPath) return
+    const controller = new AbortController()
+    const { signal } = controller
+    setLoading(true)
+    setError("")
+    void listWorkspaceView(link, threadId, "", quickPath, { scope: "task" }, signal).then(({ files, view }) => {
+      if (signal.aborted) return
+      const match = chooseWorkspaceFile(quickPath, files)
+      const location: FileLocation = { scope: "task", root: view?.root }
+      if (match.status === "many") setChoices({ paths: match.paths, location })
+      else setSelected(fileSelection(match.path, location))
+    }).catch((cause: unknown) => {
+      if (!signal.aborted) setError(fileFailure(cause))
+    }).finally(() => {
+      if (!signal.aborted) setLoading(false)
+    })
+    return () => controller.abort()
+  }, [link, threadId, quickPath, revision])
 
   const wasRunning = useRef(running)
   useEffect(() => {
@@ -151,14 +176,18 @@ export function FileBrowser({ link, threadId, onClose, status, running, covered 
     }
   }, [link, threadId, selected])
 
+  const back = useCallback(() => {
+    if (selected && !quickPath) setSelected(null)
+    else onClose()
+  }, [selected, quickPath, onClose])
+
   useEffect(() => {
     if (covered) return
     return installAndroidBack(() => {
-      if (selected) setSelected(null)
-      else onClose()
+      back()
       return true
     })
-  }, [covered, selected, onClose])
+  }, [covered, back])
 
   const needle = query.trim()
   const matches = hits?.query === needle ? hits.files : null
@@ -239,12 +268,12 @@ export function FileBrowser({ link, threadId, onClose, status, running, covered 
   return (
     <main data-testid="phone-file-browser" className="mx-auto flex h-full min-w-0 w-full max-w-lg flex-col overflow-hidden bg-background">
       <header className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-1">
-        <Button variant="ghost" className="size-10 shrink-0 px-0" onClick={() => selected ? setSelected(null) : onClose()}
-          aria-label={selected ? t("files.backList") : t("thread.back")}>
+        <Button variant="ghost" className="size-10 shrink-0 px-0" onClick={back}
+          autoFocus={Boolean(quickPath)} aria-label={selected && !quickPath ? t("files.backList") : t("thread.back")}>
           <ChevronLeft className="size-5" />
         </Button>
-        <h1 className="min-w-0 flex-1 truncate text-sm font-medium">{selected?.name ?? t("thread.files")}</h1>
-        {selected ? null : (
+        <h1 className="min-w-0 flex-1 truncate text-sm font-medium">{selected?.name ?? quickPath ?? t("thread.files")}</h1>
+        {selected || quickPath ? null : (
           <Button variant="ghost" className="size-10 shrink-0 px-0" onClick={() => setRevision((n) => n + 1)}
             aria-label={t("files.refresh")}><RefreshCw className="size-4" /></Button>
         )}
@@ -264,6 +293,24 @@ export function FileBrowser({ link, threadId, onClose, status, running, covered 
             {file?.kind === "pdf" ? <iframe src={file.url} title={selected.name} sandbox="allow-scripts" className="min-h-0 w-full flex-1 border-0" /> : null}
             {download ? <div className="shrink-0">{download}</div> : null}
           </>}
+        </section>
+      ) : quickPath ? (
+        <section className="min-h-0 flex-1 overflow-auto p-3">
+          {loading ? <p role="status" className="text-sm">{t("files.searching")}</p> : null}
+          {error ? <div className="text-sm text-destructive" role="alert">{error}
+            <Button variant="ghost" onClick={() => setRevision((n) => n + 1)}>{t("files.retry")}</Button>
+          </div> : null}
+          {choices ? <>
+            <p className="mb-2 text-sm text-muted-foreground">{t("files.chooseMatch")}</p>
+            <ul className="divide-y divide-border">
+              {choices.paths.map((path) => (
+                <li key={path}>
+                  <Button variant="ghost" className="h-auto min-h-11 w-full justify-start whitespace-normal break-all text-left"
+                    onClick={() => setSelected(fileSelection(path, choices.location))}>{path}</Button>
+                </li>
+              ))}
+            </ul>
+          </> : null}
         </section>
       ) : (
         <section className="flex min-h-0 flex-1 flex-col">
@@ -309,6 +356,10 @@ export function FileBrowser({ link, threadId, onClose, status, running, covered 
       )}
     </main>
   )
+}
+
+function fileSelection(path: string, location: FileLocation): FileSelection {
+  return { path, name: path.slice(path.lastIndexOf("/") + 1), location }
 }
 
 function fileLabel(entry: WorkspaceFile, scope: FileScope, isolated: boolean): string {

@@ -250,6 +250,12 @@ export class MockHost {
         this.seed(live, workerCollectionHistory(state, new URLSearchParams(location.search).get("stop_order")), state !== "done" && state !== "stopped")
       } else if (new URLSearchParams(location.search).get("history") === "long-agent-roster") {
         this.seed(live, longAgentRosterHistory(), true)
+      } else if (new URLSearchParams(location.search).get("history") === "file-links") {
+        this.seed(live, [{ kind: "agent_message", agentID: "manager", text: [
+          "Read [the task result](results/report.txt), or open `draft.txt`.",
+          "Pick a copy of report.txt. Missing file: `missing.txt`.",
+          "[Public reference](https://example.invalid/report.txt#zwai-file:draft.txt) · [Outside task](../secret.txt)",
+        ].join("\n\n") }], true)
       } else if (new URLSearchParams(location.search).get("history") === "streamed-agents") {
         this.seed(live, [
           { kind: "agent_message", agentID: "manager", text: "Older manager answer" },
@@ -900,7 +906,7 @@ export class MockLink {
       case OpFiles: {
         if (!thread()) return this.missing(id)
         if (new URLSearchParams(location.search).get("file-preview") === "task-workspaces") {
-          const { files, folders, view } = mockScopedFiles(req.file_scope === "project")
+          const { files, folders, view } = mockScopedFiles(req.file_scope === "project", location.search)
           if (req.file_root && req.file_root !== view.root) return this.ok({ id, ok: false, code: "file_root_changed" })
           return this.ok({ id, files: mockListedFiles(files, req.directory, req.text, folders), file_view: view, more: false })
         }
@@ -914,7 +920,7 @@ export class MockLink {
       case OpFileChunk: {
         if (!thread()) return this.missing(id)
         if (new URLSearchParams(location.search).get("file-preview") === "task-workspaces") {
-          const { files, view } = mockScopedFiles(req.file_scope === "project")
+          const { files, view } = mockScopedFiles(req.file_scope === "project", location.search)
           if (req.file_root !== view.root) return this.ok({ id, ok: false, code: "file_root_changed" })
           const file_chunk = await mockFileChunk(files, req.file_path ?? "", req.before ?? 0)
           return file_chunk ? this.ok({ id, file_chunk, file_view: view }) : this.missing(id)
