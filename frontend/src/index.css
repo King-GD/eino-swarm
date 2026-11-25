@@ -729,6 +729,16 @@
   .animate-pop-in {
     animation: none !important;
   }
+  /* Presence layers (tooltips, menus, dialogs) animate with the plugin's
+     `enter` / `exit` keyframes, which include a scale. Every use is
+     variant-prefixed (`data-[state=closed]:animate-out`), so a bare
+     `.animate-out` never matches; match the class text instead. A zero
+     duration lands on the final frame and still fires `animationend`, which
+     Radix waits for before it unmounts a closing layer. */
+  [class*="animate-in"],
+  [class*="animate-out"] {
+    animation-duration: 0s !important;
+  }
 }
 
 /* Radix presence layers (menus, dialogs, tooltips) get their pace from

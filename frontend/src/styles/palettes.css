@@ -353,6 +353,9 @@
     --tooltip-bg: hsl(var(--tips));
     --tooltip-ink: hsl(var(--tips-foreground));
     --tooltip-font-size: 12px;
+    /* FOFA's tooltip is a solid black chip; the shared glass blur would
+       frost it. */
+    --tooltip-filter: none;
     /* Richer hover cards (context usage) read as ordinary tooltips. */
     --hint-border: transparent;
     --hint-bg: var(--tooltip-bg);

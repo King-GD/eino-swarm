@@ -14,7 +14,7 @@ const LINE = "hsl(var(--chart-1))"
 function HeatTooltip({ active, payload, label }: TooltipProps<number, string>) {
   if (!active || !payload?.length) return null
   return (
-    <div className={`rounded-[var(--radius-surface,var(--radius-lg))] px-3 py-2 text-xs text-popover-foreground ${chartTooltipSurface}`}>{label}</div>
+    <div className={`rounded-[var(--radius-surface,var(--radius-lg))] px-3 py-2 text-xs ${chartTooltipSurface}`}>{label}</div>
   )
 }
 

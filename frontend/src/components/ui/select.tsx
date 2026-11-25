@@ -25,7 +25,6 @@ const SelectTrigger = React.forwardRef<
 >(({ className, children, ...props }, ref) => (
   <SelectPrimitive.Trigger
     ref={ref}
-    data-slot="select-trigger"
     className={cn(
       "flex h-8 w-full items-center justify-between gap-1 whitespace-nowrap rounded-[var(--radius-surface,var(--radius-md))] border border-input bg-[var(--field-bg,hsl(var(--background)))] px-2.5 py-1 text-xs shadow-xs focus-visible:border-[var(--field-focus-border,hsl(var(--input)))] focus-visible:outline-hidden focus-visible:ring-[length:var(--field-focus-ring,2px)] focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
       className,
@@ -47,7 +46,6 @@ const SelectContent = React.forwardRef<
   <SelectPrimitive.Portal>
     <SelectPrimitive.Content
       ref={ref}
-      data-slot="select-content"
       className={cn(
         // Dialog overlay is z-50; the list has to sit above it or Settings'
         // default-model menu is an invisible, unclickable ghost.
@@ -70,7 +68,6 @@ const SelectItem = React.forwardRef<
 >(({ className, children, ...props }, ref) => (
   <SelectPrimitive.Item
     ref={ref}
-    data-slot="select-item"
     className={cn(
       "relative flex w-full cursor-default select-none items-center rounded-[var(--radius-menu-item,var(--radius-sm))] py-1.5 pl-7 pr-2 text-xs text-[var(--menu-item-ink,inherit)] outline-hidden focus:bg-accent focus:text-[var(--menu-item-ink,hsl(var(--accent-foreground)))] data-[state=checked]:text-[var(--menu-item-checked-ink,inherit)] data-disabled:pointer-events-none data-disabled:opacity-50",
       className,

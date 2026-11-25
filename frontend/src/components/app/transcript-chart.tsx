@@ -235,7 +235,7 @@ function ChartTooltip({
 }: TooltipProps<number, string> & { unit?: string }) {
   if (!active || !payload?.length) return null
   return (
-    <div className={cn("min-w-40 rounded-[var(--radius-surface,var(--radius-lg))] px-3 py-2 text-xs text-popover-foreground", chartTooltipSurface)}>
+    <div className={cn("min-w-40 rounded-[var(--radius-surface,var(--radius-lg))] px-3 py-2 text-xs", chartTooltipSurface)}>
       {label != null && label !== "" ? (
         <div className="mb-1 font-medium">{String(label)}</div>
       ) : null}

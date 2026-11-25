@@ -114,6 +114,14 @@ describe("PhoneChart", () => {
     expect(screen.getByTestId("phone-chart-plot").querySelector("path")?.getAttribute("d")).toMatch(/^M /)
   })
 
+  it("captions the unit above the axis on the default view", () => {
+    render(<PhoneChart spec={spec({
+      type: "line", x: "k", y: "v", unit: "req/s",
+      data: [{ k: "a", v: 1 }, { k: "b", v: 2 }],
+    })} />)
+    expect(screen.getByTestId("phone-chart-unit")).toHaveTextContent("req/s")
+  })
+
   it("keeps x labels readable when there are more points than fit", () => {
     const data = Array.from({ length: 8 }, (_, i) => ({ k: `p${i}`, v: i + 1 }))
     render(<PhoneChart spec={spec({ type: "line", x: "k", y: "v", data })} />)

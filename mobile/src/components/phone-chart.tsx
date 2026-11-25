@@ -94,13 +94,16 @@ const PAD_L = 46
 const PAD_R = 8
 const PAD_T = 8
 const PAD_B = 28
+/** Room above the top tick for the unit caption. */
+const UNIT_ROW = 12
 
 function CartesianPlot({ spec }: { spec: ChartSpec }) {
   const { lo, hi } = domain(spec)
+  const top = spec.unit ? PAD_T + UNIT_ROW : PAD_T
   const innerW = VB_W - PAD_L - PAD_R
-  const innerH = VB_H - PAD_T - PAD_B
+  const innerH = VB_H - top - PAD_B
   const ticks = 4
-  const yAt = (v: number) => PAD_T + (1 - (v - lo) / (hi - lo || 1)) * innerH
+  const yAt = (v: number) => top + (1 - (v - lo) / (hi - lo || 1)) * innerH
   const xAt = (i: number) =>
     PAD_L + (spec.data.length <= 1 ? innerW / 2 : (i / (spec.data.length - 1)) * innerW)
   const baseline = yAt(Math.min(Math.max(lo, 0), hi))
@@ -113,6 +116,13 @@ function CartesianPlot({ spec }: { spec: ChartSpec }) {
       className="h-52 w-full"
       role="img"
     >
+      {spec.unit ? (
+        // The phone plot has no hover tooltip, so this caption is the only
+        // place the default view says what the numbers count.
+        <text data-testid="phone-chart-unit" x={PAD_L - 4} y={PAD_T + 2} textAnchor="end" fill={AXIS} fontSize="10">
+          {spec.unit}
+        </text>
+      ) : null}
       {Array.from({ length: ticks + 1 }, (_, i) => {
         const v = lo + ((hi - lo) * i) / ticks
         const y = yAt(v)
@@ -376,8 +386,8 @@ function labelIndexes(count: number): number[] {
   return out
 }
 
-/** Axis numbers stay bare: the unit repeats in the tooltip and the data
- *  table, and on a phone width a per-tick unit pushes the digits out. */
+/** Tick numbers stay bare: the unit is captioned once above the axis, and
+ *  on a phone width a per-tick unit pushes the digits out. */
 function compactTick(n: number): string {
   if (!Number.isFinite(n)) return ""
   const abs = Math.abs(n)

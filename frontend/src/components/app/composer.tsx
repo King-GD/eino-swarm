@@ -928,7 +928,6 @@ export function Composer({
               {corner.send ? (
                 <Button
                   size="icon"
-                  data-send-button=""
                   className="size-8 rounded-[var(--send-radius,9999px)] motion-safe:animate-pop-in"
                   disabled={sendDisabled}
                   onClick={() => void submit()}

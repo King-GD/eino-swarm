@@ -11,7 +11,6 @@ const TabsList = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <TabsPrimitive.List
     ref={ref}
-    data-slot="tabs-list"
     className={cn(
       "inline-flex h-[var(--tabs-height,2rem)] items-center justify-center rounded-[var(--radius-tabs,var(--radius-md))] bg-[var(--tabs-bg,hsl(var(--muted)))] p-[var(--tabs-pad,0.125rem)] text-muted-foreground",
       className,
@@ -27,7 +26,6 @@ const TabsTrigger = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <TabsPrimitive.Trigger
     ref={ref}
-    data-slot="tabs-trigger"
     className={cn(
       // The indicator bar exists in every palette; it is transparent unless
       // the palette sets --tabs-indicator.
