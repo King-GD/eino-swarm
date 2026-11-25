@@ -3,8 +3,7 @@
 本文是 `palette: fofa` 的视觉标准。执行者（人或 agent）按本文改代码。
 参照样稿：[design/fofa-console-v4.html](design/fofa-console-v4.html)（页面）与
 [design/fofa-components.html](design/fofa-components.html)（组件对照），浏览器直接
-打开，可切换对话 / 空状态 / 组件 / 深浅色。`design/fofa-console.html` 与
-`design/fofa-console-v3.html` 是历史沿革，不再代表标准。
+打开，可切换对话 / 空状态 / 组件 / 深浅色。
 
 ## 1. 来源与边界
 

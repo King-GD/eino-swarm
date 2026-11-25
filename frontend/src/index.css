@@ -1373,14 +1373,6 @@ html[data-palette="fofa"] [data-slot="tabs-trigger"][data-state="active"]::after
   height: 2px;
   background-color: hsl(var(--primary));
 }
-html[data-palette="fofa"] [data-tab-group] {
-  padding: 0;
-  border-radius: 0;
-  background-color: transparent;
-}
-html[data-palette="fofa"] [data-panel-tabs] {
-  border-bottom-color: transparent;
-}
 
 /* el-dialog: 20px, level3 fill, ruled header. */
 html[data-palette="fofa"] [data-slot="dialog-content"] {
