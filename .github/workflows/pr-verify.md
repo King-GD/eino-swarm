@@ -17,15 +17,23 @@ tree rather than the synthetic merge commit.
 | Documentation and Python tools | `make docs-check`. |
 | Upstream merge check | One `git fetch` of `LubyRuffy/eino-swarm` `refs/heads/main`; records `git rev-parse HEAD` and the fetched `FETCH_HEAD`, then runs `git merge-tree --write-tree --name-only <upstream-base> HEAD`. Nonzero status, both revisions and the complete `merge-tree` output go to the step summary and the job fails. It never merges, commits or pushes. |
 
-The Go and offline E2E jobs set `GOFLAGS=-tags=server`: the native shell needs
-gtk/webkit, which the Linux runner does not have, while the headless server
-entry does not. CGO stays enabled because the race tests need it, and Playwright's
-web server inherits `GOFLAGS` from the job. The E2E job compiles `./cmd/zwai`
-before Playwright starts so the suite's 180-second web-server start budget is
-not spent on a cold build.
+## Runners
+
+| image | jobs | why |
+|---|---|---|
+| `ubuntu-24.04` | Go checks, PC/Web offline E2E | Some packages still link the native shell's Gtk 4 / WebKit 6 libraries even with the `server` tag, so both jobs install `libgtk-4-dev libwebkitgtk-6.0-dev libx11-dev` (their dependencies provide glib and libsoup) before the first Go build or test. The image is pinned because the dev package names follow the Ubuntu release. |
+| `ubuntu-latest` | Phone bundle, PC/Web checks, Upstream merge check | These jobs link no native shell package. |
+| `macos-26` | Documentation and Python tools | Two tool regressions exercise macOS process identity (`libc.sysctl`, and `/proc/1/exe` being refused), so `make docs-check` needs the matching system symbols rather than a Linux-only environment. |
+
+The Go and offline E2E jobs set `GOFLAGS=-tags=server`, which selects the
+headless server entry; Playwright's web server inherits it. CGO stays enabled
+because the race tests need it. The E2E job compiles `./cmd/zwai` before
+Playwright starts so the suite's 180-second web-server start budget is not
+spent on a cold build.
 
 The Node jobs use Node 24, the version checked against both lockfiles. The Go
-jobs read the version from `go.mod`; `make docs-check` needs Python 3.
+jobs read the version from `go.mod`; `make docs-check` needs Python 3, which the
+macOS image provides.
 
 ## Reading a failure
 
@@ -36,6 +44,9 @@ keeps `frontend/test-results/` (traces and error context) as the
 `cd frontend && npx playwright show-trace <file>`.
 
 ## Running the same checks locally
+
+On a Linux machine the Go lines need `libgtk-4-dev libwebkitgtk-6.0-dev
+libx11-dev` from `apt-get` first, exactly as the two pinned jobs install them.
 
 ```bash
 make fmt-check vet test-go docs-check

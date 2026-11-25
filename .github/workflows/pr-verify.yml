@@ -80,11 +80,12 @@ jobs:
   # the browser evidence from being produced.
   pc-web-e2e:
     name: PC/Web offline E2E
-    runs-on: ubuntu-latest
+    # 24.04 is the image whose Gtk 4 / WebKit 6 package names this job installs
+    # below; a moving ubuntu-latest can change them.
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
-      # The native shell needs gtk/webkit; the Linux runner builds the headless
-      # server entry instead. Playwright's web server inherits this too.
+      # Selects the headless server entry. Playwright's web server inherits it.
       GOFLAGS: "-tags=server"
     steps:
       - uses: actions/checkout@v7
@@ -100,6 +101,14 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      # Even with the server tag the tree still imports the native shell's
+      # Gtk/WebKit packages, so the first Go build needs their pkg-config
+      # files. The transitive dependencies provide glib and libsoup. CGO stays
+      # enabled because those packages are cgo bindings.
+      - name: Install the Go build's Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev libx11-dev
       - name: Install frontend packages
         run: cd frontend && npm ci
       # The bundle and its source stamp let the web server serve dist/ rather
@@ -128,11 +137,12 @@ jobs:
 
   go:
     name: Go checks
-    runs-on: ubuntu-latest
+    # Pinned so the dev package names below stay valid on this image.
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
-      # Only the headless server entry is built and tested on Linux. CGO stays
-      # on because the race tests need it.
+      # Selects the headless server entry. CGO stays on because the race tests
+      # need it, and the native shell's Gtk/WebKit packages are still imported.
       GOFLAGS: "-tags=server"
     steps:
       - uses: actions/checkout@v7
@@ -143,6 +153,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      # The first `go build`/`go test` links the native shell packages, so their
+      # pkg-config files have to exist before it runs.
+      - name: Install the Go build's Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev libx11-dev
       - name: Formatting
         run: make fmt-check
       - name: Vet
@@ -154,7 +170,9 @@ jobs:
 
   docs:
     name: Documentation and Python tools
-    runs-on: ubuntu-latest
+    # Two tool regressions exercise macOS process identity (`libc.sysctl`,
+    # `/proc/1/exe`); the hosted macOS image has the matching system symbols.
+    runs-on: macos-26
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
