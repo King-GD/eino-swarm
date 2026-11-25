@@ -93,6 +93,9 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- The mobile work records build resolves shared styling libraries from the
+  phone dependencies in a clean checkout. (`F-139`)
+
 - Reports of an external service's observed polling cadence can publish
   without a local schedule receipt. Claims about checks armed by the app
   still require a matching schedule. (`F-150`, `C-012`)

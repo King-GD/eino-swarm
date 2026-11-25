@@ -33,6 +33,8 @@
       "@radix-ui/react-slot": ["./node_modules/@radix-ui/react-slot"],
       "@radix-ui/react-tooltip": ["./node_modules/@radix-ui/react-tooltip"],
       "class-variance-authority": ["./node_modules/class-variance-authority"],
+      "clsx": ["./node_modules/clsx"],
+      "tailwind-merge": ["./node_modules/tailwind-merge"],
       "force-graph": ["./node_modules/force-graph"],
       "lucide-react": ["./node_modules/lucide-react"],
       "recharts": ["./node_modules/recharts"]

@@ -496,7 +496,9 @@ The Playwright run uses an isolated server, data directory and evidence output.
 For the paired phone, `TestPairedPhoneWorkRecords*` exercises scope, the PC
 switch, and frame budget through a sealed link. `mobile/e2e/work-records.spec.ts`
 checks the path, details, scope switching, and the live PC setting on phone
-viewports.
+viewports. Run the mobile lint, unit tests and production build in a clean
+checkout after installing only the mobile dependencies to verify resolution
+of the shared graph's styling packages.
 
 For native acceptance, prepare the matching AX helpers on the host.
 

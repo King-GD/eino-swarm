@@ -20,7 +20,7 @@ export default defineConfig({
     dedupe: [
       "react", "react-dom", "shiki", "mermaid", "mdast-util-from-markdown",
       "@radix-ui/react-dialog", "@radix-ui/react-slot", "@radix-ui/react-tooltip", "class-variance-authority",
-      "force-graph", "lucide-react", "recharts",
+      "clsx", "tailwind-merge", "force-graph", "lucide-react", "recharts",
     ],
     alias: { "@": path.resolve(__dirname, "./src") },
   },
