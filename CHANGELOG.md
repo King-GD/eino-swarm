@@ -12,6 +12,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Added
 
+- Paired phones can search and read project knowledge pages, follow Wiki links,
+  and open the conversations cited as sources. (`F-138`, `C-053`)
 - The Knowledge panel opens a full project graph with page titles as nodes,
   one undirected line per connected pair, zoom and search by title or alias. (`F-138`, `C-053`)
 - Build a wiki graph from a task or project's retained history. Entities,

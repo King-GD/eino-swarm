@@ -1269,6 +1269,7 @@ The slim RPC the phone sends over pairlink is not an HTTP API. Request ops:
 `followup_drop` / `followup_steer` / `preempt` /
 `answer` / `continue` / `watch` / `unwatch` / `log` / `run_now` / `cancel_wait` /
 `resume_goal` / `project_get` / `project_create` / `project_update` / `catalog` / `refresh_catalog` / `get_timeouts` / `set_timeouts` / `set_product_mode` /
+`project_knowledge` / `project_knowledge_page` / `project_knowledge_cancel` /
 `tune` / `put` / `clients` / `files` /
 `file_chunk`. `hello` `{text}` is the phone's one-line model; the host
 keys it by the pairlink fingerprint, not a client-supplied id.
@@ -1457,6 +1458,22 @@ Successful mutations return a single ID/name in `projects`, without repeating
 potentially large instructions. Both mutations refuse with `restoring` during
 engine restoration. These operations use the existing paired, encrypted RPC
 channel and add no unauthenticated HTTP or cross-origin surface.
+
+Paired phones browse an existing knowledge base using read-only RPCs.
+`project_knowledge` takes `project_id`, optional search `text` (up to 512 bytes)
+and `offset`. The `knowledge` reply includes the project ID, `enabled`, up to
+32 page references and `next_offset` if another page exists. Conversation
+detail includes `project_id` for a project conversation.
+`project_knowledge_page` takes `project_id` and the `knowledge_page_id` slug.
+It reads one immutable JSON page detail with the same content and source
+resolution as the HTTP page route. Continue using both IDs, the returned
+`knowledge_transfer_id` (first chunk's `id`) and `next_offset` as `offset`.
+`knowledge_chunk` includes both scope IDs, transfer ID, total size, SHA-256,
+offsets, Base64 data and `more`. Raw chunks are at most 36 KiB and encoded page
+JSON at most 16 MiB. `project_knowledge_cancel` releases an unfinished transfer
+using the same IDs and token. A completed or cancelled token cannot be reused.
+Global disable returns `knowledge_disabled`, a missing page returns
+`knowledge_page_not_found` and an oversized page returns `too_large`.
 
 `catalog` additionally returns `memory_available`; older PCs omit it, so the
 mobile editor requests an upgrade rather than assuming an editable default.

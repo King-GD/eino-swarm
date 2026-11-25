@@ -28,6 +28,9 @@ export const OpSetProductMode = "set_product_mode"
 export const OpProjectGet = "project_get"
 export const OpProjectCreate = "project_create"
 export const OpProjectUpdate = "project_update"
+export const OpProjectKnowledge = "project_knowledge"
+export const OpKnowledgePage = "project_knowledge_page"
+export const OpKnowledgeCancel = "project_knowledge_cancel"
 export const OpCatalog = "catalog"
 export const OpRefreshCatalog = "refresh_catalog"
 export const OpGetTimeouts = "get_timeouts"
@@ -63,6 +66,8 @@ export type RemoteRequest = {
   cursor?: string
   thread_id?: string
   project_id?: string
+  knowledge_page_id?: string
+  knowledge_transfer_id?: string
   text?: string
   mode?: import("../../../frontend/src/lib/delivery-mode").DeliveryMode
   expected_turn_id?: string
@@ -253,6 +258,7 @@ export type ThreadDetail = {
   unread?: boolean
   completed_seq?: number
   id: string
+  project_id?: string
   title: string
   goal?: string
   goal_on?: boolean
@@ -335,6 +341,8 @@ export type RemoteResponse = EngineStartup & {
   file_view?: import("../../../frontend/src/lib/types").FileView
   file_chunk?: FileChunk
   task_panels?: TaskPanelManifest[]
+  knowledge?: KnowledgeList
+  knowledge_chunk?: KnowledgeChunk
   panel_transfer?: TaskPanelTransfer
   translation?: string
   speech?: import("../../../frontend/src/lib/speech-types").SpeechSnapshot
@@ -438,4 +446,23 @@ export function nextRPCId(): string {
 
 export function slimListBytes(resp: RemoteResponse): number {
   return new TextEncoder().encode(JSON.stringify(resp)).length
+}
+
+export type KnowledgeList = {
+  project_id: string
+  enabled: boolean
+  pages: import("../../../frontend/src/lib/knowledge").KnowledgePageRef[]
+  next_offset?: number
+}
+
+export type KnowledgeChunk = {
+  id: string
+  project_id: string
+  page_id: string
+  sha256: string
+  size: number
+  offset: number
+  next_offset: number
+  data: string
+  more: boolean
 }

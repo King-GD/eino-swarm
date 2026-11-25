@@ -2687,6 +2687,13 @@ The engine binds knowledge tools to the project and turn. It stamps page
 updates, resolves and classifies historical sources, and injects a bounded
 schema summary at turn setup. HTTP reads reuse the same index. The right
 inspector uses existing tool results and turn completion to refresh.
+
+Paired phones read the same project index through explicit knowledge RPCs in
+`internal/remote/knowledge.go`. The inbox and project-conversation actions
+open the same mobile browser. Search lists bounded page references and loads
+documents on selection. Each link owns at most one immutable encoded page
+transfer, with a project and page identity and a checksum. Switching the
+paired PC or data generation clears the browser and aborts pending reads.
 Manual Distill shares the Memory reviewer and per-project review queue. A
 host-owned read snapshot maps reviewer handles to original history records.
 One validated proposal can update notes, Skills and Knowledge through their

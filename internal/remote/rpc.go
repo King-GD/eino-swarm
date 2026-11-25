@@ -107,6 +107,10 @@ func dispatch(eng *engine.Engine, cfg config.RemoteConfig, stage *Staging, req R
 		return handleTimeoutSettings(eng, req, path, sessionID)
 	case OpProjectGet, OpProjectCreate, OpProjectUpdate:
 		return handleProjectSettings(eng, req, path, sessionID)
+	case OpProjectKnowledge:
+		return handleKnowledgeList(eng, req, path, sessionID)
+	case OpKnowledgePage, OpKnowledgeCancel:
+		return fail(req.ID, path, sessionID, "link_required", "knowledge page transfers require a paired link")
 	case OpCatalog:
 		return handleCatalog(eng, req, path, sessionID)
 	case OpRefreshCatalog:

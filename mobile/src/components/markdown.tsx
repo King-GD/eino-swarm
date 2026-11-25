@@ -35,19 +35,26 @@ import { t } from "@/lib/i18n"
 import { HighlightedLines } from "../../../frontend/src/lib/highlighted-lines"
 
 import { mermaidFenceIsClosed } from "../../../frontend/src/lib/markdown-mermaid"
+import { knowledgePageFromHref, remarkKnowledgeLinks } from "../../../frontend/src/lib/knowledge-link-ref"
 
 const MarkdownSource = createContext("")
+const KnowledgePageOpen = createContext<((id: string) => void) | undefined>(undefined)
 const Mermaid = lazy(() => import("./phone-mermaid").then((mod) => ({ default: mod.PhoneMermaid })))
 
 const PLUGINS = [remarkGfm, remarkMath]
+const KNOWLEDGE_PLUGINS = [...PLUGINS, remarkKnowledgeLinks]
 const MATH_LANGS = new Set(["math", "latex", "tex", "katex"])
 
-export function PhoneMarkdown({ text, className }: { text: string; className?: string }) {
+export function PhoneMarkdown({ text, className, onKnowledgePage }: {
+  text: string; className?: string; onKnowledgePage?: (id: string) => void
+}) {
   return (
     <div className={cn("md-body wrap-break-word text-sm", className)}>
-      <MarkdownSource.Provider value={text}><Markdown remarkPlugins={PLUGINS} components={COMPONENTS} urlTransform={safeUrl}>
+      <KnowledgePageOpen.Provider value={onKnowledgePage}>
+      <MarkdownSource.Provider value={text}><Markdown remarkPlugins={onKnowledgePage ? KNOWLEDGE_PLUGINS : PLUGINS} components={COMPONENTS} urlTransform={safeUrl}>
         {text}
       </Markdown></MarkdownSource.Provider>
+      </KnowledgePageOpen.Provider>
     </div>
   )
 }
@@ -58,6 +65,11 @@ function PhoneLink({
   node: _node,
   ...props
 }: ComponentPropsWithoutRef<"a"> & { node?: unknown }) {
+  const open = useContext(KnowledgePageOpen)
+  const pageId = open && knowledgePageFromHref(href)
+  if (open && pageId) {
+    return <button type="button" className="inline break-words text-left text-primary underline underline-offset-2" onClick={() => open(pageId)}>{children}</button>
+  }
   const origin = typeof window === "undefined" ? "http://127.0.0.1" : window.location.origin
   const action = classifyHref(href, origin)
   if (action === "block") {

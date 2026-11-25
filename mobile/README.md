@@ -95,6 +95,12 @@ This requires a PC version supporting the project RPCs; older PCs show an update
 message. No project settings are stored in the phone's direct-model Chat scope.
 Recent desktop/mobile differences are tracked in [the parity audit](../docs/MOBILE_DESKTOP_PARITY.md).
 
+Tap the book icon beside a project or in one of its conversations to browse
+**Knowledge** on the paired PC. Search and open Markdown pages, follow links and
+related pages, and expand verified source excerpts. Tap an available history
+source to open its original conversation. The PC hosts the library and handles
+edits and distillation.
+
 Paired PC conversations can show the same task panels as desktop. A matching
 panel opens once, and **Task panels** in the conversation header reopens it.
 The full-screen view supports touch zoom, rotation and switching between

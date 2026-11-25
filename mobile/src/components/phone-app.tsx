@@ -9,6 +9,7 @@ import { AddHostSheet } from "@/components/add-host-sheet"
 import type { ComposerExtra } from "@/components/composer"
 import { ChatSurface } from "@/components/chat-surface"
 import { HomeScreen } from "@/components/home-screen"
+import { KnowledgeScreen } from "@/components/knowledge-screen"
 import { ProviderSheet } from "@/components/provider-sheet"
 import { LinkBanner } from "@/components/link-banner"
 import { NewChatScreen } from "@/components/new-chat-screen"
@@ -124,6 +125,12 @@ export function PhoneApp() {
   const [loadingGroup, setLoadingGroup] = useState("")
   const [loadingMore, setLoadingMore] = useState(false)
   const startup = useEngineStartup(link)
+  const [knowledgeSelection, setKnowledgeSelection] = useState<{ project: string; link: RemoteLink; generation?: number }>()
+  const knowledgeOpen = Boolean(knowledgeSelection && knowledgeSelection.link === link &&
+    knowledgeSelection.generation === startup?.data_generation && surface !== "chat")
+  useEffect(() => {
+    if (!knowledgeOpen) setKnowledgeSelection(undefined)
+  }, [knowledgeOpen])
   const { policy: catalogPolicy, models, levels, catalogBusy, refreshModels, refreshBusy, refreshError, webExecutionStatus, predictionsEnabled } = useModelCatalog(link, `${startup?.product_mode ?? ""}:${startup?.model_policy?.scope ?? ""}`)
   const speechHost = surface === "chat" && account.officialOnly ? undefined : hosts.find((host) => host.fingerprint === activeFp)
   usePhoneSpeechSync(speechHost && startup?.startup === "ready" ? link : null, speechHost, hosts, surface === "chat" && !account.officialOnly, providers)
@@ -168,7 +175,7 @@ export function PhoneApp() {
 
   const completionRead = useCompletionRead({
     link: linkRef, view: viewRef, contentVisible: managerVisible,
-    visible: Boolean(view.detail) && !adding && !composing && !modelsOpen && surface !== "chat"
+    visible: Boolean(view.detail) && !knowledgeOpen && !adding && !composing && !modelsOpen && surface !== "chat"
       && (account.mode !== "account" || Boolean(link?.alive() && startup?.startup === "ready")),
     onError: setError,
     onRead: (detail, baseline) => {
@@ -712,7 +719,11 @@ export function PhoneApp() {
     />
   ) : null
 
-  const sheet = adding ? (
+  const openKnowledge = (project: string) => {
+    if (link?.alive()) setKnowledgeSelection({ project, link, generation: startup?.data_generation })
+  }
+  const closeKnowledge = () => setKnowledgeSelection(undefined)
+  const sheet = <>{adding ? (
     <AddHostSheet
       onURI={(uri) => void onURI(uri)}
       busy={bindBusy}
@@ -722,7 +733,15 @@ export function PhoneApp() {
         setAddError(undefined)
       }}
     />
-  ) : null
+  ) : null}
+    {knowledgeOpen && knowledgeSelection ? <KnowledgeScreen
+      key={knowledgeSelection.project}
+      link={knowledgeSelection.link} projectId={knowledgeSelection.project}
+      projectName={projects.find((project) => project.id === knowledgeSelection.project)?.name}
+      onClose={closeKnowledge}
+      onSource={(id) => { closeKnowledge(); void openThread(id) }}
+    /> : null}
+  </>
 
   const gate = (children: ReactNode) => <PcConnectionGate hosts={hosts} activeFingerprint={activeFp} connecting={busy || reconnecting}
     connected={Boolean(link?.alive())} ready={startup?.startup === "ready"} error={error} onRetry={() => void recover(true)}
@@ -812,6 +831,7 @@ export function PhoneApp() {
           <ThreadScreen
             key={locale + detail.id}
             detail={detail}
+            onOpenKnowledge={detail.project_id && link?.alive() ? () => openKnowledge(detail.project_id!) : undefined}
             prediction={phonePrediction(view.events, detail, predictionsEnabled && !catalogBusy)}
             onReadVisibility={(visible) => { managerVisible.current = visible }}
             fileLink={link ?? undefined}
@@ -922,6 +942,7 @@ export function PhoneApp() {
           connecting={busy || reconnecting}
           error={!link ? error : undefined}
           onOpen={(id) => void openThread(id)}
+          onOpenKnowledge={link?.alive() ? openKnowledge : undefined}
           onNewChat={(projectId) => {
             setComposeProject(projectId)
             setComposing(true)

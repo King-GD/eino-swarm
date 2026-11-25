@@ -1,4 +1,5 @@
 import type { ProjectSettings, RemoteRequest, RemoteResponse } from "./rpc"
+import { mockKnowledge } from "./mock-knowledge"
 
 export class MockProjects {
   private rows: ProjectSettings[] = [
@@ -11,6 +12,8 @@ export class MockProjects {
     const scenario = new URLSearchParams(location.search).get("projects")
     if (scenario === "legacy") return { ...base, ok: false, code: "unknown_op" }
     const found = this.rows.find((p) => p.id === req.project_id)
+    const knowledge = mockKnowledge(req, Boolean(found))
+    if (knowledge) return { ...base, ...knowledge }
     if (req.op === "project_get") return found ? { ...base, project: { ...found } } : { ...base, ok: false, code: "not_found" }
     if (scenario === "save-fail") return { ...base, ok: false, error: "Could not save project" }
     const patch = req.project_patch
