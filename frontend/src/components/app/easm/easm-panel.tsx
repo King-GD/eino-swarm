@@ -10,8 +10,8 @@ import { CloudTable } from "./cloud-table"
 import { HeatTrend } from "./heat-trend"
 import { SupplyTable } from "./supply-table"
 
-/** The EASM tab: relationship graph, hosting providers, heat trend and supply
- *  chain for one result, stacked in the side panel and side by side in the
+/** The EASM tab: relationship graph, heat trend, supply chain and hosting
+ *  providers for one result, stacked in the side panel and side by side in the
  *  enlarged dialog. */
 export function EasmPanel({ result, graphLoading, cloudsLoading, heatLoading, componentsLoading, visible = true, sheet }: {
   result: EasmResult; graphLoading?: boolean; cloudsLoading?: boolean; heatLoading?: boolean; componentsLoading?: boolean; visible?: boolean; sheet?: HTMLElement | null
@@ -29,9 +29,9 @@ export function EasmPanel({ result, graphLoading, cloudsLoading, heatLoading, co
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2">
         <AssetGraph result={result} index={index} loading={graphLoading} visible={visible && !open} onExpand={expand} mobile={sheet !== undefined} />
-        <CloudTable clouds={result.clouds} loading={cloudsLoading} className="h-[300px]" />
         <HeatTrend heat={result.heat} loading={heatLoading} className="flex h-[260px] flex-col rounded-xl border bg-card p-3" />
         <SupplyTable components={result.components} loading={componentsLoading} className="h-[360px]" sheet={sheet} visible={visible && !open} />
+        <CloudTable clouds={result.clouds} loading={cloudsLoading} className="h-[300px]" />
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="flex h-[94dvh] w-[96vw] max-w-none flex-col gap-0 overflow-hidden p-0">
@@ -42,9 +42,9 @@ export function EasmPanel({ result, graphLoading, cloudsLoading, heatLoading, co
           <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-4 md:grid-cols-[minmax(0,1.7fr)_minmax(300px,1fr)] md:overflow-hidden">
             <AssetGraph result={result} index={index} loading={graphLoading} visible={visible} expanded />
             <div className="flex min-h-0 flex-col gap-3">
-              <CloudTable clouds={result.clouds} loading={cloudsLoading} className="h-[300px] md:h-auto md:flex-1" />
               <HeatTrend heat={result.heat} loading={heatLoading} className="flex h-[260px] flex-col rounded-xl border bg-card p-3 md:h-auto md:min-h-0 md:flex-1" />
               <SupplyTable components={result.components} loading={componentsLoading} className="h-[360px] md:h-auto md:flex-1" />
+              <CloudTable clouds={result.clouds} loading={cloudsLoading} className="h-[300px] md:h-auto md:flex-1" />
             </div>
           </div>
         </DialogContent>
