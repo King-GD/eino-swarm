@@ -55,6 +55,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
+- The engine compresses Responses request bodies of at least 1 KiB when the
+  selected Gateway advertises gzip support and compression saves bytes. Older
+  gateways and personal providers receive plain JSON. (`F-171`, `C-040`)
+
 - On restart, restore only conversations with pending work or lifecycle receipts
   to settle. Progress counts those conversations. Finished history loads when
   opened, and semantic search backfill starts after the engine is ready.

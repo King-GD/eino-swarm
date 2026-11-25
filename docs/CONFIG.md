@@ -403,6 +403,10 @@ computer control, shell execution, hosted MCP approvals or arbitrary tool types.
 
 Gateway catalogs, profiles and credentials remain in memory; they are never
 saved as `models.providers`. Provider IDs beginning with `gateway:` are reserved.
+The engine reads the selected account source's optional `responses_request_gzip`
+capability on each Responses request. When true, it sends JSON bodies of at
+least 1 KiB as `Content-Encoding: gzip` if the encoded body is smaller.
+Gateways without the capability and personal providers receive ordinary JSON.
 LOCAL lists personal providers and separately authorized signed-in account catalogs.
 An additional catalog does not hide a distinct source's selectable conversation models.
 For the same source ID, the LOCAL projection controls both selection and execution;

@@ -352,6 +352,8 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-171 Official server first: sign-in, welcome and account models
 
+- 引擎调用声明 gzip 能力的 Gateway Responses 来源时，自动压缩至少 1 KiB 且压缩后更小的请求体。个人 Provider 和旧网关使用普通 JSON。关联契约 `C-040`，验证 `internal/provider/responses_request_gzip_test.go`。
+
 - LOCAL 切回第三方网关预置后，当前回合和 worker 的原始网关模型在权限仍有效时继续运行，刷新和重启恢复沿用原绑定；下一新回合使用第三方预置。来源撤权或退出登录后不继续调用。关联 `C-040`；证据：`internal/engine/model_mode_recovery_test.go`、`cmd/zwai/engine_mode_restart_test.go`、`internal/remote/account_local_sources_test.go`。
 
 - 第三方功能目录只显示对话模型：`catalog_group:third_party` 仅提供服务端对话绑定（未显式指定时为 `conversation`），title／compact／translation 等仍用于辅助功能，不作为对话选项。PC 与配对手机共用投影，目录刷新失败保留缓存时规则不变；原始网关、自配模型目录维持按类型过滤。LOCAL 输入框选中这条固定绑定后仍可打开并改选自配模型或原始网关，不因该角色 `configurable` 为 false 而锁死选择器；网关模式在策略不允许改对话模型时继续隐藏。关联 `C-040`；证据：`internal/provider/account_catalog_group_test.go`、`internal/remote/account_conversation_catalog_test.go`、`frontend/src/components/app/model-picker.test.tsx`。

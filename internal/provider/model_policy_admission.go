@@ -105,6 +105,13 @@ func (p *Pool) trackedModelBinding(inner model.BaseChatModel, prov config.Provid
 		return release, nil
 	}}
 	if account {
+		if wire, ok := inner.(*responsesModel); ok {
+			wire.requestGzip = func() bool {
+				source := currentSource()
+				return source != nil && source.capabilities != nil && source.capabilities.Authorized &&
+					source.capabilities.Available && source.capabilities.ResponsesRequestGzip
+			}
+		}
 		tracked.roleSource = currentSource
 		tracked.apiMode = prov.APIMode
 		tracked.refreshPolicy = p.RefreshCapabilities
