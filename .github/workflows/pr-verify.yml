@@ -165,17 +165,22 @@ jobs:
 
   docs:
     name: Documentation and Python tools
-    # Two tool regressions exercise macOS process identity (`libc.sysctl`,
-    # `/proc/1/exe`); a macOS image has the matching system symbols. The Intel
-    # image is pinned because GitHub's macOS ARM hosted capacity currently
-    # cancels these runs.
-    runs-on: macos-15-intel
+    # macOS supplies the process-identity symbols two tool regressions read.
+    # On this ARM64 image the linker ad-hoc signs the test's own freshly built
+    # fixtures, which the real-code-signature assertion checks. `go` must also
+    # be on PATH for the real-writer compile test, so the Go action is set up
+    # here as well.
+    runs-on: macos-15
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
       - name: Documentation and tool checks
         run: make docs-check
 

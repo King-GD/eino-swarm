@@ -24,7 +24,8 @@ commit.
 | image | jobs | why |
 |---|---|---|
 | `ubuntu-24.04` | Go checks | Some packages still link the native shell's Gtk 4 / WebKit 6 libraries even with the `server` tag, so the job installs `libgtk-4-dev libwebkitgtk-6.0-dev libx11-dev` (their dependencies provide glib and libsoup) before the first Go build or test. The image is pinned because the dev package names follow the Ubuntu release. |
-| `macos-15-intel` | PC/Web offline E2E, Documentation and Python tools | The E2E suite asserts a macOS settings titlebar (`render-probe-cover.spec.ts`) that the baseline asserts under the same platform condition, so Linux Chromium cannot satisfy it; the macOS image supplies the native libraries and installs only Chromium. `make docs-check` has two tool regressions that exercise macOS process identity (`libc.sysctl`, and `/proc/1/exe` being refused). The Intel image is pinned because GitHub's macOS ARM hosted capacity currently cancels these runs, while the full E2E suite and the full tool suite still run there unchanged. |
+| `macos-15-intel` | PC/Web offline E2E | The suite asserts a macOS settings titlebar (`render-probe-cover.spec.ts`) that the baseline asserts under the same platform condition, so Linux Chromium cannot satisfy it. The macOS image supplies the native libraries and installs only Chromium. The Intel image also has capacity while macOS ARM is short, and the full E2E suite runs there unchanged. |
+| `macos-15` | Documentation and Python tools | `make docs-check` has two tool regressions that read macOS process-identity symbols (`libc.sysctl`, and `/proc/1/exe` being refused). On this ARM64 image the linker ad-hoc signs the test's own freshly built fixtures, which the real-code-signature assertion checks. The job also installs `go` on PATH for the real-writer compile test, and runs the full tool suite unchanged. |
 | `ubuntu-latest` | Phone bundle, PC/Web checks, Upstream merge check | These jobs link no native shell package. |
 
 The Go and offline E2E jobs set `GOFLAGS=-tags=server`, which selects the
@@ -35,8 +36,8 @@ spent on a cold build; the macOS image already provides the native libraries,
 so that job installs only Chromium.
 
 The Node jobs use Node 24, the version checked against both lockfiles. The Go
-jobs read the version from `go.mod`; `make docs-check` needs Python 3, which the
-macOS image provides.
+checks job and the docs job read the version from `go.mod`; the docs job also
+needs Python 3 from the image and `go` on PATH for the real-writer compile test.
 
 ## Reading a failure
 
