@@ -341,7 +341,9 @@ func scopedHistorySourceQuery(tx *gorm.DB, table, projectID string, ref HistoryR
 		query = query.Where("th.project_id=?", projectID)
 	}
 	if ref.Kind == "event" {
-		query = query.Where("s.kind IS NOT ?", "engine_restart_checkpoint")
+		query = query.Where("s.kind IS NOT ? AND COALESCE(s.work_record_payload, 0) = 0", "engine_restart_checkpoint")
+	} else {
+		query = query.Where("s.role IS NOT 'tool' OR COALESCE(s.work_record_payload, 0) = 0")
 	}
 	return query
 }

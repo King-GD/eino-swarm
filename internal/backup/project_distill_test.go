@@ -11,10 +11,30 @@ func TestDistillationReceiptsFollowBackupPrivacyAndProjectScope(t *testing.T) {
 	src := seed(t)
 	ctx := t.Context()
 	for _, p := range []*store.Project{src.project, src.other} {
-		if err := src.st.StartProjectDistillation(ctx, store.ProjectDistillation{
-			ProjectID: p.ID, ID: "review-" + p.ID, State: "running", Receipt: []byte(`{"state":"running"}`),
-		}); err != nil {
+		th := src.thread
+		if p.ID != src.project.ID {
+			th = &store.Thread{ProjectID: p.ID}
+			if err := src.st.CreateThread(th); err != nil {
+				t.Fatal(err)
+			}
+		}
+		turn := store.Turn{ThreadID: th.ID, Status: store.TurnDone}
+		if err := src.st.CreateTurn(&turn); err != nil {
 			t.Fatal(err)
+		}
+		if err := src.st.AppendEvent(&store.Event{ThreadID: th.ID, TurnID: turn.ID, Kind: "user_message", Text: "Source for a pending review."}); err != nil {
+			t.Fatal(err)
+		}
+		row := store.ProjectDistillation{ProjectID: p.ID, ID: "review-" + p.ID, State: "running"}
+		total, err := src.st.StartDistillationQueue(ctx, row, "", func(int) ([]byte, error) { return []byte(`{"state":"running"}`), nil })
+		if err != nil || total != 1 {
+			t.Fatalf("could not seed the pending review: records=%d %v", total, err)
+		}
+		wiki := store.ProjectDistillation{ProjectID: p.ID, ID: "wiki-" + p.ID, State: "running", WikiGraph: true}
+		if total, err := src.st.StartDistillationQueue(ctx, wiki, th.ID, func(int) ([]byte, error) {
+			return []byte(`{"state":"running","wiki_graph":true}`), nil
+		}); err != nil || total != 1 {
+			t.Fatalf("could not seed the independent wiki build: records=%d %v", total, err)
 		}
 	}
 	sqlDB, err := src.st.DB().DB()
@@ -50,6 +70,19 @@ func TestDistillationReceiptsFollowBackupPrivacyAndProjectScope(t *testing.T) {
 				row, err := dst.ProjectDistillationReceipt(ctx, projectID)
 				if err != nil || (row != nil) != want {
 					t.Fatalf("receipt for %s present=%v want %v, %v", projectID, row != nil, want, err)
+				}
+				window, err := dst.DistillationWindow(ctx, "review-"+projectID, 0, 20)
+				if err != nil || (len(window) == 1 && window[0].Text == "Source for a pending review.") != want ||
+					(!want && len(window) != 0) {
+					t.Fatalf("archive separated the receipt from its source queue: %+v, %v", window, err)
+				}
+				wiki, err := dst.ProjectWikiBuildReceipt(ctx, projectID)
+				if err != nil || (wiki != nil) != want {
+					t.Fatalf("wiki receipt for %s present=%v want %v, %v", projectID, wiki != nil, want, err)
+				}
+				window, err = dst.DistillationWindow(ctx, "wiki-"+projectID, 0, 20)
+				if err != nil || len(window) != map[bool]int{true: 1, false: 0}[want] {
+					t.Fatalf("archive separated the wiki receipt from its source queue: %+v, %v", window, err)
 				}
 			}
 		})

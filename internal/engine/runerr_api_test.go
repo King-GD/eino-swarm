@@ -3,12 +3,34 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 
 	einoopenai "github.com/cloudwego/eino-ext/components/model/openai"
 	openai "github.com/meguminnnnnnnnn/go-openai"
 )
+
+func TestGatewaySafetyRefusalRequiresTheModelStatusAndGuardMessage(t *testing.T) {
+	const message = "Request blocked by the integration security guard."
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"responses", &openai.APIError{HTTPStatusCode: http.StatusForbidden, Message: message}, true},
+		{"chat completions", &einoopenai.APIError{HTTPStatusCode: http.StatusForbidden, Message: message}, true},
+		{"provider permission", &einoopenai.APIError{HTTPStatusCode: http.StatusForbidden, Message: "model access denied"}, false},
+		{"server failure", &openai.APIError{HTTPStatusCode: http.StatusBadGateway, Message: message}, false},
+		{"untyped error", errors.New(message), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isModelRequestBlocked(fmt.Errorf("model request: %w", tc.err)); got != tc.want {
+				t.Fatalf("safety refusal=%v, want %v", got, tc.want)
+			}
+		})
+	}
+}
 
 func TestPublicTurnErrorPreservesHTTPFailureInsteadOfGuessingToolJSON(t *testing.T) {
 	for _, tc := range []struct {

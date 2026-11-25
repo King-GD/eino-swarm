@@ -35,11 +35,13 @@ CONSTANTS
     PresenceAfterWindow,    \* the shell opens its window before holding presence
     IdleCommitNonAtomic,    \* idle exit acts on an earlier sample, admission stays open
     FinishUngated,          \* handoff does not wait for an in-progress finalization
+    SummaryUsesWriteBudget, \* a blocked tool consumes the time needed to save the final checkpoint
     ParkedNotCheckpointed,  \* handoff checkpoints running managers only
     IdleCountsOnlyManagers, \* idle load ignores parked workers, restoration and handoff
     ParkedAdmissionNonAtomic, \* choose/take drops the parked runtime before successor occupancy
     ParkedOwnerCheckedLate, \* attach retained workers before validating their project
     RestoreOwnerCheckedLate, \* occupy before checking a tagged worker's project
+    SkipParkedIndexEntry,   \* a terminal manager hides its live parked checkpoint
     MaxTurns
 
 Engines == {"old", "new"}
@@ -59,6 +61,7 @@ VARIABLES
     launcher,     \* the shell's launch phase (ensureEngineRecord / desktop presence)
     target,       \* engine of the shell's own build
     deadline,     \* the shared 30 s handoff budget has expired
+    handoffPhase, \* summary wait and the final durable write in the old engine
     work,         \* the conversation's in-memory execution on owner
     owner,        \* engine executing work
     checkpoint,   \* durable restart checkpoint awaiting restoration: "none", "running", "parked"
@@ -70,7 +73,7 @@ VARIABLES
     turns,        \* turns started through the window, bounded by MaxTurns
     successor     \* last parked admission: none, refused, admitted, or privately detached
 
-vars == <<eng, lease, stopping, sampled, hold, launcher, target, deadline, work,
+vars == <<eng, lease, stopping, sampled, hold, launcher, target, deadline, handoffPhase, work,
           owner, checkpoint, restorePhase, snapshot, stopped, stopAcked, gate, turns, successor>>
 
 Alive(e) == eng[e] \in Live
@@ -93,6 +96,7 @@ Init ==
     /\ launcher = "start"
     /\ target \in Engines
     /\ deadline = FALSE
+    /\ handoffPhase = "initial"
     /\ work \in {"none", "running", "parked"}
     /\ owner = "old"
     /\ checkpoint = "none"
@@ -206,8 +210,8 @@ BeginHandoff ==
     /\ UNCHANGED <<eng, lease, stopping, sampled, hold, target, deadline, work, owner,
                    checkpoint, restorePhase, snapshot, stopped, stopAcked, gate, turns, successor>>
 
-(* PrepareRestart: lockRestartFinishes under the shared deadline, then one    *)
-(* checkpoint covering active and parked registries, then cancel them.      *)
+(* PrepareRestart: lockRestartFinishes under the shared deadline, then a    *)
+(* baseline checkpoint covering active and parked registries, then cancel.  *)
 Freeze ==
     LET captured == owner = "old" /\
                     (work = "running" \/ (work = "parked" /\ ~ParkedNotCheckpointed))
@@ -216,12 +220,34 @@ Freeze ==
     /\ FinishUngated \/ ~gate
     /\ eng' = [eng EXCEPT !["old"] = "frozen"]
     /\ checkpoint' = IF captured THEN work ELSE checkpoint
+    /\ handoffPhase' = IF captured THEN "summarizing" ELSE "checkpointing"
     /\ work' = IF captured THEN "none" ELSE work
     /\ UNCHANGED <<lease, stopping, sampled, hold, launcher, target, deadline, owner,
                    restorePhase, snapshot, stopped, stopAcked, gate, turns, successor>>
 
+(* The shared summary window either settles normally or expires with an    *)
+(* unknown tool. The current cutoff leaves a separate opportunity to save. *)
+(* The fault abstracts the observed case where the old reserve was too     *)
+(* small for final persistence. Storage can independently fail or time out. *)
+EndSummary(expired) ==
+    /\ launcher = "handoff" /\ eng["old"] = "frozen" /\ ~deadline
+    /\ handoffPhase = "summarizing"
+    /\ handoffPhase' = IF ~expired THEN "checkpointing"
+                       ELSE IF SummaryUsesWriteBudget THEN "summary_exhausted"
+                       ELSE "checkpointing_unknown"
+    /\ UNCHANGED <<eng, lease, stopping, sampled, hold, launcher, target, deadline, work,
+                   owner, checkpoint, restorePhase, snapshot, stopped, stopAcked, gate, turns, successor>>
+
+SaveFinalCheckpoint ==
+    /\ launcher = "handoff" /\ eng["old"] = "frozen" /\ ~deadline
+    /\ handoffPhase \in {"checkpointing", "checkpointing_unknown"}
+    /\ handoffPhase' = IF handoffPhase = "checkpointing" THEN "saved" ELSE "saved_unknown"
+    /\ UNCHANGED <<eng, lease, stopping, sampled, hold, launcher, target, deadline, work,
+                   owner, checkpoint, restorePhase, snapshot, stopped, stopAcked, gate, turns, successor>>
+
 Ack ==
     /\ launcher = "handoff" /\ eng["old"] = "frozen" /\ ~deadline
+    /\ handoffPhase \in {"saved", "saved_unknown"}
     /\ launcher' = "acked"
     /\ UNCHANGED <<eng, lease, stopping, sampled, hold, target, deadline, work, owner,
                    checkpoint, restorePhase, snapshot, stopped, stopAcked, gate, turns, successor>>
@@ -235,7 +261,7 @@ OldAlreadyGone ==
 
 (* Before ACK an expired budget is an error that leaves the old engine as is. *)
 HandoffTimesOut ==
-    /\ launcher = "handoff" /\ deadline
+    /\ launcher = "handoff" /\ (deadline \/ handoffPhase = "summary_exhausted")
     /\ launcher' = "failed"
     /\ UNCHANGED <<eng, lease, stopping, sampled, hold, target, deadline, work, owner,
                    checkpoint, restorePhase, snapshot, stopped, stopAcked, gate, turns, successor>>
@@ -296,11 +322,22 @@ Publish ==
 
 ReadCheckpoint ==
     /\ eng["new"] = RestoringHere /\ restorePhase = "pending"
+    /\ checkpoint # "none"
     /\ IF stopped THEN snapshot' = "none"
        ELSE snapshot' \in (IF checkpoint = "none" THEN {"none"} ELSE {checkpoint, "foreign"})
     /\ restorePhase' = "read"
     /\ UNCHANGED <<eng, lease, stopping, sampled, hold, launcher, target, deadline,
                    work, owner, checkpoint, stopped, stopAcked, gate, turns, successor>>
+
+(* Startup can publish ready directly only with no outstanding indexed work.
+   The fault models an index that clears a parked worker with its manager. *)
+SkipSettledRecovery ==
+    /\ eng["new"] = RestoringHere /\ restorePhase = "pending"
+    /\ checkpoint = "none" \/ (SkipParkedIndexEntry /\ checkpoint = "parked" /\ ~stopped)
+    /\ restorePhase' = "done"
+    /\ eng' = IF RestoreBeforeListen THEN eng ELSE [eng EXCEPT !["new"] = "serving"]
+    /\ UNCHANGED <<lease, stopping, sampled, hold, launcher, target, deadline,
+                   work, owner, checkpoint, snapshot, stopped, stopAcked, gate, turns, successor>>
 
 (* Engine.Restore first settles this conversation's orphaned panel sources
    under restoreMu. A storage/identity failure refuses this conversation before
@@ -403,17 +440,21 @@ IdleExit(e) ==
 
 -----------------------------------------------------------------------------
 
-Next ==
+LifecycleStep ==
     \/ StartTurn \/ DetachParkedSuccessor
     \/ \E ownerMatches \in BOOLEAN : StartParkedSuccessor(ownerMatches) \/ RefuseParkedSuccessor(ownerMatches)
     \/ BeginFinish \/ EndFinish \/ WorkerDone
     \/ StopLive \/ StopBeforeRestore
-    \/ BeginHandoff \/ Freeze \/ Ack \/ OldAlreadyGone \/ HandoffTimesOut
+    \/ BeginHandoff \/ Ack \/ OldAlreadyGone \/ HandoffTimesOut
     \/ OldExits \/ Spawn \/ DeadlineExpires \/ DeadlineKillsReplacement
     \/ HumanCancelsLaunch
-    \/ Publish \/ ReadCheckpoint \/ OccupyRuntime \/ RefuseForeignRuntime \/ RefusePanelRecovery
+    \/ Publish \/ SkipSettledRecovery \/ ReadCheckpoint \/ OccupyRuntime \/ RefuseForeignRuntime \/ RefusePanelRecovery
     \/ UnheldWebReady \/ Reserve \/ Attach \/ FrontendAttaches \/ WindowCloses
     \/ \E e \in Engines : IdleCommit(e) \/ IdleSample(e) \/ IdleExit(e)
+
+Next ==
+    \/ Freeze \/ EndSummary(FALSE) \/ EndSummary(TRUE) \/ SaveFinalCheckpoint
+    \/ LifecycleStep /\ UNCHANGED handoffPhase
 
 Spec == Init /\ [][Next]_vars
 
@@ -429,6 +470,8 @@ TypeOK ==
     /\ launcher \in LauncherStates
     /\ target \in Engines
     /\ deadline \in BOOLEAN
+    /\ handoffPhase \in {"initial", "summarizing", "checkpointing", "checkpointing_unknown",
+                         "saved", "saved_unknown", "summary_exhausted"}
     /\ work \in WorkStates
     /\ owner \in Engines
     /\ checkpoint \in {"none", "running", "parked"}
@@ -452,6 +495,9 @@ CheckpointHasOwner ==
 (* An acknowledged Stop is never undone by restoration. *)
 StopIsFinal == stopAcked => work = "none"
 
+ReadyHasNoPendingCheckpoint ==
+    (eng["new"] = "serving" /\ restorePhase = "done") => checkpoint = "none"
+
 (* A privately held parked Registry must still be counted by its runtime. *)
 RegistryAlwaysAccounted == successor = "detached" => work # "none"
 
@@ -461,6 +507,8 @@ ParkedSuccessorOwnsProject == successor # "foreign_claimed"
 (* A ready window or headless waiter has an engine until its owner closes. *)
 WindowHasEngine == launcher = "opened" => Alive(target)
 
+SummaryLeavesWriteBudget == handoffPhase # "summary_exhausted"
+
 -----------------------------------------------------------------------------
 (* Reachability witnesses: each must be violated by the current design, or   *)
 (* the invariants above would hold only because the scenario never happens. *)
@@ -468,6 +516,7 @@ WindowHasEngine == launcher = "opened" => Alive(target)
 NeverRestoredIntoWindow ==
     ~(launcher = "opened" /\ target = "new" /\ owner = "new" /\ work # "none")
 NeverParkedCheckpoint == ~(checkpoint = "parked")
+NeverReadyWithoutRecovery == ~(eng["new"] = "serving" /\ restorePhase = "done" /\ owner = "old")
 NeverRefusedForeignRuntime == restorePhase # "owner_refused"
 NeverRefusedPanelRecovery == restorePhase # "panel_refused"
 NeverParkedSuccessor == ~(successor = "admitted" /\ work = "running" /\ turns > 0)
@@ -478,5 +527,6 @@ NeverOpenedAfterDeadline == ~(deadline /\ launcher = "opened" /\ eng["new"] = "s
 NeverIdleExitAfterClose == ~(launcher = "closed" /\ eng[target] = "exited")
 NeverRelaunchAfterIdleCommit == ~(launcher = "relaunch" /\ stopping[target])
 NeverFinishWaitsForHandoff == ~(launcher = "handoff" /\ gate /\ work = "finishing")
+NeverAckWithUnknownTool == ~(launcher = "acked" /\ handoffPhase = "saved_unknown")
 
 =============================================================================

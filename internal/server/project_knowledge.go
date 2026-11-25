@@ -13,11 +13,15 @@ func (s *Server) registerProjectKnowledge(api *gin.RouterGroup) {
 	api.GET("/projects/:id/knowledge", s.getProjectKnowledge)
 	api.POST("/projects/:id/knowledge", s.enableProjectKnowledge)
 	api.GET("/projects/:id/knowledge/tree", s.getProjectKnowledgeTree)
+	api.GET("/projects/:id/knowledge/graph", s.getProjectKnowledgeGraph)
 	api.GET("/projects/:id/knowledge/pages/:page", s.getProjectKnowledgePage)
 	api.POST("/projects/:id/knowledge/reveal", s.revealProjectKnowledge)
 }
 
 func (s *Server) projectKnowledgeSnapshot(c *gin.Context) (*knowledge.Snapshot, error) {
+	if !s.engine.Config().SwarmSnapshot().Knowledge {
+		return nil, knowledge.ErrDisabled
+	}
 	kb, err := s.engine.ProjectKnowledge(c.Param("id"))
 	if err != nil {
 		return nil, err
@@ -59,6 +63,20 @@ func (s *Server) getProjectKnowledgeTree(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, tree)
+}
+
+func (s *Server) getProjectKnowledgeGraph(c *gin.Context) {
+	snapshot, err := s.projectKnowledgeSnapshot(c)
+	if err != nil {
+		s.failProjectKnowledge(c, err)
+		return
+	}
+	graph, err := snapshot.Graph()
+	if err != nil {
+		s.failProjectKnowledge(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, graph)
 }
 
 func (s *Server) getProjectKnowledgePage(c *gin.Context) {

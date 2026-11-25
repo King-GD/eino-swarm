@@ -128,8 +128,9 @@ func (t *idleTransport) roundTrip(req *http.Request) (*http.Response, error) {
 	if resp != nil && resp.Body != nil {
 		resp.Body = newIdleBody(resp.Body, t.idle)
 		if completion, _ := req.Context().Value(streamCompletionKey{}).(*streamCompletion); completion != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			completion.requestID = streamRequestID(resp.Header)
 			completion.http.Store(true)
-			resp.Body = &streamCompletionBody{ReadCloser: resp.Body, completion: completion}
+			resp.Body = &streamCompletionBody{ReadCloser: resp.Body, completion: completion, ctx: req.Context()}
 		}
 	}
 	if resp != nil {

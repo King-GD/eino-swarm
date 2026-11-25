@@ -13,16 +13,40 @@ import (
 // ProjectDistillation stores the latest manual review receipt for one project.
 // It contains no transcript and is replaced only by the next explicit run.
 type ProjectDistillation struct {
-	ProjectID string `gorm:"primaryKey;size:64"`
-	ID        string `gorm:"size:64;not null"`
-	State     string `gorm:"size:24;not null"`
-	Receipt   []byte
+	ProjectID                          string `gorm:"primaryKey;size:64"`
+	ID                                 string `gorm:"size:64;not null"`
+	State                              string `gorm:"size:24;not null"`
+	Receipt                            []byte
+	CursorEventID                      uint `gorm:"not null;default:0"`
+	ProviderID, Model, ReasoningEffort string
+	WikiGraph                          bool `gorm:"-"`
+}
+
+// ProjectWikiBuild keeps a graph build and its resume position independent of
+// the project's last Memory review.
+type ProjectWikiBuild struct {
+	ProjectDistillation `gorm:"embedded"`
+}
+
+func (r ProjectDistillation) table() string {
+	if r.WikiGraph {
+		return "project_wiki_builds"
+	}
+	return "project_distillations"
 }
 
 // ProjectDistillationReceipt reads the latest run, if any.
 func (s *Store) ProjectDistillationReceipt(ctx context.Context, projectID string) (*ProjectDistillation, error) {
-	var row ProjectDistillation
-	err := s.db.WithContext(ctx).Take(&row, "project_id = ?", projectID).Error
+	return s.distillationReceipt(ctx, projectID, false)
+}
+
+func (s *Store) ProjectWikiBuildReceipt(ctx context.Context, projectID string) (*ProjectDistillation, error) {
+	return s.distillationReceipt(ctx, projectID, true)
+}
+
+func (s *Store) distillationReceipt(ctx context.Context, projectID string, wikiGraph bool) (*ProjectDistillation, error) {
+	row := ProjectDistillation{WikiGraph: wikiGraph}
+	err := s.db.WithContext(ctx).Table(row.table()).Take(&row, "project_id = ?", projectID).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -31,14 +55,18 @@ func (s *Store) ProjectDistillationReceipt(ctx context.Context, projectID string
 
 // StartProjectDistillation replaces the latest receipt before a reviewer can run.
 func (s *Store) StartProjectDistillation(ctx context.Context, row ProjectDistillation) error {
-	return s.db.WithContext(ctx).Clauses(clause.OnConflict{
+	return startProjectDistillation(s.db.WithContext(ctx), row)
+}
+
+func startProjectDistillation(db *gorm.DB, row ProjectDistillation) error {
+	return db.Table(row.table()).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "project_id"}}, UpdateAll: true,
 	}).Create(&row).Error
 }
 
 // FinishProjectDistillation updates only the running receipt it owns.
 func (s *Store) FinishProjectDistillation(ctx context.Context, row ProjectDistillation) error {
-	result := s.db.WithContext(ctx).Model(&ProjectDistillation{}).
+	result := s.db.WithContext(ctx).Table(row.table()).
 		Where("project_id = ? AND id = ? AND state = ?", row.ProjectID, row.ID, "running").
 		Updates(map[string]any{"state": row.State, "receipt": row.Receipt})
 	if result.Error != nil {
@@ -93,7 +121,7 @@ func (s *Store) ProjectDistillationHistory(ctx context.Context, projectID, threa
 					"CASE WHEN length(CAST(err AS BLOB)) <= ? THEN err END AS err, "+
 					"COALESCE(length(CAST(text AS BLOB)),0) > ? OR COALESCE(length(CAST(err AS BLOB)),0) > ? AS oversize",
 					maxEventBytes, maxEventBytes, maxEventBytes, maxEventBytes).
-				Where("thread_id = ? AND turn_id = ? AND kind IN ?", turn.ThreadID, turn.ID, kinds).
+				Where("thread_id = ? AND turn_id = ? AND kind IN ? AND work_record_payload = 0", turn.ThreadID, turn.ID, kinds).
 				Order("seq DESC").Limit(remaining + 1).Find(&rows).Error; err != nil {
 				return err
 			}

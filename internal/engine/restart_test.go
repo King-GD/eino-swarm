@@ -71,7 +71,7 @@ func TestPrepareRestartLeavesTheCurrentTurnRecoverable(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitLive(t, sub, swarm.NotifySpawned.String(), 10*time.Second)
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	status, err := e.PrepareRestart(ctx)
 	if err != nil || !status.Ready || status.Threads != 1 || status.ThreadsCheckpointed != 1 {
@@ -130,11 +130,12 @@ func TestPrepareRestartUsesOneDeadlineForUncancellableManagers(t *testing.T) {
 		t.Fatal("occupy failed")
 	}
 	t.Cleanup(func() { rt.release(stop, idle, turn.ID) })
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	// Keep the parent shorter than the summary limit while leaving SQLite
+	// time to persist the checkpoint under the race detector.
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	started := time.Now()
 	status, err := e.PrepareRestart(ctx)
-	if err != nil || !status.Ready || time.Since(started) > 250*time.Millisecond {
+	if err != nil || !status.Ready || ctx.Err() != nil {
 		t.Fatalf("uncancellable manager blocked restart: %+v %v", status, err)
 	}
 	if runCtx.Err() == nil {
@@ -163,7 +164,7 @@ func TestRestartCheckpointMarshalFailureDoesNotClaimPersistence(t *testing.T) {
 	e := newTestEngine(t)
 	msg := schema.UserMessage("continue")
 	msg.Extra = map[string]any{"unsupported": make(chan struct{})}
-	err := e.writeCheckpoint(&restartTarget{checkpoint: restartCheckpoint{Version: 1, ManagerHistory: []*schema.Message{msg}}})
+	err := e.writeCheckpoint(t.Context(), &restartTarget{checkpoint: restartCheckpoint{Version: 1, ManagerHistory: []*schema.Message{msg}}})
 	if err == nil || !strings.Contains(err.Error(), "marshal restart checkpoint") {
 		t.Fatalf("marshal failure=%v", err)
 	}

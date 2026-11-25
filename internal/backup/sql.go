@@ -19,9 +19,12 @@ import (
 var copyOrder = []string{
 	"projects",
 	"project_distillations",
+	"project_wiki_builds",
 	"threads",
 	"turns",
 	"events",
+	"wiki_source_scans",
+	"project_distillation_sources",
 	"messages",
 	"attachments",
 	"followups",
@@ -162,6 +165,9 @@ func knownTables(ctx context.Context, conn *sql.Conn, schema string) error {
 		if name == "thread_fts" || strings.HasPrefix(name, "thread_fts_") {
 			return nil
 		}
+		if name == "startup_recovery_threads" || name == "startup_recovery_generations" {
+			return nil
+		}
 		if _, ok := known[name]; !ok {
 			return invalidf("unexpected table %s", name)
 		}
@@ -284,7 +290,16 @@ func projectFilter(table, projectID string) (string, []any, bool, error) {
 	case "schedule_runs":
 		return `thread_id IN (` + threads + `) OR schedule_id IN (SELECT id FROM main.schedules WHERE project_id = ? OR thread_id IN (` + threads + `))`,
 			[]any{projectID, projectID, projectID}, false, nil
-	case "nuwa_nodes", "nuwa_revisions", "nuwa_verify_slots", "project_distillations":
+	case "nuwa_nodes":
+		return `project_id = ? OR (scope = 'thread' AND thread_id IN (` + threads + `))`, []any{projectID, projectID}, false, nil
+	case "nuwa_revisions":
+		return `project_id = ? OR (project_id = '' AND thread_id IN (` + threads + `))`, []any{projectID, projectID}, false, nil
+	case "wiki_source_scans":
+		// The event deletion trigger invalidates cache entries under any
+		// project, including a moved conversation's previous owner.
+		return `project_id = ? OR event_id IN (SELECT id FROM main.events WHERE thread_id IN (` + threads + `))`,
+			[]any{projectID, projectID}, false, nil
+	case "nuwa_verify_slots", "project_distillations", "project_wiki_builds", "project_distillation_sources":
 		return `project_id = ?`, []any{projectID}, false, nil
 	case "composer_drafts", "composer_draft_blobs":
 		return `draft_key = ? OR draft_key IN (SELECT 'thread:' || id FROM main.threads WHERE project_id = ?)`,
@@ -294,6 +309,70 @@ func projectFilter(table, projectID string) (string, []any, bool, error) {
 	default:
 		return "", nil, false, invalidf("no project filter for %s", table)
 	}
+}
+
+func projectReviewStateTable(table string) bool {
+	switch table {
+	case "project_distillations", "project_wiki_builds", "project_distillation_sources", "wiki_source_scans":
+		return true
+	default:
+		return false
+	}
+}
+
+// stripWikiScanCache keeps portable databases free of event-ID-bound
+// acknowledgements and their dependent triggers. Store.Open installs an
+// empty cache and trusted triggers when an archive is opened for restoration.
+func stripWikiScanCache(ctx context.Context, q queryer, schema string) error {
+	if !identRe.MatchString(schema) {
+		return invalidf("schema")
+	}
+	for _, statement := range []string{
+		"PRAGMA " + schema + ".secure_delete = ON",
+		"DROP TRIGGER IF EXISTS " + schema + ".wiki_source_scan_changed",
+		"DROP TRIGGER IF EXISTS " + schema + ".wiki_source_scan_deleted",
+		"DROP TABLE IF EXISTS " + schema + ".wiki_source_scans",
+	} {
+		if _, err := q.ExecContext(ctx, statement); err != nil {
+			return fmt.Errorf("backup: remove derived Wiki scan cache: %w", err)
+		}
+	}
+	return nil
+}
+
+// Recovery receipts point to database-local event row IDs. Portable copies
+// carry the source records and rebuild their own projection on import.
+func stripStartupRecoveryIndex(ctx context.Context, q queryer, schema string) error {
+	if !identRe.MatchString(schema) {
+		return invalidf("schema")
+	}
+	var triggers []string
+	if err := readStrings(ctx, q, `SELECT name FROM `+schema+`.sqlite_master
+		WHERE type='trigger' AND name GLOB 'startup_recovery_*'`, nil, 1, func(v []string) error {
+		triggers = append(triggers, v[0])
+		return nil
+	}); err != nil {
+		return err
+	}
+	for _, name := range triggers {
+		quoted, err := quoteIdent(name)
+		if err != nil {
+			return err
+		}
+		if _, err := q.ExecContext(ctx, `DROP TRIGGER `+schema+`.`+quoted); err != nil {
+			return fmt.Errorf("backup: remove startup recovery trigger: %w", err)
+		}
+	}
+	for _, statement := range []string{
+		`DROP TABLE IF EXISTS ` + schema + `.startup_recovery_generations`,
+		`DROP TABLE IF EXISTS ` + schema + `.startup_recovery_threads`,
+		`DROP INDEX IF EXISTS ` + schema + `.idx_startup_running_turn`,
+	} {
+		if _, err := q.ExecContext(ctx, statement); err != nil {
+			return fmt.Errorf("backup: remove startup recovery index: %w", err)
+		}
+	}
+	return nil
 }
 
 func deleteProjectRows(ctx context.Context, q queryer, projectID string) error {
@@ -373,7 +452,7 @@ func exportProjectRows(ctx context.Context, conn *sql.Conn, projectID, dest stri
 		return err
 	}
 	for _, table := range copyOrder {
-		if table == "project_distillations" && !rollbackSnapshot {
+		if !rollbackSnapshot && projectReviewStateTable(table) {
 			continue
 		}
 		where, args, skip, err := projectFilter(table, projectID)
@@ -417,6 +496,10 @@ func exportProjectRows(ctx context.Context, conn *sql.Conn, projectID, dest stri
 }
 
 func replaceAll(ctx context.Context, conn *sql.Conn, incomingPath string) error {
+	return replaceAllRows(ctx, conn, incomingPath, false)
+}
+
+func replaceAllRows(ctx context.Context, conn *sql.Conn, incomingPath string, rollbackSnapshot bool) error {
 	if err := failNext(); err != nil {
 		return err
 	}
@@ -445,6 +528,9 @@ func replaceAll(ctx context.Context, conn *sql.Conn, incomingPath string) error 
 				}
 			}
 			for _, table := range copyOrder {
+				if table == "wiki_source_scans" && !rollbackSnapshot {
+					continue
+				}
 				if err := copyTable(ctx, tx, "incoming", "main", table, "", nil, 0); err != nil {
 					return err
 				}
@@ -507,7 +593,7 @@ func applyProject(ctx context.Context, conn *sql.Conn, incomingPath, projectID s
 				}
 			}
 			for _, table := range copyOrder {
-				if table == "remote_devices" || table == "project_distillations" {
+				if table == "remote_devices" || projectReviewStateTable(table) {
 					continue
 				}
 				if err := copyTable(ctx, tx, "incoming", "main", table, "", nil, offset); err != nil {
@@ -714,8 +800,14 @@ func findConflicts(ctx context.Context, conn *sql.Conn, projectID string, replac
 			func(v []string) { add("turns", v[0], v[1], v[1] == projectID) }},
 		{`SELECT i.id, CASE WHEN COALESCE(m.project_id, '') <> '' THEN m.project_id ELSE COALESCE(th.project_id, '') END FROM incoming.schedules AS i JOIN main.schedules AS m ON m.id = i.id LEFT JOIN main.threads AS th ON th.id = m.thread_id`, 2,
 			func(v []string) { add("schedules", v[0], v[1], v[1] == projectID) }},
-		{`SELECT i.id, COALESCE(m.project_id, '') FROM incoming.nuwa_nodes AS i JOIN main.nuwa_nodes AS m ON m.id = i.id`, 2,
+		{`SELECT i.id, CASE WHEN m.scope = 'thread' THEN COALESCE(th.project_id, '') ELSE COALESCE(m.project_id, '') END
+			FROM incoming.nuwa_nodes AS i JOIN main.nuwa_nodes AS m ON m.id = i.id
+			LEFT JOIN main.threads AS th ON th.id = m.thread_id`, 2,
 			func(v []string) { add("nuwa_nodes", v[0], v[1], v[1] == projectID) }},
+		{`SELECT i.node_id, CASE WHEN m.project_id = '' THEN COALESCE(th.project_id, '') ELSE m.project_id END
+			FROM incoming.nuwa_revisions AS i JOIN main.nuwa_revisions AS m ON m.request_key = i.request_key
+			LEFT JOIN main.threads AS th ON th.id = m.thread_id`, 2,
+			func(v []string) { add("nuwa_revisions", v[0], v[1], v[1] == projectID) }},
 		{`SELECT i.id, COALESCE(th.project_id, '') FROM incoming.task_panel_rows AS i JOIN main.task_panel_rows AS m ON m.id = i.id LEFT JOIN main.threads AS th ON th.id = m.thread_id`, 2,
 			func(v []string) { add("task_panel_rows", v[0], v[1], v[1] == projectID) }},
 		{`SELECT i.draft_key FROM incoming.composer_drafts AS i JOIN main.composer_drafts AS m ON m.draft_key = i.draft_key`, 1,

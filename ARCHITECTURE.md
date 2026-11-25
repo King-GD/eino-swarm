@@ -9,9 +9,10 @@ or a binary whose file identity is not the one `engine.json` published,
 requests an automatic, bounded handoff from the old engine, stops it and
 starts its replacement listener within a 30-second handoff/listen target after
 checkout frontend preparation. The old engine
-freezes new work, checkpoints every active or parked registry, gives workers
-a shared opportunity to summarize, and preserves uncertain tool effects for
-verification after recovery. It never treats a handoff summary as completion. Clients attach over loopback HTTP: they list, watch, send,
+freezes new work and checkpoints every active or parked registry. Workers share
+up to three seconds to summarize before the final writes within the 19-second
+request deadline. The final checkpoints retain completed workers and record
+uncertain tool effects for verification after recovery. Clients attach over loopback HTTP: they list, watch, send,
 steer, interrupt and answer. They do not open the database. Closing a window
 or leaving the terminal only drops that client's presence connection. The
 engine exits after the idle grace once no presence connection is held, the
@@ -30,7 +31,7 @@ the Registry's worker tool catalog. Workspace and MCP operations stay on workers
 model and tool-scope selection still use that complete catalog. For Responses,
 the planner receives a model-instance copy without provider-hosted builtins,
 preserving the shared client, worker factory, call accounting and backoff.
-Ordinary turns keep their existing tool surface. Restored workers retain their
+Ordinary turns retain their execution tools and mount work-record tools by default. Restored workers retain their
 original model and selected tools; a human can explicitly replace a removed
 provider through the idle conversation worker-model-recovery endpoint. Its
 transactional source-turn overlay preserves historical selection, worker identity
@@ -51,16 +52,16 @@ The explicit project file scope resolves the currently selected project's
 directory and never grants mutation. Legacy conversations retain the old
 workspace resolver.
 
-Nuwa model wrappers refresh a bounded project-state preview at each Generate or
+Work-record model wrappers refresh a bounded conversation and project preview at each Generate or
 Stream entry. They validate the original project/thread/turn owner through
-`Store.NuwaSnapshotForTurn` and add a transient runtime System message to a new
+a transactional conversation snapshot and add a transient runtime System message to a new
 request slice. ADK state, compact input, durable transcript and fork seeds do not
 receive that preview. The Registry's per-generation `WorkerMiddlewares` factory
 retains the original worker configuration; tagged recovery rebuilds it from the
 original turn. The graph remains reported data. Failed optional reads produce
 an explicit unavailable state without records, revision or raw error; shared
 tools and new claims retain their ownership checks. The Registry carries each
-worker generation's starting task as a separate context value. Nuwa uses it to
+worker generation's starting task as a separate context value. The preview uses it to
 prioritize matching titles and summaries from the same fresh snapshot before
 recent records; full detail remains on demand. Managers retain recent-first
 ordering. Retrieval does not alter the worker instruction, fork seed or graph,
@@ -95,9 +96,11 @@ cancellation or selection change invalidates its in-flight response locally.
 
 PC and paired phone use the same composer delivery rules. An ordinary send
 during an active turn queues the message with its uploaded files and image
-references. Explicit insertion binds the request to the displayed turn and
-optionally one selected queue row. When the user interrupts and inserts, the
-Registry queues that input and cancels the active manager step under one lock.
+references. When that follow-up starts, the conversation model receives the
+original images and caption as a multimodal message. Explicit insertion binds
+the request to the displayed turn and optionally one selected queue row. When
+the user interrupts and inserts, the Registry queues that input and cancels
+the active manager step under one lock.
 The next manager input keeps the turn identity and workers. The durable
 steer and selected queue claim commit together.
 
@@ -149,10 +152,18 @@ launcher's child; a competing loser is reaped when its single Acquire fails.
 `app.New(DeferRestore:true)` constructs the engine and routes without recovering
 history. `serveEngine` listens, publishes a `restoring` lease and serves HTTP,
 then owns synchronous `App.Restore`; the idle watcher counts recovery as active
-work. `Engine.Restore` builds one indexed checkpoint/event snapshot per conversation,
-passes it through the restored runtime bootstrap, including the validated identity
-of an unanswered human call and both manager correction
-allowances, and records `engine_restore` measurements on the original turn. The
+work. `Engine.Restore` selects pending conversations from durable turn, panel,
+schedule and generation state and the indexed worker recovery evidence.
+SQLite maintains open and pending generation pointers and invalidates settled
+worker proofs in the source write transaction. A legacy library builds its
+generation projection once, committing each conversation separately. A later
+rewind or incompatible source edit rebuilds the affected projection. Settled
+conversations keep their history on disk until a client opens it. Recovery
+progress counts the selected conversations. Runnable work gets one shared
+checkpoint/event snapshot. Receipt-only recovery reads the relevant lifecycle
+rows. The resumed bootstrap receives the snapshot, the validated identity
+of an unanswered human call and both manager correction allowances. The
+recovery path records `engine_restore` measurements on the original turn. The
 filtered events retain `model_retry` and `max_iterations_continued` receipts across
 checkpoints. A new human cap continuation discards the startup snapshot before
 reading its new durable allowance receipt; later work does not reuse that snapshot. Running and parked recovery failures are
@@ -161,7 +172,8 @@ other conversations continue. The compatibility `ResumeOrphanedTurns` entry
 returns accepted resumptions together with the same typed aggregate, preserving
 per-conversation causes. Stop is serialized with each conversation's
 restoration. Only after recovery finishes does the scheduler start and metadata
-become `ready`. PC and phone show progress; work mutations are gated on both
+become `ready`. Search embedding backfill starts in its own worker after this
+transition. PC and phone show progress; work mutations are gated on both
 HTTP and encrypted RPC while reads, drafts, presence and Stop remain available.
 Shutdown cancels recovery and waits before closing its store.
 
@@ -747,6 +759,12 @@ reference after the validated original bytes are saved under the thread's input
 tree. Reconnects replay the card. Paired phones read the pixels through bounded
 RPC chunks. Direct phone chat owns a separate request using its Mobile Bearer
 and persists the original bytes in IndexedDB.
+
+On desktop and Web, **Extract text** in a sent image preview makes a
+cancellable, tool-free request using the OCR role. The adapter resolves the
+role's own provider and protocol and sends the selected stored image. The
+result belongs to the open preview. Conversation sends use the conversation
+model's visual input path, independently of OCR availability.
 
 ## Phone remote (pairlink)
 
@@ -1416,7 +1434,9 @@ worker before closing SQLite.
    `{text, images?, files?, from_event_seq?, history_report?}`. Pasted images are decoded,
    sniffed, stored under `$ZWAI_HOME/inputs/<thread>/` and sent as eino
    `UserInputMultiContent` (caption in a text part, not also on `Content` —
-   OpenAI cannot marshal both), not as workspace files. A `/goal <objective>`
+   OpenAI cannot marshal both), not as workspace files. The conversation's
+   model receives the multimodal input and the transcript retains image
+   references for later turns. A `/goal <objective>`
    body (identifier split, glued CJK, fullwidth `／`, IME punctuation `、`) pins the standing
    objective and starts or steers; the stored user message is the objective.
    One turn per conversation
@@ -1424,8 +1444,9 @@ worker before closing SQLite.
    a live `/goal`, which steers this turn, and
    `from_event_seq`, which interrupts, truncates from that `user_message`,
    and starts again at that position. Ordinary Enter while running **queues a
-   follow-up** (`POST /api/threads/:id/followups`) that starts as the next turn
-   after completion or failure. Stop, cancellation and restart keep it queued.
+   follow-up** with its attachments (`POST /api/threads/:id/deliver`, mode
+   `queue`). The queued message starts as the next turn after completion or
+   failure. Stop, cancellation and restart keep it queued.
    Clicking a waiting row deletes it and loads the
    text into the composer; Enter while the turn is still running enqueues a
    new follow-up at the back. `PATCH …/followups/:fid` still rewrites one row
@@ -1441,8 +1462,7 @@ worker before closing SQLite.
    Enter queues a follow-up instead of leaving the steer in the inbox.
    `PATCH …/steers/:seq` still rewrites one unread caption in place
    (`steer_revised`) for other clients; images on that steer stay.
-   Stop is still `POST …/interrupt` (turn ctx). Pasted images cannot wait in
-   the queue (the row is text) and inject now instead.
+   Stop is still `POST …/interrupt` (turn ctx).
 2. The runtime loads the conversation's transcript from the database (reduced
    to user/assistant messages, so context stays bounded; `/compact` and
    in-turn auto-compact further
@@ -1954,6 +1974,27 @@ constraints belong in skill preconditions; descriptions state when to use a
 skill. An exact existing skill-name pointer may remain in notes if it does not
 restate the body. This changes no Markdown format or event kind.
 
+Deterministic family folding keeps every source's complete body, normalizing
+whitespace only. It omits a source section only when that entire normalized body
+already occurs in the original keeper; word overlap cannot preserve negation,
+numbers, conditions or ordering. Keeper writes and source deletions are separate
+filesystem operations. On a later failure the Store returns the original error
+and reports the actual keeper write and only source files confirmed gone. The
+turn's memory-review event records that failure and those landed changes, using
+its existing safe error summary. This is text retention, not a semantic guarantee for
+model-authored skill patches. Regression coverage: `internal/memory/families_test.go`,
+`internal/memory/skill_usage_test.go` and `internal/engine/review_finalize_test.go`.
+
+The 80% notes-pressure warning is advisory. It reports the remaining character
+budget from the turn-start snapshot; the write tool accepts growth that still
+fits the total and per-note limits. Adding to a nonempty store also costs the
+two-character entry separator, while a replacement spends its net growth.
+If a useful change does not fit, consolidation preserves unrelated notes and
+the supported meaning of related notes. The prompt snapshot stays stable for
+the turn, and tool results report the live write outcome. Regression coverage:
+`internal/memory/prompt_test.go` and
+`internal/engine/memory_pressure_http_test.go`.
+
 8. **Review** (`F-420`, `C-025`): with memory and auto-review enabled, a
    successful turn starts a single streaming `adk.ChatModelAgent` from the stored
    event log, even when the manager already used a memory tool. Compacted ADK
@@ -2188,6 +2229,14 @@ A JSON decoding failure alone cannot identify invalid tool arguments. Idle,
 first-byte and context overflow errors keep their existing recovery guidance;
 the original model-call records and bounded retry events remain tied to the same
 turn for API, CLI and desktop Trace diagnosis.
+
+The model HTTP stream records decoded response-body bytes and the last positive
+read time. A receive timeout stays typed through the model adapter and maps to
+`model_read_timeout`. For a failed read or premature EOF, the existing model-call
+Trace error stores the byte count, last-read UTC time when available and a
+validated Gateway request ID. No response content or socket address is copied
+into the diagnostic. Normal completion and caller cancellation keep their
+existing handling.
 
 The UI must survive a refresh, a reconnect and a slow client without losing an
 event or showing a duplicate:
@@ -2550,26 +2599,21 @@ Nuwa dispatch can narrow the actual workspace tools on a new worker. The
 selection is recorded with its spawn and checkpoint, then reapplied before
 recovery claims that worker. Descendants inherit the available subset.
 
-`nuwa_tools.go` mounts project-scoped reads and, outside planning, trusted shared
-writes. Store transactions commit node CAS, project revision, provenance audit
-and tool-call idempotency together. Agents can cite their own persisted tool
-replies by call ID without mounting the history query tool. The transaction
-resolves manager IDs within the turn and worker IDs within one execution.
-Worker notification ownership can pass to a new manager turn while the
-execution continues. A fact retains its original author and links to the
-actual result event. Recovery creates a fresh scope for new tool calls.
-Dependency version stamps make corrections and unavailable references
-explicit. Reported nodes record claims and their sources. `nuwa_snapshot.go`
-combines these records with workers projected from actual lifecycle receipts.
-GET and a separate project-revision SSE stream drive the Collaboration panel
-without adding another chat event sequence. For isolated work, the graph derives
-dashed origin paths from the saved turn and author. A worker's displayed metadata
-requires a matching conversation, turn, agent and generation. Solid arrows
-continue to represent the stored work dependencies.
-Timeline truncation advances the current project's visible collaboration
-revision in the same transaction. Explicit conversation deletion cleans up authored
-nodes across their historical projects and advances each affected revision.
-See [Nuwa](docs/NUWA.md), `F-136` and `C-037`.
+The [work records](docs/WORK.md) layer mounts `read_work` and, outside
+planning, `record_work` independently of Nuwa. The original turn freezes
+availability. Store transactions commit scope, node CAS, revision and audit
+together. Private records stay with their conversation. Explicit promotion
+atomically shares the prerequisite closure and preserves original identity
+and dependency version evidence. The model sees a bounded untrusted preview,
+with inactive record stubs taking the lowest priority under budget.
+
+The work snapshot combines records with durable worker state. The desktop
+inspector uses a thread snapshot and revision pair when a conversation is
+open, with the existing project snapshot elsewhere. The named conversation
+notification uses the chat connection and no chat sequence. Membership moves,
+rewind and deletion invalidate affected snapshots; authored shared records
+retain their original project until the author is deleted. The graph derives
+its inactive projection from current states. See `F-139` and `C-055`.
 
 ## Independent conversation coordination
 
@@ -2652,6 +2696,24 @@ The engine binds knowledge tools to the project and turn. It stamps page
 updates, resolves and classifies historical sources, and injects a bounded
 schema summary at turn setup. HTTP reads reuse the same index. The right
 inspector uses existing tool results and turn completion to refresh.
+
+The PC and Web graph draws navigation from a virtual project root. The
+layout attaches one page per connected component using membership lines and
+groups large sets of unlinked pages. Search and group browsing retain every
+browsable page reference. A selected grouped page is added to the visible graph with
+its route to the root. The saved graph and HTTP response contain the actual
+page relationships and Wiki links.
+
+Wiki review omits workflow and editorial labels and links that depend on
+them. The index flags older generated pages with the same rule for review
+and keeps the Markdown and citations accessible by page ID.
+
+Paired phones read the same project index through explicit knowledge RPCs in
+`internal/remote/knowledge.go`. The inbox and project-conversation actions
+open the same mobile browser. Search lists bounded page references and loads
+documents on selection. Each link owns at most one immutable encoded page
+transfer, with a project and page identity and a checksum. Switching the
+paired PC or data generation clears the browser and aborts pending reads.
 Manual Distill shares the Memory reviewer and per-project review queue. A
 host-owned read snapshot maps reviewer handles to original history records.
 One validated proposal can update notes, Skills and Knowledge through their
@@ -2659,7 +2721,24 @@ existing stores. Manual runs share one SQLite receipt between the two panels.
 For a successful turn with project memory, auto-review and Knowledge enabled,
 the existing reviewer applies wiki updates in the same batch as notes and
 Skills. It publishes their committed revisions in the original turn's
-`memory_review` event, which refreshes the open Knowledge panel. See [the distillation design](docs/plans/2026-11-23-unified-project-distillation.md)
+`memory_review` event, which refreshes the open Knowledge panel. Current-task
+and current-project manual distillation freeze source identities in SQLite,
+read bounded batches in order and commit a cursor with each accepted receipt.
+Full-text mode also commits the byte offset inside an unfinished source. The
+event cursor advances after the final segment, and explicitly resumed jobs use
+both saved positions. Wiki builds use one frozen source queue with separate
+local and semantic checkpoints. The local scanner reads source windows, verifies
+project ownership and stages attributable nodes and explicit edges in the
+Markdown store. The persisted receipt makes the first graph available before
+model input. Per-source acknowledgements reuse immutable records across builds;
+current source identities and editable captions govern reuse. New builds
+publish documents directly after the local scan unless model review was
+requested. Receipts persist the choice across pause and resume. In review
+mode, the semantic reviewer repairs unresolved items while retaining previously validated items
+within the same draft. The host commits complete windows in order and
+progressively appends verified observations to the documents. The graph uses the
+same in-memory wiki index as the tree and page views. Page IDs remain stable
+across title edits, and the client lays out the scoped nodes and edges. See [the distillation design](docs/plans/2026-11-23-unified-project-distillation.md)
 and [the wiki design](docs/plans/2026-11-23-project-knowledge-design.md).
 
 ## Integrated terminal
@@ -3016,13 +3095,16 @@ in [current contracts](docs/CONTRACTS.md).
 
 The desktop and Web inspector resolves registered entries against the active
 project or conversation and uses the result to render both the tab and its
-content. Nuwa is a project-owned React entry gated by mode or retained history;
-it uses the existing project GET/SSE and mounts when selected. The conversation
-Task panels entry groups agent-opened iframe instances and keeps them mounted
-behind other tabs. The host registry controls presentation; the embedded
+content. Work records follow the open conversation, including standalone
+conversations, with a project fallback when no conversation is open. The conversation
+Task panels entry groups visible instances and keeps them mounted behind other
+tabs. The store admits a visible projection when the instance has committed
+observations or a running source. Open writes initial state for runtime tools.
+HTTP and sealed Pairlink close use the same engine operation, committing a
+conversation-scoped close marker and deletion before cancelling the instance's
+producer context. The host registry controls presentation; the embedded
 HTML/JS plugin catalog remains the source for builds and Agent tools. The paired
-phone continues to use its conversation panel surface and does not register the
-Nuwa graph.
+phone continues to use its conversation panel surface.
 
 `internal/taskpanel` defines the versioned state protocol; `internal/store/task_panels.go` persists conversation-owned projections and a separate delivery journal. Runtime tools provide trusted provenance and bounded producer publication. Repository HTML/JS plugins under `frontend/src/task-panels` own their layout and run in dedicated opaque-origin iframes through an acknowledged SDK channel. The FOFA example producer uses CLI batches and locally owned HTTP checks; no asset fields enter the generic host protocol. See [Task panels](docs/TASK_PANELS.md), `F-137` and `C-050`.
 

@@ -156,24 +156,19 @@ class RecoveryIdentityPreparationTests(unittest.TestCase):
 
     def test_timeout_keeps_an_existing_cause_before_secondary_storage_errors(self):
         # An adapter may already have attributed this exact child timeout.
-        real_run = subprocess.run
+        # The separate real-child test above covers capture of partial bytes.
+        argv = ["fixture"]
         for failed in ([], ["cause.stdout"]):
             directory = self.root / ("with-io" if failed else "without-io")
             directory.mkdir()
-            original, observed = RuntimeError("existing attribution"), []
-            def attributed_timeout(*args, **kwargs):
-                try:
-                    return real_run(*args, **kwargs)
-                except subprocess.TimeoutExpired as error:
-                    error.__cause__ = original
-                    observed.append(error)
-                    raise
-            argv = [sys.executable, "-c", "import time;print('partial',flush=True);time.sleep(5)"]
+            original = RuntimeError("existing attribution")
+            timeout = subprocess.TimeoutExpired(argv, .2, output=b"partial\n")
+            timeout.__cause__ = original
             with self.subTest(failed=failed), self.failed_receipts(failed), \
-                    mock.patch.object(identity.subprocess, "run", side_effect=attributed_timeout), \
+                    mock.patch.object(identity.subprocess, "run", side_effect=timeout), \
                     self.assertRaises(subprocess.TimeoutExpired) as caught:
                 identity.run(argv, directory, "cause", timeout=.2)
-            self.assertIs(caught.exception, observed[0])
+            self.assertIs(caught.exception, timeout)
             self.assertIs(caught.exception.__cause__, original)
             self.assertEqual(caught.exception.stdout, b"partial\n")
             if failed:

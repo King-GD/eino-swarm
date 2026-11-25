@@ -83,8 +83,20 @@ func Open(path string) (*Store, error) {
 	if err := s.dropThreadOwnership(); err != nil {
 		return nil, err
 	}
-	if err := db.AutoMigrate(&Project{}, &Thread{}, &Message{}, &Turn{}, &Event{}, &LLMCall{}, &Attachment{}, &Followup{}, &Schedule{}, &ScheduleRun{}, &RemoteDevice{}, &ThreadWakeDecision{}, &ComposerDraft{}, &ComposerDraftBlob{}, &PendingScheduleAnswer{}, &NuwaNode{}, &NuwaRevision{}, &NuwaVerifySlot{}, &TaskPanelRow{}, &TaskPanelMutation{}, &TaskPanelChangeRow{}, &ProjectDistillation{}); err != nil {
+	if err := db.AutoMigrate(&Project{}, &Thread{}, &Message{}, &Turn{}, &Event{}, &LLMCall{}, &Attachment{}, &Followup{}, &Schedule{}, &ScheduleRun{}, &RemoteDevice{}, &ThreadWakeDecision{}, &ComposerDraft{}, &ComposerDraftBlob{}, &PendingScheduleAnswer{}, &NuwaNode{}, &NuwaRevision{}, &NuwaVerifySlot{}, &TaskPanelRow{}, &TaskPanelMutation{}, &TaskPanelChangeRow{}, &ProjectDistillation{}, &ProjectWikiBuild{}, &ProjectDistillationSource{}, &WikiSourceScan{}); err != nil {
 		return nil, fmt.Errorf("store: migrate: %w", err)
+	}
+	if err := ensureWikiSourceScanInvalidation(db); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("store: invalidate wiki scan sources: %w", err)
+	}
+	if err := backfillTaskPanelObservations(db); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("store: backfill task panel observations: %w", err)
+	}
+	if err := migrateWorkScopes(db); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("store: migrate work scopes: %w", err)
 	}
 	if err := s.ensureThreadOwnership(); err != nil {
 		return nil, err
@@ -99,6 +111,10 @@ func Open(path string) (*Store, error) {
 		WHERE project_id IS NULL`).Error; err != nil {
 		_ = sqlDB.Close()
 		return nil, fmt.Errorf("store: backfill turn project owners: %w", err)
+	}
+	if err := ensureStartupRecovery(db); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("store: initialize startup recovery index: %w", err)
 	}
 	return s, nil
 }

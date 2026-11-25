@@ -45,6 +45,7 @@ const (
 	modelRetryReasonRateLimited     = "rate_limited"
 	modelRetryReasonUnavailable     = "model_unavailable"
 	modelRetryReasonTransport       = "model_transport"
+	modelRetryReasonReadTimeout     = "model_read_timeout"
 	modelRetryReasonIdle            = "model_idle"
 	modelRetryReasonResponse        = "model_response_invalid"
 )
@@ -105,6 +106,10 @@ func modelFailureClass(err error) string {
 	var idle provider.IdleTimeoutError
 	if errors.As(err, &idle) {
 		return modelRetryReasonIdle
+	}
+	var readTimeout *provider.StreamReadTimeoutError
+	if errors.As(err, &readTimeout) {
+		return modelRetryReasonReadTimeout
 	}
 	s := strings.ToLower(err.Error())
 	switch {

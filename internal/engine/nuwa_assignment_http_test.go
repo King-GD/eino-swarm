@@ -149,7 +149,7 @@ func TestNuwaWorkerAssignmentAtActualADKGenerateAndStream(t *testing.T) {
 
 			// Cancellation must still refuse model input even with a known
 			// assignment. A nil Store proves the cancellation guard ran first.
-			wrapped, err := (&Engine{}).nuwaContextHandlers(turn)[0].WrapModel(ctx, probe, nil)
+			wrapped, err := (&Engine{cfg: e.cfg}).nuwaContextHandlers(turn)[0].WrapModel(ctx, probe, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

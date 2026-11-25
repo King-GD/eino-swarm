@@ -6,6 +6,7 @@ import { HomeBar } from "@/components/home-bar"
 import { HostChrome } from "@/components/host-chrome"
 import { InboxRow, type RowState } from "@/components/inbox-row"
 import { InboxSkeleton } from "@/components/inbox-skeleton"
+import { KnowledgeButton } from "@/components/knowledge-screen"
 import { PullToRefresh } from "@/components/pull-to-refresh"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/cn"
@@ -84,6 +85,7 @@ export function HomeScreen({
   groups = [],
   loadingGroup = "",
   onOpen,
+  onOpenKnowledge,
   onMore,
   onNewChat,
   onSelectHost,
@@ -114,6 +116,7 @@ export function HomeScreen({
   groups?: InboxGroupState[]
   loadingGroup?: string
   onOpen: (id: string) => void
+  onOpenKnowledge?: (projectId: string) => void
   onMore: (group?: string) => void
   onNewChat: (projectId: string) => void
   onSelectHost: (fingerprint: string) => void
@@ -159,6 +162,7 @@ export function HomeScreen({
       key={g.id || "recent"}
       title={g.name}
       onNew={g.id ? () => onNewChat(g.id) : undefined}
+      onKnowledge={g.id && onOpenKnowledge ? () => onOpenKnowledge(g.id) : undefined}
       collapsible={Boolean(g.id)}
       // A query paints the folder open so a match is not stuck
       // behind a fold. The saved fold returns when the query goes.
@@ -353,6 +357,7 @@ function sectionMore(groups: InboxGroupState[], id: string): InboxGroupState | u
 function InboxSection({
   title,
   onNew,
+  onKnowledge,
   collapsible = false,
   open = true,
   onToggle,
@@ -364,6 +369,7 @@ function InboxSection({
 }: {
   title: string
   onNew?: () => void
+  onKnowledge?: () => void
   collapsible?: boolean
   open?: boolean
   onToggle?: () => void
@@ -376,7 +382,7 @@ function InboxSection({
   const label = "truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
   return (
     <section className="flex flex-col gap-1">
-      <div className={cn("flex items-center gap-0.5 px-1", onNew ? "h-8" : "h-6")}>
+      <div className={cn("flex items-center gap-0.5 px-1", onKnowledge ? "h-9" : onNew ? "h-8" : "h-6")}>
         {collapsible ? (
           <h2 className="min-w-0 flex-1">
             <button
@@ -398,6 +404,7 @@ function InboxSection({
         ) : (
           <h2 className={cn("min-w-0 flex-1", label)}>{title}</h2>
         )}
+        {onKnowledge ? <KnowledgeButton onClick={onKnowledge} project={title} /> : null}
         {onNew ? (
           <Button
             type="button"

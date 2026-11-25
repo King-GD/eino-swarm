@@ -2,11 +2,11 @@
 
 Task panels are bundled HTML/JS applications. Each panel owns its layout and may use D3, Canvas or another bundled library. The host supplies conversation identity, versioned data and appearance; it does not interpret business fields. Desktop and Web use the same implementation. This is the local Task Panel Protocol v1, not a claim of MCP Apps compatibility.
 
-The paired mobile app bundles the same plugin HTML/JS and iframe host. A PC conversation with a panel gains a Task panels button and opens the first available panel once. The phone uses a full-screen sheet with touch interaction and multiple-panel selection; closing it preserves the frame and zoom without stopping the PC task. A replacement connection to the same PC/thread/database generation retains the last validated projection data while fencing old RPC replies; the source is not restarted. A conversation without a panel has no panel entry. PC selection, conversation selection and database-generation changes invalidate old reads. A phone-only direct-model chat does not run the PC's registered sources.
+The paired mobile app bundles the same plugin HTML/JS and iframe host. A PC conversation with a visible instance gains a Task panels button and opens the first available panel once. The phone uses a full-screen sheet with touch interaction and multiple-panel selection. Returning to the conversation preserves the frame and zoom. **Close panel instance** removes the selected instance persistently on every client and interrupts its own running source while the PC task continues. A replacement connection to the same PC/thread/database generation retains the last validated projection data while fencing old RPC replies; the source is not restarted. A conversation without a panel has no panel entry. PC selection, conversation selection and database-generation changes invalidate old reads. A phone-only direct-model chat does not run the PC's registered sources.
 
 ## Using the example
 
-Install/configure a compatible local `fofa` CLI using its own credential mechanism, then set **Settings → Tools → Task panels**. Provide the query and request geographic collection and HTTP(S) checks in the conversation. The agent can open `fofa-world-map`, then invoke its registered source with `{ "query": "<task-supplied query>", "max_assets": 1000 }`. There is no default query and opening the panel alone performs no collection. Nuwa planners can open/read/publish panels; execution remains on workers. Planning mode exposes only reads.
+Install and configure a compatible local `fofa` CLI using its own credential mechanism. Enable task panels under **Settings → Tools → Task panel plugins**. Source options such as the executable and batch size are configured under `task_panels` in `config.yaml` or through the settings API. Provide the query and request geographic collection and HTTP(S) checks in the conversation. The agent can open `fofa-world-map`, then invoke its registered source with `{ "query": "<task-supplied query>", "max_assets": 1000 }`. There is no default query and opening the panel alone performs no collection. Nuwa planners can open/read/publish panels; execution remains on workers. Planning mode exposes only reads.
 
 The inspector opens when it first discovers a new panel instance in the current conversation. Updates to known instances and reconnect replays do not switch the selected tab. Switching tabs keeps the iframe and map zoom. Local map filters, zoom and tooltips do not start tools. Closing the inspector does not stop the task; Stop cancels the task-owned collector and HTTP requests. The current implementation bundles plugins with the app rather than accepting external ZIPs or generated HTML at runtime.
 
@@ -28,12 +28,12 @@ During collection the display reports discovered and processed counts. A fixed c
 
 | 注册项 | `scope` | `activation` | `renderer` |
 | --- | --- | --- | --- |
-| `nuwa` | `project` | `project_mode`：项目启用女娲或已有历史；不自动切换标签 | `react`：选中时挂载女娲协作组件，使用现有项目数据流 |
+| `nuwa` | 当前会话，未打开会话时绑定项目 | 会话打开即显示；项目入口按模式或已有记录显示；保留当前焦点 | `react`：选中时挂载工作记录组件，会话通知复用聊天 SSE |
 | `task-panels` | `thread` | `agent_open`：当前会话有实例才显示入口，首次发现新实例时自动打开 | `iframe`：同一标签内可切换多个实例，其他标签选中时保留 iframe |
 
-解析注册项时会绑定具体的项目或会话 ID。当前标签因归属变化或实例移除而不可用时，右侧栏暂时显示 Agents，不覆盖原选项。女娲从会话所属项目读取；只在没有活动会话时使用侧栏所选项目。任务面板实例归会话，采集执行归启动它的任务，两者有各自的生命周期。
+解析注册项时会绑定具体的项目或会话 ID。当前标签因归属变化或实例移除而不可用时，右侧栏暂时显示 Agents，不覆盖原选项。工作记录读取当前会话及其所属项目；只在没有活动会话时使用侧栏所选项目。任务面板实例归会话，采集执行归启动它的任务，两者有各自的生命周期。
 
-按下文编写 HTML/JS 插件后，把定义加到 [catalog.json](../frontend/src/task-panels/catalog.json) 即可共用 `task-panels` 入口，无须改宿主注册表。新增宿主面板类型时，在宿主注册表中声明归属、激活、渲染和挂载规则，并验证切换作用域时不会带入旧面板。`catalog.json` 是构建和 Agent 共用的插件目录；女娲的宿主注册项不进入该目录，也不出现在 Agent 提示词的可用任务面板列表中，不能用 `open_task_panel` 打开。配对手机继续使用会话级任务面板的现有入口，不展示女娲协作图。
+按下文编写 HTML/JS 插件后，把定义加到 [catalog.json](../frontend/src/task-panels/catalog.json) 即可共用 `task-panels` 入口，无须改宿主注册表。新增宿主面板类型时，在宿主注册表中声明归属、激活、渲染和挂载规则，并验证切换作用域时不会带入旧面板。`catalog.json` 是构建和 Agent 共用的插件目录；工作记录的宿主注册项不进入该目录，也不出现在 Agent 提示词的可用任务面板列表中，不能用 `open_task_panel` 打开。配对手机继续使用会话级任务面板的现有入口，不展示工作记录图。
 
 先约定面板状态：记录的稳定 ID、进度和错误字段，以及空状态。`schema` 校验输出状态，`initial_state` 是首次打开时的有效空状态；专用数据源的输入由 `source.input_schema` 另行约定。现有工具已能提供所需结果时，可以只新增前端插件，复用宿主的发布工具。
 
@@ -68,7 +68,14 @@ A running registered source exclusively owns new writes to its panel using its c
 
 The host transfers one MessageChannel after verifying the iframe window identity. Version/patch capability negotiation precedes data delivery; plugins acknowledge applied revisions. A patch with the wrong base requests a snapshot. Failed callbacks allow a bounded resynchronization; startup/apply timeout surfaces a local error with explicit retry. Hidden panes do not accumulate an unbounded render queue and catch up from current state when shown.
 
-Read endpoints: `GET /api/task-panels/catalog`, `GET /api/threads/:id/panels`, `GET /api/threads/:id/panels/:panel`. Browser clients opt into `GET /api/threads/:id/events?panels=1`: this existing conversation SSE carries named `panel_ready`, `panel_update` and `panel_error` frames alongside chat. Panel frames never set SSE id; their monotonic cursor remains inside the body and cannot overwrite chat Last-Event-ID. Reusing the physical connection leaves HTTP/1 connection capacity for two-window draft saves. Legacy chat clients are unchanged. Explicit API consumers may use `GET /api/threads/:id/panels/events`, starting with `ready {panels,cursor}` from one atomic read. Reconnect repairs from a fresh snapshot without rerunning tools.
+An instance becomes visible when a source starts or a publication commits an
+observation. The open receipt, initial snapshot and empty ownership patches
+supply no observation. A committed data snapshot can explicitly report zero
+even if its bytes match the initial state. An empty instance disappears when
+its source finishes or is recovered as interrupted. The host applies this rule
+to all catalog entries. Updates and reconnects keep the user's tab selection.
+
+Read endpoints: `GET /api/task-panels/catalog`, `GET /api/threads/:id/panels`, `GET /api/threads/:id/panels/:panel`. `DELETE /api/threads/:id/panels/:panel` closes one instance persistently. Browser clients opt into `GET /api/threads/:id/events?panels=1`: this existing conversation SSE carries named `panel_ready`, `panel_update` and `panel_error` frames alongside chat. Panel frames never set SSE id; their monotonic cursor remains inside the body and cannot overwrite chat Last-Event-ID. Reusing the physical connection leaves HTTP/1 connection capacity for two-window draft saves. Legacy chat clients are unchanged. Explicit API consumers may use `GET /api/threads/:id/panels/events`, starting with `ready {panels,cursor}` from one atomic read. Reconnect repairs from a fresh snapshot without rerunning tools.
 
 ### Paired mobile transport
 
@@ -76,7 +83,7 @@ Mobile data uses the existing sealed Pairlink connection, never the PC's Gin HTT
 
 The reply's `panel_transfer` contains `{id,thread_id,panel_id,revision,size,sha256,offset,next_offset,data,more}`. Each `data` is base64 of at most 36KiB, within the 64KiB sealed frame. The complete JSON envelope is limited to 64MiB, including its definition. Continuations use `task_panel_read {thread_id,panel_id,transfer_id,offset}`. All chunks retain the same identity, revision, size and SHA-256. The phone checks ordering and the complete hash/JSON/identity before applying data. It never renders a partial body, changes chat seq, loads HTML from the PC, or invokes a producer.
 
-Each connection owns one frozen transfer. A successful new first read replaces it; failed first reads retain the previous valid transfer. `task_panel_cancel {thread_id,panel_id,transfer_id}` releases only that exact transfer; old cancellation cannot remove a successor. Link close releases the cache. Invalid scope/offset, expired tokens and oversized replies fail explicitly; the manifest is never silently clipped. Continuations verify visibility using a narrow metadata query rather than copying the entire live state again.
+Each connection owns one frozen transfer. A successful new first read replaces it; failed first reads retain the previous valid transfer. `task_panel_cancel {thread_id,panel_id,transfer_id}` releases only that exact transfer; old cancellation cannot remove a successor. Link close releases the cache. `task_panel_close {thread_id,panel_id}` closes the host instance and invalidates its transfer. A closed instance refuses later publication or reopening. Invalid scope/offset, expired tokens and oversized replies fail explicitly; the manifest is never silently clipped. Continuations verify visibility using a narrow metadata query rather than copying the entire live state again.
 
 Manifests continue while the sheet is closed, but after initial discovery hidden panels do not start more bulk reads. Reopening reads the latest committed version. Failed patch application falls back to a complete snapshot; an older PC that returns `unknown_op` simply has no panel entry. The transfer limit is not acceptance of 64MiB per panel across an arbitrary number of mounted mobile plugins; large multi-panel memory and device performance require separate measurement.
 
@@ -142,6 +149,11 @@ The renderer shows the graph, attention trend and component table and keeps all 
 ## Validation
 
 `go test -race ./internal/taskpanel ./internal/store ./internal/panelplugins/fofaworld ./internal/panelplugins/easm ./internal/engine ./internal/server` covers protocol, storage, producer and real model/HTTP boundaries. Producer fixtures include the real installed CLI against a loopback fake FOFA API and local HTTP/HTTPS targets: no real account or public asset is needed. `make model-check` includes task-panel ownership, commit-before-delivery, idempotency, cleanup identity and orphan-recovery counterexamples. EASM producer tests use a fake tool caller per aggregation plus merge fixtures (incremental batches, confirmation, unknown parents, subject reset, domain budget, certificates) and one engine test through the real model → two `run_panel_source` calls → MCP streamable HTTP boundary; every published state is validated against the catalog schema, and an already stored panel of the previous pipeline still validates. `frontend/e2e/easm.spec.ts` drives the native renderer with served panel state and real SSE patches, including a restart whose stored steps still say running while the host reports the source interrupted. Frontend unit tests and the task-panel Playwright case exercise the packaged iframe, incremental map, zoom retention, full snapshots, version refusal and failed-plugin handling. Native desktop acceptance remains a separate ci-macOS gate.
+
+The [instance close audit](../models/panels/README.md#instance-close-audit)
+checks the commit, scoped cancellation, acknowledgement and asynchronous
+delivery boundaries. It pairs each modeled rule with a Store, engine, sealed
+transport or client regression.
 
 The [model mapping and bounds](../models/panels/README.md) cover competing writers, source ownership, per-conversation recovery isolation, snapshot/SSE crossings, iframe acknowledgements and probe receipt cancellation. These checks prove finite protocol properties under their stated assumptions; they do not replace implementation race tests, native acceptance or establish that every possible failure is absent.
 

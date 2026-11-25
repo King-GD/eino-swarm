@@ -106,7 +106,6 @@ func New(opts Options) (*App, error) {
 	eng := engine.New(cfg, st, pool, logger)
 	idx := search.New(st, pool, cfg, logger)
 	eng.SetThreadIndex(idx)
-	idx.Start()
 	eng.BeginRestore()
 
 	assets := opts.Assets

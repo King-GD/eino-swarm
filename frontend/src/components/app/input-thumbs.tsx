@@ -1,9 +1,10 @@
 import { Loader2, X } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { api } from "@/lib/api"
+import { Textarea } from "@/components/ui/textarea"
+import { api, ApiError } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { useT } from "@/lib/use-t"
 import type { ImageRef } from "@/lib/types"
@@ -27,19 +28,26 @@ export function InputThumbs({
     >
       {images.map((img) => (
         <li key={`${threadId}:${img.id}`} className="min-w-0">
-          <InputImageThumb src={api.inputImageURL(threadId, img.id)} name={img.name} />
+          <InputImageThumb
+            src={api.inputImageURL(threadId, img.id)}
+            name={img.name}
+            extractText={(signal) => api.extractImageText(threadId, img.id, signal)}
+          />
         </li>
       ))}
     </ul>
   )
 }
 
-export function InputImageThumb({ src, name, large = false, onLoad, onError }: {
+type ExtractText = (signal: AbortSignal) => Promise<{ text: string }>
+
+export function InputImageThumb({ src, name, large = false, onLoad, onError, extractText }: {
   src: string
   name?: string
   large?: boolean
   onLoad?: () => void
   onError?: () => void
+  extractText?: ExtractText
 }) {
   const t = useT()
   const [open, setOpen] = useState(false)
@@ -58,7 +66,7 @@ export function InputImageThumb({ src, name, large = false, onLoad, onError }: {
       </DialogTrigger>
       {open ? (
         <DialogContent
-          className="input-image-preview"
+          className={cn("input-image-preview data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-1/2", extractText && "overflow-y-auto")}
           hideClose
           aria-describedby={undefined}
         >
@@ -69,14 +77,14 @@ export function InputImageThumb({ src, name, large = false, onLoad, onError }: {
               <X aria-hidden />
             </Button>
           </DialogClose>
-          <ImagePreview src={src} name={label} />
+          <ImagePreview src={src} name={label} extractText={extractText} />
         </DialogContent>
       ) : null}
     </Dialog>
   )
 }
 
-function ImagePreview({ src, name }: { src: string; name: string }) {
+function ImagePreview({ src, name, extractText }: { src: string; name: string; extractText?: ExtractText }) {
   const t = useT()
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading")
   return (
@@ -94,6 +102,47 @@ function ImagePreview({ src, name }: { src: string; name: string }) {
         onLoad={() => setStatus("loaded")}
         onError={() => setStatus("error")}
       />
+      {status === "loaded" && extractText && <ImageTextExtraction extractText={extractText} />}
     </>
+  )
+}
+
+function ImageTextExtraction({ extractText }: { extractText: ExtractText }) {
+  const t = useT()
+  const request = useRef<AbortController | null>(null)
+  const [result, setResult] = useState<{ text: string } | "pending" | "unavailable" | "failed" | null>(null)
+  useEffect(() => () => request.current?.abort(), [])
+
+  const run = async () => {
+    if (request.current) return
+    const controller = new AbortController()
+    request.current = controller
+    setResult("pending")
+    try {
+      const response = await extractText(controller.signal)
+      if (!controller.signal.aborted) setResult(response)
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        setResult(err instanceof ApiError && err.code === "image_ocr_unavailable" ? "unavailable" : "failed")
+      }
+    } finally {
+      request.current = null
+    }
+  }
+
+  return (
+    <div className="grid gap-2">
+      <Button type="button" size="sm" variant="outline" className="justify-self-start"
+        disabled={result === "pending"} onClick={() => void run()}>
+        {t(result === "pending" ? "image.ocr.pending" : "image.ocr.action")}
+      </Button>
+      {result === "unavailable" || result === "failed" ? (
+        <p role="alert" className="text-sm text-muted-foreground">{t(result === "unavailable" ? "image.ocr.unavailable" : "image.ocr.failed")}</p>
+      ) : result && typeof result === "object" ? (
+        result.text ? (
+          <Textarea aria-label={t("image.ocr.result")} readOnly rows={4} value={result.text} />
+        ) : <p role="status" className="text-sm text-muted-foreground">{t("image.ocr.empty")}</p>
+      ) : null}
+    </div>
   )
 }

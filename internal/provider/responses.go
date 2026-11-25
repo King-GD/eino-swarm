@@ -2,6 +2,7 @@ package provider
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -48,6 +49,7 @@ type responsesModel struct {
 	mu           sync.RWMutex
 	tools        []*schema.ToolInfo
 	continuation *ResponsesContinuation
+	requestGzip  func() bool // current capability of the bound Gateway source
 }
 
 func newResponsesModel(p config.Provider) (*responsesModel, error) {
@@ -67,7 +69,7 @@ func (m *responsesModel) WithTools(tools []*schema.ToolInfo) (model.ToolCallingC
 	if _, err := responsesTools(nil, tools); err != nil {
 		return nil, err
 	}
-	return &responsesModel{provider: m.provider, client: m.client, tools: append([]*schema.ToolInfo{}, tools...), continuation: m.continuation}, nil
+	return &responsesModel{provider: m.provider, client: m.client, tools: append([]*schema.ToolInfo{}, tools...), continuation: m.continuation, requestGzip: m.requestGzip}, nil
 }
 
 func (m *responsesModel) BindTools(tools []*schema.ToolInfo) error {
@@ -102,7 +104,7 @@ func (m *responsesModel) requestOnce(ctx context.Context, in []*schema.Message, 
 	if err != nil {
 		return nil, responsesRequest{}, err
 	}
-	body := map[string]any{"model": strings.TrimSpace(m.provider.Model), "include": []string{"reasoning.encrypted_content"}}
+	body := map[string]any{"model": strings.TrimSpace(m.provider.Model)}
 	if o.Model != nil {
 		body["model"] = *o.Model
 	}
@@ -149,16 +151,31 @@ func (m *responsesModel) requestOnce(ctx context.Context, in []*schema.Message, 
 	return m.sendResponses(ctx, body, input, stream)
 }
 
+const minResponsesGzipBytes = 1024
+
 func (m *responsesModel) postResponses(ctx context.Context, body map[string]any) (*http.Response, error) {
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("provider: responses request: %w", err)
+	}
+	var encoding string
+	if len(raw) >= minResponsesGzipBytes && m.requestGzip != nil && m.requestGzip() {
+		compressed, err := gzipResponsesBody(raw)
+		if err != nil {
+			return nil, fmt.Errorf("provider: compress responses request: %w", err)
+		}
+		if len(compressed) < len(raw) {
+			raw, encoding = compressed, "gzip"
+		}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(strings.TrimSpace(m.provider.BaseURL), "/")+"/responses", bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if encoding != "" {
+		req.Header.Set("Content-Encoding", encoding)
+	}
 	if key := strings.TrimSpace(m.provider.APIKey); key != "" {
 		req.Header.Set("Authorization", "Bearer "+key)
 	}
@@ -175,6 +192,21 @@ func (m *responsesModel) postResponses(ctx context.Context, body map[string]any)
 		return nil, responsesHTTPError(resp.StatusCode, resp.Status, raw)
 	}
 	return resp, nil
+}
+
+func gzipResponsesBody(raw []byte) ([]byte, error) {
+	var compressed bytes.Buffer
+	writer, err := gzip.NewWriterLevel(&compressed, gzip.BestSpeed)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := writer.Write(raw); err != nil {
+		return nil, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	return compressed.Bytes(), nil
 }
 
 func (m *responsesModel) Generate(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.Message, error) {

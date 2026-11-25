@@ -42,6 +42,8 @@ type Service struct {
 	log   *slog.Logger
 
 	mu       sync.Mutex
+	reloadMu sync.Mutex
+	started  bool
 	queue    chan string
 	overflow map[string]struct{}
 	stop     chan struct{}
@@ -66,11 +68,22 @@ func New(st *store.Store, embed Embedder, cfg *config.Config, log *slog.Logger) 
 	}
 }
 
-// Start drains the embedding queue. Safe to call once.
+// Start backfills and drains embeddings on the owned background worker.
 func (s *Service) Start() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	select {
+	case <-s.stop:
+		return
+	default:
+	}
+	if s.started {
+		return
+	}
+	s.started = true
 	s.wg.Add(1)
+	s.inflight.Add(1)
 	go s.loop()
-	s.Reload()
 }
 
 // Stop finishes the embed already running, then drops anything still
@@ -79,8 +92,6 @@ func (s *Service) Stop() {
 	s.mu.Lock()
 	select {
 	case <-s.stop:
-		s.mu.Unlock()
-		return
 	default:
 		close(s.stop)
 	}
@@ -90,6 +101,8 @@ func (s *Service) Stop() {
 
 func (s *Service) loop() {
 	defer s.wg.Done()
+	s.Reload()
+	s.inflight.Done()
 	for {
 		s.promoteOverflow()
 		select {
@@ -125,13 +138,26 @@ func (s *Service) Remove(threadID string) {}
 // Reload reapplies the live pin: a model change drops old vectors and
 // backfills. Removing the model leaves keyword search running.
 func (s *Service) Reload() {
-	if !s.semantic() {
+	s.reloadMu.Lock()
+	defer s.reloadMu.Unlock()
+	s.mu.Lock()
+	started := s.started
+	s.mu.Unlock()
+	if !started {
+		return
+	}
+	select {
+	case <-s.stop:
+		return
+	default:
+	}
+	_, model, enabled := s.embeddingChoice()
+	if !enabled {
 		s.mu.Lock()
 		s.pin = ""
 		s.mu.Unlock()
 		return
 	}
-	_, model, _ := s.embeddingChoice()
 	s.mu.Lock()
 	changed := s.pin != model
 	s.pin = model
@@ -176,27 +202,33 @@ func (s *Service) embeddingChoice() (providerID, model string, on bool) {
 			}
 		}
 	}
-	if !s.cfg.Search.SemanticEnabled() {
+	settings, defaultProvider := s.cfg.SearchSnapshot()
+	if !settings.SemanticEnabled() {
 		return "", "", false
 	}
-	return s.providerID(), strings.TrimSpace(s.cfg.Search.EmbeddingModel), true
+	return settings.ResolveProvider(defaultProvider), strings.TrimSpace(settings.EmbeddingModel), true
 }
 
 func (s *Service) enqueue(id string) {
-	s.inflight.Add(1)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.started {
+		return
+	}
 	select {
 	case <-s.stop:
-		s.inflight.Done()
 		return
+	default:
+	}
+	s.inflight.Add(1)
+	select {
 	case s.queue <- id:
 	default:
-		s.mu.Lock()
 		if _, ok := s.overflow[id]; ok {
 			s.inflight.Done()
 		} else {
 			s.overflow[id] = struct{}{}
 		}
-		s.mu.Unlock()
 	}
 }
 
@@ -228,19 +260,6 @@ func (s *Service) abandonQueued() {
 			return
 		}
 	}
-}
-
-func (s *Service) pinModel() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.pin != "" {
-		return s.pin
-	}
-	return strings.TrimSpace(s.cfg.Search.EmbeddingModel)
-}
-
-func (s *Service) providerID() string {
-	return s.cfg.Search.ResolveProvider(s.cfg.ModelsSnapshot().Default)
 }
 
 func clampLimit(n int) int {

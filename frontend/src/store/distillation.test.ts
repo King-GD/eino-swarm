@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { api } from "@/lib/api"
 import type { DistillResult } from "@/lib/distillation"
-import { useDistillation } from "./distillation"
+import { useDistillation, useWikiBuild } from "./distillation"
+import { useKnowledge } from "./knowledge"
 
 vi.mock("@/lib/api", () => ({
   api: { startDistillation: vi.fn(), distillStatus: vi.fn() },
@@ -15,7 +16,11 @@ function deferred<T>() {
 }
 
 describe("project distillation panel state", () => {
-  beforeEach(() => useDistillation.setState({ projects: {} }))
+  beforeEach(() => {
+    useDistillation.setState({ projects: {} })
+    useWikiBuild.setState({ projects: {} })
+    useKnowledge.setState({ refreshByProject: {} })
+  })
   afterEach(() => vi.resetAllMocks())
 
   it("keeps a newer admission when an earlier panel refresh returns", async () => {
@@ -32,6 +37,22 @@ describe("project distillation panel state", () => {
     expect(useDistillation.getState().projects.two).toBeUndefined()
   })
 
+  it("keeps checkpoint counts when the other panel's older poll arrives late", async () => {
+    const old = deferred<DistillResult>()
+    const latest: DistillResult = {
+      state: "running", review_id: "saved",
+      progress: { total: 10, processed: 4, remaining: 6, skipped: 0, batches: 1 },
+    }
+    vi.mocked(api.distillStatus).mockReturnValueOnce(old.promise).mockResolvedValueOnce(latest)
+    const signal = new AbortController().signal
+    const { refresh } = useDistillation.getState()
+    const pending = refresh("one", signal)
+    await refresh("one", signal)
+    old.resolve({ ...latest, progress: { total: 10, processed: 0, remaining: 10, skipped: 0, batches: 0 } })
+    await pending
+    expect(useDistillation.getState().projects.one.result).toEqual(latest)
+  })
+
   it("shares one request across panels while admission is pending and retains the terminal receipt", async () => {
     const post = deferred<DistillResult>()
     vi.mocked(api.startDistillation).mockReturnValueOnce(post.promise)
@@ -46,5 +67,22 @@ describe("project distillation panel state", () => {
     vi.mocked(api.distillStatus).mockResolvedValueOnce(receipt)
     await refresh("one", new AbortController().signal)
     expect(useDistillation.getState().projects.one.result).toEqual(receipt)
+  })
+
+  it("refreshes the graph as soon as the local scan publishes it", async () => {
+    const scanning: DistillResult = {
+      state: "running", review_id: "scan", knowledge_enabled: true,
+      wiki_phase: "scan", wiki_scan_processed: 0,
+      progress: { total: 10, processed: 0, remaining: 10, skipped: 0, batches: 0 },
+    }
+    const ready: DistillResult = { ...scanning, wiki_phase: "graph", wiki_scan_processed: 10, wiki_scan_complete: true }
+    vi.mocked(api.startDistillation).mockResolvedValueOnce(scanning)
+    vi.mocked(api.distillStatus).mockResolvedValueOnce(ready)
+    const { refresh, start } = useWikiBuild.getState()
+    await start("one", { scope: "project" })
+    const version = useKnowledge.getState().refreshByProject.one
+    await refresh("one", new AbortController().signal)
+    expect(useWikiBuild.getState().projects.one.result).toEqual(ready)
+    expect(useKnowledge.getState().refreshByProject.one).toBe(version + 1)
   })
 })

@@ -272,6 +272,7 @@ type reviewOutcome struct {
 	Knowledge []distillChange `json:"knowledge,omitempty"`
 	Note      string          `json:"note,omitempty"`
 	Err       string          `json:"err,omitempty"`
+	failure   error
 	// Notify is how chatty this review should be in the transcript, stamped
 	// at record time so a later settings change does not rewrite history.
 	Notify       string           `json:"notify,omitempty"`
@@ -360,7 +361,7 @@ func (e *Engine) runReviewInput(threadID string, turn *store.Turn, pc *projectCo
 	}
 	memorySettings := e.cfg.Snapshot().Memory
 	deduplicateFeedback := memorySettings.ReviewDeduplicateFeedback
-	instruction := memory.ReviewPromptWithFeedback(deduplicateFeedback, pc.hasKnowledge())
+	instruction := memory.ReviewPromptWithFeedback(deduplicateFeedback, pc.hasKnowledge() && e.cfg.SwarmSnapshot().Knowledge)
 	description := "curates this project's memory after a conversation"
 	batch := &reviewBatchTool{store: pc.memory, sources: reviewEvidenceSources(sourceEvents, input.Events),
 		humanOnly: turn.Status == store.TurnError, library: pc.library, mu: &mu, outcome: &outcome,
@@ -493,6 +494,7 @@ func (e *Engine) driveReviewer(run reviewRun, mu *sync.Mutex, outcome *reviewOut
 	reviewer, err := e.reviewerModel(ctx, run)
 	if err != nil {
 		mu.Lock()
+		outcome.failure = err
 		outcome.Err = publicTurnError(err)
 		outcome.StopReason = "error"
 		mu.Unlock()
@@ -510,6 +512,7 @@ func (e *Engine) driveReviewer(run reviewRun, mu *sync.Mutex, outcome *reviewOut
 	})
 	if err != nil {
 		mu.Lock()
+		outcome.failure = err
 		outcome.Err = publicTurnError(err)
 		outcome.StopReason = "error"
 		mu.Unlock()
@@ -540,6 +543,7 @@ func (e *Engine) driveReviewer(run reviewRun, mu *sync.Mutex, outcome *reviewOut
 				break
 			}
 			mu.Lock()
+			outcome.failure = ev.Err
 			outcome.Err = publicTurnError(ev.Err)
 			outcome.StopReason = "error"
 			mu.Unlock()
@@ -678,6 +682,13 @@ func (e *Engine) applySkillFold(pc *projectContext, outcome *reviewOutcome) {
 		return
 	}
 	changes, err := pc.memory.FoldSkillFamilies()
+	for _, c := range changes {
+		outcome.Changed = true
+		outcome.Changes = append(outcome.Changes, c)
+		if c.Target == memory.ToolSkillManage {
+			outcome.Skills = append(outcome.Skills, c)
+		}
+	}
 	if err != nil {
 		if outcome.Err == "" {
 			outcome.Err = err.Error()
@@ -686,13 +697,6 @@ func (e *Engine) applySkillFold(pc *projectContext, outcome *reviewOutcome) {
 			}
 		}
 		return
-	}
-	for _, c := range changes {
-		outcome.Changed = true
-		outcome.Changes = append(outcome.Changes, c)
-		if c.Target == memory.ToolSkillManage {
-			outcome.Skills = append(outcome.Skills, c)
-		}
 	}
 }
 

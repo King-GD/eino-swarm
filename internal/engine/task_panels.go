@@ -109,7 +109,7 @@ func (e *Engine) taskPanelTools(turn *store.Turn, set *tools.Set, readOnly, plan
 	if readOnly {
 		return []tool.BaseTool{read}
 	}
-	open := makeTool("open_task_panel", "Bind an installed HTML/JS panel to this conversation. Use an exact plugin_id from read_panel_state or the available panel index; repeated opens retain existing data.", map[string]*schema.ParameterInfo{"plugin_id": {Type: schema.String, Required: true}}, func(ctx context.Context, args string) (any, error) {
+	open := makeTool("open_task_panel", "Bind an installed HTML/JS panel to this conversation. Use an exact plugin_id from read_panel_state or the available panel index; repeated opens retain existing data. A user-closed instance refuses reopening.", map[string]*schema.ParameterInfo{"plugin_id": {Type: schema.String, Required: true}}, func(ctx context.Context, args string) (any, error) {
 		var in struct {
 			PluginID string `json:"plugin_id"`
 		}
@@ -214,7 +214,9 @@ func (e *Engine) runPanelSource(ctx context.Context, turn *store.Turn, set *tool
 	if err := taskpanel.ValidateState(taskpanel.Definition{Schema: definition.InputSchema}, in.Input); err != nil {
 		return nil, err
 	}
-	if _, busy := e.panelRuns.LoadOrStore(panel.ID, true); busy {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	if _, busy := e.panelRuns.LoadOrStore(panel.ID, cancel); busy {
 		return nil, fmt.Errorf("panel source is already running")
 	}
 	defer e.panelRuns.Delete(panel.ID)
@@ -241,7 +243,13 @@ func (e *Engine) runPanelSource(ctx context.Context, turn *store.Turn, set *tool
 			e.log.Warn("could not settle interrupted panel source", "panel_id", panel.ID, "turn_id", source.TurnID, "error", cleanupErr)
 		}
 	}()
-	if _, err := e.store.StartTaskPanelSource(ctx, source, panel.ID); err != nil {
+	e.recordMu.Lock()
+	_, err = e.store.StartTaskPanelSource(ctx, source, panel.ID)
+	e.recordMu.Unlock()
+	if err != nil {
+		if cause := context.Cause(ctx); cause != nil {
+			return map[string]any{"ok": false, "error": panelSourceError(cause)}, nil
+		}
 		return nil, err
 	}
 	counter := 0
@@ -271,14 +279,37 @@ func (e *Engine) runPanelSource(ctx context.Context, turn *store.Turn, set *tool
 		_, err = e.publishTaskPanel(ctx, source, update)
 		return err
 	})
+	if runErr == nil {
+		runErr = context.Cause(ctx)
+	}
 	if runErr != nil {
 		return map[string]any{"ok": false, "summary": summary, "error": panelSourceError(runErr)}, nil
 	}
-	if _, err := e.store.FinishTaskPanelSource(ctx, source, panel.ID); err != nil {
+	e.recordMu.Lock()
+	_, err = e.store.FinishTaskPanelSource(ctx, source, panel.ID)
+	e.recordMu.Unlock()
+	if err != nil {
+		if cause := context.Cause(ctx); cause != nil {
+			return map[string]any{"ok": false, "summary": summary, "error": panelSourceError(cause)}, nil
+		}
 		return nil, err
 	}
 	finished = true
 	return map[string]any{"ok": true, "summary": summary, "panel_id": panel.ID}, nil
+}
+
+// CloseTaskPanel settles presentation before cancelling only this instance's
+// producer. The tool caller and its owning turn retain their parent context.
+func (e *Engine) CloseTaskPanel(ctx context.Context, threadID, panelID string) error {
+	e.recordMu.Lock()
+	defer e.recordMu.Unlock()
+	if err := e.store.CloseTaskPanel(ctx, threadID, panelID); err != nil {
+		return err
+	}
+	if cancel, running := e.panelRuns.Load(panelID); running {
+		cancel.(context.CancelFunc)()
+	}
+	return nil
 }
 
 func panelSourceError(err error) string {

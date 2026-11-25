@@ -9,6 +9,7 @@ same engine, so uploads, downloads and the live event stream have one implementa
 
 Projects can opt into **Nuwa collaboration**: a planner model coordinates, and an
 executor model does the workspace and external-service work. See [Nuwa](docs/NUWA.md).
+Paste an image to send it with your message to the conversation model.
 With an authorized gateway image model, ask chat to draw or type `/image`
 followed by a description. Open or save the finished image from the conversation.
 In the desktop and Web transcript, scroll up for earlier messages and open
@@ -109,7 +110,7 @@ a follow-up; ⌘Enter steers the current turn. **Stop** cancels it.
 What you get is a plan, workers in the Agents tab, a workspace in the Files tab,
 and a Trace tab with the turn id (`zwai trace <id>`). `/goal` keeps pursuing a
 standing objective. `/plan` explores and writes a plan before changing files.
-Composer, schedule, projects and memory are in [Using zwai](docs/USAGE.md). Use **Distill** in a project’s Memory or Knowledge panel to review retained history and update notes, Skills and the wiki in one run.
+Composer, schedule, projects and memory are in [Using zwai](docs/USAGE.md). Use **Distill** in a project’s Memory or Knowledge panel to update notes, Skills and the wiki in one run. In Knowledge, **Build wiki graph** extracts entities and events from retained history, shows their sources, and then fills in their pages.
 
 ## Common commands
 

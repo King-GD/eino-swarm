@@ -104,11 +104,19 @@ the protocol, binary hash, task hashes, model choices and interleaved schedule.
 The actual run freezes its own receipt. Do not run paid evaluations merely to
 validate this harness; use its offline tests or `--mock` for that purpose.
 
-The three example arms separate ordinary behavior, the Nuwa framework change,
-and an offered mixed-model configuration. All arms share the base tool
-configuration, configured model directory, per-task deadline, output cap and
-review allowance. Nuwa adds its mode-specific collaboration and model tools,
-with execution tools on workers rather than on its manager.
+The example compares two ordinary arms with identical models and budgets and
+`work_ledger` explicitly off or on. The remaining arms measure Nuwa with the
+same planner and an offered mixed-model configuration. All arms share the base
+tool configuration, model directory, per-task deadline, output cap and review
+allowance. Nuwa retains work records and mode-specific model tools, with
+execution tools on workers.
+
+A protocol arm can set the optional Boolean `work_ledger`. The runner writes
+the choice to its private candidate config before starting the engine and
+checks the Settings response. Each result records the configured and effective
+values. Omission follows the candidate's default; Nuwa's work records remain
+enabled regardless of the ordinary-mode switch. The protocol records the exact
+arms and binary used, so older observations keep their own boundaries.
 
 Each arm may provide an optional `project_instruction` string, empty by default.
 It is appended as the last part of that arm's user project instruction, after

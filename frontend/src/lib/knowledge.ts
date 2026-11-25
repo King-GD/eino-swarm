@@ -19,7 +19,7 @@ export interface KnowledgeNode {
 }
 
 export interface KnowledgeIssue {
-  kind: "broken_link" | "stale" | "missing_relation" | "invalid_page"
+  kind: "broken_link" | "stale" | "missing_relation" | "invalid_page" | "wiki_non_subject"
   page_id?: string
   target?: string
   relation?: string
@@ -38,6 +38,28 @@ export interface KnowledgePageRef {
   id: string
   title: string
   type: string
+}
+
+export interface KnowledgeGraphNode extends KnowledgePageRef {
+  aliases?: string[]
+}
+
+export interface KnowledgeGraphEdge {
+  source: string
+  target: string
+  relations?: string[]
+  wikilink?: boolean
+}
+
+export interface KnowledgeGraph {
+  nodes: KnowledgeGraphNode[]
+  edges: KnowledgeGraphEdge[]
+}
+
+export function matchKnowledgeGraphNodes(nodes: readonly KnowledgeGraphNode[], query: string) {
+  const search = query.trim().toLowerCase()
+  return nodes.filter((node) => [node.title, node.id, ...(node.aliases ?? [])]
+    .some((name) => name.toLowerCase().includes(search)))
 }
 
 export interface KnowledgeConnection {
@@ -61,6 +83,7 @@ export interface KnowledgeSource {
 
 export interface KnowledgePage extends KnowledgePageRef {
   body: string
+  wiki?: { kind: "entity" | "event"; category: string; document_pending: boolean }
   fields?: Record<string, unknown>
   as_of?: string
   updated_at?: string
@@ -71,6 +94,7 @@ export interface KnowledgePage extends KnowledgePageRef {
   mentions?: KnowledgePageRef[]
   unresolved?: string[]
   sources?: KnowledgeSource[]
+  wiki_observations?: { source: KnowledgeSource; quote: string }[]
 }
 
 

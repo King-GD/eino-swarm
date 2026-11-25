@@ -83,7 +83,11 @@ class ReadinessTests(unittest.TestCase):
         stack.enter_context(mock.patch.object(smoke, "validate_helper", return_value=dict(binary_sha256="prepared")))
         stack.enter_context(mock.patch.object(smoke.runner, "require_guest"))
         stack.enter_context(mock.patch.object(smoke, "Deadline", return_value=self.deadline))
-        stack.enter_context(mock.patch.object(smoke.time, "sleep", side_effect=self.advance))
+        # Fake the scenario's sleep without advancing its clock from a real
+        # child's subprocess wait loop.
+        clock_module = mock.Mock(wraps=smoke.time)
+        clock_module.sleep.side_effect = self.advance
+        stack.enter_context(mock.patch.object(smoke, "time", clock_module))
         return stack
 
     def advance(self, seconds):

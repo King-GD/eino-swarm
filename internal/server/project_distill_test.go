@@ -29,10 +29,20 @@ func TestProjectDistillRejectsForeignConversationAndKeepsEmptyProjectIdle(t *tes
 		"scope": "project", "thread_id": "th_missing",
 	}, http.StatusBadRequest)
 	h.json(http.MethodGet, "/api/projects/pj_missing/distill", nil, http.StatusNotFound)
+	h.json(http.MethodPost, "/api/projects/pj_missing/distill", map[string]any{"resume_review_id": "missing"}, http.StatusNotFound)
 	h.json(http.MethodPost, "/api/projects/pj_missing/distill", map[string]any{"scope": "project"}, http.StatusNotFound)
 	h.json(http.MethodPost, base+"/distill", "not an object", http.StatusBadRequest)
 	h.json(http.MethodPost, base+"/distill", map[string]any{"scope": "latest_turn"}, http.StatusBadRequest)
+	h.json(http.MethodPost, base+"/distill", map[string]any{"scope": "latest_turn", "thread_id": "th_unused", "full_text": true}, http.StatusBadRequest)
 	h.json(http.MethodPost, base+"/distill", map[string]any{"scope": "unknown"}, http.StatusBadRequest)
+	h.json(http.MethodPost, base+"/distill", map[string]any{"scope": "project", "resume_review_id": "a"}, http.StatusBadRequest)
+	h.json(http.MethodPost, base+"/distill", map[string]any{"scope": "project", "wiki_review": true}, http.StatusBadRequest)
+	h.json(http.MethodPost, base+"/distill", map[string]any{"scope": "project", "wiki_review": false}, http.StatusBadRequest)
+	h.json(http.MethodPost, base+"/distill", map[string]any{"resume_review_id": "a", "wiki_graph": true, "wiki_review": true}, http.StatusBadRequest)
+	h.json(http.MethodPost, base+"/distill", map[string]any{"pause_review_id": "a", "wiki_graph": true, "wiki_review": false}, http.StatusBadRequest)
+	h.json(http.MethodPost, base+"/distill", map[string]any{"resume_review_id": "a", "pause_review_id": "a"}, http.StatusBadRequest)
+	h.json(http.MethodPost, base+"/distill", map[string]any{"resume_review_id": "a", "full_text": true}, http.StatusBadRequest)
+	h.json(http.MethodPost, base+"/distill", map[string]any{"pause_review_id": "missing"}, http.StatusNotFound)
 	foreignID := h.newThread()
 	h.json(http.MethodPost, base+"/distill", map[string]any{"scope": "thread", "thread_id": foreignID}, http.StatusNotFound)
 	if status := h.json(http.MethodGet, base+"/knowledge", nil, http.StatusOK); status["enabled"] != false {
@@ -49,6 +59,15 @@ func TestProjectDistillRejectsForeignConversationAndKeepsEmptyProjectIdle(t *tes
 	}
 	if result := h.json(http.MethodPost, "/api/projects/"+disabled+"/distill", map[string]any{"scope": "project"}, http.StatusConflict); result["code"] != "distillation_disabled" {
 		t.Fatalf("missing actionable admission error: %v", result)
+	}
+
+	pending := store.ProjectDistillation{ProjectID: project["id"].(string), ID: "pending", State: "interrupted",
+		Receipt: []byte(`{"review_id":"pending","state":"interrupted","scope":"project","progress":{"total":1,"remaining":1}}`)}
+	if err := h.app.Store.StartProjectDistillation(t.Context(), pending); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.json(http.MethodPost, base+"/distill", map[string]any{"scope": "project"}, http.StatusConflict); got["code"] != "distillation_pending" {
+		t.Fatalf("missing saved-job conflict: %v", got)
 	}
 
 }
@@ -80,6 +99,13 @@ func TestProjectDistillOneReviewWritesNotesSkillAndKnowledgeWithRealTrace(t *tes
 	}
 	if result["review_id"] != started["review_id"] || result["state"] != "completed" {
 		t.Fatalf("review did not complete: %v", result)
+	}
+	progress, ok := result["progress"].(map[string]any)
+	if !ok || progress["processed"] != float64(1) || progress["remaining"] != float64(0) {
+		t.Fatalf("completed without the full scope: %v", result)
+	}
+	if restored := h.json(http.MethodPost, path, map[string]any{"resume_review_id": started["review_id"]}, http.StatusOK); restored["state"] != "completed" {
+		t.Fatalf("resume reopened a finished review: %v", restored)
 	}
 	if result["thread_id"] != threadID || result["turn_id"] != turn.ID {
 		t.Fatalf("wrong trace anchor: %v", result)

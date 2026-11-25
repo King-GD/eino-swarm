@@ -3,8 +3,9 @@ package app
 import (
 	"context"
 	"errors"
-	"github.com/LubyRuffy/eino-swarm/internal/engine"
 	"time"
+
+	"github.com/LubyRuffy/eino-swarm/internal/engine"
 )
 
 // Restore is owned by the serving engine. It finishes recovery before starting
@@ -37,5 +38,6 @@ func (a *App) Restore(ctx context.Context) error {
 	a.Engine.FinishRestore()
 	a.restored = true
 	a.Logger.Info("engine startup", "phase", "unfinished_runs_restored", "duration_ms", time.Since(started).Milliseconds())
+	a.Search.Start()
 	return nil
 }

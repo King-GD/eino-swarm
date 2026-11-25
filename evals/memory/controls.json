@@ -1,0 +1,328 @@
+{
+  "version": 1,
+  "kind": "synthetic-control",
+  "cutoff": "2026-11-10T00:00:00Z",
+  "cases": [
+    {
+      "id": "dream-scope-control",
+      "project_instruction": "Work only on the supplied offline fixture. Do not perform network operations.",
+      "notes": [
+        "Selected directory names are trimmed before storage."
+      ],
+      "skills": [],
+      "sources": [
+        {
+          "project_id": "control-project",
+          "thread_id": "control-history",
+          "seq": 1,
+          "kind": "human",
+          "text": "For this project, preserve selected directory names exactly, including trailing whitespace. Never redirect a deleted selection to a trimmed sibling.",
+          "observed_at": "2026-11-09T00:00:00Z"
+        }
+      ],
+      "prompt": "Create decision.json with keys preserve_trailing_whitespace and fallback_to_trimmed_sibling (both booleans) according to this project's current directory-selection policy. Verify the original project record if the policy is uncertain.",
+      "files": {},
+      "checks": [
+        {
+          "name": "selection identity",
+          "type": "json_equals",
+          "path": "decision.json",
+          "value": {
+            "preserve_trailing_whitespace": true,
+            "fallback_to_trimmed_sibling": false
+          }
+        }
+      ],
+      "timeout_s": 180
+    },
+    {
+      "id": "catalog-discovery-control",
+      "project_instruction": "Work only on the supplied offline fixture. Do not perform network operations.",
+      "notes": [],
+      "skills": [
+        {
+          "name": "archive-topic-00",
+          "description": "Use when inspecting archived topic 0.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-01",
+          "description": "Use when inspecting archived topic 1.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-02",
+          "description": "Use when inspecting archived topic 2.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-03",
+          "description": "Use when inspecting archived topic 3.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-04",
+          "description": "Use when inspecting archived topic 4.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-05",
+          "description": "Use when inspecting archived topic 5.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-06",
+          "description": "Use when inspecting archived topic 6.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-07",
+          "description": "Use when inspecting archived topic 7.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-08",
+          "description": "Use when inspecting archived topic 8.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-09",
+          "description": "Use when inspecting archived topic 9.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-10",
+          "description": "Use when inspecting archived topic 10.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-11",
+          "description": "Use when inspecting archived topic 11.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-12",
+          "description": "Use when inspecting archived topic 12.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-13",
+          "description": "Use when inspecting archived topic 13.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-14",
+          "description": "Use when inspecting archived topic 14.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-15",
+          "description": "Use when inspecting archived topic 15.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-16",
+          "description": "Use when inspecting archived topic 16.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-17",
+          "description": "Use when inspecting archived topic 17.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-18",
+          "description": "Use when inspecting archived topic 18.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-19",
+          "description": "Use when inspecting archived topic 19.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-20",
+          "description": "Use when inspecting archived topic 20.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-21",
+          "description": "Use when inspecting archived topic 21.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-22",
+          "description": "Use when inspecting archived topic 22.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-23",
+          "description": "Use when inspecting archived topic 23.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-24",
+          "description": "Use when inspecting archived topic 24.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-25",
+          "description": "Use when inspecting archived topic 25.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-26",
+          "description": "Use when inspecting archived topic 26.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-27",
+          "description": "Use when inspecting archived topic 27.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-28",
+          "description": "Use when inspecting archived topic 28.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-29",
+          "description": "Use when inspecting archived topic 29.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-30",
+          "description": "Use when inspecting archived topic 30.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-31",
+          "description": "Use when inspecting archived topic 31.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-32",
+          "description": "Use when inspecting archived topic 32.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-33",
+          "description": "Use when inspecting archived topic 33.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-34",
+          "description": "Use when inspecting archived topic 34.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-35",
+          "description": "Use when inspecting archived topic 35.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-36",
+          "description": "Use when inspecting archived topic 36.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-37",
+          "description": "Use when inspecting archived topic 37.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-38",
+          "description": "Use when inspecting archived topic 38.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-39",
+          "description": "Use when inspecting archived topic 39.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-40",
+          "description": "Use when inspecting archived topic 40.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-41",
+          "description": "Use when inspecting archived topic 41.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-42",
+          "description": "Use when inspecting archived topic 42.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-43",
+          "description": "Use when inspecting archived topic 43.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-44",
+          "description": "Use when inspecting archived topic 44.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-45",
+          "description": "Use when inspecting archived topic 45.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-46",
+          "description": "Use when inspecting archived topic 46.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-47",
+          "description": "Use when inspecting archived topic 47.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-48",
+          "description": "Use when inspecting archived topic 48.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "archive-topic-49",
+          "description": "Use when inspecting archived topic 49.",
+          "body": "Read the matching archived source and verify its current applicability."
+        },
+        {
+          "name": "z-incident-format",
+          "description": "Use when producing incident reports from operational notes.",
+          "body": "Write report.json with format set to ir-3, impacted_service from the notes, and duration_minutes computed from the outage interval."
+        }
+      ],
+      "sources": [
+        {
+          "project_id": "control-project",
+          "thread_id": "control-format-history",
+          "seq": 1,
+          "kind": "human",
+          "text": "For incident reports follow the recorded house procedure.",
+          "observed_at": "2026-11-09T00:00:00Z"
+        }
+      ],
+      "prompt": "Produce the project-standard incident report from notes.txt.",
+      "files": {
+        "notes.txt": "The billing service was unavailable from 14:05 UTC to 14:23 UTC.\n"
+      },
+      "checks": [
+        {
+          "name": "correct report data",
+          "type": "json_equals",
+          "path": "report.json",
+          "value": {
+            "format": "ir-3",
+            "impacted_service": "billing",
+            "duration_minutes": 18
+          }
+        }
+      ],
+      "timeout_s": 240
+    }
+  ]
+}

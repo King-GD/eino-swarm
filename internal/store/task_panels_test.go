@@ -22,7 +22,12 @@ type panelFixture struct {
 
 func newPanelFixture(t *testing.T) panelFixture {
 	t.Helper()
-	f := panelFixture{s: open(t), thread: Thread{Title: "panel source"}, def: taskpanel.Definition{ID: "chart", Version: "1", Name: "Chart", Entry: "chart/index.html", Schema: json.RawMessage(`{"type":"object","properties":{"count":{"type":"integer"}}}`), InitialState: json.RawMessage(`{"count":0}`)}}
+	return panelFixtureForStore(t, open(t))
+}
+
+func panelFixtureForStore(t *testing.T, s *Store) panelFixture {
+	t.Helper()
+	f := panelFixture{s: s, thread: Thread{Title: "panel source"}, def: taskpanel.Definition{ID: "chart", Version: "1", Name: "Chart", Entry: "chart/index.html", Schema: json.RawMessage(`{"type":"object","properties":{"count":{"type":"integer"}}}`), InitialState: json.RawMessage(`{"count":0}`)}}
 	if err := f.s.CreateThread(&f.thread); err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +97,7 @@ func TestTaskPanelReplayAndDuplicateKeepOriginalReceipt(t *testing.T) {
 		t.Fatal("state alias")
 	}
 	changes, e := f.s.TaskPanelChanges(t.Context(), f.thread.ID, 0)
-	if e != nil || len(changes) != 3 || changes[0].Kind != "snapshot" || changes[2].Kind != "patch" {
+	if e != nil || len(changes) != 2 || changes[0].Kind != "patch" || changes[1].Kind != "patch" {
 		t.Fatalf("changes=%v %v", changes, e)
 	}
 	c, e := f.s.TaskPanelCursor(t.Context(), f.thread.ID)
@@ -266,7 +271,7 @@ func TestTaskPanelPublicationFailureRollsBackStateAndDelivery(t *testing.T) {
 		t.Fatal(got, e)
 	}
 	changes, e := f.s.TaskPanelChanges(t.Context(), f.thread.ID, 0)
-	if e != nil || len(changes) != 1 {
+	if e != nil || len(changes) != 0 {
 		t.Fatal(changes, e)
 	}
 }

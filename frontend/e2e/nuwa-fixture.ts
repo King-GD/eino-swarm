@@ -11,7 +11,7 @@ type NodeReceipt = { ok: boolean; node: { id: string; version: number } }
 
 /** Real model HTTP → Registry tool → durable project nodes → snapshot/SSE.
  * This is protocol evidence, not a measurement of autonomous model reasoning. */
-export async function startNuwaFixture(mode?: "discussion" | "published") {
+export async function startNuwaFixture(mode?: "discussion" | "published" | "ordinary" | "legacy") {
   const errors: string[] = []
   const workerModels: string[] = []
   let taskNode: { id: string; version: number } | undefined
@@ -22,7 +22,7 @@ export async function startNuwaFixture(mode?: "discussion" | "published") {
   const taskGate = new Promise<void>((resolve) => {
     releaseTask = resolve
   })
-  let revision: { id: string; version: number } | undefined
+  let revision: { id: string; version: number; status?: string } | undefined
   const reply = (response: ServerResponse, input: Input, delta: object, finish = "stop") => {
     response.writeHead(200, {
       "Content-Type": input.stream ? "text/event-stream" : "application/json",
@@ -50,7 +50,12 @@ export async function startNuwaFixture(mode?: "discussion" | "published") {
             index: 0,
             id,
             type: "function",
-            function: { name, arguments: JSON.stringify(args) },
+            function: {
+              name,
+              arguments: JSON.stringify(name === "record_work" && mode !== "ordinary" && !("id" in args) && !("scope" in args)
+                ? { ...args, scope: "project" }
+                : args),
+            },
           },
         ],
       },
@@ -75,9 +80,27 @@ export async function startNuwaFixture(mode?: "discussion" | "published") {
           reply(response, input, { role: "assistant", content: JSON.stringify({ claims: [] }) })
           return
         }
+        if (mode === "legacy") {
+          if (input.tools?.some((tool) => tool.function.name === "record_work"))
+            throw new Error("Work tool appeared while creating legacy history")
+          const context = input.messages.map((message) => message.content ?? "").join("\n")
+          if (input.messages[0]?.content?.startsWith("Extract durable work records")) {
+            if (!context.includes("Historical inspection") || input.tools?.length)
+              throw new Error("Wrong legacy extraction input")
+            const source = context.match(/\[seq=(\d+) kind=user/)
+            if (!source) throw new Error("Historical source was not offered")
+            reply(response, input, { role: "assistant", content: JSON.stringify({ records: [{
+              key: "inspection", kind: "fact", title: "Distilled inspection", status: "reported",
+              summary: "The saved inspection identified a durable finding.", evidence: [Number(source[1])],
+            }] }) })
+          } else {
+            reply(response, input, { role: "assistant", content: "Historical inspection found a durable observation." })
+          }
+          return
+        }
         if (!input.tools?.some((tool) => tool.function.name === "record_work"))
           throw new Error("record_work absent at real model boundary")
-        if (input.model === "nuwa-fixture") {
+        if (input.model === "nuwa-fixture" && mode !== "ordinary") {
           const executionTools = new Set([
             "read", "write", "edit", "ls", "tree", "glob", "grep", "exec",
             "web_search", "web_fetch", "python_runner", "screenshot",
@@ -86,7 +109,7 @@ export async function startNuwaFixture(mode?: "discussion" | "published") {
             if (executionTools.has(tool.function.name) || tool.function.name.startsWith("mcp_"))
               throw new Error(`Nuwa manager gained an execution tool: ${tool.function.name}`)
           }
-        } else if (input.model !== "nuwa-worker") {
+        } else if (input.model !== "nuwa-fixture" && input.model !== "nuwa-worker") {
           throw new Error(`Unexpected Nuwa fixture model: ${input.model}`)
         }
         if (mode === "discussion") {
@@ -105,11 +128,30 @@ export async function startNuwaFixture(mode?: "discussion" | "published") {
             throw new Error(`Node write refused: ${message.content}`)
           return receipt.node
         }
+        if (mode === "ordinary") {
+          if (!input.tools.some((tool) => tool.function.name === "read_work") ||
+              !input.tools.some((tool) => tool.function.name === "read") ||
+              input.tools.some((tool) => tool.function.name === "list_models")) {
+            throw new Error("An ordinary manager did not receive the ordinary execution and work surfaces")
+          }
+          const callID = `ordinary-fact-${revision?.version ?? 0}`
+          if (!result(callID)) {
+            call(response, input, callID, revision?.status ? {
+              id: revision.id, version: revision.version, status: revision.status,
+              summary: revision.status === "retracted" ? "The new evidence refutes it." : "The follow-up supports it.",
+            } : {
+              kind: "fact", title: "Bounded observation", summary: "An evidence-based observation", status: "reported",
+            })
+            return
+          }
+          reply(response, input, { role: "assistant", content: "The work record is saved." })
+          return
+        }
         if (input.model === "nuwa-worker") {
           workerModels.push(input.model)
           if (!input.tools.some((tool) => tool.function.name === "write"))
             throw new Error("Worker lost its write tool at the real model boundary")
-          if (!taskNode && mode !== "published")
+          if (!taskNode)
             throw new Error("Worker started before its shared task")
           const reviewWritten = input.messages.findLast(
             (message) => message.role === "tool" && message.tool_call_id === "nuwa-worker-review-write"
@@ -136,13 +178,23 @@ export async function startNuwaFixture(mode?: "discussion" | "published") {
             }
             if (!written.content?.startsWith("Updated file "))
               throw new Error(`Worker artifact write failed: ${written.content}`)
+            const fact = result("nuwa-published-fact")
+            if (!fact) {
+              call(response, input, "nuwa-published-fact", {
+                kind: "fact", title: "The review files were written", depends_on: [taskNode.id],
+                own_tool_call_ids: ["nuwa-worker-review-write", "nuwa-worker-write"],
+              })
+              return
+            }
+            workerFact = fact
             if (!result("nuwa-worker-artifact")) {
               call(response, input, "nuwa-worker-artifact", {
                 kind: "artifact",
+                scope: "thread",
                 title: "Field observations",
                 summary: "Independent observations ready for review",
                 status: "reported",
-                depends_on: [],
+                depends_on: [fact.id],
                 artifact_path: "field-observations.md",
               })
               return
@@ -150,7 +202,6 @@ export async function startNuwaFixture(mode?: "discussion" | "published") {
             reply(response, input, { role: "assistant", content: "Field observations published." })
             return
           }
-          if (!taskNode) throw new Error("Worker started before its shared task")
           const fact = result("nuwa-fact")
           if (!fact) {
             call(response, input, "nuwa-fact", {
@@ -191,7 +242,7 @@ export async function startNuwaFixture(mode?: "discussion" | "published") {
           return
         }
         const task = result("nuwa-task")
-        if (!task && mode !== "published") {
+        if (!task) {
           call(response, input, "nuwa-task", {
             kind: "task",
             title: "Compare the evidence",
@@ -226,9 +277,7 @@ export async function startNuwaFixture(mode?: "discussion" | "published") {
             "nuwa-spawn",
             {
               role: "independent-review",
-              task: task
-                ? `Review the supplied evidence for shared task ${task.id}; write review-notes.md, record the bounded observation and cite its source.`
-                : "Write review-notes.md and field-observations.md, then publish the independent field observations as a shared artifact.",
+              task: `Review the supplied evidence for task ${task.id}; write review-notes.md, record the bounded observation and cite its source.`,
             },
             "spawn_agent"
           )
@@ -253,12 +302,9 @@ export async function startNuwaFixture(mode?: "discussion" | "published") {
         const settled = JSON.parse(waited.content ?? "{}") as {
           agents?: { agent_id: string; status: string }[]
         }
-        if (
-          !settled.agents?.some(
-            (agent) => agent.agent_id === started.agent_id && agent.status === "done"
-          ) ||
-          (mode !== "published" && !workerFact)
-        )
+        if (!settled.agents?.some(
+          (agent) => agent.agent_id === started.agent_id && agent.status === "done"
+        ) || !workerFact)
           throw new Error(`Actual worker result was not collected: ${waited.content}`)
         const fact = workerFact
         if (!result("nuwa-artifact")) {
@@ -267,7 +313,7 @@ export async function startNuwaFixture(mode?: "discussion" | "published") {
             title: "Review notes",
             summary: "A result ready for independent review",
             status: "reported",
-            depends_on: fact ? [fact.id] : [],
+            depends_on: [fact.id],
             artifact_path: "review-notes.md",
             detail: "# Review notes\n\nThe conclusion is limited to the measured input.",
           })
@@ -312,7 +358,7 @@ export async function startNuwaFixture(mode?: "discussion" | "published") {
       sourceTurn = turn
     },
     releaseTask,
-    revise: (node: { id: string; version: number }) => {
+    revise: (node: { id: string; version: number; status?: string }) => {
       revision = node
     },
     close: () =>

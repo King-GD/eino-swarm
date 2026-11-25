@@ -2,12 +2,12 @@ import { act, render, screen, within } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { RightPanel } from "./panel"
 import { emptyTranscript } from "@/lib/transcript"
-import type { Project } from "@/lib/types"
+import type { Meta, Project } from "@/lib/types"
 import { useTaskPanels } from "@/store/task-panels"
 import type { TaskPanel } from "@/task-panels/types"
 
 vi.mock("./nuwa-panel", () => ({
-  NuwaPanel: ({ project }: { project: Project }) => <p>Recorded project work: {project.id}</p>,
+  NuwaPanel: ({ project, threadId }: { project?: Project; threadId?: string }) => <p>Recorded project work: {project?.id ?? threadId}</p>,
 }))
 vi.mock("./task-panel-frame", () => ({
   TaskPanelFrame: ({ panel, visible }: { panel: TaskPanel; visible: boolean }) => (
@@ -34,15 +34,21 @@ const props = {
 }
 
 describe("Project collaboration mode", () => {
-  it("keeps ordinary projects on the existing Agents view", () => {
-    render(<RightPanel {...props} nuwaProject={project} />)
-    expect(screen.queryByRole("tab", { name: "Collaboration" })).toBeNull()
+  it("offers work records in an ordinary project and respects the global off switch", () => {
+    const knowledge = { project, onOpenThread: vi.fn(), onTrace: vi.fn() }
+    const view = render(<RightPanel {...props} nuwaProject={project} knowledge={knowledge} />)
+    expect(screen.getByRole("tab", { name: "Work records" })).toHaveAttribute("data-scope", "project")
+    expect(screen.getByRole("tab", { name: "Knowledge" })).toHaveAttribute("data-scope", "project")
+    view.rerender(<RightPanel {...props} nuwaProject={{ ...project, nuwa_enabled: true }} knowledge={knowledge}
+      meta={{ swarm: { work_ledger: false, knowledge: false } } as Meta} />)
+    expect(screen.queryByRole("tab", { name: "Work records" })).toBeNull()
+    expect(screen.queryByRole("tab", { name: "Knowledge" })).toBeNull()
     expect(screen.getByRole("tab", { name: "Agents" })).toHaveAttribute("data-state", "active")
   })
 
   it("keeps recorded collaboration reachable after the mode is turned off", () => {
     render(<RightPanel {...props} nuwaProject={{ ...project, nuwa_enabled: false, nuwa_revision: 2 }} />)
-    expect(screen.getByRole("tab", { name: "Collaboration" })).toHaveAttribute("data-state", "active")
+    expect(screen.getByRole("tab", { name: "Work records" })).toHaveAttribute("data-state", "active")
     expect(screen.getByText("Recorded project work: p")).toBeInTheDocument()
   })
 
@@ -52,10 +58,9 @@ describe("Project collaboration mode", () => {
     const onTabChange = vi.fn()
     const enabled = { ...project, nuwa_enabled: true }
     const view = render(<RightPanel {...props} onTabChange={onTabChange} tab="task-panels" threadId="first" nuwaProject={enabled} />)
-    const taskTabs = within(screen.getByRole("group", { name: "Task" }))
-    const projectTabs = within(screen.getByRole("group", { name: enabled.name }))
+    const taskTabs = within(screen.getByRole("tablist"))
     expect(taskTabs.getByRole("tab", { name: "Task panels" })).toHaveAttribute("aria-selected", "true")
-    expect(projectTabs.getByRole("tab", { name: "Collaboration" })).toHaveAttribute("aria-selected", "false")
+    expect(taskTabs.getByRole("tab", { name: "Work records" })).toHaveAttribute("aria-selected", "false")
     const frame = screen.getByTestId("registered-frame")
     expect(frame).toHaveTextContent(progress.id)
     expect(screen.queryByText(foreign.id)).toBeNull()
@@ -82,7 +87,7 @@ describe("Project collaboration mode", () => {
     const onTabChange = vi.fn()
     const view = render(<RightPanel {...props} onTabChange={onTabChange} tab="agents" nuwaProject={project} />)
     view.rerender(<RightPanel {...props} onTabChange={onTabChange} tab="agents" nuwaProject={{ ...project, nuwa_enabled: true }} />)
-    expect(screen.getByRole("tab", { name: "Collaboration" })).toBeVisible()
+    expect(screen.getByRole("tab", { name: "Work records" })).toBeVisible()
     expect(screen.getByRole("tab", { name: "Agents" })).toHaveAttribute("aria-selected", "true")
     expect(screen.queryByText(/Recorded project work/)).toBeNull()
     expect(onTabChange).not.toHaveBeenCalled()
@@ -90,7 +95,14 @@ describe("Project collaboration mode", () => {
     view.rerender(<RightPanel {...props} onTabChange={onTabChange} nuwaProject={{ ...project, id: "other", nuwa_revision: 2 }} />)
     expect(screen.getByText("Recorded project work: other")).toBeVisible()
     view.rerender(<RightPanel {...props} onTabChange={onTabChange} threadId="standalone" />)
-    expect(screen.queryByRole("tab", { name: "Collaboration" })).toBeNull()
-    expect(screen.queryByText(/Recorded project work/)).toBeNull()
+    expect(screen.getByRole("tab", { name: "Work records" })).toHaveAttribute("aria-selected", "true")
+    expect(screen.getByText("Recorded project work: standalone")).toBeVisible()
+  })
+
+  it("offers work records in a standalone conversation without selecting the tab", () => {
+    const onTabChange = vi.fn()
+    render(<RightPanel {...props} onTabChange={onTabChange} tab="agents" threadId="standalone" />)
+    expect(screen.getByRole("tab", { name: "Work records" })).toHaveAttribute("aria-selected", "false")
+    expect(onTabChange).not.toHaveBeenCalled()
   })
 })

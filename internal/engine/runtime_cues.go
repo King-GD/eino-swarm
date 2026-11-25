@@ -58,7 +58,7 @@ func legacyRuntimeCue(text string) bool {
 	switch text {
 	case GoalContinueText(), legacyGoalContinueCue, workerCollectionCorrectionCue, modelRetryCue, reasoningOutputRecoveryCue,
 		resumeCue, resumeWorkersCue, parkedWorkersCue, scheduleCompletionCue,
-		scheduleAnswerCorrectionCue, goalSessionWrapSteer(), "[steer] " + goalSessionWrapSteer():
+		scheduleAnswerCorrectionCue, legacyScheduleAnswerCorrectionCue, goalSessionWrapSteer(), "[steer] " + goalSessionWrapSteer():
 		return true
 	}
 	if suffix, ok := strings.CutPrefix(text, workerCollectionCorrectionCue+"\nUncollected worker IDs: "); ok {

@@ -97,6 +97,18 @@ func TestPublicTurnErrorNamesTheModelService(t *testing.T) {
 	}
 }
 
+func TestModelResponseReadTimeoutKeepsItsRetryAndPublicCause(t *testing.T) {
+	err := fmt.Errorf("failed to receive stream chunk: %w", &provider.StreamReadTimeoutError{
+		Cause: errors.New("read tcp 192.0.2.1:1->192.0.2.2:443: read: operation timed out"),
+	})
+	if !isRetryableModelError(err) || modelFailureClass(err) != "model_read_timeout" {
+		t.Fatalf("body read timeout lost its retry category: %v", err)
+	}
+	if got := publicTurnError(err); got != "model response read timed out" {
+		t.Fatalf("unexpected public read timeout: %q", got)
+	}
+}
+
 func TestPublicTurnErrorRewritesTheIterationCap(t *testing.T) {
 	err := fmt.Errorf("[NodeRunError] run node[ChatModel] pre processor fail: exceeds max iterations\n------------------------\nnode path: [ChatModel]")
 	got := publicTurnError(err)

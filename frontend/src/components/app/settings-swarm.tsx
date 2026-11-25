@@ -97,6 +97,28 @@ export function SwarmTab({
             aria-label={t("settings.swarm.predictions")}
           />
         </Field>
+        <Field
+          query={query}
+          label={t("settings.swarm.workLedger")}
+          hint={t("settings.swarm.workLedgerHint")}
+        >
+          <Switch
+            checked={settings.swarm.work_ledger !== false}
+            onCheckedChange={(work_ledger) => update({ work_ledger })}
+            aria-label={t("settings.swarm.workLedger")}
+          />
+        </Field>
+        <Field
+          query={query}
+          label={t("settings.swarm.knowledge")}
+          hint={t("settings.swarm.knowledgeHint")}
+        >
+          <Switch
+            checked={settings.swarm.knowledge !== false}
+            onCheckedChange={(knowledge) => update({ knowledge })}
+            aria-label={t("settings.swarm.knowledge")}
+          />
+        </Field>
       </SettingsSection>
 
       <SettingsSection title={t("settings.swarm.subagents")}>

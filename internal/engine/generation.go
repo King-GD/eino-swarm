@@ -133,7 +133,9 @@ func (a *accumulator) generation(n swarm.Notification) {
 				}
 			}
 		}
-		if n.Err != nil && body.Reason == "model_error" {
+		if body.Reason == "model_error" && isModelRequestBlocked(n.Err) {
+			body.Reason, body.Detail = modelRequestBlocked, ""
+		} else if n.Err != nil && body.Reason == "model_error" {
 			detail := strings.Join(strings.Fields(publicTurnError(n.Err)), " ")
 			detail = publicAPIBearer.ReplaceAllString(detail, "[redacted]")
 			detail = publicAPICredentials.ReplaceAllString(detail, "[redacted]")
@@ -197,6 +199,11 @@ func (e *Engine) stopOrphanedGenerations(threadID string, human bool, snapshots 
 	if log == nil {
 		return
 	}
+	e.settleOrphanedGenerationLog(log, human, snapshots...)
+}
+
+func (e *Engine) settleOrphanedGenerationLog(log *generationLog, human bool, snapshots ...*restoreSnapshot) bool {
+	saved := true
 	for _, origin := range log.open {
 		body := e.generationExitCause(origin, "none", true, snapshots...)
 		if human {
@@ -206,6 +213,8 @@ func (e *Engine) stopOrphanedGenerations(threadID string, human bool, snapshots 
 		origin.Kind, origin.Text = "generation_interrupted", generationBody(body)
 		if e.recordGeneration(&origin) {
 			log.apply(origin)
+		} else {
+			saved = false
 		}
 	}
 	for _, pending := range log.pending {
@@ -218,8 +227,11 @@ func (e *Engine) stopOrphanedGenerations(threadID string, human bool, snapshots 
 		pending.Text = generationBody(body)
 		if e.recordGeneration(&pending) {
 			log.apply(pending)
+		} else {
+			saved = false
 		}
 	}
+	return saved
 }
 
 func (e *Engine) generationExitCause(origin store.Event, recovery string, handoff bool, snapshots ...*restoreSnapshot) swarm.GenerationInterruption {

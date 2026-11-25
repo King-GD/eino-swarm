@@ -13,6 +13,9 @@ import (
 // that keeps spawning verifiers is refused before the next worker exists.
 func (e *Engine) nuwaVerifyAdmission(turn *store.Turn) func(context.Context, string, string, string) error {
 	return func(ctx context.Context, intent, target, callID string) error {
+		if !e.cfg.SwarmSnapshot().WorkLedger {
+			return ErrWorkDisabled
+		}
 		if turn == nil || turn.ProjectID == "" {
 			return fmt.Errorf("spawn_agent: verification has no project")
 		}
@@ -40,7 +43,7 @@ func (e *Engine) nuwaVerifyAdmission(turn *store.Turn) func(context.Context, str
 			return fmt.Errorf("spawn_agent: this tool call was already used for a different verification target")
 		}
 		if errors.Is(err, store.ErrNotFound) || errors.Is(err, store.ErrInvalidNuwaNode) {
-			return fmt.Errorf("spawn_agent: target must be an existing shared record id from record_work or read_work")
+			return fmt.Errorf("spawn_agent: target must be an existing shared record visible in this turn; use an id from record_work or read_work")
 		}
 		return fmt.Errorf("spawn_agent: verification budget could not be recorded")
 	}

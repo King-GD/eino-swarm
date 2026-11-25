@@ -41,6 +41,9 @@ const (
 	OpProjectGet          = "project_get"
 	OpProjectCreate       = "project_create"
 	OpProjectUpdate       = "project_update"
+	OpProjectKnowledge    = "project_knowledge"
+	OpKnowledgePage       = "project_knowledge_page"
+	OpKnowledgeCancel     = "project_knowledge_cancel"
 	OpCatalog             = "catalog"
 	OpRefreshCatalog      = "refresh_catalog"
 	OpGetTimeouts         = "get_timeouts"
@@ -55,9 +58,11 @@ const (
 	OpFiles               = "files"
 	OpFileChunk           = "file_chunk"
 	OpGeneratedImageChunk = "generated_image_chunk"
+	OpThreadWork          = "thread_work"
 	OpTaskPanels          = "task_panels"
 	OpTaskPanelRead       = "task_panel_read"
 	OpTaskPanelCancel     = "task_panel_cancel"
+	OpTaskPanelClose      = "task_panel_close"
 	OpTranslateSelection  = "translate_selection"
 	OpCancelTranslation   = "cancel_translation"
 	OpRefreshCapabilities = "refresh_capabilities"
@@ -152,9 +157,11 @@ type Request struct {
 	FileScope string `json:"file_scope,omitempty"`
 	FileRoot  string `json:"file_root,omitempty"`
 
-	PanelID           string `json:"panel_id,omitempty"`
-	PanelBaseRevision *int64 `json:"base_revision,omitempty"`
-	PanelTransferID   string `json:"transfer_id,omitempty"`
+	PanelID             string `json:"panel_id,omitempty"`
+	PanelBaseRevision   *int64 `json:"base_revision,omitempty"`
+	PanelTransferID     string `json:"transfer_id,omitempty"`
+	KnowledgePageID     string `json:"knowledge_page_id,omitempty"`
+	KnowledgeTransferID string `json:"knowledge_transfer_id,omitempty"`
 
 	ProjectPatch    json.RawMessage `json:"project_patch,omitempty"`
 	TimeoutSettings json.RawMessage `json:"timeout_settings,omitempty"`
@@ -207,6 +214,7 @@ type Response struct {
 	Models                []ModelView                `json:"models,omitempty"`
 	ReasoningLevels       []string                   `json:"reasoning_levels,omitempty"`
 	WebExecutionSupported bool                       `json:"web_execution_supported,omitempty"`
+	WorkRecordsAvailable  bool                       `json:"work_records_available,omitempty"`
 	Put                   *PutView                   `json:"put,omitempty"`
 	Groups                []ThreadGroup              `json:"groups,omitempty"`
 	Followups             *[]FollowupView            `json:"followups,omitempty"`
@@ -216,7 +224,10 @@ type Response struct {
 	FileView              *engine.WorkspaceView      `json:"file_view,omitempty"`
 	FileChunk             *FileChunkView             `json:"file_chunk,omitempty"`
 	TaskPanels            *[]store.TaskPanelManifest `json:"task_panels,omitempty"`
+	WorkSnapshot          *store.WorkSnapshot        `json:"work_snapshot,omitempty"`
 	PanelTransfer         *PanelTransferView         `json:"panel_transfer,omitempty"`
+	Knowledge             *KnowledgeListView         `json:"knowledge,omitempty"`
+	KnowledgeChunk        *KnowledgeChunkView        `json:"knowledge_chunk,omitempty"`
 
 	Project             *ProjectSettings          `json:"project,omitempty"`
 	ComposerPredictions *bool                     `json:"composer_predictions,omitempty"`
@@ -398,6 +409,7 @@ type ThreadDetail struct {
 	Unread          bool         `json:"unread"`
 	CompletedSeq    int64        `json:"completed_seq"`
 	ID              string       `json:"id"`
+	ProjectID       string       `json:"project_id,omitempty"`
 	Title           string       `json:"title"`
 	Goal            string       `json:"goal,omitempty"`
 	GoalOn          bool         `json:"goal_on,omitempty"`

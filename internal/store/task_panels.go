@@ -23,6 +23,7 @@ type TaskPanelRow struct {
 	State          []byte
 	SourceJSON     []byte
 	Hidden         bool
+	Closed         bool `gorm:"not null;default:false"`
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }
@@ -31,7 +32,8 @@ type TaskPanelRow struct {
 type TaskPanelMutation struct {
 	SourceStatus string
 	ID           int64  `gorm:"primaryKey;autoIncrement"`
-	PanelID      string `gorm:"uniqueIndex:idx_panel_operation,priority:1;index;size:64"`
+	PanelID      string `gorm:"uniqueIndex:idx_panel_operation,priority:1;index;index:idx_panel_observation,priority:2;size:64"`
+	Observation  bool   `gorm:"index:idx_panel_observation,priority:1"`
 	OperationID  string `gorm:"uniqueIndex:idx_panel_operation,priority:2;size:128"`
 	ThreadID     string `gorm:"index;size:64"`
 	TurnID       string `gorm:"index;size:64"`
@@ -106,6 +108,9 @@ func (s *Store) OpenTaskPanel(ctx context.Context, d taskpanel.Definition, src t
 		}
 		var row TaskPanelRow
 		found := tx.Where("thread_id = ? AND plugin_id = ?", src.ThreadID, d.ID).Take(&row).Error
+		if found == nil && row.Closed {
+			return fmt.Errorf("%w: panel instance was closed by the user", taskpanel.ErrConflict)
+		}
 		if found == nil && !row.Hidden {
 			out, err = panelValue(row)
 			return err
@@ -141,19 +146,26 @@ func (s *Store) OpenTaskPanel(ctx context.Context, d taskpanel.Definition, src t
 		if err = tx.Create(&mutation).Error; err != nil {
 			return err
 		}
-		if err = appendPanelChange(tx, row, u); err != nil {
-			return err
-		}
 		out, err = panelValue(row)
 		return err
 	})
 	return
 }
 
-// TaskPanel loads only a visible instance owned by this conversation.
+// TaskPanel loads an instance for runtime tools, including its initial state
+// before anything has been published to the presentation clients.
 func (s *Store) TaskPanel(ctx context.Context, threadID, panelID string) (taskpanel.Panel, error) {
+	return readTaskPanelRow(s.db.WithContext(ctx).Where("hidden = ? AND closed = ?", false, false), threadID, panelID)
+}
+
+// VisibleTaskPanel loads one instance using the same admission as the manifest.
+func (s *Store) VisibleTaskPanel(ctx context.Context, threadID, panelID string) (taskpanel.Panel, error) {
+	return readTaskPanelRow(s.db.WithContext(ctx).Where(taskPanelVisibleSQL), threadID, panelID)
+}
+
+func readTaskPanelRow(query *gorm.DB, threadID, panelID string) (taskpanel.Panel, error) {
 	var row TaskPanelRow
-	err := s.db.WithContext(ctx).Where("id = ? AND thread_id = ? AND hidden = ?", panelID, threadID, false).Take(&row).Error
+	err := query.Where("id = ? AND thread_id = ?", panelID, threadID).Take(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return taskpanel.Panel{}, ErrNotFound
 	}
@@ -163,14 +175,19 @@ func (s *Store) TaskPanel(ctx context.Context, threadID, panelID string) (taskpa
 	return panelValue(row)
 }
 
-// TaskPanels returns this conversation's visible instances in creation order.
+// TaskPanels lists runtime bindings, including an opened instance awaiting
+// its first publication. Human-closed and rewound bindings are excluded.
 func (s *Store) TaskPanels(ctx context.Context, threadID string) ([]taskpanel.Panel, error) {
-	panels, _, err := s.SnapshotTaskPanels(ctx, threadID)
+	panels, _, err := s.snapshotTaskPanels(ctx, threadID, "hidden = false AND closed = false")
 	return panels, err
 }
 
-// SnapshotTaskPanels atomically reads instances and their independent stream cursor.
-func (s *Store) SnapshotTaskPanels(ctx context.Context, threadID string) (panels []taskpanel.Panel, cursor int64, err error) {
+// SnapshotTaskPanels atomically reads visible instances and their stream cursor.
+func (s *Store) SnapshotTaskPanels(ctx context.Context, threadID string) ([]taskpanel.Panel, int64, error) {
+	return s.snapshotTaskPanels(ctx, threadID, taskPanelVisibleSQL)
+}
+
+func (s *Store) snapshotTaskPanels(ctx context.Context, threadID, scope string) (panels []taskpanel.Panel, cursor int64, err error) {
 	panels = []taskpanel.Panel{}
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var n int64
@@ -181,7 +198,7 @@ func (s *Store) SnapshotTaskPanels(ctx context.Context, threadID string) (panels
 			return ErrNotFound
 		}
 		var rows []TaskPanelRow
-		if err := tx.Where("thread_id = ? AND hidden = ?", threadID, false).Order("created_at, id").Find(&rows).Error; err != nil {
+		if err := tx.Where("thread_id = ?", threadID).Where(scope).Order("created_at, id").Find(&rows).Error; err != nil {
 			return err
 		}
 		for _, row := range rows {

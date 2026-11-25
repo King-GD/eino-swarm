@@ -37,7 +37,7 @@ func nuwaValidationSource(t *testing.T, e *Engine, name string) (*store.Project,
 	if err != nil {
 		t.Fatal(err)
 	}
-	turn := &store.Turn{ThreadID: thread.ID, UserText: "Inspect the current validation evidence", ProviderID: thread.ProviderID, Model: thread.Model, NuwaEnabled: true}
+	turn := &store.Turn{ThreadID: thread.ID, ProjectID: project.ID, UserText: "Inspect the current validation evidence", ProviderID: thread.ProviderID, Model: thread.Model, NuwaEnabled: true}
 	if err := e.store.CreateTurn(turn); err != nil {
 		t.Fatal(err)
 	}
@@ -109,6 +109,7 @@ func TestNuwaValidationReadWorkIsScopedPagedAndBounded(t *testing.T) {
 	other, foreignThread, foreignTurn := nuwaValidationSource(t, e, "Unrelated project")
 	foreign := nuwaValidationNode(t, e, other, foreignThread, foreignTurn, "Foreign source", "do not disclose")
 	detail := strings.Repeat("原始观察保留数字42与否定条件，不可省略。", 100)
+	owner := withHistoryReadOwner(t.Context(), thread.ID, turn.ID)
 	first := nuwaValidationNode(t, e, project, thread, turn, "First observation", detail)
 	second := nuwaValidationNode(t, e, project, thread, turn, "Second observation", "separate detail")
 	type index struct {
@@ -118,22 +119,22 @@ func TestNuwaValidationReadWorkIsScopedPagedAndBounded(t *testing.T) {
 		More  bool             `json:"more"`
 	}
 	var page index
-	body, err := e.readNuwaWork(t.Context(), project.ID, `{"limit":1}`)
+	body, err := e.readNuwaWork(owner, project.ID, `{"limit":1}`)
 	if err != nil || json.Unmarshal([]byte(body), &page) != nil || page.Total != 2 || !page.More || page.Next != 1 || len(page.Nodes) != 1 || page.Nodes[0].Detail != "" || page.Nodes[0].ID != first.ID || strings.Contains(body, foreign.ID) {
 		t.Fatalf("scoped summary page=%s err=%v", body, err)
 	}
-	body, err = e.readNuwaWork(t.Context(), project.ID, `{"offset":1,"limit":1}`)
+	body, err = e.readNuwaWork(owner, project.ID, `{"offset":1,"limit":1}`)
 	if err != nil || json.Unmarshal([]byte(body), &page) != nil || page.More || len(page.Nodes) != 1 || page.Nodes[0].ID != second.ID {
 		t.Fatalf("second page=%s err=%v", body, err)
 	}
 	for _, args := range []string{`{"offset":999}`, `{"kind":"task"}`} {
-		body, err := e.readNuwaWork(t.Context(), project.ID, args)
+		body, err := e.readNuwaWork(owner, project.ID, args)
 		if err != nil || json.Unmarshal([]byte(body), &page) != nil || len(page.Nodes) != 0 || page.More {
 			t.Fatalf("empty page=%s err=%v", body, err)
 		}
 	}
 	for _, args := range []string{`{"offset":-1}`, `{"limit":-1}`, `{"unknown":true}`, `{} {}`, `{"id":"` + foreign.ID + `"}`} {
-		if _, err := e.readNuwaWork(t.Context(), project.ID, args); err == nil {
+		if _, err := e.readNuwaWork(owner, project.ID, args); err == nil {
 			t.Fatalf("invalid or foreign query was accepted: %s", args)
 		}
 	}
@@ -147,7 +148,7 @@ func TestNuwaValidationReadWorkIsScopedPagedAndBounded(t *testing.T) {
 	var combined strings.Builder
 	for offset := 0; ; {
 		args := fmt.Sprintf(`{"id":%q,"offset":%d,"limit":120}`, first.ID, offset)
-		body, err := e.readNuwaWork(t.Context(), project.ID, args)
+		body, err := e.readNuwaWork(owner, project.ID, args)
 		var response full
 		if err != nil || utf8.RuneCountInString(body) > 900 || json.Unmarshal([]byte(body), &response) != nil || response.Total != utf8.RuneCountInString(detail) {
 			t.Fatalf("complete bounded detail page=%s err=%v", body, err)
@@ -164,25 +165,25 @@ func TestNuwaValidationReadWorkIsScopedPagedAndBounded(t *testing.T) {
 	if combined.String() != detail {
 		t.Fatal("bounded pages changed the original Chinese evidence")
 	}
-	if _, err := e.readNuwaWork(t.Context(), project.ID, fmt.Sprintf(`{"id":%q,"offset":999999}`, first.ID)); err != nil {
+	if _, err := e.readNuwaWork(owner, project.ID, fmt.Sprintf(`{"id":%q,"offset":999999}`, first.ID)); err != nil {
 		t.Fatalf("detail end offset: %v", err)
 	}
 	// Whole summary nodes must shrink as a page, never as invalid JSON.
 	e.cfg.Tools.ResultMaxChars = 1300
-	body, err = e.readNuwaWork(t.Context(), project.ID, `{}`)
+	body, err = e.readNuwaWork(owner, project.ID, `{}`)
 	if err != nil || json.Unmarshal([]byte(body), &page) != nil || len(page.Nodes) == 0 || utf8.RuneCountInString(body) > 1300 {
 		t.Fatalf("budgeted index=%s err=%v", body, err)
 	}
 	huge := nuwaValidationNode(t, e, project, thread, turn, strings.Repeat("大", 3000), "detail")
 	for _, args := range []string{fmt.Sprintf(`{"id":%q}`, huge.ID), `{"offset":2}`} {
-		if _, err := e.readNuwaWork(t.Context(), project.ID, args); err == nil || !strings.Contains(err.Error(), "metadata exceeds") {
+		if _, err := e.readNuwaWork(owner, project.ID, args); err == nil || !strings.Contains(err.Error(), "metadata exceeds") {
 			t.Fatalf("oversized metadata silently looked complete: %v", err)
 		}
 	}
-	if _, err := e.readNuwaWork(t.Context(), "unknown-project", `{}`); !errors.Is(err, store.ErrNotFound) {
+	if _, err := e.readNuwaWork(owner, "unknown-project", `{}`); !errors.Is(err, store.ErrInvalidNuwaNode) {
 		t.Fatalf("missing project error=%v", err)
 	}
-	cancelled, cancel := context.WithCancel(t.Context())
+	cancelled, cancel := context.WithCancel(owner)
 	cancel()
 	if _, err := e.readNuwaWork(cancelled, project.ID, `{}`); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled read error=%v", err)
@@ -260,6 +261,8 @@ func TestNuwaValidationModelCatalogAndDefaultMode(t *testing.T) {
 	readonlyReg := swarm.NewRegistry()
 	t.Cleanup(readonlyReg.Close)
 	e.wireNuwaRegistry(readonlyReg, set, pc, &readOnly)
+	e.wireWorkLedgerRegistry(readonlyReg, set, &readOnly)
+	var workRead bool
 	for _, base := range readonlyReg.WorkerConfiguration().SubAgentTools {
 		info, err := base.Info(t.Context())
 		if err != nil {
@@ -268,8 +271,9 @@ func TestNuwaValidationModelCatalogAndDefaultMode(t *testing.T) {
 		if info.Name == "record_work" {
 			t.Fatal("planning worker was given shared writes")
 		}
+		workRead = workRead || info.Name == "read_work"
 	}
-	if !strings.Contains(readonlyReg.WorkerConfiguration().WorkerPreamble, "Planning is read-only") || project.ID == "" {
+	if !workRead || !strings.Contains(readonlyReg.WorkerConfiguration().WorkerPreamble, "Planning is read-only") || project.ID == "" {
 		t.Fatal("read-only worker lost its instruction")
 	}
 	for _, ctx := range []context.Context{t.Context(), func() context.Context { ctx, cancel := context.WithCancel(t.Context()); cancel(); return ctx }()} {
@@ -303,14 +307,14 @@ func TestNuwaValidationArgumentAndCallerRefusals(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := newTestEngine(t)
-	project, _, turn := nuwaValidationSource(t, e, "Caller validation")
-	if _, err := e.recordNuwaWork(t.Context(), project.ID, "", turn, `{}`); err == nil || !strings.Contains(err.Error(), "actual Nuwa agent") {
+	_, _, turn := nuwaValidationSource(t, e, "Caller validation")
+	if _, err := e.recordNuwaWork(t.Context(), "", turn, `{}`); err == nil || !strings.Contains(err.Error(), "actual agent invocation") {
 		t.Fatalf("untrusted caller error=%v", err)
 	}
 	ctx, cancel := context.WithCancelCause(t.Context())
 	cause := errors.New("validation caller cancelled")
 	cancel(cause)
-	if _, err := e.recordNuwaWork(ctx, project.ID, "", turn, `{}`); !errors.Is(err, cause) {
+	if _, err := e.recordNuwaWork(ctx, "", turn, `{}`); !errors.Is(err, cause) {
 		t.Fatalf("caller cancellation was replaced: %v", err)
 	}
 }
@@ -422,10 +426,10 @@ func TestNuwaValidationActualManagerPreservesAndClearsCASPatchFields(t *testing.
 		var args map[string]any
 		switch step {
 		case 1:
-			args = map[string]any{"kind": "task", "title": "Inspect evidence", "status": "done"}
+			args = map[string]any{"scope": "project", "kind": "task", "title": "Inspect evidence", "status": "done"}
 		case 2:
 			taskID = result.Node.ID
-			args = map[string]any{"kind": "fact", "title": "Recorded observation", "summary": "Original report", "detail": "完整原始证据，不可替换为猜测。", "status": "reported", "depends_on": []string{taskID}, "evidence": []store.NuwaEvidence{{ThreadID: threadID, Seq: 1}}}
+			args = map[string]any{"scope": "project", "kind": "fact", "title": "Recorded observation", "summary": "Original report", "detail": "完整原始证据，不可替换为猜测。", "status": "reported", "depends_on": []string{taskID}, "evidence": []store.NuwaEvidence{{ThreadID: threadID, Seq: 1}}}
 		case 3:
 			factID = result.Node.ID
 			args = map[string]any{"id": factID, "version": result.Node.Version, "summary": "Corrected report"}
@@ -443,7 +447,7 @@ func TestNuwaValidationActualManagerPreservesAndClearsCASPatchFields(t *testing.
 			if len(result.Node.DependsOn) != 0 || len(result.Node.Evidence) != 0 || result.Node.Title != "Rechecked observation" {
 				t.Errorf("explicit patch fields were ignored: %+v", result.Node)
 			}
-			args = map[string]any{"kind": "artifact", "title": "Reviewable file", "artifact_path": selected, "depends_on": []string{factID}}
+			args = map[string]any{"scope": "project", "kind": "artifact", "title": "Reviewable file", "artifact_path": selected, "depends_on": []string{taskID, factID}}
 		case 7:
 			if result.Node.ArtifactPath != "work/"+selected || result.Node.Kind != "artifact" {
 				t.Errorf("published artifact lost exact selected path: %+v", result.Node)
@@ -506,9 +510,10 @@ func TestNuwaValidationActualManagerPreservesAndClearsCASPatchFields(t *testing.
 func TestNuwaValidationActualRegisteredHostRefusesMissingAuthority(t *testing.T) {
 	for _, mode := range []string{"missing-owner", "missing-project"} {
 		t.Run(mode, func(t *testing.T) {
+			var target store.NuwaNode
 			e, calls := newScheduleCompletionHTTPEngine(t, func(w http.ResponseWriter, _ *http.Request, step int, request scheduleCompletionRequest) {
 				if step == 1 {
-					nuwaValidationTool(w, request, "validation-authority", "record_work", `{"id":"existing-node","version":1,"summary":"change"}`)
+					nuwaValidationTool(w, request, "validation-authority", "record_work", fmt.Sprintf(`{"id":%q,"version":1,"summary":"change"}`, target.ID))
 					return
 				}
 				last := request.Messages[len(request.Messages)-1]
@@ -518,6 +523,7 @@ func TestNuwaValidationActualRegisteredHostRefusesMissingAuthority(t *testing.T)
 				writeContextFlowReply(w, request.Stream, map[string]any{"content": "The unavailable write was refused."}, "stop")
 			})
 			project, thread, turn := nuwaValidationSource(t, e, "Host authority")
+			target = nuwaValidationNode(t, e, project, thread, turn, "Stable source report", "")
 			set, err := e.conversationTools(t.Context(), thread)
 			if err != nil {
 				t.Fatal(err)
@@ -537,13 +543,12 @@ func TestNuwaValidationActualRegisteredHostRefusesMissingAuthority(t *testing.T)
 			var result swarm.RunResult
 			if mode == "missing-owner" {
 				ctx, release := ownManagerTestFixture(t.Context(), rt, turn.ID, reg)
-				result, err = reg.RunWith(ctx, swarm.RunConfig{Instruction: ManagerPrompt(set, ""), Task: "Inspect the current evidence.", ManagerTools: e.nuwaWorkTools(project.ID, set.WorkspaceDir, turn, false)}, swarm.Callback(acc.onNotify))
+				result, err = reg.RunWith(ctx, swarm.RunConfig{Instruction: ManagerPrompt(set, ""), Task: "Inspect the current evidence.", ManagerTools: e.nuwaWorkTools(set.WorkspaceDir, turn, false)}, swarm.Callback(acc.onNotify))
 				release()
 			} else {
-				vanished := *pc.project
-				vanished.ID = "missing-project"
-				pc.project = &vanished
-				result, err = rt.runOwnedTestManager(t.Context(), turn, reg, acc, set, pc, []adk.Message{schema.UserMessage("Inspect the current evidence.")})
+				vanished := *turn
+				vanished.ProjectID = "missing-project"
+				result, err = rt.runOwnedTestManager(t.Context(), &vanished, reg, acc, set, pc, []adk.Message{schema.UserMessage("Inspect the current evidence.")})
 			}
 			acc.flushAll()
 			if err != nil || result.Final == "" || len(calls.snapshot()) != 2 {
@@ -553,7 +558,7 @@ func TestNuwaValidationActualRegisteredHostRefusesMissingAuthority(t *testing.T)
 				t.Fatal(err)
 			}
 			_, nodes, err := e.store.NuwaSnapshot(t.Context(), project.ID)
-			if err != nil || len(nodes) != 0 {
+			if err != nil || len(nodes) != 1 || nodes[0].Version != target.Version || nodes[0].Summary != target.Summary {
 				t.Fatalf("refused host mutated shared state: %+v err=%v", nodes, err)
 			}
 		})
@@ -779,13 +784,13 @@ func TestNuwaValidationWorkerInvalidationUsesDurableProjectOwnership(t *testing.
 	e := newTestEngine(t)
 	project, thread, turn := nuwaValidationSource(t, e, "Worker invalidation")
 	for _, event := range []store.Event{{Kind: "delta", ThreadID: thread.ID}, {Kind: swarm.NotifySpawned.String(), ThreadID: "missing"}} {
-		e.invalidateNuwaWorkers(event)
+		e.record(event)
 	}
 	plain, err := e.CreateThread("Nonproject worker", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	e.invalidateNuwaWorkers(store.Event{Kind: swarm.NotifySpawned.String(), ThreadID: plain.ID})
+	e.record(store.Event{Kind: swarm.NotifySpawned.String(), ThreadID: plain.ID})
 	ordinary, err := e.CreateProject("Standard project", "", "", false, false)
 	if err != nil {
 		t.Fatal(err)
@@ -794,7 +799,7 @@ func TestNuwaValidationWorkerInvalidationUsesDurableProjectOwnership(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	e.invalidateNuwaWorkers(store.Event{Kind: swarm.NotifySpawned.String(), ThreadID: standardThread.ID})
+	e.record(store.Event{Kind: swarm.NotifySpawned.String(), ThreadID: standardThread.ID})
 	if revision, _, err := e.store.NuwaSnapshot(t.Context(), project.ID); err != nil || revision != 0 {
 		t.Fatalf("unrelated events changed revision=%d err=%v", revision, err)
 	}
@@ -817,7 +822,7 @@ func TestNuwaValidationWorkerInvalidationUsesDurableProjectOwnership(t *testing.
 	}); err != nil {
 		t.Fatal(err)
 	}
-	faulted.invalidateNuwaWorkers(store.Event{Kind: swarm.NotifyFinished.String(), ThreadID: ft.ID})
+	faulted.record(store.Event{Kind: swarm.NotifyFinished.String(), ThreadID: ft.ID})
 	if revision, _, err := faulted.store.NuwaSnapshot(t.Context(), fp.ID); err != nil || revision != 0 {
 		t.Fatalf("failed revision was falsely durable: revision=%d err=%v", revision, err)
 	}

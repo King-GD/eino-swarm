@@ -104,6 +104,9 @@ type knowledgeReadReply struct {
 }
 
 func (e *Engine) readKnowledge(ctx context.Context, projectID string, kb *knowledge.Store, raw string, maxChars int) (string, error) {
+	if !e.cfg.SwarmSnapshot().Knowledge {
+		return "", knowledge.ErrDisabled
+	}
 	var input knowledgeReadInput
 	if err := decodeNuwaArgs(raw, &input); err != nil {
 		return "", err
@@ -202,6 +205,9 @@ func (e *Engine) recordKnowledge(ctx context.Context, projectID string, turn *st
 	defer e.workspaceMu.Unlock()
 	e.recordMu.Lock()
 	defer e.recordMu.Unlock()
+	if !e.cfg.SwarmSnapshot().Knowledge {
+		return "", knowledge.ErrDisabled
+	}
 	if err := e.knowledgeToolOwner(ctx, turn, projectID, true); err != nil {
 		return "", err
 	}

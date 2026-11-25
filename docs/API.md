@@ -366,7 +366,10 @@ account does not refetch it. The offline provider (`--mock`) never reaches a
 network, so it always reports `signed_out`.
 
 `startup` is `restoring` while the serving process restores conversation state,
-then `ready`. `restore.completed/total` counts examined conversations. Optional
+then `ready`. `restore.total` counts conversations selected for recovery or
+lifecycle reconciliation. `restore.completed` counts those already processed,
+including failed attempts. A settled conversation is excluded. Before the
+selection is available, the counters are zero. Optional
 `restore.failed` counts individual conversations that could not be restored;
 running and parked failures both count, with `engine_restore.phase: "failed"`
 and their original cause retained in the original-turn Trace and engine log.
@@ -1269,6 +1272,7 @@ The slim RPC the phone sends over pairlink is not an HTTP API. Request ops:
 `followup_drop` / `followup_steer` / `preempt` /
 `answer` / `continue` / `watch` / `unwatch` / `log` / `run_now` / `cancel_wait` /
 `resume_goal` / `project_get` / `project_create` / `project_update` / `catalog` / `refresh_catalog` / `get_timeouts` / `set_timeouts` / `set_product_mode` /
+`project_knowledge` / `project_knowledge_page` / `project_knowledge_cancel` /
 `tune` / `put` / `clients` / `files` /
 `file_chunk`. `hello` `{text}` is the phone's one-line model; the host
 keys it by the pairlink fingerprint, not a client-supplied id.
@@ -1457,6 +1461,22 @@ Successful mutations return a single ID/name in `projects`, without repeating
 potentially large instructions. Both mutations refuse with `restoring` during
 engine restoration. These operations use the existing paired, encrypted RPC
 channel and add no unauthenticated HTTP or cross-origin surface.
+
+Paired phones browse an existing knowledge base using read-only RPCs.
+`project_knowledge` takes `project_id`, optional search `text` (up to 512 bytes)
+and `offset`. The `knowledge` reply includes the project ID, `enabled`, up to
+32 page references and `next_offset` if another page exists. Conversation
+detail includes `project_id` for a project conversation.
+`project_knowledge_page` takes `project_id` and the `knowledge_page_id` slug.
+It reads one immutable JSON page detail with the same content and source
+resolution as the HTTP page route. Continue using both IDs, the returned
+`knowledge_transfer_id` (first chunk's `id`) and `next_offset` as `offset`.
+`knowledge_chunk` includes both scope IDs, transfer ID, total size, SHA-256,
+offsets, Base64 data and `more`. Raw chunks are at most 36 KiB and encoded page
+JSON at most 16 MiB. `project_knowledge_cancel` releases an unfinished transfer
+using the same IDs and token. A completed or cancelled token cannot be reused.
+Global disable returns `knowledge_disabled`, a missing page returns
+`knowledge_page_not_found` and an oversized page returns `too_large`.
 
 `catalog` additionally returns `memory_available`; older PCs omit it, so the
 mobile editor requests an upgrade rather than assuming an editable default.
@@ -1776,10 +1796,54 @@ connection. Clients refetch GET rather than applying event payloads as node
 patches. Reconnect reads current state, not a chat-sequence replay. Revisions may
 skip intermediate updates and must never be used as conversation `seq` values.
 
-Shared mutation is through actual agent `record_work` calls, not a public
-project-node write endpoint. `list_models`, `read_work` and `record_work` tool
-schemas and their trust/CAS boundaries are described in [Nuwa](NUWA.md) and
-`C-037`.
+The node `scope` is `project` in this snapshot. The work-record tools
+and the conversation endpoints below provide the two read scopes. See
+[Work records](WORK.md) and `C-055`.
+
+### `GET /api/threads/:id/work`
+
+Returns `thread_id`, `project_id`, `thread_revision`, `project_revision`,
+`data_generation`, `nodes`, and `workers`. `has_own_work` is true when the conversation has already created any work records, including promoted records. A standalone thread has an empty project ID and zero
+project revision. The snapshot includes the thread's own private records and
+its current project's shared records. Workers are limited to this thread and
+come from durable lifecycle records. The response ETag identifies this snapshot
+and is the precondition for promotion and manual extraction.
+
+Both work snapshot endpoints set `incomplete_basis` on a reported artifact
+whose visible prerequisite chain lacks an active task or a reported fact.
+New writes of reported artifacts require both prerequisites.
+
+Paired phones use the encrypted `thread_work` RPC with `thread_id`.
+The reply includes `work_snapshot` and `data_generation`. Only the
+conversation's private records and its current project's shared records
+are eligible. A compatible PC with work records enabled advertises
+`work_records_available` in `meta`. The RPC returns `work_disabled` when
+disabled and `work_too_large` when the full graph exceeds the frame budget.
+
+### `GET /api/threads/:id/work/events`
+
+Sends a named `nuwa_updated` frame for the current thread, project, revision pair
+and data generation on connect and when that identity changes. Refetch the snapshot
+on notification. Clients may receive the same named frames over
+`GET /api/threads/:id/events?work=1`. Work frames use no SSE id and do not affect
+the conversation replay cursor.
+
+### `POST /api/threads/:id/work/promote`
+
+Body `{"ids":["nw_…"]}`, with the current work snapshot's ETag in `If-Match`.
+Moves the requested private records and their private prerequisites to the
+current project in one transaction. Returns `200` with the committed `thread_id`, `project_id`, revision pair, `data_generation`, promoted `nodes` and a new ETag. A changed snapshot or membership returns `409`. Invalid
+input or a standalone destination returns `400`.
+
+### `POST /api/threads/:id/work/distill`
+
+Extracts private work records from the saved history of a conversation that
+has no records of its own. Send its work snapshot ETag in `If-Match`. The
+request returns `200` with `{"created":n}`; zero means there was nothing to
+keep. Concurrent extraction, changed ownership or history, and records created
+during the request return `409 work_conflict`. The global Work records switch
+rejects extraction with `409 work_disabled`. The model can cite only offered
+source events, and records are published in one storage transaction.
 
 ### `DELETE /api/projects/:id` → `204`
 
@@ -1799,7 +1863,40 @@ Start one background review of retained project history. The JSON request
 contains `scope: "latest_turn" | "thread" | "project"`. Supply `thread_id`
 for the first two scopes. The conversation must currently belong to the
 project. Supply `enable_knowledge: true` to explicitly initialize Knowledge
-if needed. Both panels use the same project endpoint.
+if needed. For `thread` or `project`, supply `full_text: true` to review the
+full text of eligible records in bounded segments. Omit it to use excerpts.
+Both panels use the same project endpoint. For an existing batch
+job, send only `{"pause_review_id":"…"}` to request a pause or
+`{"resume_review_id":"…"}` to resume from its saved checkpoint and original
+scope and reading mode. The request to pause reports `202` with `state: "pausing"` while
+the reviewer is stopping. An unknown
+review ID returns `404`. Starting a different review while a previous batch
+job still has pending records returns `409 distillation_pending`.
+
+Use `wiki_graph: true` on POST to start a graph build with `thread` or
+`project` scope, or to pause or resume that graph build with its review ID.
+With the global Knowledge setting enabled, the build initializes the project
+wiki if needed and uses an independent checkpoint. New builds default to
+local scanning followed by document publication, with zero model requests.
+Supply `wiki_review: true` to include model review. Only a new graph build
+accepts this option. Pause and resume preserve the original choice.
+Use `GET /api/projects/:id/distill?wiki_graph=true` for status. New receipts
+include the selected `wiki_review` boolean. Older receipts with the field
+absent retain their original review behavior. `wiki_phase` is `scan`,
+`graph` (model review), or `documents`.
+`wiki_scan_processed` counts frozen records accounted for locally, including
+`wiki_scan_skipped` for unavailable or ineligible records and `wiki_scan_deferred`
+for records above the 8 MiB local parsing limit. A reviewed build can still
+read the latter in segments. `wiki_scan_complete` follows local publication.
+For local builds, `progress` counts the scan and includes both types of skips.
+For builds with model review, it counts semantic review, including previously
+accepted immutable records and skips. `wiki_documents` and `wiki_documented`
+track pages and written documents, including batches during semantic review.
+A generated page exposes `wiki.kind`, `wiki.category` and
+`wiki.document_pending`. Its optional `wiki_observations` array holds
+`{source, quote}` excerpts confirmed against still-available source records.
+Each retained excerpt has the original conversation, event or message
+sequence, and turn when available.
 
 An admitted request returns `202` with `review_id`, `state: "running"`,
 `scope` and, while the original anchor is available, `thread_id` and
@@ -1808,17 +1905,31 @@ evidence returns `200` with `state: "no_work"`. Invalid scope arguments,
 foreign conversations and all destinations disabled return `400`, `404`
 and `409 distillation_disabled`, respectively.
 
-GET returns the latest durable receipt, or `state: "idle"`. Terminal states
-are `completed`, `partial`, `failed` and `interrupted`. Optional fields
+GET returns the latest durable receipt, or `state: "idle"`. It reports
+`pausing` while an acknowledged pause is still waiting on the reviewer.
+Settled states are `paused`, `completed`, `partial`, `failed` and
+`interrupted`. Optional fields
 include `changes` for committed notes and Skills, `knowledge` for committed
 pages or schema revisions, `error`, `history_omitted` and `uncertain` for
-possible unconfirmed writes following interruption. Partial success retains
-its committed items. The browser polls this endpoint while showing a run.
+possible unconfirmed writes following interruption, plus `full_text: true`
+for a job started in full-text mode. For `thread` and
+`project`, `progress` has `total`, `processed`, `remaining`, `skipped` and
+`batches`. Counts refer to candidate records frozen when the job starts.
+Classified failures include `error_code` and, when available,
+`error_provider_id` for the settings action. These fields clear on resume.
+New queue receipts set `progress.coverage_known` and include nonzero counts in
+`progress.excerpted` and `progress.oversized_skipped`. The latter is a subset of
+`skipped`. Skipped records are included in `processed`. A partially reviewed
+full-text record stays in `remaining` and exposes `progress.segment_bytes` and
+`progress.segment_total_bytes` until its final segment commits.
+A job reaches `completed` when its remaining count reaches zero. Partial
+success retains its committed items. Both panels poll this endpoint.
 
 ### `GET /api/projects/:id/knowledge` · `POST /api/projects/:id/knowledge`
 
 Both return a status object with `enabled`, `page_count` and
-`pending_count`. An enabled project also returns `schema` and its content
+`pending_count`. The page count includes stored pages flagged for review.
+An enabled project also returns `schema` and its content
 `revision`. POST needs no body. It publishes a neutral starting schema
 only when absent. GET for an existing project with no schema returns
 `{"enabled":false,"page_count":0,"pending_count":0}`. An unknown project
@@ -1831,8 +1942,21 @@ view ID defined in the project schema. The response contains `view`,
 `nodes` and, when present, `issues`. A node has `id`, `label`, `kind`
 (`type`, `relation`, `page`), and optional `type`, `aliases`, `children`
 and `cycle`. A bounded graph view can set `truncated`. Lint can report
-`broken_link`, `stale`, `missing_relation` and `invalid_page`. An unknown
+`broken_link`, `stale`, `missing_relation`, `invalid_page` and
+`wiki_non_subject`. The last code flags a generated workflow or editorial
+label. Those pages are available by ID and appear in the pending view. An unknown
 view is `400`; a disabled knowledge base is `404` with `knowledge_disabled`.
+
+### `GET /api/projects/:id/knowledge/graph`
+
+Return the project's read-only relationship graph. `nodes` contains one
+entry per browsable page, including unlinked pages, with its stable `id`, display
+`title`, `type` and optional `aliases`. Each `edges` entry connects one pair
+of pages. The `source` and `target` fields give the endpoint IDs in lexical
+order. The optional `relations` and `wikilink` flag combine the evidence
+from both pages. Missing targets and pages flagged as `wiki_non_subject`
+remain in the pending view. A disabled
+knowledge base returns `404 knowledge_disabled`.
 
 ### `GET /api/projects/:id/knowledge/pages/:page`
 
@@ -2480,8 +2604,10 @@ and Continue/Stop path. See `C-036` and [source identities](DATA_MODEL.md#source
 `text` may be empty when `images` or `files` is not, or when `from_event_seq`
 points at a `user_message` that still has its original images. Each image is sniffed (png/jpeg/gif/webp);
 a renamed HTML file is rejected. At most 8 images, 8 MiB decoded each. They are
-**visual input**, stored under `$ZWAI_HOME/inputs/<thread>/`, not workspace
-uploads. `files` are workspace-relative paths of uploads attached to **this**
+**visual input** for the conversation model, stored under
+`$ZWAI_HOME/inputs/<thread>/` and referenced by the sent message. A queued
+image follow-up supplies the same visual input when it starts. `files` are
+workspace-relative paths of uploads attached to **this**
 send (always under `uploads/`). They are named on the user message so the
 model reads those first instead of scavenging older leftovers in the same
 folder. Unknown, escaped, or non-upload paths are `400`. At most 32 files.
@@ -2801,7 +2927,8 @@ reused. The current `max_completion_tokens` applies to the continuation.
 
 `400` when `turn_id` is missing or blank. `409 no_failed_turn` when that id
 is not the latest failed human turn, including a goal or schedule turn, a
-cancelled turn, or a turn with no stored user message. `409 busy` while a
+cancelled turn, a turn with no stored user message, or a gateway safety
+refusal (`model_request_blocked` or its legacy error text). `409 busy` while a
 turn is running. `409 restoring` while startup recovery is in progress.
 
 ```json
@@ -2945,8 +3072,10 @@ overlap: apply a stored `(thread_id, seq)` only once, including side effects.
 also preserves the optional field; clients that do not use it remain compatible.
 
 Generation interruption `reason` is `engine_restart`, `process_exit`,
-`output_limit`, `model_error`, `timeout`, `cancelled` or `unknown`. `detail`
-contains the recorded cause; a process exit alone does not prove its trigger.
+`output_limit`, `model_error`, `model_request_blocked`, `timeout`, `cancelled`
+or `unknown`. `detail` contains the recorded cause when available. A process
+exit alone does not prove its trigger. A gateway safety refusal has empty
+`detail`, with the original HTTP failure available in Trace model calls.
 `recovery` is `pending` (recovery is arranged), `recovered` (execution resumed)
 or `none` (no recovery is arranged). Lifecycle events retain the output's
 original turn for Trace even if its worker outlives that manager check.
@@ -2998,7 +3127,7 @@ shortening only the bounded detail text.
 | `workers_collection_resumed` | one generation-bound automatic completion wake for this turn; JSON contains the original `wait_id`, `worker_ids` and terminal `workers`. It only resumes collection, is not a wait-result receipt, and does not renew correction or automatic-wake allowances |
 | `workers_collection_declined` | internal durable refusal of this exact worker-collection wait before acknowledging a human decline; contains `wait_id`, `worker_ids` and `workers`. Refused and not stored once `workers_collection_resumed` for that wait exists. Cold recovery cannot turn the old automatic wait back on. Not a completion or model-call receipt |
 | `model_backoff` | a wait observation or private-candidate deferral, not a sent request or new retry allowance. Origin JSON is `{scope:"origin",cooldown_id,attempt,wait_ms}` on the actual caller/turn: cooldown_id is an opaque process-local service-generation identity shared across roles, with no endpoint; positive wait_ms is observed remaining cooldown (sub-millisecond waits use 1), and 0 means an active probe has not yet yielded valid content and its remaining wait is unknown. Only one recovery probe is admitted after cooldown; its first decoded nonempty body, reasoning or tool-call delta admits other requests while the stream stays open. Headers, role-only/empty/usage-only deltas and error frames do not admit them. Only the probe's final result resets or advances failures; concurrent results during that probe cannot change the streak or a later generation. A failed probe renews cooldown without cancelling already admitted requests; non-streaming Generate waits for its complete result. PC/phone chat and history show one timed row per conversation/generation and omit zero-delay probe rows; Trace keeps each caller observation. Candidate JSON instead uses `{scope:"schedule_answer",attempt,wait_ms,code,candidate_id}` as described below. Legacy rows may omit the added fields. |
-| `model_retry` | the manager hit a recoverable ChatModel failure and re-entered this turn. `text` is JSON `{attempt,cap,reason?}`. `reason` selects the transcript notice: `invalid_tool_json` (the model returned a tool call that was not valid JSON), `model_response_invalid` (the SDK cannot decode the model HTTP response or stream, including a wrong field type; the turn did not reach a tool), `rate_limited`, `model_unavailable` (HTTP 500/502/503/504/529), `model_transport` (dropped stream, connection reset, mid-stream read timeout), `model_idle` (silence after the first byte). Older rows omit `reason` and keep the generic retry line. `reason: "context_overflow"` is separate: the endpoint rejected the call because the prompt plus the requested output does not fit the window. That notice names the window, the turn compacts once, and a second rejection ends the turn with `the prompt plus the requested output exceeds this model's context window; automatic compact could not free enough space. Lower Max completion tokens in Settings → Swarm, or shorten the request, then retry`. A repeating schedule that ends that way is paused. When the in-turn retries are exhausted, the turn error is the same class: `the model returned a tool call that was not valid JSON`, `the model service is rate limiting requests`, `the model service is unavailable`, `the model service returned a response that could not be decoded`, or `the connection to the model service dropped`. An exhausted idle timeout keeps the sentence that names how long the model sent no data. A trailing tool call whose arguments are not valid JSON is refused before the next model request and then dropped, so that payload is not sent and a `400 Unterminated string` cannot repeat. `reason: "scheduled_no_activity"` is the scheduled-check continuation, not a model failure |
+| `model_retry` | the manager hit a recoverable ChatModel failure and re-entered this turn. `text` is JSON `{attempt,cap,reason?}`. `reason` selects the transcript notice: `invalid_tool_json` (the model returned a tool call that was not valid JSON), `model_response_invalid` (the SDK cannot decode the model HTTP response or stream, including a wrong field type; the turn did not reach a tool), `rate_limited`, `model_unavailable` (HTTP 500/502/503/504/529), `model_transport` (dropped stream or connection reset), `model_read_timeout` (transport timeout reading a started response), `model_idle` (silence after the first byte). Older rows omit `reason` and keep the generic retry line. `reason: "context_overflow"` is separate: the endpoint rejected the call because the prompt plus the requested output does not fit the window. That notice names the window, the turn compacts once, and a second rejection ends the turn with `the prompt plus the requested output exceeds this model's context window; automatic compact could not free enough space. Lower Max completion tokens in Settings → Swarm, or shorten the request, then retry`. A repeating schedule that ends that way is paused. When the in-turn retries are exhausted, the turn error is the same class: `the model returned a tool call that was not valid JSON`, `the model service is rate limiting requests`, `the model service is unavailable`, `the model service returned a response that could not be decoded`, `the connection to the model service dropped`, or `model response read timed out`. An exhausted idle timeout keeps the sentence that names how long the model sent no data. A trailing tool call whose arguments are not valid JSON is refused before the next model request and then dropped, so that payload is not sent and a `400 Unterminated string` cannot repeat. `reason: "scheduled_no_activity"` is the scheduled-check continuation, not a model failure |
 | `title` | the conversation was named; `text` is the new title, `agent_id` is `title-namer`. Not rendered in the transcript |
 | `decision` | the fixed decisions role answered; `text` is the short result. Not rendered in the conversation; the Trace tab's Full log lists it |
 | `session_memory` | the rolling session briefing was refreshed from the event log; `text` is JSON `{summary,through_seq}`. `agent_id` is `session-memory`. Not rendered in the transcript; compact and the reviewer read the thread fields. Post-turn refresh is background work: a queued follow-up starts as soon as the turn is `done` or `error`, and does not wait for this event |
@@ -3023,7 +3152,7 @@ shortening only the bounded detail text.
 | `schedule_report` | the scheduled check reported. `text` is JSON `{findings,quiet}`. Empty findings / `quiet:true` hide that turn's chat bubbles; the events stay in the log. When this event is omitted after `schedule_fired` and `done` is empty, the client treats the turn the same way. A findings report plus empty `done` keeps the fired chip |
 | `schedule_cancelled` | a wait was cancelled. `text` is the schedule id. `role: "human"` on the wake target records an explicit human cancellation and denies further manager waits until later human permission. The transcript shows a short chip, not the raw id |
 | `done` | the turn finished; `text` is the final answer. Empty / whitespace `text` hides chat bubbles only after `schedule_fired` when that turn did not already report findings. An armed `schedule`, `goal_continued`, compact, or other notice plus empty `done` stays visible. Non-empty `text` after a fire is findings and keeps the fired chip |
-| `error` | the turn failed; `err` explains |
+| `error` | the turn failed; `err` explains. A gateway safety refusal on the manager call uses `model_request_blocked` here and in `turn.error` |
 | `ready` | replay is complete (no `seq`, not stored) |
 
 When `tools.enabled` includes `exec_session`, eligible ordinary manager
@@ -3944,9 +4073,15 @@ For a failed model request, `turn.error` and the stored `error.err` keep the
 HTTP status and concrete API rejection/response-decoder reason. Public text
 excludes raw response bodies and graph paths, masks credentials, and limits
 the cause to 512 runes. A JSON decode error does not imply invalid tool arguments.
-`llm_calls[].err` retains the original recorded model failure; `model_retry`
-events show bounded retries on this same turn. Existing timeout/context recovery
-advice is preserved. No payload schema or event kind changes.
+`llm_calls[].err` records the model failure. Failed reads and premature EOF
+after successful streaming headers include `received_bytes` (decoded HTTP
+body bytes, including SSE framing), `last_received_at` (RFC 3339 UTC, omitted
+until bytes arrive), and `request_id` when the response has a single
+Gateway-format `X-Request-ID`. The diagnostic omits response content and
+raw socket details. A transport read timeout produces public
+`model response read timed out` and the `model_retry` reason
+`model_read_timeout`. Header deadlines, configured stream idle and caller
+cancellation retain their separate behavior.
 
 ```json
 {"turn": {"id": "tn_cd34…", "status": "done", "duration_ms": 12480, "…": "…"},
@@ -4025,6 +4160,14 @@ do not. Event kinds and phone RPC shapes stay stable. See `C-019` and
 
 The composer retains image-suffixed generic binary/UTI drops as vision input and normalizes their MIME claim before the existing turn/steer image payload. Bytes remain unchanged. Explicit text/PDF files stay attachments. The server still sniffs real bytes and rejects unsupported or mismatched claims; client filename inference is not content validation. See [C-028](CONTRACTS.md#c-028-image-intake-retains-vision-bytes).
 
+`POST /api/threads/:id/input-images/:image_id/ocr` extracts text from the
+single stored image identified by the same path as its preview. It uses the
+configured and authorized `ocr` role and returns `{"text":"…"}`. An empty
+string represents an image with no recognized text. The HTTP request owns the
+call and the result stays in the preview. Missing images return 404. An
+unavailable role returns 403, a busy extraction service 429, an upstream
+failure 502 and a timeout 504.
+
 ## Engine restart handoff (`F-110`, `C-027`)
 
 `POST /api/engine/restart` prepares the current engine for a launcher-owned
@@ -4043,12 +4186,14 @@ A `200` acknowledgement is returned only after durable checkpoints:
 `stage` is initially empty, then `preparing`, `summarizing`, `checkpointing`,
 `ready`, or `failed`. The endpoint
 is safe to read while handoff runs. `checkpointed` counts worker checkpoints;
-`threads_checkpointed` counts conversation checkpoints. During `summarizing`,
+`threads_checkpointed` counts conversation checkpoints. The shared
+`summarizing` wait lasts up to three seconds and can end earlier to leave time
+for final writes. During `summarizing`,
 `settled` counts workers that finished or whose handoff stop was requested; it is
 not task completion or durable checkpoint confirmation. A single warning after
-half the shared handoff budget lists pending worker IDs/roles per conversation.
-A failed save returns
-an error; retry reuses the frozen recovery state rather than granting another
+half the summary window lists pending worker IDs/roles per conversation. Final
+writes retain completed workers and mark still-pending tool calls as unknown.
+A failed save or expired deadline returns an error. A save retry reuses the frozen recovery state rather than granting another
 summary period. A disconnected caller cannot turn an incomplete save into a
 positive acknowledgement.
 
@@ -4098,6 +4243,8 @@ mode, non-object entries, missing/non-string/duplicate/unsupported types or tool
 on Chat Completions return `400` before changing configuration. API key omission,
 clearing and masking retain their existing semantics. Supported types and cloud
 resource limits are described in [configuration](CONFIG.md#provider-cloud-tools).
+
+The provider adapter omits the optional `include` field in Responses requests.
 
 The PC manager can use native Responses continuation when the Gateway
 conversation capability advertises `responses_developer_history: 1`. The
@@ -4207,8 +4354,8 @@ browser streams reject redirects too. Personal provider compatibility is unchang
 
 ## Task panel protocol v1
 
-`GET /api/task-panels/catalog` returns `{plugins}`. `GET/PUT /api/task-panels/settings` reads/merges task-panel settings independently of other settings; invalid/unknown/null fields return400. The `easm` field (`{server_id, tools, max_domains, max_components}`) is replaced as one object, so a client sends all of its roles together. A catalog definition may set `renderer:"native"` with an empty `entry`; such panels are drawn by a bundled app component and have no plugin document. `GET /api/threads/:id/panels` returns `{panels,cursor}`; `GET /api/threads/:id/panels/:panel` returns one owned instance, or404. `GET /api/threads/:id/panels/events` emits an atomic `ready` snapshot and committed `panel_update` snapshot/patch/deleted records on its own cursor. Reconnect does not execute work. There are no renderer-facing data-write or source-start endpoints. Agent tool and iframe contracts are documented in [Task panels](TASK_PANELS.md).
+`GET /api/task-panels/catalog` returns `{plugins}`. `GET/PUT /api/task-panels/settings` reads/merges task-panel settings independently of other settings; invalid/unknown/null fields return400. The `easm` field (`{server_id, tools, max_domains, max_components}`) is replaced as one object, so a client sends all of its roles together. A catalog definition may set `renderer:"native"` with an empty `entry`; such panels are drawn by a bundled app component and have no plugin document. `GET /api/threads/:id/panels` returns `{panels,cursor}`; `GET /api/threads/:id/panels/:panel` returns one visible owned instance, or404. Both reads admit instances with a running source or a committed observation. `DELETE /api/threads/:id/panels/:panel` persistently closes that instance, emits a deletion, and interrupts its running source. A successful close or retry returns 204; a missing or foreign instance returns 404. `GET /api/threads/:id/panels/events` emits an atomic `ready` snapshot and committed `panel_update` snapshot/patch/deleted records on its own cursor. Reconnect does not execute work. There are no renderer-facing data-write or source-start endpoints. Agent tool and iframe contracts are documented in [Task panels](TASK_PANELS.md).
 
 Browser task panels negotiate `panels=1` on the existing conversation events URL. Named `panel_ready`, `panel_update`, `panel_error` frames have no SSE id and carry only their own body cursor. They never enter transcript replay or consume another persistent browser connection. Legacy subscriptions without the query retain their original frames.
 
-Paired phones use read-only Pairlink `task_panels`, `task_panel_read` and `task_panel_cancel`. The manifest contains no bulk state. A read freezes one `{panel}` snapshot or an exact-base `{change}` patch, transferred in at most36KiB raw/base64 chunks under the sealed frame cap. `panel_transfer` binds token, thread/panel identity, revision, complete size and SHA-256 to every offset. Continuation/cancel requests must name the same thread, panel and token. The complete envelope is at most64MiB; oversized manifests/transfers return `too_large`, invalid scope/offset `bad_request`, missing instances `not_found`, and stale tokens `transfer_expired`. One connection retains one immutable body until replacement, exact cancel or close. New manifest revisions never change an in-flight body. See [mobile transport details](TASK_PANELS.md#paired-mobile-transport).
+Paired phones read through Pairlink `task_panels`, `task_panel_read` and `task_panel_cancel`. `task_panel_close {thread_id,panel_id}` performs the same persistent close as HTTP and requires an active paired link. The manifest contains no bulk state. A read freezes one `{panel}` snapshot or an exact-base `{change}` patch, transferred in at most36KiB raw/base64 chunks under the sealed frame cap. `panel_transfer` binds token, thread/panel identity, revision, complete size and SHA-256 to every offset. Continuation/cancel requests must name the same thread, panel and token. The complete envelope is at most64MiB; oversized manifests/transfers return `too_large`, invalid scope/offset `bad_request`, missing instances `not_found`, and stale tokens `transfer_expired`. One connection retains one immutable body until replacement, exact cancel or close. New manifest revisions never change an in-flight body. See [mobile transport details](TASK_PANELS.md#paired-mobile-transport).

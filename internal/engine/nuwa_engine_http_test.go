@@ -25,7 +25,7 @@ func TestNuwaManagerSharesEvidenceThroughActualHTTPModel(t *testing.T) {
 		switch step {
 		case 1:
 			assertNuwaRecordWorkGuidance(t, request, "manager")
-			writeScheduleCompletionTool(w, request, "record_work", `{"kind":"fact","title":"Measured result","summary":"The supplied input was inspected.","evidence":[]}`)
+			writeScheduleCompletionTool(w, request, "record_work", `{"scope":"project","kind":"fact","title":"Measured result","summary":"The supplied input was inspected.","evidence":[]}`)
 		case 2:
 			var receipt struct {
 				OK   bool           `json:"ok"`
@@ -90,7 +90,7 @@ func assertNuwaRecordWorkGuidance(t *testing.T, request scheduleCompletionReques
 		}
 	}
 	prompt := strings.Join(strings.Fields(system.String()), " ")
-	for _, term := range []string{"as you work", "material prerequisites", "returned node IDs", "Independent work can remain unlinked"} {
+	for _, term := range []string{"Record each material task when starting it", "observations backed by", "its actual task and factual basis", "returned record IDs", "facts can remain unlinked"} {
 		if !strings.Contains(prompt, term) {
 			t.Errorf("%s system prompt is missing shared-work guidance %q", actor, term)
 		}

@@ -1,9 +1,11 @@
+import { knowledgeEn } from "./messages-knowledge"
 import { accountEn } from "./messages-account"
 import { pcWaitEn } from "./messages-pc-wait"
 import { generationEn } from "./messages-generation"
 import { speechEn } from "./messages-speech"
 export const en = {
   ...pcWaitEn,
+  ...knowledgeEn,
   ...speechEn,
   "account.capabilitiesUnknown": "Gateway capabilities could not be verified. Your saved settings are retained; retry below.",
   "selection.actions": "Selected text actions",
@@ -178,6 +180,8 @@ export const en = {
   "files.refresh": "Refresh files",
   "files.search": "Search files",
   "files.searching": "Searching…",
+  "files.openPreview": "Open {path}",
+  "files.chooseMatch": "Choose a file",
   "files.loadingDir": "Loading this directory…",
   "files.loading": "Reading file…",
   "files.progressLabel": "File load progress",
@@ -336,6 +340,8 @@ export const en = {
   "notice.modelServiceRateLimited": "the model service is rate limiting requests",
   "notice.modelServiceUnavailable": "the model service is unavailable",
   "notice.modelServiceTransport": "the connection to the model service dropped",
+  "notice.modelRetryReadTimeout": "Model response read timed out. Retrying.",
+  "notice.modelServiceReadTimeout": "Model response read timed out.",
 
   "notice.goalCompleted": "Standing objective completed.",
 

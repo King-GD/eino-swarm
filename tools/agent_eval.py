@@ -184,13 +184,26 @@ def load_tasks(selected: list[str], root: Path = TASKS_DIR) -> list[dict]:
 
 
 def seed_data_dir(data_dir: Path, task: dict, provider: dict | None, max_completion_tokens: int = 0,
-                  models: dict | None = None) -> None:
-    if provider is not None or models is not None:
+                  models: dict | None = None, work_ledger: bool | None = None) -> None:
+    if provider is not None or models is not None or work_ledger is not None:
+        # Both configurations write their optional swarm cap as a section.
+        # When setting the ledger explicitly, build that section once here.
+        cap = 0 if work_ledger is not None else max_completion_tokens
+        if models is not None:
+            body = protocol.render_model_config(models, cap)
+        elif provider is not None:
+            body = grade.render_eval_config(provider, EVAL_PROVIDER_ID, cap)
+        else:
+            body = ""
+        if work_ledger is not None:
+            body += "swarm:\n"
+            if max_completion_tokens:
+                body += f"    max_completion_tokens: {max_completion_tokens}\n"
+            body += f"    work_ledger: {json.dumps(work_ledger)}\n"
         cfg = data_dir / "config.yaml"
         fd = os.open(cfg, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "w") as fh:
-            fh.write(protocol.render_model_config(models, max_completion_tokens) if models else
-                     grade.render_eval_config(provider, EVAL_PROVIDER_ID, max_completion_tokens))
+            fh.write(body)
     for skill in task.get("skills", []):
         dest = data_dir / "library" / "skills" / skill["name"] / "SKILL.md"
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -394,9 +407,17 @@ def run_once(task: dict, run_idx: int, args: argparse.Namespace, provider: dict 
             evidence / name, grade.redact(json.dumps(value, indent=2, ensure_ascii=False), secrets)))
 
     try:
-        seed_data_dir(data_dir, task, provider, getattr(args, "max_completion_tokens", 0), models)
+        work_ledger = getattr(args, "work_ledger", None)
+        seed_data_dir(data_dir, task, provider, getattr(args, "max_completion_tokens", 0), models, work_ledger)
         engine.start()
         phase("boot")
+        configured_ledger = None
+        if hasattr(args, "work_ledger"):
+            settings = http_json(engine.base, "GET", "/api/settings")["settings"]
+            configured_ledger = settings.get("swarm", {}).get("work_ledger")
+            if work_ledger is not None and configured_ledger is not work_ledger:
+                raise EvalError("settings API did not acknowledge the work_ledger arm")
+            record["work_ledger_configured"] = configured_ledger
         # Untitled, as a human creates one, so automatic naming is measured too.
         thread_body = {}
         workspace = data_dir / "eval-workspace"
@@ -417,6 +438,8 @@ def run_once(task: dict, run_idx: int, args: argparse.Namespace, provider: dict 
                     if project.get(key) not in (None, value):
                         raise EvalError("project API did not acknowledge the Nuwa model pair")
             thread_body["project_id"] = project["id"]
+            if hasattr(args, "work_ledger"):
+                record["work_ledger"] = True if project.get("nuwa_enabled") is True else configured_ledger
         if models:
             thread_body["provider_id"] = models["planner"]["provider_id"]
         thread = http_json(engine.base, "POST", "/api/threads", thread_body)["thread"]

@@ -1,4 +1,5 @@
 export const generationEn = {
+  "generation.requestBlocked": "This request couldn’t be processed due to safety restrictions. You can rephrase it or ask something else.",
   "generation.interrupted": "Generation interrupted: {reason}.",
   "generation.reason.engine_restart": "engine restart",
   "generation.reason.process_exit": "the previous process exited; its cause was not recorded",
@@ -13,6 +14,7 @@ export const generationEn = {
 }
 
 export const generationZh: Record<keyof typeof generationEn, string> = {
+  "generation.requestBlocked": "这条请求因安全限制未能处理。你可以调整请求内容，或换个问题继续。",
   "generation.interrupted": "本次生成已中断：{reason}。",
   "generation.reason.engine_restart": "引擎重启",
   "generation.reason.process_exit": "上次进程已退出，具体原因未记录",

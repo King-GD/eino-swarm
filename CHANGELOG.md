@@ -12,6 +12,27 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Added
 
+- Paired phones open task files directly from conversation messages and worker
+  logs. When several files share a name, choose the path before opening the
+  preview. (`F-224`, `C-015`, `C-020`)
+
+- Paired phones can view conversation and project work records with their
+  collaboration paths. (`F-139`, `C-055`)
+- Paired phones can search and read project knowledge pages, follow Wiki links,
+  and open the conversations cited as sources. (`F-138`, `C-053`)
+
+- The Knowledge panel opens a full project graph with page titles as nodes,
+  one undirected line per connected pair, zoom and search by title or alias. (`F-138`, `C-053`)
+- Build a wiki graph and cited documents from a task or project's retained
+  history without a model call. The build menu also offers scopes with model
+  review for semantic entities, events and links. (`F-138`, `C-054`, #189)
+
+- Desktop and Web conversations have a Work records tab. Agents can keep
+  private tasks, facts and results, then explicitly share records and their
+  prerequisites with a project. Retracted records can be unfolded or restored
+  with their existing identity. Existing shared records stay visible.
+  (`F-139`, `C-055`)
+
 - Task panels can show an enterprise asset portrait (EASM). The agent confirms the subject, performs the discovery lookups itself, and pushes each finished batch of companies, domains and certificates into the panel, which merges the batches into one graph; on the batch that carries the final asset query the panel collects the asset totals, attention trend and components itself. Each aggregation shows its own progress and a failure never stops the others. The panel follows the app language on PC, Web and paired phones.
 
 - PC and Web projects can keep a Markdown knowledge base with linked pages,
@@ -33,6 +54,20 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - PC and Web voice settings can choose a preferred microphone or follow the operating-system input. Phones use their own microphone. (`F-148`, `C-048`)
 
 ### Changed
+
+- The engine compresses Responses request bodies of at least 1 KiB when the
+  selected Gateway advertises gzip support and compression saves bytes. Older
+  gateways and personal providers receive plain JSON. (`F-171`, `C-040`)
+
+- On restart, restore only conversations with pending work or lifecycle receipts
+  to settle. Progress counts those conversations. Finished history loads when
+  opened, and semantic search backfill starts after the engine is ready.
+  Older libraries build their recovery index on first startup. (`F-110`, `C-027`)
+
+- Current-task and current-project distillation process history in saved
+  batches for notes, Skills and Knowledge. Both panels show processed and
+  remaining records, and interrupted runs can resume after an app restart.
+  (`F-138`, `F-420`, `C-054`)
 
 - 桌面、Web 与手机共用一套动效 token（90 ms 按下、140 ms 快速、200 ms 基础、280 ms 缓慢；同一组缓动曲线）。弹出层进出、横幅与停靠提示、进度条、复制反馈和图表悬停都按同一节奏只动画 `transform` / `opacity`；主题或明暗切换不再让半屏颜色渐变。系统开启“减少动态效果”时这些动画与平滑滚动关闭，最终状态仍完整可见。
 
@@ -70,9 +105,9 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
   appear in the original turn receipt and refresh the open Knowledge panel.
   (`F-138`, `F-420`, `C-025`, `C-054`)
 
-- The right panel groups Agents, Files, Trace and agent-opened panels under
-  Task, and Memory, Collaboration and Knowledge under the project name.
-  Conversations outside projects show Shared library. (`F-138`)
+- The right panel uses a single row for task and project tabs. Hover over a
+  tab to see its scope. Shared tabs outside projects show Shared library.
+  (`F-138`)
 
 - Side chat answers from the current task's findings, project notes and recorded skills. It can search that task and open a skill, and it still cannot change the task. (`F-147`, `C-042`)
 
@@ -95,10 +130,78 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Gateway safety refusals show one localized chat notice on desktop, Web and
+  paired phones. The blocked turn cannot be retried. (`F-130`, `C-035`)
+
+- Wiki graphs exclude workflow and editorial labels. Previously generated
+  labels appear in Pending with their saved citations. (`F-138`, `C-053`, `C-054`)
+
+- Knowledge graphs start at a project root. Relationship clusters are
+  connected by membership lines, and large sets of unlinked pages remain
+  browsable in their own branch. (`F-138`, `C-053`)
+
+- The mobile work records build resolves shared styling libraries from the
+  phone dependencies in a clean checkout. (`F-139`)
+
+- Reports of an external service's observed polling cadence can publish
+  without a local schedule receipt. Claims about checks armed by the app
+  still require a matching schedule. (`F-150`, `C-012`)
+
+- Memory capacity warnings allow writes that fit the actual budget. Skill folding
+  preserves complete source instructions and reports writes that landed before a
+  later cleanup failure. (`F-420`, `C-025`)
+
+- Desktop, Web and paired phone chats identify model response read timeouts.
+  The failed model-call Trace records received bytes, the last read time and
+  a Gateway request ID when available. (`F-130`, `C-012`, `C-029`)
+
+- Wiki graph builds publish attributable local observations before model review.
+  The panel shows separate scan, review and article progress. Subsequent builds
+  reuse accepted source records, and large graphs remain searchable while
+  review continues. (`F-138`, `C-054`, #188)
+
+- Conversation image sends, including queued follow-ups, pass the original
+  image and caption to the conversation model and keep the image in history,
+  independent of OCR availability. Desktop and Web image previews offer
+  explicit text extraction through the OCR model.
+  (`F-140`, `C-028`)
+
+- Responses requests omit the optional `include` field by default, so
+  compatibility endpoints that reject the field can accept the first request.
+  (`F-175`, `C-030`)
+
+- Task panel plugin settings show the shared enable switch and byte limits
+  for state and updates. Source-specific options are managed through the
+  configuration file or settings API. The Save button appears after an edit.
+  (`F-137`, `C-050`)
+
+- Project distillation gives the reviewer actionable citation feedback,
+  retries an unwritten batch once for recoverable failures, and shows
+  saved progress and timeout settings guidance in both panels. (`F-138`, `C-054`)
+- Distillation displays its saved scope and enables the toolbar resume
+  action when the original run has paused or failed. (`F-138`, `C-054`)
+- Distillation counts excerpts and oversized skips separately and offers a
+  resumable full-text option for current-task and current-project history.
+  (`F-138`, `C-054`)
+
+- Work results now require a saved task and fact in their prerequisite chain.
+  Conversation graphs show referenced project prerequisites and flag older
+  results with an incomplete basis. (`F-139`, `C-055`)
+
+- The expanded work graph fills its dialog and fits the available width while
+  keeping long paths scrollable. Work graphs show actual dependencies and
+  drop the decorative goal node. (`F-139`, `C-055`)
+
+- Engine replacement gives workers up to three seconds to summarize, leaving
+  time for the final durable checkpoints. An in-flight tool keeps its unknown
+  outcome, and completed workers keep their results. (`F-110`, `C-027`)
+
 - The phone shows the sub-agent entry and the running count as soon as a task opens, while workers are still running outside the first history page. Earlier history is no longer required to reveal them. A sub-agent that hits its lifetime limit leaves that count and stays failed; a later parent error or retain receipt does not put that run back. (`F-222`, `C-006`, `C-019`)
 - The expanded phone composer keeps the selected model name and puts the microphone, Send and Stop on the same row as the settings controls. Thinking levels appear in their picker. (`F-220`, `C-017`)
 - Opening PC or Web Models and Speech settings no longer prompts for microphone access. The microphone picker can request access when opened explicitly. (`F-148`, `C-048`)
 - In LOCAL, new conversations with the account source selected start on the original Gateway chat catalog when available. A scoped conversation binding can explicitly set the default model. (`F-171`, `C-040`)
+
+- Desktop, Web and paired phones show a task panel only while its source runs or it has a committed observation. **Close panel instance** persists across visits and restarts and interrupts only that instance's source. (`F-137`, `C-050`)
 
 - A restarted EASM source no longer leaves the panel spinning: loading follows the host's `source_status`, so an interrupted collection stops even though the steps it stored still say running.
 

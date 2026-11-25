@@ -65,6 +65,7 @@ import { MANAGER_ID, liveWorkers, splitQueuedSteers } from "@/lib/transcript"
 import { useApp } from "@/store/app"
 import { turnSlices } from "@/lib/turn-boundary"
 import { visibleGoalNotices } from "@/lib/goal-notice"
+import { visibleModelRequestNotices } from "@/lib/model-request-blocked"
 
 export { Reasoning } from "@/components/app/transcript-reasoning"
 
@@ -107,7 +108,7 @@ export function Transcript({
   const manager = state.agents[MANAGER_ID]
   const endRef = useRef<HTMLDivElement>(null)
   const scrollerRef = useRef<HTMLDivElement>(null)
-  const blocks = useMemo(() => visibleGoalNotices(manager?.blocks ?? EMPTY_BLOCKS), [manager?.blocks])
+  const blocks = useMemo(() => visibleModelRequestNotices(visibleGoalNotices(manager?.blocks ?? EMPTY_BLOCKS)), [manager?.blocks])
   const apiTurns = useApp((s) => s.turns)
   const collapseProcess = useApp((s) => s.transcriptMode === "user")
   const navItems = useMemo(

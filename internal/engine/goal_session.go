@@ -49,6 +49,9 @@ func (rt *runtime) turnOutcome(interrupt context.Context, runErr error) (status,
 	if isLimitStop(runErr) {
 		return store.TurnCancelled, runErr.Error(), false
 	}
+	if isModelRequestBlocked(runErr) {
+		return store.TurnError, modelRequestBlocked, false
+	}
 	if runErr != nil {
 		return store.TurnError, publicTurnError(runErr), false
 	}

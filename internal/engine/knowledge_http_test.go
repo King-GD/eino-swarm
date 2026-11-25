@@ -10,6 +10,7 @@ import (
 	"time"
 
 	swarm "github.com/LubyRuffy/eino-swarm"
+	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/knowledge"
 	"github.com/LubyRuffy/eino-swarm/internal/provider"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
@@ -300,8 +301,8 @@ func TestKnowledgeToolsFollowPlanningAndNuwaAtManagerAndWorkerHTTP(t *testing.T)
 					}
 					return
 				}
-				if offered["record_work"] != (mode.nuwa && !mode.planning) {
-					t.Errorf("knowledge writes do not match Nuwa write admission in %s", mode.name)
+				if offered["record_work"] != (!mode.planning) {
+					t.Errorf("work records do not match planning write admission in %s", mode.name)
 				}
 				switch managerSteps.Add(1) {
 				case 1:
@@ -362,7 +363,7 @@ func TestKnowledgeToolsFollowPlanningAndNuwaAtManagerAndWorkerHTTP(t *testing.T)
 
 func TestEnablingKnowledgeMidTurnLeavesDisabledPromptAndToolsUnchanged(t *testing.T) {
 	var e *Engine
-	var projectID, before string
+	var before string
 	e, _ = newScheduleCompletionHTTPEngine(t, func(w http.ResponseWriter, _ *http.Request, step int, request scheduleCompletionRequest) {
 		system := knowledgeSystemText(request)
 		offered := nuwaPlannerOfferedTools(request)
@@ -375,7 +376,10 @@ func TestEnablingKnowledgeMidTurnLeavesDisabledPromptAndToolsUnchanged(t *testin
 		switch step {
 		case 1:
 			before = system
-			if _, err := e.EnableProjectKnowledge(projectID); err != nil {
+			if err := e.UpdateConfig(func(cfg *config.Config) error {
+				cfg.Swarm.Knowledge = true
+				return nil
+			}); err != nil {
 				t.Error(err)
 			}
 			nuwaValidationTool(w, request, "inspect-original-metadata", ToolQueryHistory, "{}")
@@ -389,12 +393,12 @@ func TestEnablingKnowledgeMidTurnLeavesDisabledPromptAndToolsUnchanged(t *testin
 	})
 	e.cfg.Memory.Enabled = true
 	e.cfg.Memory.AutoReview = false
+	e.cfg.Swarm.Knowledge = false
 	project, err := e.CreateProject("Snapshot fixture", "", "", true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	projectID = project.ID
-	thread := knowledgeFixtureThread(t, e, projectID, "Scope check")
+	thread := knowledgeFixtureThread(t, e, project.ID, "Scope check")
 	for _, text := range []string{"Check the initial scope.", "Check the scope on a new turn."} {
 		turn, err := e.StartTurn(thread.ID, text)
 		if err != nil {

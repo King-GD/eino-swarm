@@ -201,7 +201,8 @@ function AppShell() {
     setPanelTab(tab)
   }, [])
   const openKnowledgePage = useCallback((page: string) => {
-    const { activeId, threads } = useApp.getState()
+    const { activeId, threads, meta } = useApp.getState()
+    if (meta?.swarm?.knowledge === false) return
     const owner = threads.find(({ id }) => id === activeId)?.project_id
     if (owner) useKnowledge.getState().openPage(owner, page)
     showInspector("knowledge")

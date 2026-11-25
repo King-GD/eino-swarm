@@ -88,13 +88,6 @@ func TestTaskPanelStoreFailuresRemainErrors(t *testing.T) {
 			t.Fatal("mutation")
 		}
 	})
-	t.Run("open-delivery", func(t *testing.T) {
-		f := newPanelFixture(t)
-		injectPanelFault(t, f.s, "create", "task_panel_change_rows", "")
-		if _, e := f.s.OpenTaskPanel(t.Context(), f.def, f.src); e == nil {
-			t.Fatal("delivery")
-		}
-	})
 	t.Run("anchor", func(t *testing.T) {
 		f := newPanelFixture(t)
 		injectPanelFault(t, f.s, "row", "events", "")
@@ -166,6 +159,9 @@ func TestTaskPanelCorruptDurableInputsFailClosed(t *testing.T) {
 		t.Run(column, func(t *testing.T) {
 			f := newPanelFixture(t)
 			p := f.open(t)
+			if _, e := f.s.StartTaskPanelSource(t.Context(), f.src, p.ID); e != nil {
+				t.Fatal(e)
+			}
 			if e := f.s.db.Model(&TaskPanelRow{}).Where("id = ?", p.ID).UpdateColumn(column, []byte(`{`)).Error; e != nil {
 				t.Fatal(e)
 			}

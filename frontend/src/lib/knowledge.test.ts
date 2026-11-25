@@ -6,6 +6,7 @@ import {
   filterKnowledgeTree,
   groupKnowledgeConnections,
   knowledgeSourceURL,
+  matchKnowledgeGraphNodes,
   pushKnowledgePage,
   type KnowledgeNode,
 } from "./knowledge"
@@ -14,6 +15,17 @@ import { isKnowledgePageID, knowledgePageFromHref, splitKnowledgeLinks } from ".
 const shared: KnowledgeNode = { id: "shared", label: "Shared page", kind: "page", aliases: ["Alternate title"], cycle: true }
 
 describe("Knowledge navigation", () => {
+  it("finds graph nodes by their titles, aliases and stable IDs", () => {
+    const main = { id: "stable-slug", title: "Renamed page", type: "entry", aliases: ["Old name"] }
+    const isolated = { id: "another", title: "Unlinked page", type: "entry" }
+    const nodes = [main, isolated]
+    expect(matchKnowledgeGraphNodes(nodes, "  renamed ")).toEqual([main])
+    expect(matchKnowledgeGraphNodes(nodes, "OLD NAME")).toEqual([main])
+    expect(matchKnowledgeGraphNodes(nodes, "stable-slug")).toEqual([main])
+    expect(matchKnowledgeGraphNodes(nodes, "unlinked")).toEqual([isolated])
+    expect(matchKnowledgeGraphNodes(nodes, "absent")).toEqual([])
+  })
+
   it("filters without dropping ancestors or coalescing copies under different parents", () => {
     const first: KnowledgeNode = { id: "one", label: "One", kind: "page", children: [shared] }
     const second: KnowledgeNode = { id: "two", label: "Two", kind: "page", children: [shared] }

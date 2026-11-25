@@ -99,7 +99,7 @@ func TestLongPathRemainsVisibleAfterTheConversationIsFolded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	preview, err := renderNuwaContext(project.ID, revision, nodes, "List every accepted result in stage order.", e.Config().Tools.ToolResultLimit())
+	preview, err := renderNuwaContext(store.WorkRevision{ProjectID: project.ID, ProjectRevision: revision}, nodes, "List every accepted result in stage order.", e.Config().Tools.ToolResultLimit())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,11 +142,11 @@ func TestNuwaPathFollowsDependenciesAndDropsOnlyAnOversizedSummary(t *testing.T)
 	}
 	huge := store.NuwaNode{ID: "huge", Title: "huge", Summary: strings.Repeat("大", 8000), Status: "reported", UpdatedAt: later}
 	small := store.NuwaNode{ID: "small", Title: "small", Summary: "kept-token", Status: "reported", UpdatedAt: early}
-	fitted, err := renderNuwaContext("project", 1, []store.NuwaNode{small}, "", 1<<20)
+	fitted, err := renderNuwaContext(store.WorkRevision{ProjectID: "project", ProjectRevision: 1}, []store.NuwaNode{small}, "", 1<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
-	text, err := renderNuwaContext("project", 1, []store.NuwaNode{huge, small}, "", utf8.RuneCountInString(fitted))
+	text, err := renderNuwaContext(store.WorkRevision{ProjectID: "project", ProjectRevision: 1}, []store.NuwaNode{huge, small}, "", utf8.RuneCountInString(fitted))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,11 +155,11 @@ func TestNuwaPathFollowsDependenciesAndDropsOnlyAnOversizedSummary(t *testing.T)
 	}
 	ancestor := store.NuwaNode{ID: "ancestor", Title: "ancestor", Summary: strings.Repeat("大", 8000), Status: "reported", UpdatedAt: early}
 	dependent := store.NuwaNode{ID: "dependent", Title: "dependent", Summary: "kept-token", Status: "reported", DependsOn: []string{ancestor.ID}, UpdatedAt: later}
-	kept, err := renderNuwaContext("project", 1, []store.NuwaNode{dependent}, "", 1<<20)
+	kept, err := renderNuwaContext(store.WorkRevision{ProjectID: "project", ProjectRevision: 1}, []store.NuwaNode{dependent}, "", 1<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
-	blocked, err := renderNuwaContext("project", 1, []store.NuwaNode{ancestor, dependent}, "", utf8.RuneCountInString(kept))
+	blocked, err := renderNuwaContext(store.WorkRevision{ProjectID: "project", ProjectRevision: 1}, []store.NuwaNode{ancestor, dependent}, "", utf8.RuneCountInString(kept))
 	if err != nil || strings.Contains(blocked, ancestor.Summary) || !strings.Contains(blocked, dependent.ID) {
 		t.Fatalf("a prerequisite that cannot fit removed the step that can:\n%s err=%v", blocked, err)
 	}
@@ -237,6 +237,7 @@ func solveLongPath(t *testing.T, nuwa bool) longPathOutcome {
 	}
 	e.cfg.Memory.AutoReview = false
 	e.cfg.Swarm.CompactKeepMessages = 2
+	e.cfg.Swarm.WorkLedger = nuwa
 	project, err := e.CreateProject("long path", "Continue a chain of accepted results.", t.TempDir(), true, nuwa)
 	if err != nil {
 		t.Fatal(err)

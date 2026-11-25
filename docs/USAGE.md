@@ -79,6 +79,16 @@ and projects sort by last update; drag a row to pin a custom order. On the
 desktop window, drag the title bar to move it; double-click to zoom or
 restore, like Finder.
 
+**Task panels** appears in the inspector when a panel is collecting or has
+published results. Choose **Close panel instance** to remove the selected
+instance from this conversation, including after restart. A running source
+for that instance is interrupted while the conversation continues. Hiding the
+inspector keeps its panels available.
+
+**Settings → Tools → Task panel plugins** controls the shared enable switch
+and the state and update byte limits. Select **Save panel settings** when
+you change these values. See [Task panels](TASK_PANELS.md) for source settings.
+
 On the Mac, an independent native controller checks actual painted pixels.
 A window that stays one flat colour counts as not painted. It tries one
 reload, then replaces the window on the same engine if needed.
@@ -203,18 +213,21 @@ After a visible reply, one likely next message can appear as the placeholder.
 Tab inserts it; Enter sends it. **Settings → Swarm → Suggest a next step**
 turns the extra call off. It is on by default.
 
-Paste a screenshot into the box. It lands as a thumbnail you can drop before
-sending, and goes to the model as visual input, not as a file in the
-workspace. Dragging a file onto the box does the same split: images become
-thumbs, other files become workspace attachments. A photo whose drop reports
-a generic binary type, or only a `png` / `jpg` / `gif` / `webp` name, is still
+Paste a screenshot into the box. It lands as a thumbnail you can remove before
+sending. The conversation model receives the original image and caption as
+visual input, including when a queued message starts its turn. Dragging images
+onto the box creates thumbnails. Other files become workspace attachments.
+A photo whose drop reports a generic binary type, or only a
+`png` / `jpg` / `gif` / `webp` name, is still
 a thumb. The server sniffs the bytes and refuses unsupported or mismatched
 type claims. Sending names those files on the message, so the model reads what
 you just attached.
 
 Click a sent image, or focus it and press Enter or Space, to open it over the
 conversation. Escape, the backdrop, or Close returns to the thumbnail.
-Closing the preview keeps a running task going.
+Choose **Extract text** in that preview to run the configured OCR model on
+the selected image. The recognized text can be selected and copied from the
+preview. Closing it cancels the extraction and keeps any running task going.
 
 Hover a user bubble or a finished answer to see the event time. Copy takes
 the text. Edit opens the bubble in place. Sending keeps that bubble, clears
@@ -288,10 +301,14 @@ separate from successful or failed workers. Reopening keeps that state even
 when a cancellation receipt arrives after cleanup. Cleanup alone never means
 a task completed. Explicitly resuming a worker can run it again.
 
-When the latest human turn fails on desktop or web, **Retry** continues from
+When the latest human turn offers **Retry** on desktop or web, it continues from
 the context stored at that failure, including tool results already recorded.
 The same turn continues. Retry stays disabled while Settings is open or the
 conversation is busy.
+
+If the gateway blocks a request for safety reasons, chat shows one notice.
+You can adjust the request or ask something else. The failed turn has no
+**Retry** action, and Trace retains the original model call error.
 
 If the manager hits its tool-round limit, the transcript asks whether to add
 another slice. **Manager tool rounds** opens Settings → Swarm on that field.
@@ -552,7 +569,9 @@ and retain each turn's error. Ordinary messages still leave that pause in
 place. **Start** explicitly resumes it. Truncated tool JSON, a `429`, a
 dropped stream, or a mid-stream TCP read timeout retries in-turn. The
 transcript names the model service for a rate limit, an outage, or a dropped
-connection. A concrete API rejection stays as that status and cause. Three
+connection. A TCP read timeout during a response has its own notice. For
+the received bytes, last-read time and Gateway request ID when present, use
+`zwai trace <turn>`. A concrete API rejection stays as that status and cause. Three
 consecutive worker lifetime watchdog failures stop automatic resume: the turn
 errors, its goal blocks, and its recurring check pauses. Inspect the worker
 trace, model, and task before an explicit new message or **Start** retries.
@@ -809,9 +828,15 @@ and [table semantics](DATA_MODEL.md#read-only-history-sql).
 executor model. Mode changes apply to subsequent turns. Current workers keep
 their configuration. See [Nuwa](NUWA.md).
 
+Open **Work records** in the right inspector to see the conversation's
+tasks, facts and results. In a project, the same view includes shared records.
+Choose **Merge into project** on a private record to share it and its private
+prerequisites. An independent conversation keeps its own work records.
+See [Work records](WORK.md).
+
 ## Project knowledge
 
-In the right panel, open **Knowledge** under the project name and choose
+In the right panel, open **Knowledge** and choose
 **Enable knowledge base**. If the conversation is in **Shared library**,
 move it into a project to use Knowledge. **By type** groups pages by their
 schema type. Project-defined views follow named relationships. **Pending**
@@ -822,13 +847,70 @@ Page sources distinguish primary material, unverified analysis and external
 links. Removed or rewound history remains listed as unavailable. An available
 last-update link opens its conversation or Trace.
 
+Open **Graph** to browse the wiki from the project root. Dotted membership
+lines connect each relationship cluster and unlinked page to the project.
+Each pair of pages shares one undirected line. A solid line shows a defined
+relationship, and a dashed line shows a Wiki link with no defined relationship.
+Large groups of unlinked pages share an **Unlinked pages** entry. Open it to
+browse those pages, or search by title or alias across browsable pages.
+Selecting a result shows its path in the graph. Click a page node or use
+the open button beside search to read it. **Fit the whole knowledge graph**
+restores the overview.
+
+On a paired phone, tap **Knowledge** beside a project or in a project
+conversation header. Search or page through the results, open a document
+and follow its Wiki links, related pages or backlinks. Expand a source excerpt
+to read the saved original text, or tap an available source to open its
+conversation on the phone.
+
 Open **Distill** from **Memory** or **Knowledge**. Choose **Latest turn** for
 the most recent successful turn, **Current task** for this conversation or
 **Current project** for the project's retained conversations, including archived
 ones. A single background review can save notes, Skills and wiki pages.
-Both panels show the same result and a link to the original Trace. A larger
-scope can exceed the history budget; the result indicates omitted history.
-Failed turns can contribute explicit human requirements to notes.
+Both panels show the same result and a link to an original Trace. Failed
+turns can contribute explicit human requirements to notes.
+
+For **Current task** and **Current project**, the progress bar shows how many
+historical records it has processed and how many remain. You can pause and
+continue from the last saved batch, including after restarting the app.
+Both panels show the saved scope. When a batch stops with records remaining,
+the toolbar offers **Resume distillation** for that same scope.
+The review covers the completed history at the time you started it. By
+default, long records are reviewed as excerpts or skipped when they exceed
+the read limit. The panel shows those counts separately. Choose
+**Current task · Full text** or **Current project · Full text** to read
+eligible long records in segments. This can require more model requests.
+The panel tracks the current record's segment progress and counts the
+record as processed when its last segment commits. Resuming keeps the saved
+reading mode and segment position. Unavailable or ineligible sources can
+still be skipped.
+If a citation remains invalid or a temporary model failure ends a batch
+before a write is attempted, the reviewer retries that batch once. For a
+failure that needs a settings change, follow the message in either panel,
+then choose **Resume distillation** to keep the progress already saved.
+
+In **Knowledge → Build wiki graph**, choose **Current task** or **Current project**
+to scan retained history and publish explicit identifiers, supported
+structured names, evidenced relationships and documents locally. To also
+review ambiguous names, events and relationships with a model, choose a scope
+under **Include model review**. Open **Graph** to search nodes and view their
+cited excerpts as soon as the local scan completes. A link uses one
+undirected line per pair. For large graphs the overview lays out a bounded
+selection, and search can find every node in the project. Once observations
+are verified, the builder appends them to the documents in batches and
+preserves existing prose.
+
+Generated workflow messages, waiting prompts and section or table labels
+are excluded from the graph. Older generated pages recognized as those
+labels appear in **Pending**, where you can open their saved text and
+original citations.
+
+The panel tracks scanned records and document updates. When selected,
+model review has its own progress. Records over the local scan size limit
+can be reviewed in an explicit review build. Pause and resume preserve the
+saved positions and chosen mode. Subsequent builds reuse
+accepted immutable records. Sources with changed content are checked again.
+The graph build has its own receipt alongside **Distill**.
 
 **Distill** uses enabled destinations. Choose **Enable knowledge and distill**
 to initialize a wiki and include it in the same review. An interrupted run
@@ -1116,8 +1198,10 @@ the background, so its network wait does not hold the window closed. Startup
 errors show the current attempt's log and actual process failure.
 
 The desktop and Web window can attach while unfinished work is restoring. PC
-and phone show recovery progress and keep saved history available. New work
-waits until recovery ends. Individual recovery failures leave a visible
+and phone show progress for the conversations with recovery work. Completed
+conversations stay in the list and load history when opened. The first launch
+after upgrading an older library may take longer while it builds the recovery
+index. New work waits until recovery ends. Individual recovery failures leave a visible
 failure count and the original Trace. Other work stays usable. Stop remains
 available and is persisted before that conversation can resume. Goal editing
 and its keyboard shortcuts pause during recovery. A refused goal edit stays

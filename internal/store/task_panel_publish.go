@@ -41,6 +41,9 @@ func (s *Store) PublishTaskPanel(ctx context.Context, src taskpanel.Source, u ta
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
+		if row.Closed {
+			return ErrNotFound
+		}
 		if len(limits) > 1 {
 			return taskpanel.ErrInvalid
 		}
@@ -90,12 +93,18 @@ func (s *Store) PublishTaskPanel(ctx context.Context, src taskpanel.Source, u ta
 		if err != nil {
 			return err
 		}
-		mutation := TaskPanelMutation{SourceStatus: row.SourceStatus, PanelID: row.ID, OperationID: u.OperationID, ThreadID: src.ThreadID, TurnID: src.TurnID, AnchorSeq: anchor, Revision: row.Revision, Digest: digest, Body: body, SourceJSON: row.SourceJSON}
+		mutation := TaskPanelMutation{Observation: panelUpdateHasObservation(u), SourceStatus: row.SourceStatus, PanelID: row.ID, OperationID: u.OperationID, ThreadID: src.ThreadID, TurnID: src.TurnID, AnchorSeq: anchor, Revision: row.Revision, Digest: digest, Body: body, SourceJSON: row.SourceJSON}
 		if err = tx.Create(&mutation).Error; err != nil {
 			return err
 		}
-		if err = appendPanelChange(tx, row, u); err != nil {
+		visible, err := taskPanelHasPresentation(tx, row)
+		if err != nil {
 			return err
+		}
+		if visible {
+			if err = appendPanelChange(tx, row, u); err != nil {
+				return err
+			}
 		}
 		out, err = panelValue(row)
 		return err
@@ -190,7 +199,18 @@ func rewindTaskPanels(tx *gorm.DB, threadID string, fromSeq int64, turnIDs []str
 		if err := tx.Where("panel_id = ?", id).Delete(&TaskPanelChangeRow{}).Error; err != nil {
 			return err
 		}
-		if err := appendPanelChange(tx, row, taskpanel.Update{BaseRevision: nextRevision - 1, Kind: kind, State: row.State}); err != nil {
+		visible, err := taskPanelHasPresentation(tx, row)
+		if err != nil {
+			return err
+		}
+		if !visible {
+			kind = "deleted"
+		}
+		change := taskpanel.Update{BaseRevision: nextRevision - 1, Kind: kind}
+		if visible {
+			change.State = row.State
+		}
+		if err := appendPanelChange(tx, row, change); err != nil {
 			return err
 		}
 	}

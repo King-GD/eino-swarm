@@ -1,81 +1,155 @@
 import { create } from "zustand"
+import { ApiError } from "@/lib/api"
 import { nuwaAPI, subscribeNuwa } from "@/lib/nuwa-api"
-import type { NuwaSnapshot } from "@/lib/nuwa"
+import { subscribeWorkEvents } from "@/lib/nuwa-events"
+import { workAtLeast, type ThreadWorkSnapshot, type WorkVersion } from "@/lib/nuwa"
+
+export interface WorkOwner {
+  threadId?: string
+  projectId?: string
+  generation: number
+}
 
 interface NuwaState {
-  projectId?: string
-  snapshot?: NuwaSnapshot
+  owner?: WorkOwner
+  snapshot?: ThreadWorkSnapshot
+  tag?: string
   loading: boolean
   connected: boolean
   error?: string
-  connect: (projectId: string) => () => void
+  promoting: boolean
+  promoteError?: { id: string; message: string; conflict: boolean }
+  connect: (owner: WorkOwner) => () => void
   refresh: () => Promise<void>
+  promote: (id: string) => Promise<boolean>
 }
 
 let visit = 0
 let closeStream: (() => void) | undefined
-let reading = false
-let wantedRevision = -1
+let reading: Promise<void> | undefined
+let wanted: WorkVersion | undefined
 
-/** One mounted project view owns its stream. The visit identity also rejects
- * old A → B → A responses, while revisions reject older snapshots in a visit. */
-export const useNuwa = create<NuwaState>((set, get) => ({
-  loading: false,
-  connected: false,
-  connect: (projectId) => {
-    closeStream?.()
-    const token = ++visit
-    reading = false
-    wantedRevision = -1
-    set({ projectId, snapshot: undefined, loading: true, connected: false, error: undefined })
-    closeStream = subscribeNuwa(projectId, {
-      onRevision: (revision) => {
-        if (token !== visit || revision <= (get().snapshot?.revision ?? -1)) return
-        wantedRevision = Math.max(wantedRevision, revision)
-        void get().refresh()
-      },
-      onOpen: () => {
-        if (token !== visit) return
-        set({ connected: true })
-        void get().refresh()
-      },
-      onError: () => {
-        if (token === visit) set({ connected: false })
-      },
-    })
+function projectVersion(owner: WorkOwner, revision: number): WorkVersion {
+  return {
+    thread_id: "",
+    project_id: owner.projectId ?? "",
+    thread_revision: 0,
+    project_revision: revision,
+    data_generation: owner.generation,
+  }
+}
+
+/** One inspector visit owns its reads, mutations and invalidations. */
+export const useNuwa = create<NuwaState>((set, get) => {
+  function invalidate(version: WorkVersion) {
+    const current = get().snapshot
+    if ((current && workAtLeast(current, version)) || (wanted && workAtLeast(wanted, version))) return
+    wanted = version
+    if (current && (version.project_id !== current.project_id || version.data_generation !== current.data_generation)) {
+      set({ snapshot: undefined, tag: undefined, loading: true })
+    }
     void get().refresh()
-    return () => {
-      if (token !== visit) return
-      ++visit
-      reading = false
+  }
+
+  return {
+    loading: false,
+    connected: false,
+    promoting: false,
+    connect: (owner) => {
+      const token = ++visit
       closeStream?.()
-      closeStream = undefined
-      set({ connected: false })
-    }
-  },
-  refresh: async () => {
-    const projectId = get().projectId
-    if (!projectId || reading) return
-    const token = visit
-    const requested = wantedRevision
-    reading = true
-    set({ loading: !get().snapshot, error: undefined })
-    try {
-      const snapshot = await nuwaAPI.snapshot(projectId)
-      if (token !== visit || snapshot.project_id !== projectId) return
-      if (snapshot.revision >= (get().snapshot?.revision ?? -1))
-        set({ snapshot, loading: false, error: undefined })
-    } catch (error) {
-      if (token === visit)
-        set({ loading: false, error: error instanceof Error ? error.message : String(error) })
-    } finally {
-      if (token === visit) {
-        reading = false
-        // An invalidation received during this read needs one fresh read. A
-        // stale/erroring server alone never starts a background retry loop.
-        if (wantedRevision > requested && wantedRevision > (get().snapshot?.revision ?? -1))
-          void get().refresh()
+      reading = undefined
+      wanted = undefined
+      set({ owner, snapshot: undefined, tag: undefined, loading: true, connected: false, error: undefined, promoting: false, promoteError: undefined })
+      const connection = (connected: boolean) => {
+        if (token !== visit) return
+        set({ connected })
+        if (connected) void get().refresh()
       }
-    }
-  },
-}))
+      closeStream = owner.threadId
+        ? subscribeWorkEvents(owner.threadId, (event) => {
+          if (token !== visit) return
+          if (event.kind === "connection") connection(event.connected)
+          else if (event.version.data_generation >= owner.generation) invalidate(event.version)
+        })
+        : subscribeNuwa(owner.projectId!, {
+          onRevision: (revision) => {
+            if (token === visit) invalidate(projectVersion(owner, revision))
+          },
+          onOpen: () => connection(true),
+          onError: () => connection(false),
+        })
+      void get().refresh()
+      return () => {
+        if (token !== visit) return
+        ++visit
+        reading = undefined
+        closeStream?.()
+        closeStream = undefined
+        set({ owner: undefined, snapshot: undefined, tag: undefined, connected: false })
+      }
+    },
+    refresh: async () => {
+      const owner = get().owner
+      if (!owner) return
+      if (reading) return reading
+      const token = visit
+      const requested = wanted
+      set({ loading: !get().snapshot, error: undefined })
+      reading = (async () => {
+        try {
+          const result = owner.threadId
+            ? await nuwaAPI.threadSnapshot(owner.threadId)
+            : await nuwaAPI.snapshot(owner.projectId!).then((snapshot) => ({
+              view: { ...projectVersion(owner, snapshot.revision), project_id: snapshot.project_id, nodes: snapshot.nodes, workers: snapshot.workers },
+              tag: undefined,
+            }))
+          if (token !== visit) return
+          const { view, tag } = result
+          if (view.thread_id !== (owner.threadId ?? "") ||
+              (!owner.threadId && view.project_id !== owner.projectId) ||
+              view.data_generation < owner.generation) return
+          const current = get().snapshot
+          if ((current && !workAtLeast(view, current)) || (wanted && !workAtLeast(view, wanted))) return
+          set({ snapshot: view, tag, error: undefined })
+        } catch (error) {
+          if (token === visit) set({ error: error instanceof Error ? error.message : String(error) })
+        } finally {
+          if (token === visit) {
+            reading = undefined
+            set({ loading: false })
+            const current = get().snapshot
+            if (wanted && wanted !== requested && (!current || !workAtLeast(current, wanted))) {
+              await get().refresh()
+            }
+          }
+        }
+      })()
+      return reading
+    },
+    promote: async (id) => {
+      const { owner, snapshot, tag, promoting } = get()
+      if (!owner?.threadId || !snapshot?.project_id || !tag || promoting ||
+          !snapshot.nodes.some((node) => node.id === id && node.scope === "thread")) return false
+      const token = visit
+      set({ promoting: true, promoteError: undefined })
+      try {
+        const revision = await nuwaAPI.promote(owner.threadId, [id], tag)
+        if (token === visit) {
+          invalidate(revision)
+          await get().refresh()
+        }
+        return token === visit
+      } catch (error) {
+        if (token === visit) {
+          const conflict = error instanceof ApiError && error.code === "work_conflict"
+          set({ promoteError: { id, conflict, message: error instanceof Error ? error.message : String(error) } })
+          if (conflict) await get().refresh()
+        }
+        return false
+      } finally {
+        if (token === visit) set({ promoting: false })
+      }
+    },
+  }
+})

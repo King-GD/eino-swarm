@@ -69,20 +69,33 @@ func settleTaskPanelSource(tx *gorm.DB, src taskpanel.Source, panelID, status st
 	if row.SourceStatus == status {
 		return panelValue(row)
 	}
+	if row.Closed {
+		return taskpanel.Panel{}, ErrNotFound
+	}
 	if status == "running" && row.SourceStatus != "" {
 		return taskpanel.Panel{}, taskpanel.ErrConflict
 	}
 	if status == "finished" && row.SourceStatus != "running" {
 		return taskpanel.Panel{}, taskpanel.ErrConflict
 	}
-	oldRevision := row.Revision
+	oldRevision, wasRunning := row.Revision, row.SourceStatus == "running"
 	row.SourceStatus = status
 	row.Revision++
 	row.UpdatedAt = time.Now().UTC()
 	if err = tx.Save(&row).Error; err != nil {
 		return taskpanel.Panel{}, err
 	}
-	if err = appendPanelChange(tx, row, taskpanel.Update{Kind: "snapshot", BaseRevision: oldRevision, State: row.State}); err != nil {
+	visible, err := taskPanelHasPresentation(tx, row)
+	if err != nil {
+		return taskpanel.Panel{}, err
+	}
+	switch {
+	case visible:
+		err = appendPanelChange(tx, row, taskpanel.Update{Kind: "snapshot", BaseRevision: oldRevision, State: row.State})
+	case wasRunning:
+		err = appendPanelChange(tx, row, taskpanel.Update{Kind: "deleted", BaseRevision: oldRevision})
+	}
+	if err != nil {
 		return taskpanel.Panel{}, err
 	}
 	return panelValue(row)

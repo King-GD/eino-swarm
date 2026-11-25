@@ -5,11 +5,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/LubyRuffy/eino-swarm/internal/app"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/LubyRuffy/eino-swarm/internal/app"
 )
 
 // This hook exists only in the test binary; production has no environment
@@ -18,7 +19,7 @@ func runRestoreProcessHelper() int {
 	fs := flag.NewFlagSet("restore-process", flag.ContinueOnError)
 	dir := fs.String("data-dir", "", "")
 	addr := fs.String("addr", "127.0.0.1:0", "")
-	_ = fs.Bool("mock", false, "")
+	mock := fs.Bool("mock", false, "")
 	if err := fs.Parse(os.Args[2:]); err != nil {
 		return 2
 	}
@@ -28,7 +29,21 @@ func runRestoreProcessHelper() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	delay, _ := time.ParseDuration(os.Getenv("ZWAI_RESTORE_DELAY"))
-	err := serveEngine(ctx, engineOpts{DataDir: *dir, Addr: *addr, Restore: func(ctx context.Context, a *app.App) (err error) {
+	var indexProbe *indexedStartupProbe
+	listener := time.Now()
+	err := serveEngine(ctx, engineOpts{DataDir: *dir, Addr: *addr, Mock: *mock, Ready: func(string) {
+		listener = time.Now()
+	}, Recovered: func(string) {
+		if indexProbe != nil {
+			if err := indexProbe.finish(time.Since(listener)); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+			}
+		}
+	}, Restore: func(ctx context.Context, a *app.App) (err error) {
+		indexProbe, err = observeIndexedStartup(a)
+		if err != nil {
+			return err
+		}
 		probe, err := startLargeRestoreProbe(ctx, a)
 		if err != nil {
 			return err

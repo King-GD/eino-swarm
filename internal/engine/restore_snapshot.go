@@ -52,15 +52,7 @@ func (e *Engine) loadRestoreSnapshot(ctx context.Context, threadID string) (*res
 // hold rt.mu, while generation notifications take generations before rt.mu;
 // this path must not initialize the generation cache or acquire its lock.
 func (e *Engine) readRestoreSnapshot(ctx context.Context, threadID string) (*restoreSnapshot, error) {
-	var accepted *restartCheckpoint
-	cp, err := e.store.LatestEventOfKind(ctx, threadID, KindRestartCheckpoint, func(event *store.Event) bool {
-		var checkpoint restartCheckpoint
-		if json.Unmarshal([]byte(event.Text), &checkpoint) != nil || checkpoint.Version != 1 {
-			return false
-		}
-		accepted = &checkpoint
-		return true
-	})
+	cp, accepted, err := e.readStartupCheckpoint(ctx, threadID)
 	if err != nil {
 		return nil, err
 	}
@@ -90,21 +82,11 @@ func (e *Engine) readRestoreSnapshot(ctx context.Context, threadID string) (*res
 	// A committed report can have a synthetic result in checkpoint history.
 	// Include its exact call in this one filtered read, even if that history
 	// considered the call closed, so receipt repair never rereads the full turn.
-	reports, err := e.store.ListScheduleReportsForRecovery(threadID)
+	reportIDs, err := e.startupScheduleReportCalls(threadID)
 	if err != nil {
 		return nil, err
 	}
-	for i := range reports {
-		row := &reports[i]
-		payload, failure := decodeRestoredScheduleAnswer(&store.Turn{ID: row.TurnID, ThreadID: threadID}, row)
-		if failure != nil {
-			return nil, failure
-		}
-		if payload.ToolCallID == "" {
-			return nil, &scheduleAnswerError{Code: "answer_restore_invalid"}
-		}
-		pendingIDs = append(pendingIDs, payload.ToolCallID)
-	}
+	pendingIDs = append(pendingIDs, reportIDs...)
 	s.events, err = e.store.ListRecoveryEvents(ctx, threadID, cutoff, pendingIDs...)
 	if err != nil {
 		return nil, err
@@ -124,6 +106,39 @@ func (e *Engine) readRestoreSnapshot(ctx context.Context, threadID string) (*res
 	return s, nil
 }
 
+func (e *Engine) readStartupCheckpoint(ctx context.Context, threadID string) (*store.Event, *restartCheckpoint, error) {
+	var accepted *restartCheckpoint
+	cp, err := e.store.LatestEventOfKind(ctx, threadID, KindRestartCheckpoint, func(event *store.Event) bool {
+		var checkpoint restartCheckpoint
+		if json.Unmarshal([]byte(event.Text), &checkpoint) != nil || checkpoint.Version != 1 {
+			return false
+		}
+		accepted = &checkpoint
+		return true
+	})
+	return cp, accepted, err
+}
+
+func (e *Engine) startupScheduleReportCalls(threadID string) ([]string, error) {
+	reports, err := e.store.ListScheduleReportsForRecovery(threadID)
+	if err != nil {
+		return nil, err
+	}
+	var calls []string
+	for i := range reports {
+		row := &reports[i]
+		payload, failure := decodeRestoredScheduleAnswer(&store.Turn{ID: row.TurnID, ThreadID: threadID}, row)
+		if failure != nil {
+			return nil, failure
+		}
+		if payload.ToolCallID == "" {
+			return nil, &scheduleAnswerError{Code: "answer_restore_invalid"}
+		}
+		calls = append(calls, payload.ToolCallID)
+	}
+	return calls, nil
+}
+
 func (e *Engine) restoreTurnEvents(turnID string, snapshots ...*restoreSnapshot) ([]store.Event, error) {
 	if s := firstRestore(snapshots); s != nil {
 		events := make([]store.Event, 0)
@@ -137,7 +152,7 @@ func (e *Engine) restoreTurnEvents(turnID string, snapshots ...*restoreSnapshot)
 	return e.store.ListTurnEvents(turnID)
 }
 
-func (e *Engine) recordRestoreSnapshot(turn *store.Turn, s *restoreSnapshot, started time.Time, restoreErr, contextErr error) {
+func (e *Engine) recordRestoreResult(turn *store.Turn, events, checkpoints int, started time.Time, restoreErr, contextErr error) {
 	phase, category := "restored", ""
 	if restoreErr != nil {
 		phase, category = "failed", "restore_error"
@@ -151,9 +166,9 @@ func (e *Engine) recordRestoreSnapshot(turn *store.Turn, s *restoreSnapshot, sta
 		DurationMS      int64  `json:"duration_ms"`
 		ScannedEvents   int    `json:"scanned_events"`
 		CheckpointReads int    `json:"checkpoint_reads"`
-	}{phase, category, time.Since(started).Milliseconds(), len(s.events), 1})
+	}{phase, category, time.Since(started).Milliseconds(), events, checkpoints})
 	e.record(store.Event{ThreadID: turn.ThreadID, TurnID: turn.ID, Kind: "engine_restore", AgentID: swarm.DefaultManagerID, Text: string(body)})
-	e.log.Info("engine conversation restoration", "phase", phase, "error_category", category, "thread", turn.ThreadID, "turn", turn.ID, "duration_ms", time.Since(started).Milliseconds(), "scanned_events", len(s.events), "checkpoint_reads", 1)
+	e.log.Info("engine conversation restoration", "phase", phase, "error_category", category, "thread", turn.ThreadID, "turn", turn.ID, "duration_ms", time.Since(started).Milliseconds(), "scanned_events", events, "checkpoint_reads", checkpoints)
 }
 
 func checkpointFromRestoreEvents(events []store.Event, snapshots []*restoreSnapshot) (*restartCheckpoint, int) {

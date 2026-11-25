@@ -135,7 +135,7 @@ func TestNuwaRecallIgnoresDetailAndPreservesSourceAndWarnings(t *testing.T) {
 	if got := nuwaRecallNodeIDs(ordered); !slices.Equal(got, []string{"match", "detail"}) {
 		t.Fatalf("on-demand detail influenced recall: %v", got)
 	}
-	text, err := renderNuwaContext("project", 3, nodes, "needle", 1<<20)
+	text, err := renderNuwaContext(store.WorkRevision{ProjectID: "project", ProjectRevision: 3}, nodes, "needle", 1<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,13 +154,13 @@ func TestNuwaRecallIgnoresDetailAndPreservesSourceAndWarnings(t *testing.T) {
 func TestNuwaRecallKeepsWholeNodeBudgetAndSkipsOversizedMatches(t *testing.T) {
 	at := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
 	small := store.NuwaNode{ID: "small", Title: "other", UpdatedAt: at.Add(time.Hour)}
-	full, err := renderNuwaContext("project", 1, []store.NuwaNode{small}, "needle", 1<<20)
+	full, err := renderNuwaContext(store.WorkRevision{ProjectID: "project", ProjectRevision: 1}, []store.NuwaNode{small}, "needle", 1<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
 	budget := utf8.RuneCountInString(full)
 	large := store.NuwaNode{ID: "large", Title: "needle", Summary: strings.Repeat("观察😀", budget), UpdatedAt: at}
-	text, err := renderNuwaContext("project", 1, []store.NuwaNode{small, large}, "needle", budget)
+	text, err := renderNuwaContext(store.WorkRevision{ProjectID: "project", ProjectRevision: 1}, []store.NuwaNode{small, large}, "needle", budget)
 	if err != nil || utf8.RuneCountInString(text) > budget {
 		t.Fatalf("ranked preview exceeded the whole character budget: err=%v", err)
 	}

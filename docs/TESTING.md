@@ -465,6 +465,69 @@ output, final AX/pixel result and its own `smoke.json`; cleanup and a separate
 fresh inventory confirmed deleted case data and no owned processes. Its bound
 records are retained separately in `native-smoke-revision3-readygate01` and do
 not change the earlier failed baseline or accept a future public installer.
+## Conversation work records (`F-139`, `C-055`)
+
+Start with the Nuwa and Inspector cases in `make model-check`. The current
+design permits a standalone conversation to read its records and a peer to
+read both records after closure promotion. Seeded private leaks, missing
+closure and focus stealing each violate their own invariant. The EventStream
+case also rejects using the work revision as the conversation cursor.
+
+The `nuwa-merge-*` cases model confirmation against the original destination,
+conversation and project revisions, and restore generation. Failure between
+prerequisite and root writes leaves no partial merge. The first publishable
+snapshot includes the full dependency closure and both revisions. The
+`work-pruning-*` cases model a bounded dependency graph. Inactive ancestors
+of an active result remain visible, an entirely inactive branch collapses,
+and restoration returns the same record ID. A dependent keeps its version
+warning until it explicitly reconfirms the restored prerequisite. Fault cases
+check the corresponding invariants and reachability cases exercise both
+refusal and successful outcomes. The models cover these bounded protocols.
+
+Exercise versioned promotion and its failures at the Store and HTTP boundaries.
+Use actual model HTTP inputs for ordinary and standalone tools, planning,
+setting changes, original-turn restore, preview revision matching and inactive
+record budgeting. Project and full backup tests cover scope-aware row
+ownership and omission. Use the work panel E2E for explicit sharing, navigation,
+failed preconditions and retraction/restoration. Exercise draft saves from a
+second window while both work panels receive native chat-stream invalidations.
+The Playwright run uses an isolated server, data directory and evidence output.
+
+For the paired phone, `TestPairedPhoneWorkRecords*` exercises scope, the PC
+switch, and frame budget through a sealed link. `mobile/e2e/work-records.spec.ts`
+checks the path, details, scope switching, and the live PC setting on phone
+viewports. Run the mobile lint, unit tests and production build in a clean
+checkout after installing only the mobile dependencies to verify resolution
+of the shared graph's styling packages.
+
+For native acceptance, prepare the matching AX helpers on the host.
+
+```bash
+make native-smoke-prepare
+xcrun clang -fobjc-arc -mmacosx-version-min=13.0 \
+  -framework Foundation -framework AppKit -framework ApplicationServices \
+  -framework CoreGraphics tools/native_generation_interruption_ax.m \
+  -o bin/native-work-record-controls
+shasum -a 256 bin/native-work-record-controls
+```
+
+Transfer the helpers, their sources, `tools/`, and the frozen app to the
+guest. In the authorized `ci-macOS` Terminal, use the recorded control-helper
+digest and a new evidence directory.
+
+```bash
+python3 -B tools/native_work_records.py --case --app "$APP" --evidence "$EVIDENCE" \
+  --ax bin/native-macos-ax --controls bin/native-work-record-controls \
+  --control-sha256 "$CONTROL_SHA256"
+```
+
+The case sends through the native composer to a private loopback fixture,
+merges from the record detail, and checks the graph before and after
+retraction and restoration. Keep the native press and screenshot receipts,
+the durable record ID and version snapshots, and the cleanup receipt outside
+case data. The targeted round allows 100 seconds including cleanup. The
+ordinary native smoke keeps its 60-second budget.
+
 ## Nuwa project collaboration (`F-136`, `C-037`)
 
 A saved Nuwa planner and executor are checked through project create/update and
@@ -503,7 +566,7 @@ that record's details through `read_work`.
 Check `/plan` and accepted-plan instructions at actual model HTTP input, including
 recovery after the project switch changes: neither may direct a Nuwa planner to
 call execution tools. `nuwa_plan_prompt_http_test.go` covers this boundary.
-The Collaboration panel must retain the live status, exact Trace and worker
+The Work records panel must retain the live status, exact Trace and worker
 result files even when no graph nodes are recorded.
 The browser suite also creates two dependency-free artifacts with different recorded authors in
 one turn, checks each dashed origin link against the persisted identities before
@@ -538,7 +601,7 @@ through edit/resend and explicit deletion after a move. It checks committed
 revision delivery, unavailable references and removal of the deleted
 author's private history. Store tests inject failed revision writes and
 check transaction rollback. The Nuwa model reproduces stale revisions for
-both mutations. The browser scenario drives the open Collaboration view
+both mutations. The browser scenario drives the open Work records view
 through the same source changes.
 
 `internal/store/nuwa_test.go` exercises CAS races, full correction provenance,
@@ -990,7 +1053,53 @@ native macOS acceptance in `ci-macOS`.
 exercises the provider and HTTP tool boundaries, distinct conversation sources
 with the same event sequence, partial storage conflicts and interrupted
 receipts. The Playwright project knowledge suite walks all three scopes,
-switches between both panels and follows the Trace receipt. The
+switches between both panels and follows the Trace receipt.
+The real reviewer receives the exact allowed quote and source number on a
+wiki citation refusal. An exhausted unwritten batch or transient outage
+can retry once without counting progress twice. The browser test checks
+that a failed request retains the progress bar and opens the relevant
+model settings before continuing.
+The long-history regression checks that every batch reaches the reviewer.
+Full-text coverage reconstructs the admitted UTF-8 bytes from model inputs,
+pauses inside a record, resumes after reopening the store and checks that a
+quote from the tail can update notes, Skills and Knowledge with the original
+source identity. The excerpt regression distinguishes excerpts, oversized
+skips and other ineligible records. The browser exercises both full-text
+scope actions and the progress within a record.
+The pause and restart regression saves all three destinations, interrupts the
+next batch, reopens the same SQLite store, and checks that resuming neither
+repeats the committed batch nor admits history added after the snapshot.
+The pause response stays pending until the reviewer exits. Browser coverage
+checks the toolbar resumes the original task after reopening, and the real
+reviewer checks that an explicit resume after failure still excludes peers.
+The Wiki loopback tests hold model review while the local scan publishes
+searchable observations, check source drill-down, replay partially published
+files after a receipt failure and verify incremental reuse. Actual model
+requests exercise item-level repair, a smaller retry that covers the original
+UTF-8 data, and pauses inside a source. Test the default build against the real
+loopback model adapter. It publishes cited documents while the model-review slot
+is held and makes zero model requests. A later opt-in build reviews the same
+source with its local result already saved. Resume older scan and graph receipts
+without the mode field and check that both retain model review. The Web suite
+exercises both menu choices and progress displays and verifies that an open graph
+refreshes, search reaches nodes outside a large overview and an available
+citation shows its excerpt. Measure the time from the actual build action to
+searchable graph and original citation on an isolated history copy.
+
+`wiki-build-*` checks the bounded scan/review/document protocol in
+`models/knowledge/WikiBuild.tla`. A local scan checkpoint requires publication,
+review requires a complete local scan and an explicit review mode. Final
+completion requires saved documents and, in review mode, all semantic windows.
+Fault switches admit review without a request and documents before a full local
+scan. Negated witnesses find successful completion in both modes and pause during
+local scan and article publication. The model represents complete source and
+document units, with file publication and receipt acknowledgement distinct.
+SQLite/file failure and exact source identity are verified in behavioral tests.
+Full and project backup tests also check that portable copies omit the
+derived source acknowledgements and that an internal rollback restores them.
+`distillation-progress-*` TLC cases cover completion only at the end of the
+scope, acceptance before advancing, counting a record after its final segment,
+and retaining both checkpoint positions across resume.
 `distillation-*` TLC cases cover exclusive admission, scoped publication,
 committed receipts, and a reachable run that saves all three targets.
 `TestCompletedTurnAutomaticallyKeepsNotesSkillsAndKnowledgeInOneReviewerBatch`
@@ -1001,6 +1110,23 @@ Knowledge is enabled. The offline browser regression keeps Knowledge visible
 and verifies its automatic refresh before reading Trace.
 
 ## Project Markdown knowledge (`F-138`, `C-053`)
+
+`TestKnowledgeGraphRetainsOneNodePerPageAcrossTitleChanges` checks stable IDs,
+merged evidence from reciprocal links, isolated pages and aliases. The HTTP route
+test checks project scoping and missing targets. The knowledge Playwright suite
+checks that the project root and titled pages are drawn, locates a page by
+alias, opens a legacy workflow label from Pending, and browses and opens a
+page in a collapsed unlinked branch.
+`TestLegacyWikiLabelsRemainInspectableOutsideBrowsing` checks that generated
+labels and their graph edges stay out of normal navigation while saved
+citations, manual pages and observed events remain accessible.
+`TestWikiReviewRepairsOnlyTheUnresolvedItemsAtTheModelBoundary` checks host
+omission of workflow labels and their dependent links alongside citation repair
+through the model adapter.
+`frontend/src/lib/knowledge-layout.test.ts` checks reachability from the
+project root for disconnected components, cycles and a 6,270-page sparse
+graph with 316 saved links. It checks that opening a leaf retains its path
+and that saved page relationships are preserved.
 
 - `go test -race -cover ./internal/knowledge ./internal/engine ./internal/server ./internal/backup`
   exercises schema and file validation, graph derivation, revision conflicts,
@@ -1021,6 +1147,14 @@ and verifies its automatic refresh before reading Trace.
   identity. Its reachability cases and seeded faults check the model's
   sensitivity. The Go and browser tests exercise the implementation.
 - Native desktop acceptance uses the isolated ci-macOS candidate procedure.
+- `internal/remote/knowledge_test.go` drives real sealed pairlink frames
+  through project search and pagination, full Unicode page reads, scope/token
+  refusal, mid-read edits and global disable. The phone transfer tests check
+  scope, chunk identity and checksums before accepting a page.
+  `mobile/e2e/project-knowledge.spec.ts` exercises project entry, search,
+  navigation, source excerpts and old-PC feedback in both browser profiles.
+  The packaged iOS check uses `IOS_LAYOUT_SCENARIO=ios-project-knowledge.swift`
+  with the disposable fixture and reaches a source through the native app.
 
 ## Original project-history SQL and source reports (`F-410`, `C-036`)
 
@@ -1643,9 +1777,32 @@ is used in regression tests. Structured classification
 requires stance, time and attribution; nonaffirmative, noncurrent and reported
 items cannot require a matching armed plan. These offline fixtures prove the
 protocol and runtime boundary, not an external model's semantic accuracy.
+
+The [schedule answer admission model](../models/scheduling/ScheduleAnswerAdmission.tla)
+runs with `make model-check`. It checks one private candidate and at most one
+same-turn correction. The historical switch sends a grounded external polling
+observation to local schedule matching. TLC finds both an unnecessary correction
+and a second refusal ending in `no_matching_schedule`. Separate switches check
+that a mixed answer cannot exempt its local claim, a malformed external item
+cannot publish, and changed scheduling evidence cannot be used at commit.
+The current model reaches publication for external-only and verified mixed
+answers and can publish a corrected mixed answer that drops its unsupported
+local claim. With a live owner, healthy storage and fair verification and
+commit, an external-only observation eventually publishes.
+
+The model starts at structured extraction. The external item needs a verbatim
+witness and passage and may carry no app schedule ID. Only a concrete
+current app claim needs the arming flag `new`. TLC checks guard removal on
+both sides, and the Go tests exercise this distinction through Registry and
+the real model transport. Identifying the operator in prose remains a
+semantic model assumption. The Registry/HTTP
+tests above cover valid external items, both kinds of mixed answer, and refusal
+after one correction. `internal/store/schedule_answer_test.go` covers the
+recheck of the selected row under actual SQLite cancellation.
+
 `internal/engine/schedule_answer_identity_test.go` and
-`internal/engine/schedule_answer_identity_boundary_test.go` cover the three-value scope
-protocol and the real Registry/HTTP answer boundary (Issue #132). A recurring
+`internal/engine/schedule_answer_identity_boundary_test.go` cover application
+scope and the real Registry/HTTP answer boundary (Issue #132). A recurring
 thread wake can support an assertion that does not specify a destination;
 recurrence alone must not fabricate an independent job. Specific scopes require
 an exact `scope_quote` within the claim's passage, and any extracted ID must
@@ -3649,6 +3806,30 @@ go test -race -count=1 ./internal/engine -run 'TestRestoreBindsTheOriginalQuesti
 
 ### Large-history restoration measurement
 
+`TestIndexedEngineStartupScalesWithPendingConversations` starts real engine
+children against an isolated SQLite library of 317 conversations and
+1,207,770 historical events. The first process builds the legacy generation
+projection. Later processes observe actual queries from listener publication
+through the ready lease. This timing test uses a non-race process. It asserts
+zero history reads for settled conversations, ready within one second with zero
+pending and within ten seconds with ten pending, and completion of all twelve
+original turns in another round.
+The offline mock avoids network wait and native UI. The 2026-11-25 macOS run
+measured 2.011 s for first upgrade after listening, then 0.011 s, 1.247 s and
+1.155 s for zero, ten and twelve pending conversations, respectively.
+
+The targeted race tests cover trigger rollback, per-conversation migration
+retry, rewind invalidation, parked worker selection, backup import and search
+backfill starting after readiness. The app tests inject a scan failure in a
+pending recovery candidate and verify WAL release. Parked-worker failures
+retain their checkpoint and future wake, with a warning, failed Trace receipt
+and a ready engine.
+
+```bash
+go test ./cmd/zwai -run '^TestIndexedEngineStartupScalesWithPendingConversations$' -timeout 4m -count=1 -v
+go test -race ./internal/store ./internal/engine ./internal/app ./internal/backup -run 'TestStartup|TestSettledParkedCheckpoint|TestSemanticStartupBackfill|TestPortableBackupRecreatesRecoveryPointers|TestNew(ReportsParkedRecoveryFailure|RejectsFatalRecovery)' -timeout 2m -count=1
+```
+
 `BenchmarkRestoreSnapshotLargeHistory` uses 100,001 historical tool-result rows
 (each 1,080 bytes) and two checkpoint bodies of 2,240,246 bytes each. On the
 2026-10-24 Apple M3 Max run, three repetitions measured **125.695 ms/op**,
@@ -3825,6 +4006,18 @@ failure details and their recovery-settings links. Run them with
 `cd frontend && npm test -- src/lib/i18n.test.ts src/components/app/agent-failure.test.tsx`.
 
 ## Automatic restart handoff (F-110 / C-027)
+
+`TestRestartBlockedWorkerLeavesTimeForDurableCheckpoints` runs a real worker
+tool through Registry and ADK. The tool stays blocked through acknowledgement,
+while the final SQLite checkpoint takes over one second to write. The test
+checks that `ready` arrives before the parent deadline and the checkpoint
+contains the original unknown call and the other worker's confirmed result.
+`TestRestartSummaryDeadlineCapsWaitAndReservesTimeForWrites` checks the exact
+three-second cap and the shorter wait when the parent has less time left.
+`TestRestartExpiredFinalWriteDoesNotAuthorizeReplacement` expires the actual
+final write and verifies that retry can save the retained checkpoint.
+The `EngineLifecycle` model checks the budget allocation with the historical
+summary-wait fault and reaches acknowledgement after saving an unknown call.
 
 `internal/engine/recovery_context_test.go` crosses durable parked-worker
 `Engine.Restore`, Registry/ADK and a local HTTP model adapter. It checks that a
@@ -8462,6 +8655,20 @@ AX trees, exact web/app/test-package identity and owned-device cleanup receipts.
 
 `mobile/src/components/file-browser.test.tsx` exercises the real read/preview path, including an HTML artifact whose sandbox excludes same-origin access. `document-preview.test.tsx` renders CSV, TSV, DOCX, XLSX, PPTX and EPUB. `text-file-preview.test.tsx` checks suffix selection, unknown/large/empty text, exact source preservation and inert SVG/MDX source. `mobile/e2e/walkthrough.spec.ts` checks Markdown structure and syntax colors in light/dark; the packaged `mobile/e2e/ios-wait-layout.swift` `testPhoneOutputPreview` reaches both documents through Outputs. Reuse `scripts/ios-layout-fixture.py` and select only that XCTest. Android uses a disposable offline package and isolated emulator, inspecting the same reached screens; a browser pass or native launch alone does not accept the changed flow.
 
+Transcript file links use `e2e/file-preview-controls.spec.ts -g 'paired file links'`
+on Chromium and iPhone WebKit. The case opens an exact task path, downloads its
+bytes, chooses between same-name files and returns after a missing-file error.
+`thread-file-links.test.tsx` also checks the original draft, focus, RPC file root
+and discarded responses after a PC switch. For packaged iOS, use
+`IOS_LAYOUT_QUERY='/?mock=1&tick=0&history=file-links&file-preview=task-workspaces'`
+and select `AppUITests/BindFlowTests/testTranscriptFileLinkOpensTaskPreview`.
+Android selects `com.lubyruffy.zwai.FilePreviewControlsTest#transcriptFileLinkOpensTaskPreview`.
+The Android driver selects Local mode in the test WebView before loading
+offline input, including on a fresh install. The native cases retain the
+opened preview and returned transcript screens. Read Android attachments
+from the reported app-private directory with `adb shell run-as` on the
+disposable debug installation.
+
 The EPUB cases in `mobile/e2e/file-preview-controls.spec.ts` open a packaged
 book through Outputs and turn pages within and across chapters using taps.
 They check that showing the controls keeps the page in place and compare the
@@ -8670,9 +8877,26 @@ then return to the original manager transcript. Retain screenshots and the
 accessibility tree alongside the test result and packaged asset hashes.
 ## Model API failure evidence (#71)
 
+`TestStreamReadDiagnosticsOverHTTP2` streams through a loopback HTTP/2 server
+and imposes a real TCP read deadline after Chat Completions and Responses have
+both delivered content. It verifies trace attribution, premature EOF, idle
+timeout, cancellation and valid completion. The partial-frame test ensures
+Responses carries the transport error through an unfinished SSE line.
+`TestTruncatedModelStreamKeepsPerRequestDiagnosticsInTrace` checks three real
+HTTP attempts against the saved turn and its model-call rows.
+`frontend/e2e/model-read-timeout.spec.ts` exercises the named SSE event and
+reload rendering. Phone `history=model-read-timeout` covers the same notices
+through paired history playback on Chromium and iPhone WebKit.
+
 `go test -race ./internal/engine -run 'TestPublic|TestEmptyGatewayResponse|TestAPIAuthenticationFailure'` covers wrapped SDK/Eino errors, HTTP 502 empty-body decode failure, 400/401/403/429/5xx causes, bounded credential-masked public text and preserved context/first-byte advice. The integration test uses a local `httptest` HTTP server through the real SDK and engine: 502 yields three HTTP/model calls and two retries on the same failed turn; 401/403 yield one call and no retry. Stored turn/error text, original LLM errors, retry events and no-goal turn count are asserted independently. No network or real model is used.
 
 `cd frontend && ZWAI_E2E_MODEL_API_ERROR=1 npm run e2e -- api-error.spec.ts` runs the desktop Web path against a local empty-502 HTTP endpoint through the real SDK. The flag selects the API-error test group and starts the app without `--mock`. The regular offline-provider suite skips these tests. Check Chat, the same-turn Trace and Full log, return/reload persistence, three HTTP calls and two retries, and the retained screenshots/Trace JSON.
+
+The same Web suite checks a gateway safety 403 through the real SDK and chat.
+It verifies one notice and no Retry before and after reload, direct retry
+refusal and one model request. `TestGatewaySafetyRefusalStopsTheTurnWithoutResending`
+checks durable receipts and original model call Trace. The paired phone
+`api-error.spec.ts` exercises both current and legacy receipts on reload.
 
 `cd frontend && ZWAI_E2E_MODEL_API_ERROR=1 npm run e2e -- transcript-error-retry.spec.ts`
 uses a keyless loopback model to fail the original turn, then verifies
@@ -8947,6 +9171,18 @@ in the concurrent Playwright section above. These browser checks exercise the
 shared desktop/Web React flow; they do not establish native Wails acceptance.
 
 ## Decodable image input and sent-image preview (F-140 / C-028)
+
+`internal/engine/image_input_http_test.go` holds a conversation request open,
+queues a PNG with OCR configured, and observes the actual model HTTP requests
+when the queued turn runs and when a later turn reads the history. It verifies
+model names, caption, MIME, original bytes and decoded dimensions. A separate
+case sends a normal image on a Gateway that grants conversation only.
+`internal/engine/image_ocr_test.go` checks that an explicit extraction sends
+only the selected stored bytes to the authorized OCR model over HTTP, keeps
+the result out of conversation history and refuses an unavailable role.
+`frontend/e2e/image-input.spec.ts` exercises explicit selection, an unavailable
+OCR response and result display. `input-thumbs.test.tsx` checks that closing
+the preview cancels its own request.
 
 `frontend/e2e/fixtures/vision-photo.jpg` is a valid JPEG (684 bytes, 16x12), not a three-byte magic marker. `frontend/e2e/image-input.spec.ts` checks MIME and unchanged base64 through submission, exact stored bytes, Trace references, natural dimensions and reload. `composer-image-drop.test.tsx` owns the corresponding component behavior; the large conversation/composer suites keep their other responsibilities. A visible img element or src alone does not prove decoding. The default offline provider does not prove image semantics; independent keyless loopback acceptance can inspect actual OpenAI image_url transport without using a real model.
 

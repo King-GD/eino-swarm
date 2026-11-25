@@ -1,11 +1,11 @@
 import { useId, useMemo, useState } from "react"
-import { Maximize2, Target } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { compareNuwaRecent, layoutNuwaCollaboration, nuwaPathFocus, nuwaStatusTally, NUWA_GOAL_ID, type NuwaNode, type NuwaWorker } from "@/lib/nuwa"
-import { MANAGER_ID } from "@/lib/transcript-blocks"
-import { useT } from "@/lib/use-t"
-import { cn } from "@/lib/utils"
-import { Input } from "@/components/ui/input"
+import { ChevronRight, Maximize2 } from "lucide-react"
+import { Button } from "../ui/button"
+import { compareNuwaRecent, isInactiveNuwaNode, layoutNuwaCollaboration, nuwaPathFocus, nuwaStatusTally, type NuwaNode, type NuwaWorker } from "../../lib/nuwa"
+import { MANAGER_ID } from "../../lib/transcript-blocks"
+import type { WorkTranslate } from "../../lib/messages-work"
+import { cn } from "../../lib/cn"
+import { Input } from "../ui/input"
 import { NuwaStatus, NuwaStale, nuwaKind, nuwaKindSurface, nuwaStatusLabel } from "./nuwa-status"
 
 const CARD_HEIGHT = 88
@@ -38,23 +38,29 @@ export function nuwaRecorder(record: NuwaNode, workers: NuwaWorker[]) {
 
 /** Buttons overlay the SVG paths so work records remain keyboard accessible. */
 export function NuwaGraph({
+  t,
   nodes,
+  collapsed = [],
+  conversation = false,
   workers = [],
   selected,
   onSelect,
   onExpand,
   expanded = false,
 }: {
+  t: WorkTranslate
   nodes: NuwaNode[]
+  collapsed?: NuwaNode[]
+  conversation?: boolean
   workers?: NuwaWorker[]
   selected?: string
   onSelect: (id: string) => void
   onExpand?: () => void
   expanded?: boolean
 }) {
-  const t = useT()
   const marker = useId().replace(/:/g, "")
   const [openedKinds, setOpenedKinds] = useState<string[]>([])
+  const [showCollapsed, setShowCollapsed] = useState(false)
   const [queries, setQueries] = useState<Record<string, string>>({})
   const filterBase = useId()
   const layout = useMemo(() => layoutNuwaCollaboration(nodes), [nodes])
@@ -64,14 +70,16 @@ export function NuwaGraph({
   const selectedKind = loose.find((group) => group.records.some((record) => record.id === selected))?.kind
   const kindOpen = (kind: string) => openedKinds.includes(kind) || selectedKind === kind
   const emphasized = (id: string) => !focus || focus.has(id)
-  const hasDependencies = layout.edges.some(({ to }) => to !== NUWA_GOAL_ID)
+  const hasDependencies = layout.edges.length > 0
+  const openGroups = loose.filter((group) => kindOpen(group.kind))
+  const collapsedOpen = showCollapsed
   const compact = !expanded
   const cardWidth = compact ? 148 : 192
   const columnWidth = compact ? 176 : 232
   const columns = 1 + Math.max(0, ...layout.positions.map(({ column }) => column))
   const width = Math.max(280, PAD * 2 + (columns - 1) * columnWidth + cardWidth)
-  // Paths and cards share the same horizontal scale. Deeper graphs can scroll.
-  const minWidth = Math.min(width, columns * 96 + 20)
+  // Fit the available width while keeping a readable minimum for long paths.
+  const minWidth = Math.min(width, columns * (compact ? 96 : 112) + 20)
   const height = Math.max(
     112,
     ...layout.positions.map(({ row }) => PAD * 2 + row * ROW + CARD_HEIGHT)
@@ -81,37 +89,35 @@ export function NuwaGraph({
       className={cn("min-w-0", expanded && "flex min-h-0 flex-1 flex-col")}
       aria-label={t("nuwa.path")}
     >
-      <div className="mb-2 flex items-center justify-between gap-2">
+      {!expanded ? <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="text-xs font-medium text-muted-foreground">{t("nuwa.path")}</h3>
         {onExpand ? (
           <Button variant="ghost" size="icon-xs" aria-label={t("nuwa.expand")} onClick={onExpand}>
             <Maximize2 />
           </Button>
         ) : null}
-      </div>
-      <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-        {hasDependencies ? (
-          <span className="inline-flex items-center gap-1.5">
-            <span aria-hidden className="w-4 border-t-2 border-muted-foreground" />
-            {t("nuwa.dependencyEdge")}
-          </span>
-        ) : null}
-        <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden className="w-4 border-t-2 border-dashed border-primary/70" />
-          {t("nuwa.goalEdge")}
-        </span>
-      </div>
+      </div> : null}
+      {nodes.length ? (<>
+      {hasDependencies ? (
+        <div className="mb-2 flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span aria-hidden className="w-4 border-t-2 border-muted-foreground" />
+          {t("nuwa.dependencyEdge")}
+        </div>
+      ) : null}
       <div
         role="region"
         aria-label={t("nuwa.graph")}
         tabIndex={0}
         className={cn(
-          "thin-scrollbar shrink-0 overflow-auto rounded-lg border border-border bg-muted/20",
-          expanded ? "max-h-[70vh]" : "max-h-72"
+          "thin-scrollbar overflow-auto rounded-lg border border-border bg-muted/20",
+          expanded ? "flex min-h-0 flex-1 flex-col" : "max-h-72 shrink-0"
         )}
       >
-        <div className="relative" style={{ width: compact ? `clamp(${minWidth}px, 100%, ${width}px)` : width, height }}>
-          <svg
+        <div
+          className={cn("relative", expanded && "m-auto shrink-0")}
+          style={{ width: `clamp(${minWidth}px, 100%, ${width}px)`, height }}
+        >
+          {hasDependencies ? <svg
             width="100%"
             height={height}
             viewBox={`0 0 ${width} ${height}`}
@@ -135,8 +141,7 @@ export function NuwaGraph({
             {layout.edges.map(({ from, to }) => {
               const a = positions.get(from)!,
                 b = positions.get(to)!
-              const goal = b.node.type === "goal"
-              const active = !focus || (goal ? focus.has(from) : focus.has(from) && focus.has(to))
+              const active = !focus || (focus.has(from) && focus.has(to))
               const x1 = PAD + a.column * columnWidth + cardWidth,
                 y1 = PAD + a.row * ROW + CARD_HEIGHT / 2
               const x2 = PAD + b.column * columnWidth,
@@ -144,7 +149,7 @@ export function NuwaGraph({
               return (
                 <path
                   key={`${from}:${to}`}
-                  data-testid={goal ? "nuwa-goal-edge" : "nuwa-edge"}
+                  data-testid="nuwa-edge"
                   data-from={from}
                   data-to={to}
                   data-emphasis={active ? "active" : "dim"}
@@ -153,14 +158,12 @@ export function NuwaGraph({
                   stroke="currentColor"
                   strokeWidth="1.5"
                   vectorEffect="non-scaling-stroke"
-                  strokeDasharray={goal ? "4 3" : undefined}
                   opacity={active ? 1 : 0.28}
-                  className={goal ? "text-primary/70" : undefined}
                   markerEnd={`url(#${marker})`}
                 />
               )
             })}
-          </svg>
+          </svg> : null}
           {layout.positions.map(({ node, column, row }) => {
             const style = {
               width: `${100 * cardWidth / width}%`,
@@ -169,28 +172,6 @@ export function NuwaGraph({
               top: PAD + row * ROW,
             }
             const active = emphasized(node.id)
-            if (node.type === "goal") {
-              const goalActive = !focus || layout.edges.some((edge) => edge.to === NUWA_GOAL_ID && focus.has(edge.from))
-              return (
-                <div
-                  key={node.id}
-                  data-testid="nuwa-goal"
-                  data-node-id={node.id}
-                  data-emphasis={goalActive ? "active" : "dim"}
-                  className={cn(
-                    "absolute flex flex-col justify-center gap-1 rounded-lg border border-dashed border-primary/50 bg-primary/5 px-3 py-2",
-                    !goalActive && "opacity-35"
-                  )}
-                  style={style}
-                >
-                  <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <Target className="size-3" aria-hidden />
-                    {t("nuwa.goalNode")}
-                  </span>
-                  <span className="truncate text-xs font-medium">{t("nuwa.goal")}</span>
-                </div>
-              )
-            }
             if (node.type === "loose") {
               const kindLabel = nuwaKind(node.kind, t)
               const expanded = kindOpen(node.kind)
@@ -221,7 +202,7 @@ export function NuwaGraph({
                     {t("nuwa.unlinkedCount", { count: node.records.length })}
                   </span>
                   <span className="w-full truncate text-[10px] text-muted-foreground">
-                    {nuwaStatusTally(node.records).map(({ status, count }) => `${count} ${nuwaStatusLabel(status, t)}`).join(" · ")}
+                    {nuwaStatusTally(node.records).map(({ status, count }) => `${count} ${nuwaStatusLabel(status, t, node.kind)}`).join(" · ")}
                     {node.records.some((record) => record.stale_dependencies?.length)
                       ? ` · ${node.records.filter((record) => record.stale_dependencies?.length).length} ${t("nuwa.staleShort")}`
                       : ""}
@@ -248,80 +229,74 @@ export function NuwaGraph({
                   "absolute flex flex-col items-start gap-0.5 overflow-hidden rounded-lg border px-3 py-2 text-left shadow-xs transition-colors hover:border-primary/60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
                   nuwaKindSurface(record.kind) ?? "bg-card",
                   selected === record.id ? "border-primary ring-1 ring-primary/30" : "border-border",
-                  !active && "opacity-35"
+                  !active ? "opacity-35" : isInactiveNuwaNode(record) && "opacity-65"
                 )}
                 style={style}
               >
-                <span className="text-[10px] text-muted-foreground">{nuwaKind(record.kind, t)}</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {nuwaKind(record.kind, t)}
+                  {conversation && (record.scope ?? "project") === "project" ? ` · ${t("nuwa.projectPrerequisite")}` : ""}
+                </span>
                 <span className="w-full truncate text-xs font-medium" title={record.title}>
                   {record.title}
                 </span>
                 <span className="flex max-w-full items-center gap-1">
-                  <NuwaStatus status={record.status} />
-                  <NuwaStale node={record} />
+                  <NuwaStatus t={t} status={record.status} kind={record.kind} />
+                  <NuwaStale t={t} node={record} />
                 </span>
               </button>
             )
           })}
         </div>
       </div>
-      {loose.filter((group) => kindOpen(group.kind)).length ? (
-        <div className={cn("min-h-0", expanded && "flex-1 overflow-auto")}>
-          {loose.filter((group) => kindOpen(group.kind)).map((group) => {
+      </>) : null}
+      {collapsed.length ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mt-2 justify-start text-xs"
+          aria-expanded={collapsedOpen}
+          onClick={() => setShowCollapsed((open) => !open)}
+          data-testid="nuwa-pruned-group"
+        >
+          <ChevronRight className={cn("size-3 transition-transform", collapsedOpen && "rotate-90")} />
+          {t("nuwa.prunedGroup", { count: collapsed.length })}
+        </Button>
+      ) : null}
+      {openGroups.length || collapsedOpen && collapsed.length ? (
+        <div className={cn("min-h-0", expanded && "max-h-[35%] shrink-0 overflow-y-auto")}>
+          {openGroups.map((group) => {
             const kindLabel = nuwaKind(group.kind, t)
-            const query = queries[group.kind] ?? ""
-            const records = [...group.records].sort(compareNuwaRecent).filter((record) => {
-              const needle = query.trim().toLowerCase()
-              return !needle || record.title.toLowerCase().includes(needle) || record.summary.toLowerCase().includes(needle)
-            })
-            const filterID = `${filterBase}-${group.kind}`
             return (
-              <div key={group.id} className="mt-2">
-                {group.records.length > 8 ? (
-                  <Input
-                    id={filterID}
-                    value={query}
-                    aria-label={t("nuwa.unlinkedFilter", { kind: kindLabel })}
-                    placeholder={t("nuwa.unlinkedFilter", { kind: kindLabel })}
-                    className="mb-2 h-8 text-xs"
-                    onChange={(event) => setQueries((current) => ({ ...current, [group.kind]: event.target.value }))}
-                  />
-                ) : null}
-                <ul aria-label={t("nuwa.unlinkedList", { kind: kindLabel })} className="grid gap-1">
-                  {records.map((record) => {
-                    const recorder = nuwaRecorder(record, workers)
-                    const author = recorder.manager ? t("nuwa.originManager") : recorder.name
-                    return (
-                      <li key={record.id}>
-                        <button
-                          type="button"
-                          data-node-id={record.id}
-                          onClick={() => onSelect(record.id)}
-                          aria-pressed={selected === record.id}
-                          aria-description={record.agent_id && record.turn_id && author
-                            ? t("nuwa.originDescription", { agent: author, turn: record.turn_id })
-                            : undefined}
-                          className={cn(
-                            "flex w-full min-w-0 items-center gap-2 rounded-md border px-2 py-1.5 text-left hover:bg-accent/50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
-                            nuwaKindSurface(record.kind),
-                            selected === record.id ? "border-primary" : "border-transparent"
-                          )}
-                        >
-                          <span className="min-w-0 flex-1 truncate text-xs font-medium" title={record.title}>
-                            {record.title}
-                          </span>
-                          <NuwaStatus status={record.status} />
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
-                {records.length === 0 ? (
-                  <p className="px-2 py-2 text-xs text-muted-foreground">{t("nuwa.unlinkedNone")}</p>
-                ) : null}
-              </div>
+              <NuwaGroupRecords
+                t={t}
+                key={group.id}
+                records={group.records}
+                filterId={`${filterBase}-${group.kind}`}
+                filterLabel={t("nuwa.unlinkedFilter", { kind: kindLabel })}
+                listLabel={t("nuwa.unlinkedList", { kind: kindLabel })}
+                query={queries[group.kind] ?? ""}
+                onQuery={(query) => setQueries((current) => ({ ...current, [group.kind]: query }))}
+                workers={workers}
+                selected={selected}
+                onSelect={onSelect}
+              />
             )
           })}
+          {collapsedOpen && collapsed.length ? (
+            <NuwaGroupRecords
+              t={t}
+              records={collapsed}
+              filterId={`${filterBase}-pruned`}
+              filterLabel={t("nuwa.prunedFilter")}
+              listLabel={t("nuwa.prunedList")}
+              query={queries.pruned ?? ""}
+              onQuery={(query) => setQueries((current) => ({ ...current, pruned: query }))}
+              workers={workers}
+              selected={selected}
+              onSelect={onSelect}
+            />
+          ) : null}
         </div>
       ) : null}
       {layout.cyclic ? (
@@ -335,5 +310,70 @@ export function NuwaGraph({
         </p>
       ))}
     </section>
+  )
+}
+
+function NuwaGroupRecords({
+  t, records, filterId, filterLabel, listLabel, query, onQuery, workers, selected, onSelect,
+}: {
+  t: WorkTranslate
+  records: NuwaNode[]
+  filterId: string
+  filterLabel: string
+  listLabel: string
+  query: string
+  onQuery: (query: string) => void
+  workers: NuwaWorker[]
+  selected?: string
+  onSelect: (id: string) => void
+}) {
+  const needle = query.trim().toLowerCase()
+  const matching = [...records].sort(compareNuwaRecent)
+    .filter((record) => !needle || record.title.toLowerCase().includes(needle) || record.summary.toLowerCase().includes(needle))
+  return (
+    <div className="mt-2">
+      {records.length > 8 ? (
+        <Input
+          id={filterId}
+          value={query}
+          aria-label={filterLabel}
+          placeholder={filterLabel}
+          className="mb-2 h-8 text-xs"
+          onChange={(event) => onQuery(event.target.value)}
+        />
+      ) : null}
+      <ul aria-label={listLabel} className="grid gap-1">
+        {matching.map((record) => {
+          const recorder = nuwaRecorder(record, workers)
+          const author = recorder.manager ? t("nuwa.originManager") : recorder.name
+          return (
+            <li key={record.id}>
+              <button
+                type="button"
+                data-node-id={record.id}
+                onClick={() => onSelect(record.id)}
+                aria-pressed={selected === record.id}
+                aria-description={record.agent_id && record.turn_id && author
+                  ? t("nuwa.originDescription", { agent: author, turn: record.turn_id })
+                  : undefined}
+                className={cn(
+                  "flex w-full min-w-0 items-center gap-2 rounded-md border px-2 py-1.5 text-left hover:bg-accent/50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+                  nuwaKindSurface(record.kind),
+                  selected === record.id ? "border-primary" : "border-transparent"
+                )}
+              >
+                <span className="min-w-0 flex-1 truncate text-xs font-medium" title={record.title}>
+                  {record.title}
+                </span>
+                <NuwaStatus t={t} status={record.status} kind={record.kind} />
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+      {matching.length === 0 ? (
+        <p className="px-2 py-2 text-xs text-muted-foreground">{t("nuwa.unlinkedNone")}</p>
+      ) : null}
+    </div>
   )
 }

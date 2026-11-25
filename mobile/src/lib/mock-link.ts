@@ -1,20 +1,22 @@
 import { mockGeneratedImageChunk, mockGeneratedImageTurn } from "./mock-generated-image"
 import { compactHistoryFixture, compactHistoryRunning, compactHistorySteps, compactTurnSummaries, mockCompactPage } from "./mock-compact-history"
 import { MockProjects } from "./mock-projects"
+import { mockTurnID, olderThreadSeed, threadSeed, transcriptFileLinksSeed, type MockThread } from "./mock-threads"
 import { MockProductMode } from "./mock-product-mode"
 import { MockSpeech } from "./mock-speech"
 import { MOCK_FLAG, mockTickMs, mockPauseOpenMs, mockPauseClientsMs } from "./mock-link-timing"
 import { mockTaskPanelRPC, releaseMockTaskPanels, resetMockTaskPanels } from "./mock-task-panels"
+import { mockThreadWork, mockWorkRecordsMeta } from "./mock-work-records"
 export { wantsMock, mockTickMs, mockPauseOpenMs } from "./mock-link-timing"
 import { mockFileChunk, mockListedFiles, mockOutputFiles, mockScopedFiles } from "./mock-files"
 import { iterationLimitHistory, iterationSnapshotOnly, mockAwaitingContinue, mockContinueIteration } from "./mock-iteration-limit"
 import { restartAskHistory } from "./mock-ask-restart"
-import { generationHistory } from "./mock-generation"
+import { generationHistory, modelFailureHistory } from "./mock-generation"
 import { backoffHistory } from "./mock-backoff"
 import { longAgentRosterHistory } from "./mock-agent-roster"
 import { workerCollectionHistory, workerCollectionStopHistory, workerCollectionPaged } from "./mock-worker-collection"
 import { predictionTurn, reasoningOnlyTurn, scriptedTurn, type Step } from "./mock-turn"
-import { mockGoalDetail, mockGoalFixture, resumeMockGoal, type MockGoalFields } from "./mock-goal"
+import { mockGoalDetail, mockGoalFixture, resumeMockGoal } from "./mock-goal"
 import {
   OpAnswer,
   OpCancelWait,
@@ -29,6 +31,7 @@ import {
   OpFollowupSteer,
   OpHello,
   OpMeta,
+  OpThreadWork,
   OpClientRead,
   OpClients,
   OpList,
@@ -54,7 +57,6 @@ import {
   PROTOCOL_V,
   type TimeoutSettings,
   type TimeoutSettingsPatch,
-  type FollowupView,
   type RemoteEvent,
   type RemoteRequest,
   type RemoteResponse,
@@ -72,104 +74,6 @@ import { stopReplayEnd, stopReplayStart } from "./mock-stop-replay"
  *  two sockets is still one PC — and React's strict mode opens two. */
 
 const MOCK_HOST = "Walkthrough PC"
-
-type MockThread = MockGoalFields & {
-  id: string
-  title: string
-  projectID: string
-  scheduleSource?: ThreadView["schedule_source"]
-  summary: string
-  running: boolean
-  waiting: boolean
-  action: string
-  askUser: boolean
-  minutesAgo: number
-  providerID?: string
-  model?: string
-  reasoning?: string
-  events: RemoteEvent[]
-  completedSeq?: number
-  readSeq?: number
-  followups?: FollowupView[]
-  pendingInputs?: RemoteEvent[]
-  script?: number
-  finishingSeed?: boolean
-}
-
-
-function mockTurnID(thread: MockThread): string {
-  for (let i = thread.events.length - 1; i >= 0; i--) {
-    const id = thread.events[i].turn_id
-    if (id) return id
-  }
-  return thread.id + "-live"
-}
-
-function threadSeed(): MockThread[] {
-  return [
-    {
-      id: "t-live",
-      title: "Trim the layout pass",
-      projectID: "p-platform",
-      summary: "",
-      running: true,
-      waiting: false,
-      action: "Reading src/lib/layout.ts",
-      askUser: false,
-      minutesAgo: 0,
-      events: [],
-    },
-    {
-      id: "t-wait",
-      title: "Watch the nightly export",
-      projectID: "p-platform",
-      summary: "Checking again after the next run",
-      running: false,
-      waiting: true,
-      action: "",
-      askUser: false,
-      minutesAgo: 6,
-      goal: "Keep the export green and report anything that breaks",
-      events: [],
-    },
-    {
-      id: "t-recent",
-      title: "Sweep the unused exports",
-      projectID: "p-platform",
-      summary: "Removed four dead helpers and kept the tests green",
-      running: false,
-      waiting: false,
-      action: "",
-      askUser: false,
-      minutesAgo: 52,
-      events: [],
-    },
-    {
-      id: "t-notes",
-      title: "Summarise this week",
-      projectID: "p-notes",
-      summary: "Wrote the digest into the notes folder",
-      running: false,
-      waiting: false,
-      action: "",
-      askUser: false,
-      minutesAgo: 20 * 60,
-      events: [],
-    },
-    {
-      id: "t-loose",
-      title: "Name the release",
-      projectID: "",
-      summary: "Three candidates, one of them survives a trademark check",
-      running: false,
-      waiting: false,
-      action: "",
-      askUser: false,
-      minutesAgo: 3 * 24 * 60,
-      events: [],
-    },
-  ]
-}
 
 type Watcher = { threadID: string; deliver: (resp: RemoteResponse) => void }
 
@@ -250,6 +154,8 @@ export class MockHost {
         this.seed(live, workerCollectionHistory(state, new URLSearchParams(location.search).get("stop_order")), state !== "done" && state !== "stopped")
       } else if (new URLSearchParams(location.search).get("history") === "long-agent-roster") {
         this.seed(live, longAgentRosterHistory(), true)
+      } else if (new URLSearchParams(location.search).get("history") === "file-links") {
+        this.seed(live, transcriptFileLinksSeed(), true)
       } else if (new URLSearchParams(location.search).get("history") === "streamed-agents") {
         this.seed(live, [
           { kind: "agent_message", agentID: "manager", text: "Older manager answer" },
@@ -282,14 +188,19 @@ export class MockHost {
     }
     const done = this.find("t-recent")
     if (done) {
-      if (new URLSearchParams(location.search).get("history") === "reasoning-only") {
+      const history = new URLSearchParams(location.search).get("history")
+      if (history === "reasoning-only") {
         this.seed(done, reasoningOnlyTurn(false), false)
-      } else if (new URLSearchParams(location.search).get("history") === "model-response-error") {
+      } else if (history === "model-response-error" || history === "model-read-timeout") {
+        this.seed(done, modelFailureHistory(history === "model-read-timeout"), false)
+      } else if (history === "model-request-blocked" || history === "legacy-model-request-blocked") {
+        const legacy = history === "legacy-model-request-blocked"
+        const turnID = "blocked-turn"
+        const error = legacy ? "model API request failed: HTTP 403 Forbidden: Request blocked by the integration security guard." : "model_request_blocked"
         this.seed(done, [
-          { kind: "model_retry", agentID: "manager", text: JSON.stringify({ attempt: 1, cap: 2, reason: "model_response_invalid" }) },
-          { kind: "model_retry", agentID: "manager", text: JSON.stringify({ attempt: 2, cap: 2, reason: "model_response_invalid" }) },
-          { kind: "error", agentID: "manager", err: "the model service returned a response that could not be decoded" },
-          { kind: "done" },
+          { kind: "user_message", turnID, text: "Perform the requested check" },
+          { kind: "generation_interrupted", turnID, agentID: "manager", messageID: "blocked", text: JSON.stringify({ reason: legacy ? "model_error" : error, detail: legacy ? error : "", recovery: "none" }) },
+          { kind: "error", turnID, agentID: "manager", err: error },
         ], false)
       } else if (new URLSearchParams(location.search).get("history") === "api-error") {
         this.seed(done, [
@@ -542,18 +453,7 @@ export class MockHost {
   }
 
   older(): ThreadView {
-    return this.view({
-      id: "t-older",
-      title: "Page past the first",
-      projectID: "",
-      summary: "",
-      running: false,
-      waiting: false,
-      action: "",
-      askUser: false,
-      minutesAgo: 90,
-      events: [],
-    })
+    return this.view(olderThreadSeed())
   }
 
   at(th: MockThread): string {
@@ -578,7 +478,7 @@ export class MockHost {
     return {
       ...(compactHistoryFixture(th.id) ? { turns: compactTurnSummaries() } : {}),
       ...(new URLSearchParams(location.search).get("history") === "restore-pending" && !th.running ? { turns: [{ id: "stored-before-restart", status: "running" }] } : {}),
-      id: th.id,
+      id: th.id, project_id: th.projectID || undefined,
       title: th.title,
       ...(this.legacyCompletion ? {} : { unread: (th.completedSeq ?? 0) > (th.readSeq ?? 0), completed_seq: th.completedSeq ?? 0 }),
       ...mockGoalDetail(th),
@@ -864,8 +764,10 @@ export class MockLink {
       case OpMeta: {
         const search = new URLSearchParams(location.search)
         const [completed, total] = (search.get("restore") ?? "0,0").split(",").map(Number)
-        return this.ok({ id, startup: search.get("startup") === "restoring" ? "restoring" : "ready", restore: { completed, total }, web_execution_supported: true, web_execution_status: { preference: "auto", execution: "local", cloud_account: "sign_in_required" } })
+        return this.ok({ id, ...mockWorkRecordsMeta(), startup: search.get("startup") === "restoring" ? "restoring" : "ready", restore: { completed, total }, web_execution_supported: true, web_execution_status: { preference: "auto", execution: "local", cloud_account: "sign_in_required" } })
       }
+      case OpThreadWork:
+        return this.ok({ id, ...mockThreadWork(thread()) })
       case OpHello:
         return this.ok({ id })
       case OpUnwatch:
@@ -904,7 +806,7 @@ export class MockLink {
       case OpFiles: {
         if (!thread()) return this.missing(id)
         if (new URLSearchParams(location.search).get("file-preview") === "task-workspaces") {
-          const { files, folders, view } = mockScopedFiles(req.file_scope === "project")
+          const { files, folders, view } = mockScopedFiles(req.file_scope === "project", location.search)
           if (req.file_root && req.file_root !== view.root) return this.ok({ id, ok: false, code: "file_root_changed" })
           return this.ok({ id, files: mockListedFiles(files, req.directory, req.text, folders), file_view: view, more: false })
         }
@@ -918,7 +820,7 @@ export class MockLink {
       case OpFileChunk: {
         if (!thread()) return this.missing(id)
         if (new URLSearchParams(location.search).get("file-preview") === "task-workspaces") {
-          const { files, view } = mockScopedFiles(req.file_scope === "project")
+          const { files, view } = mockScopedFiles(req.file_scope === "project", location.search)
           if (req.file_root !== view.root) return this.ok({ id, ok: false, code: "file_root_changed" })
           const file_chunk = await mockFileChunk(files, req.file_path ?? "", req.before ?? 0)
           return file_chunk ? this.ok({ id, file_chunk, file_view: view }) : this.missing(id)

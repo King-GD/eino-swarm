@@ -195,6 +195,7 @@ func testNuwaRestoredWorkerContextAtHTTP(t *testing.T, bound bool) {
 	}
 	envelope, err := json.Marshal(map[string]any{
 		"project_id": project.ID, "status": "available", "revision": correctedRevision,
+		"thread_revision": 0, "project_revision": correctedRevision,
 		"total": len(nodes), "omitted": len(nodes) - len(shown), "nodes": shown,
 	})
 	if err != nil {

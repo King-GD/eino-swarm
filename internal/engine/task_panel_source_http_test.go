@@ -10,6 +10,9 @@ import (
 	"path/filepath"
 	goruntime "runtime"
 	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,13 +27,26 @@ func TestTaskPanelSourceRunsAndStopsThroughActualManagerHTTP(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("shell fixture; producer process support cross-compiled separately")
 	}
-	for _, stop := range []bool{false, true} {
-		t.Run(fmt.Sprintf("stop=%t", stop), func(t *testing.T) {
+	for _, action := range []string{"finish", "stop", "close"} {
+		t.Run(action, func(t *testing.T) {
+			stop := action == "stop"
+			closePanel := action == "close"
 			began := make(chan struct{}, 1)
+			requestCancelled := make(chan struct{}, 1)
+			managerContinued, releaseManager := make(chan struct{}, 1), make(chan struct{})
+			var releaseOnce sync.Once
+			release := func() { releaseOnce.Do(func() { close(releaseManager) }) }
+			defer release()
+			var requests atomic.Int32
 			target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if requests.Add(1) != 1 {
+					w.WriteHeader(http.StatusConflict)
+					return
+				}
 				began <- struct{}{}
-				if stop {
+				if stop || closePanel {
 					<-r.Context().Done()
+					requestCancelled <- struct{}{}
 					return
 				}
 				w.WriteHeader(http.StatusForbidden)
@@ -57,12 +73,22 @@ func TestTaskPanelSourceRunsAndStopsThroughActualManagerHTTP(t *testing.T) {
 					}
 					writeScheduleCompletionTool(w, request, "run_panel_source", fmt.Sprintf(`{"panel_id":%q,"input":{"query":"fixture supplied by task"}}`, panel.ID))
 				default:
+					if closePanel {
+						if last := request.Messages[len(request.Messages)-1].Content; !strings.Contains(last, `"error":"cancelled"`) {
+							t.Errorf("manager did not receive source cancellation: %s", last)
+						}
+						managerContinued <- struct{}{}
+						<-releaseManager
+					}
 					writeContextFlowReply(w, request.Stream, map[string]any{"content": "The collected observations are available."}, "stop")
 				}
 			})
 			if err := e.cfg.Update(func(c *config.Config) error {
 				c.TaskPanels.FOFAClient = client
-				c.TaskPanels.TimeoutSeconds = 2
+				c.TaskPanels.TimeoutSeconds = 10
+				if !closePanel {
+					c.TaskPanels.TimeoutSeconds = 2
+				}
 				return nil
 			}); err != nil {
 				t.Fatal(err)
@@ -85,7 +111,7 @@ func TestTaskPanelSourceRunsAndStopsThroughActualManagerHTTP(t *testing.T) {
 				// the panel. Wait for that durable observation before Stop.
 				deadline := time.Now().Add(5 * time.Second)
 				for {
-					panels, readErr := e.store.TaskPanels(t.Context(), thread.ID)
+					panels, _, readErr := e.store.SnapshotTaskPanels(t.Context(), thread.ID)
 					if readErr != nil {
 						t.Fatal(readErr)
 					}
@@ -109,9 +135,42 @@ func TestTaskPanelSourceRunsAndStopsThroughActualManagerHTTP(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			if closePanel {
+				panels, _, err := e.store.SnapshotTaskPanels(t.Context(), thread.ID)
+				if err != nil || len(panels) != 1 || panels[0].SourceStatus != "running" {
+					t.Fatalf("running panel unavailable: %v, %v", panels, err)
+				}
+				if err = e.CloseTaskPanel(t.Context(), thread.ID, panels[0].ID); err != nil {
+					t.Fatal(err)
+				}
+				select {
+				case <-requestCancelled:
+				case <-time.After(3 * time.Second):
+					t.Fatal("close did not cancel the instance's request")
+				}
+				select {
+				case <-managerContinued:
+				case <-time.After(3 * time.Second):
+					t.Fatal("manager did not continue after the source was closed")
+				}
+				current, err := e.store.GetTurn(turn.ID)
+				if err != nil || current.Status != store.TurnRunning || len(fixture.snapshot()) != 3 || requests.Load() != 1 {
+					t.Fatalf("close changed the turn or repeated the source: %+v, %v", current, err)
+				}
+				visible, _, err := e.store.SnapshotTaskPanels(t.Context(), thread.ID)
+				if err != nil || len(visible) != 0 {
+					t.Fatalf("closed panel still shown: %v, %v", visible, err)
+				}
+				release()
+				if got := waitForTurn(t, e, turn.ID); got.Status != store.TurnDone {
+					t.Fatalf("turn did not finish normally after close: %+v", got)
+				}
+				waitSettled(t, e, thread.ID)
+				return
+			}
 			got := waitForTurn(t, e, turn.ID)
 			waitSettled(t, e, thread.ID)
-			panels, err := e.store.TaskPanels(t.Context(), thread.ID)
+			panels, _, err := e.store.SnapshotTaskPanels(t.Context(), thread.ID)
 			if err != nil || len(panels) != 1 {
 				t.Fatalf("panels=%v err=%v", panels, err)
 			}

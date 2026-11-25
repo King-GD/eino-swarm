@@ -21,6 +21,7 @@ type Snapshot struct {
 	revision   string
 	pages      map[string]indexedPage
 	ambiguous  map[string]bool
+	reviewOnly map[string]bool
 	ordered    []string
 	names      map[string][]PageRef
 	outgoing   map[string][]Connection
@@ -46,12 +47,18 @@ type Connection struct {
 	Resolved bool     `json:"resolved"`
 }
 
+type WikiObservation struct {
+	Source Source `json:"source"`
+	Quote  string `json:"quote"`
+}
+
 type PageDetail struct {
 	Page
-	Outgoing   []Connection `json:"outgoing"`
-	Incoming   []Connection `json:"incoming"`
-	Mentions   []PageRef    `json:"mentions"`
-	Unresolved []string     `json:"unresolved"`
+	Outgoing         []Connection      `json:"outgoing"`
+	Incoming         []Connection      `json:"incoming"`
+	Mentions         []PageRef         `json:"mentions"`
+	Unresolved       []string          `json:"unresolved"`
+	WikiObservations []WikiObservation `json:"wiki_observations,omitempty"`
 }
 
 type Issue struct {
@@ -87,8 +94,12 @@ func (s *Snapshot) Page(id string) (*PageDetail, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: page %q", ErrNotFound, id)
 	}
+	page := clonePage(item.page)
+	if page.Wiki != nil {
+		page.Wiki.Pending = page.Wiki.Written < len(page.Wiki.Evidence)
+	}
 	return &PageDetail{
-		Page: clonePage(item.page), Outgoing: cloneConnections(s.outgoing[id]), Incoming: cloneConnections(s.incoming[id]),
+		Page: page, Outgoing: cloneConnections(s.outgoing[id]), Incoming: cloneConnections(s.incoming[id]),
 		Mentions: append([]PageRef{}, s.mentions[id]...), Unresolved: append([]string{}, s.unresolved[id]...),
 	}, nil
 }
@@ -107,23 +118,41 @@ func cloneConnections(connections []Connection) []Connection {
 // Search matches IDs, titles, aliases and Markdown content in deterministic
 // page order. Exact normalized identity matches precede substring matches.
 func (s *Snapshot) Search(query string, limit int) []PageRef {
+	return s.SearchPage(query, 0, limit)
+}
+
+// SearchPage returns the same ordered matches without allocating the earlier pages.
+func (s *Snapshot) SearchPage(query string, offset, limit int) []PageRef {
 	result := []PageRef{}
-	if limit <= 0 {
+	if offset < 0 || limit <= 0 {
 		return result
+	}
+	add := func(page PageRef) {
+		if offset > 0 {
+			offset--
+		} else {
+			result = append(result, page)
+		}
 	}
 	key := normalizedName(query)
 	matched := map[string]bool{}
 	for _, page := range s.names[key] {
-		result = append(result, page)
+		if s.reviewOnly[page.ID] {
+			continue
+		}
+		add(page)
 		matched[page.ID] = true
 		if len(result) == limit {
 			return result
 		}
 	}
 	for _, id := range s.ordered {
+		if s.reviewOnly[id] {
+			continue
+		}
 		page := s.pages[id].page
 		if !matched[id] && pageContains(page, key) {
-			result = append(result, page.ref())
+			add(page.ref())
 			if len(result) == limit {
 				break
 			}
@@ -215,6 +244,13 @@ func (s *Snapshot) derive() {
 	})
 	for _, id := range s.ordered {
 		page := s.pages[id].page
+		if isWikiReviewOnly(page) {
+			if s.reviewOnly == nil {
+				s.reviewOnly = make(map[string]bool)
+			}
+			s.reviewOnly[id] = true
+			s.issues = append(s.issues, Issue{Kind: "wiki_non_subject", PageID: id, Detail: page.Title})
+		}
 		s.indexPageNames(page)
 		s.indexPageLinks(page)
 	}

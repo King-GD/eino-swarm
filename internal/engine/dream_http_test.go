@@ -301,6 +301,9 @@ func runDreamHTTPScenario(t *testing.T, expected, explicitEffort string, wikiEna
 	e.cfg.Memory.ReviewReasoningEffort = explicitEffort
 	e.cfg.Swarm.AutoTitle = false
 	e.cfg.Swarm.ComposerPredictions = false
+	// Ordinary turns can initialize Knowledge automatically. Pin both paths so
+	// the schema assertions exercise the intended review tools in each case.
+	e.cfg.Swarm.Knowledge = withWiki
 	e.cfg.Models.Providers[0].BaseURL = dreamEndpoint.URL
 	e.cfg.Models.Providers[0].Model = "local-dream-fixture"
 	e.pool = provider.New(e.cfg)

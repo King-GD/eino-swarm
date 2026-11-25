@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ReviewProgressBar } from "./review-progress-bar"
 import {
   TIDY_ESTIMATE_CAP,
   TIDY_SCAN_MS,
@@ -114,16 +115,7 @@ function TidyProgress({
   const percent = Math.round(Math.min(TIDY_ESTIMATE_CAP, ratio) * 100)
   return (
     <div className="grid gap-2">
-      <div
-        className="h-1 overflow-hidden rounded-full bg-muted"
-        role="progressbar"
-        aria-label={t("memory.tidyProgress")}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={percent}
-      >
-        <div className="h-full w-full origin-left bg-primary transition-transform" style={{ transform: `scaleX(${percent / 100})` }} />
-      </div>
+      <ReviewProgressBar label={t("memory.tidyProgress")} percent={percent} />
       <ol className="grid gap-1">
         {labels.map((label, i) => {
           const current = i === step

@@ -12,6 +12,9 @@ interface TaskPanelState {
   connected: boolean
   error?: string
   automaticPanelId?: string
+  closingPanelId?: string
+  closeError?: boolean
+  closePanel: (id: string) => Promise<void>
   connect: (threadId: string) => () => void
   refresh: () => Promise<void>
 }
@@ -21,6 +24,7 @@ let stopStream: (() => void) | undefined
 let cursor = 0
 let snapshotCursor = 0
 let loading: { token: number; promise: Promise<void> } | undefined
+let closed = new Set<string>()
 let observed = new Map<string, { cursor: number; revision: number; deleted: boolean }>()
 const seen = new Map<string, Set<string>>()
 
@@ -30,7 +34,7 @@ export const useTaskPanels = create<TaskPanelState>((set, get) => {
     if (!threadId || at < snapshotCursor) return
     snapshotCursor = at
     cursor = Math.max(cursor, at)
-    const valid = panels.filter((panel) => panel.thread_id === threadId)
+    const valid = panels.filter((panel) => panel.thread_id === threadId && !closed.has(panel.id))
     const previous = new Map(get().panels.map((panel) => [panel.id, panel]))
     const accepted = valid.filter((panel) => {
       const last = observed.get(panel.id)
@@ -67,7 +71,8 @@ export const useTaskPanels = create<TaskPanelState>((set, get) => {
       cursor = 0
       snapshotCursor = 0
       observed = new Map()
-      set({ threadId, panels: [], changes: {}, connected: false, error: undefined, automaticPanelId: undefined })
+      closed = new Set()
+      set({ threadId, panels: [], changes: {}, connected: false, error: undefined, automaticPanelId: undefined, closingPanelId: undefined, closeError: undefined })
       const stop = subscribeTaskPanelEvents(threadId, (event) => {
         if (token !== visit) return
         if (event.kind === "connection") {
@@ -89,6 +94,7 @@ export const useTaskPanels = create<TaskPanelState>((set, get) => {
           const change = event.change
           if (change.thread_id !== threadId || !Number.isSafeInteger(change.cursor) || change.cursor <= cursor || !Number.isSafeInteger(change.revision) || change.revision < 0 || !["snapshot", "patch", "deleted", "removed"].includes(change.kind)) return
           cursor = change.cursor
+          if (closed.has(change.panel_id)) return
           observed.set(change.panel_id, { cursor: change.cursor, revision: change.revision, deleted: change.kind === "deleted" || change.kind === "removed" })
           const current = get().panels.find((panel) => panel.id === change.panel_id)
           if (change.kind === "deleted" || change.kind === "removed") {
@@ -114,7 +120,29 @@ export const useTaskPanels = create<TaskPanelState>((set, get) => {
         stopStream = undefined
         observed = new Map()
         cursor = 0; snapshotCursor = 0
-        set({ threadId: undefined, panels: [], changes: {}, automaticPanelId: undefined, error: undefined, connected: false })
+        set({ threadId: undefined, panels: [], changes: {}, automaticPanelId: undefined, error: undefined, connected: false, closingPanelId: undefined, closeError: undefined })
+      }
+    },
+    closePanel: async (id) => {
+      const { threadId, closingPanelId } = get()
+      const token = visit
+      if (!threadId || closingPanelId || !get().panels.some((panel) => panel.id === id)) return
+      set({ closingPanelId: id, closeError: undefined })
+      try {
+        const response = await fetch(`/api/threads/${encodeURIComponent(threadId)}/panels/${encodeURIComponent(id)}`, { method: "DELETE" })
+        if (token !== visit) return
+        if (!response.ok) throw new Error("Panel close failed")
+        closed.add(id)
+        observed.delete(id)
+        set((state) => ({
+          panels: state.panels.filter((panel) => panel.id !== id),
+          changes: Object.fromEntries(Object.entries(state.changes).filter(([panelId]) => panelId !== id)),
+          automaticPanelId: state.automaticPanelId === id ? undefined : state.automaticPanelId,
+        }))
+      } catch {
+        if (token === visit) set({ closeError: true })
+      } finally {
+        if (token === visit) set({ closingPanelId: undefined })
       }
     },
     refresh: async () => {

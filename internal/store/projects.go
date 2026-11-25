@@ -106,12 +106,12 @@ func (s *Store) DeleteProject(id string) error {
 	}
 	var threadIDs []string
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		if err := deleteNuwaProject(tx, id); err != nil {
-			return err
-		}
 		// Derive owned drafts from the same snapshot that deletes their owners.
 		// A pre-transaction list can miss a newly created thread's private bytes.
 		if err := tx.Model(&Thread{}).Where("project_id = ?", id).Pluck("id", &threadIDs).Error; err != nil {
+			return err
+		}
+		if err := deleteNuwaProject(tx, id, threadIDs); err != nil {
 			return err
 		}
 		draftKeys := []string{"new:" + id}
@@ -139,7 +139,16 @@ func (s *Store) DeleteProject(id string) error {
 				return err
 			}
 		}
+		if err := tx.Delete(&ProjectDistillationSource{}, "project_id = ?", id).Error; err != nil {
+			return err
+		}
 		if err := tx.Delete(&ProjectDistillation{}, "project_id = ?", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&ProjectWikiBuild{}, "project_id = ?", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&WikiSourceScan{}, "project_id = ?", id).Error; err != nil {
 			return err
 		}
 		return tx.Where("id = ?", id).Delete(&Project{}).Error
@@ -193,6 +202,9 @@ func (s *Store) SetThreadProject(threadID, projectID string) error {
 		}
 		if thread.ProjectID == projectID {
 			return nil
+		}
+		if err := bumpWorkRevision(tx, threadID); err != nil {
+			return fmt.Errorf("store: invalidate work after project move: %w", err)
 		}
 		var visible []string
 		if err := tx.Model(&Project{}).Where("id IN ? AND (nuwa_enabled = ? OR nuwa_revision > 0)",

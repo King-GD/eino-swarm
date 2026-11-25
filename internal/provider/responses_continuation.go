@@ -65,7 +65,7 @@ func WithResponsesContinuation(inner model.BaseChatModel, state *ResponsesContin
 func (m *responsesModel) withContinuation(state *ResponsesContinuation) *responsesModel {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return &responsesModel{provider: m.provider, client: m.client, tools: m.tools, continuation: state}
+	return &responsesModel{provider: m.provider, client: m.client, tools: m.tools, continuation: state, requestGzip: m.requestGzip}
 }
 
 func (m *responsesModel) planContinuation(body map[string]any, input []any) (responsesRequest, error) {

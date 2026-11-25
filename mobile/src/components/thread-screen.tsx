@@ -1,6 +1,6 @@
 import { parseSlashSubmit } from "../../../frontend/src/lib/slash-core"
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
-import { ArrowDown, ChevronLeft, ChevronRight, FileText, Loader2, UsersRound } from "lucide-react"
+import { ArrowDown, ChevronLeft, ChevronRight, FileText, GitBranch, Loader2, UsersRound } from "lucide-react"
 
 import type { ComposerPrediction } from "../../../frontend/src/lib/composer-prediction"
 import type { InsertMode } from "../../../frontend/src/lib/delivery-mode"
@@ -10,11 +10,14 @@ import { IterationLimitCard } from "@/components/iteration-limit-card"
 import { Composer, type ComposerExtra } from "@/components/composer"
 import { DeliveryMenu } from "@/components/delivery-menu"
 import { FileBrowser } from "@/components/file-browser"
+import { KnowledgeButton } from "@/components/knowledge-screen"
+import { PhoneFileLinkContext } from "@/components/markdown"
 import { GoalBanner, ScheduleBanner } from "@/components/status-banners"
 import { SelectionActions } from "@/components/selection-actions"
 import { ThreadLog } from "@/components/thread-blocks"
 import { pairedTurnDestinations, scrollToTranscriptRow, TurnNavigation } from "@/components/turn-navigation"
 import { PhoneTaskPanelButton, PhoneTaskPanelSheet, usePhoneTaskPanelView } from "@/components/task-panels"
+import { PhoneWorkRecords, phoneWorkText } from "@/components/work-records"
 import { Button } from "@/components/ui/button"
 import { agentRosterText } from "@/lib/agent-label"
 import { installAndroidBack } from "@/lib/android-back"
@@ -37,6 +40,7 @@ export function ThreadScreen({
   onReadVisibility,
   fileLink,
   panelOwnerKey = "",
+  workRecordsGeneration,
   blocks,
   historyWork,
   historyBefore,
@@ -45,6 +49,7 @@ export function ThreadScreen({
   caughtUp = true,
   onBack,
   onOpenAccount,
+  onOpenKnowledge,
   onOlder,
   followups = [],
   onSend,
@@ -74,6 +79,7 @@ export function ThreadScreen({
   onReadVisibility?: (visible: boolean) => void
   fileLink?: RemoteLink
   panelOwnerKey?: string
+  workRecordsGeneration?: number
   blocks: CompactBlock[]
   historyWork?: HistoryWork[]
   historyBefore?: number
@@ -82,6 +88,7 @@ export function ThreadScreen({
   caughtUp?: boolean
   onBack: () => void
   onOpenAccount?: () => void
+  onOpenKnowledge?: () => void
   onOlder?: (turnId?: string) => Promise<number | undefined> | void
   followups?: FollowupView[]
   onSend: (text: string, extra?: ComposerExtra) => void
@@ -120,8 +127,17 @@ export function ThreadScreen({
     { id: "stopped", label: t("thread.agent.stoppedGroup", { n: stoppedAgents.length }), agents: stoppedAgents },
   ]
   const [agentPage, setAgentPage] = useState("chat")
+  const [linkedFile, setLinkedFile] = useState<{ path: string; link: RemoteLink; threadId: string; owner: string }>()
+  const fileTrigger = useRef<HTMLElement | null>(null)
+  const quickPath = linkedFile && linkedFile.link === fileLink && linkedFile.threadId === detail.id && linkedFile.owner === panelOwnerKey
+    ? linkedFile.path : undefined
   const showingRoster = agentPage === "agents"
   const taskPanels = usePhoneTaskPanelView(fileLink, detail.id, panelOwnerKey, Boolean(detail.running))
+  const [workView, setWorkView] = useState<{ owner: string; link: RemoteLink }>()
+  const workOwner = panelOwnerKey && workRecordsGeneration !== undefined ? `${panelOwnerKey}\0${detail.id}` : ""
+  const workOpen = Boolean(fileLink && workOwner && workView?.owner === workOwner && workView.link === fileLink)
+  const closeWork = useCallback(() => setWorkView(undefined), [])
+  useEffect(() => { if (!workOpen) closeWork() }, [closeWork, workOpen])
   const turnId = detail.running?.turn_id
   const destinations = pairedTurnDestinations(detail.turns ?? [], manager, turnId)
   const suppliedPreviews = new Set(detail.turns?.filter((turn) => turn.user_text).map((turn) => turn.id))
@@ -129,12 +145,14 @@ export function ThreadScreen({
     caughtUp && hasMore && destinations.length >= 3 ? fileLink : undefined,
     detail.id, historyBefore, destinations.filter((turn) => !suppliedPreviews.has(turn.id)),
   )
-  useLayoutEffect(() => { onReadVisibility?.(agentPage === "chat" && !taskPanels.open) }, [agentPage, onReadVisibility, taskPanels.open])
+  useLayoutEffect(() => {
+    onReadVisibility?.(agentPage === "chat" && !taskPanels.open && !workOpen && !quickPath)
+  }, [agentPage, onReadVisibility, taskPanels.open, workOpen, quickPath])
   const selectedAgent = agents.find((agent) => agent.id === agentPage)
   const ask = pendingAsk(manager)
   const opening = !caughtUp && blocks.length === 0
   const asking = Boolean(detail.running?.ask_user || ask?.pending)
-  const canSelectTranscript = !asking && (agentPage === "chat" || Boolean(selectedAgent))
+  const canSelectTranscript = !asking && !quickPath && (agentPage === "chat" || Boolean(selectedAgent))
   const running = Boolean(detail.running)
   const iterationLimit = pendingIterationLimit(manager, detail.running?.turn_id)
   const waiting = Boolean(detail.waiting && !running)
@@ -156,6 +174,23 @@ export function ThreadScreen({
     setQuoteActionDocked(false)
   }, [])
 
+  const openLinkedFile = useCallback((path: string, trigger: HTMLElement) => {
+    if (!fileLink) return
+    fileTrigger.current = trigger
+    resetSelectionAction()
+    setLinkedFile({ path, link: fileLink, threadId: detail.id, owner: panelOwnerKey })
+  }, [fileLink, detail.id, panelOwnerKey, resetSelectionAction])
+  const closeLinkedFile = useCallback(() => setLinkedFile(undefined), [])
+
+  useLayoutEffect(() => {
+    if (quickPath) return
+    const trigger = fileTrigger.current
+    fileTrigger.current = null
+    if (trigger?.isConnected) trigger.focus({ preventScroll: true })
+  }, [quickPath])
+
+  useEffect(() => closeLinkedFile(), [fileLink, detail.id, panelOwnerKey, closeLinkedFile])
+
   useEffect(() => {
     setAgentPage("chat")
     resetSelectionAction()
@@ -171,12 +206,12 @@ export function ThreadScreen({
 
   useEffect(() => {
     // The task panel sheet handles Back for its own dialogs before closing.
-    if (taskPanels.open || agentPage === "chat" || agentPage === "files") return
+    if (taskPanels.open || quickPath || agentPage === "chat" || agentPage === "files") return
     return installAndroidBack(() => {
       changePage(agentPage === "agents" ? "chat" : "agents")
       return true
     })
-  }, [agentPage, taskPanels.open])
+  }, [agentPage, taskPanels.open, quickPath])
 
   useEffect(() => {
     if (!canSelectTranscript) return
@@ -325,6 +360,14 @@ export function ThreadScreen({
     }
   }
 
+  if (workOpen && fileLink && workRecordsGeneration !== undefined) {
+    return <>
+      <PhoneWorkRecords key={workOwner} link={fileLink} threadId={detail.id} generation={workRecordsGeneration}
+        covered={taskPanels.open} onBack={closeWork} />
+      <PhoneTaskPanelSheet view={taskPanels} />
+    </>
+  }
+
   if (agentPage === "files" && fileLink) {
     return <><div className="flex min-h-0 flex-1 flex-col" inert={taskPanels.open} aria-hidden={taskPanels.open}>
       <FileBrowser key={`${detail.id}:${panelOwnerKey ?? ""}`} link={fileLink} threadId={detail.id} running={running} covered={taskPanels.open} onClose={() => changePage("chat")}
@@ -333,7 +376,9 @@ export function ThreadScreen({
   }
 
   return (
-    <><main inert={taskPanels.open} aria-hidden={taskPanels.open} className="mx-auto flex h-full min-w-0 w-full max-w-lg flex-col justify-end overflow-hidden bg-background">
+    <><div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+    <main inert={taskPanels.open || Boolean(quickPath)} aria-hidden={taskPanels.open || Boolean(quickPath)}
+      className={cn("mx-auto flex h-full min-w-0 w-full max-w-lg flex-col justify-end overflow-hidden bg-background", quickPath && "invisible")}>
       <header className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-1">
         <Button
           variant="ghost"
@@ -363,6 +408,13 @@ export function ThreadScreen({
           ) : null}
         </div>
         <PhoneTaskPanelButton view={taskPanels} />
+        {agentPage === "chat" && workOwner && fileLink ? (
+          <Button type="button" variant="ghost" className="size-10 shrink-0 px-0"
+            aria-label={phoneWorkText("nuwa.tab")} onClick={() => setWorkView({ owner: workOwner, link: fileLink })}>
+            <GitBranch className="size-5" aria-hidden />
+          </Button>
+        ) : null}
+        {agentPage === "chat" && onOpenKnowledge ? <KnowledgeButton onClick={onOpenKnowledge} /> : null}
         {agentPage === "chat" && onOpenAccount ? <AccountButton onClick={onOpenAccount} /> : null}
       </header>
       <GoalBanner
@@ -480,6 +532,7 @@ export function ThreadScreen({
                   ))}
                 </div>
               ) : (
+                <PhoneFileLinkContext.Provider value={fileLink ? openLinkedFile : undefined}>
                 <ThreadLog blocks={selectedAgent ? selectedAgent.blocks : manager}
                   historyWork={historyWork}
                   historyAgent={selectedAgent?.id}
@@ -487,6 +540,7 @@ export function ThreadScreen({
                   running={selectedAgent ? selectedAgent.status === "running" : running}
                   onContinue={agentPage === "chat" && detail.running?.awaiting_continue !== false ? onContinue : undefined}
                   activeTurnId={detail.running?.turn_id} continueDisabled={composerPending || restoring} />
+                </PhoneFileLinkContext.Provider>
               )}
             </div>
             {agentPage === "chat" && detail.running?.awaiting_continue && !iterationLimit ? (
@@ -597,7 +651,11 @@ export function ThreadScreen({
           return extra ? onSend(text, extra) : onSend(text)
         } : onSend}
       /> : null}
-    </main><PhoneTaskPanelSheet view={taskPanels} /></>
+    </main>
+    {quickPath && fileLink ? <div className="absolute inset-0" inert={taskPanels.open} aria-hidden={taskPanels.open}>
+      <FileBrowser key={quickPath} link={fileLink} threadId={detail.id} quickPath={quickPath} onClose={closeLinkedFile} covered={taskPanels.open} />
+    </div> : null}
+    </div><PhoneTaskPanelSheet view={taskPanels} /></>
   )
 }
 

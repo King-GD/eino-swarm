@@ -1,5 +1,5 @@
 import { BackoffNotice } from "./backoff-notice"
-import { GenerationNotice } from "./generation-notice"
+import { GenerationNotice, ModelRequestBlockedNotice } from "./generation-notice"
 import { IterationLimitCard } from "./iteration-limit-card"
 import { useCallback, useEffect, useState } from "react"
 import { ChevronRight, Loader2 } from "lucide-react"
@@ -32,6 +32,7 @@ import type { RemoteLink } from "@/lib/link"
 import type { HistoryWork } from "@/lib/rpc"
 import { LazyHistoryWork } from "@/components/lazy-history-work"
 import { gatewayImageCode } from "@/lib/paired-image-generation"
+import { isModelRequestBlocked, visibleModelRequestNotices } from "../../../frontend/src/lib/model-request-blocked"
 
 export function renderBlock(b: CompactBlock) {
   if (b.kind === "turn_end") {
@@ -74,7 +75,7 @@ export function renderBlock(b: CompactBlock) {
     if (!text) return null
     return (
       <div data-quote-text="" className={cn("mr-4 min-w-0 wrap-break-word text-sm leading-snug", b.streaming && "opacity-90")}>
-        <PhoneMarkdown text={text} />
+        <PhoneMarkdown text={text} streaming={b.streaming} />
         {!b.streaming ? <SpeechActions id={b.id} text={text} /> : null}
       </div>
     )
@@ -97,6 +98,7 @@ export function renderBlock(b: CompactBlock) {
     return null
   }
   if (b.kind === "error" || (b.kind === "finish" && b.failed)) {
+    if (isModelRequestBlocked(b.text)) return <ModelRequestBlockedNotice />
     return <p className="text-sm text-destructive">{localizeNotice(b.text)}</p>
   }
   if (b.kind === "finish" && b.cancelled) {
@@ -246,6 +248,8 @@ function localizeNotice(text: string): string {
       return t("notice.modelRetryUnavailable")
     case "The connection to the model service dropped. Retrying.":
       return t("notice.modelRetryTransport")
+    case "Model response read timed out. Retrying.":
+      return t("notice.modelRetryReadTimeout")
     case "The model service stopped sending data. Retrying.":
       return t("notice.modelRetryIdle")
     case "Continuing from the failed step.":
@@ -263,6 +267,8 @@ function localizeNotice(text: string): string {
       return t("notice.modelServiceUnavailable")
     case "the connection to the model service dropped":
       return t("notice.modelServiceTransport")
+    case "model response read timed out":
+      return t("notice.modelServiceReadTimeout")
     case "the prompt plus the requested output exceeds this model's context window; automatic compact could not free enough space. Lower Max completion tokens in Settings → Swarm, or shorten the request, then retry":
       return t("notice.contextOverflow")
     case "the prompt plus the requested output exceeds this model's context window; automatic compact could not free enough space. Lower Max completion tokens in Settings → Swarm, or shorten the request, then retry. The scheduled check is paused":
@@ -307,11 +313,12 @@ export function ThreadLog({
   historyAgent?: string
 }) {
   const deferred = historyWork.filter((range) => !range.agent_ids || range.agent_ids.includes(historyAgent))
-  const items = foldPhoneItems(deferred.length ? blocks.filter((block) => {
+  const visible = visibleModelRequestNotices(blocks)
+  const items = foldPhoneItems(deferred.length ? visible.filter((block) => {
     if (block.kind !== "reasoning" && block.kind !== "tool") return true
     const seq = block.sourceSeq ?? 0
     return !deferred.some((range) => seq >= range.from && seq <= range.through)
-  }) : blocks)
+  }) : visible)
   let lastWork = -1
   items.forEach((item, i) => {
     if (item.type === "block" && item.block.kind === "turn_end") {

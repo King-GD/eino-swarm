@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,7 @@ import (
 	"github.com/LubyRuffy/eino-swarm/internal/knowledge"
 	"github.com/LubyRuffy/eino-swarm/internal/provider"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
+	openai "github.com/meguminnnnnnnnn/go-openai"
 )
 
 func distillWire(t *testing.T, serve func(http.ResponseWriter, scheduleCompletionRequest, int)) (*Engine, *atomic.Int32) {
@@ -59,7 +61,7 @@ func waitDistill(t *testing.T, e *Engine, id string) DistillationResult {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got.State != "running" {
+		if got.State != "running" && got.State != "pausing" {
 			return got
 		}
 		time.Sleep(5 * time.Millisecond)
@@ -86,8 +88,17 @@ func TestDistillationKeepsPeerSequenceIdentityAndReportsActualPartialWrites(t *t
 			strings.Contains(source, foreign) || strings.Count(source, "event_seq=1 ") != 2 {
 			t.Errorf("wrong captured scope: %s", source)
 		}
+		if step == 2 {
+			if !strings.Contains(req.Messages[0].Content, "A previous attempt may have saved part of this batch.") {
+				t.Error("resuming a partially published batch did not ask the reviewer to inspect the saved destinations")
+			}
+			nuwaValidationTool(w, req, "resume", distillBatchName, `{"changes":[],"knowledge":[
+				{"action":"write_page","id":"peer","type":"entry","title":"Peer","body":"Peer observed distinct material.","evidence":[{"seq":2,"quote":"Peer observed distinct material."}]}
+			]}`)
+			return
+		}
 		if step != 1 {
-			t.Errorf("partial commit ran another model call: %d", step)
+			t.Errorf("unexpected additional model call: %d", step)
 		}
 		nuwaValidationTool(w, req, "distill", distillBatchName, `{
 		  "changes":[{"target":"memory","action":"add","content":"Preserve the working convention.","evidence":[{"seq":1,"quote":"Preserve the working convention."}]}],
@@ -149,6 +160,17 @@ func TestDistillationKeepsPeerSequenceIdentityAndReportsActualPartialWrites(t *t
 	page, err := e.ProjectKnowledgePage(t.Context(), project.ID, "hypothesis")
 	if err != nil || len(page.Sources) != 1 || page.Sources[0].Classification != "analysis" || page.Sources[0].ThreadID != b.ID {
 		t.Fatalf("analysis did not retain its precise origin: %+v / %v", page, err)
+	}
+	if result.Progress.Processed != 0 || !result.Uncertain {
+		t.Fatalf("partial file writes advanced the cursor: %+v", result)
+	}
+	if _, err := e.StartProjectDistillation(t.Context(), project.ID, DistillationRequest{ResumeReviewID: result.ReviewID}); err != nil {
+		t.Fatal(err)
+	}
+	repaired := waitDistill(t, e, project.ID)
+	if repaired.State != "completed" || repaired.Uncertain || repaired.Progress.Processed != 3 ||
+		len(repaired.Changes) != 1 || len(repaired.Knowledge) != 2 || calls.Load() != 2 {
+		t.Fatalf("resume lost saved work or counted it again: %+v", repaired)
 	}
 }
 
@@ -420,6 +442,13 @@ func TestDistillationRefusesForeignAndMalformedProposalsBeforeAcceptingCanonical
 				!strings.Contains(receipt, `"success":false`) {
 				t.Errorf("guard did not refuse proposal %d: %s", step-1, receipt)
 			}
+			if step == 5 {
+				for _, field := range []string{`knowledge[0]`, `"reason":"quote_mismatch"`, `"source_text":"` + quote + `"`, `"citable_sources":[1]`} {
+					if !strings.Contains(receipt, field) {
+						t.Errorf("wiki refusal omitted %q from the model's repair instructions: %s", field, receipt)
+					}
+				}
+			}
 		}
 		if step <= len(proposals) {
 			nuwaValidationTool(w, req, fmt.Sprintf("proposal-%d", step), distillBatchName, proposals[step-1].args)
@@ -454,6 +483,106 @@ func TestDistillationRefusesForeignAndMalformedProposalsBeforeAcceptingCanonical
 	page, err = e.ProjectKnowledgePage(t.Context(), p.ID, "target")
 	if err != nil || len(page.Sources) != 1 || page.Sources[0].Available == nil || *page.Sources[0].Available {
 		t.Fatalf("changed stamp remained available: %+v, %v", page, err)
+	}
+}
+
+func TestDistillationRetriesTheUnwrittenBatchOnce(t *testing.T) {
+	const source = "Keep the original project convention."
+	const peerSource = "A peer discussion has an independent convention."
+	for _, scenario := range []string{"citation", "provider outage", "exhausted", "first byte"} {
+		t.Run(scenario, func(t *testing.T) {
+			e, calls := distillWire(t, func(w http.ResponseWriter, req scheduleCompletionRequest, step int) {
+				if !strings.Contains(req.Messages[1].Content, source) {
+					t.Error("retry lost the original batch input")
+				}
+				if strings.Contains(req.Messages[1].Content, peerSource) {
+					t.Error("retry or explicit resume widened the task to the project")
+				}
+				if scenario == "first byte" {
+					if strings.Contains(req.Messages[0].Content, "fresh attempt at the same batch") {
+						t.Error("a configured first-byte deadline started a fresh batch retry")
+					}
+					time.Sleep(1250 * time.Millisecond)
+					return
+				}
+				if step == 2 && !strings.Contains(req.Messages[0].Content, "fresh attempt at the same batch") {
+					t.Error("the retry did not start a new reviewer on the frozen batch")
+				}
+				if step == 1 && scenario == "provider outage" {
+					http.Error(w, "temporary service outage", http.StatusServiceUnavailable)
+					return
+				}
+				quote := source
+				if step == 1 || (scenario == "exhausted" && step == 2) {
+					quote = "A quote absent from the original input."
+				}
+				nuwaValidationTool(w, req, fmt.Sprintf("batch-%d", step), distillBatchName, fmt.Sprintf(
+					`{"changes":[],"knowledge":[{"action":"write_page","id":"convention","type":"entry","title":"Convention","body":%q,"evidence":[{"seq":1,"quote":%q}]}]}`,
+					source, quote))
+			})
+			e.cfg.Memory.ReviewMaxIterations = 1
+			if scenario == "first byte" {
+				e.cfg.Models.Providers[0].FirstByteTimeoutSeconds = 1
+			}
+			p, err := e.CreateProject("Bounded retry", "", "", true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			th := knowledgeFixtureThread(t, e, p.ID, "Original task")
+			distillEvent(t, e, th, store.TurnDone, KindUser, source)
+			peer := knowledgeFixtureThread(t, e, p.ID, "Peer discussion")
+			distillEvent(t, e, peer, store.TurnDone, KindUser, peerSource)
+			_, err = e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{Scope: "thread", ThreadID: th.ID, EnableKnowledge: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := waitDistill(t, e, p.ID)
+			if scenario == "first byte" {
+				// Provider discovery can make its own request inside one reviewer.
+				if result.State != "failed" || result.ErrorCode != "first_byte_timeout" ||
+					result.ErrorProviderID != th.ProviderID || calls.Load() > 2 {
+					t.Fatalf("provider deadline was hidden or blindly retried: %+v (%d calls)", result, calls.Load())
+				}
+				return
+			}
+			if scenario == "exhausted" {
+				if result.State != "failed" || result.ErrorCode != "evidence" ||
+					result.Progress.Processed != 0 || len(result.Knowledge) != 0 || calls.Load() != 2 {
+					t.Fatalf("failed retry moved the cursor or was not bounded: %+v (%d calls)", result, calls.Load())
+				}
+				resumed, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{ResumeReviewID: result.ReviewID})
+				if err != nil || resumed.Scope != "thread" || resumed.ThreadID != th.ID {
+					t.Fatalf("resume changed the saved task scope: %+v %v", resumed, err)
+				}
+				done := waitDistill(t, e, p.ID)
+				if done.State != "completed" || done.Scope != "thread" || done.ThreadID != th.ID ||
+					done.Progress.Total != 1 || done.Progress.Processed != 1 || calls.Load() != 3 {
+					t.Fatalf("resume processed outside the original task: %+v (%d calls)", done, calls.Load())
+				}
+			} else if result.State != "completed" || result.Progress.Processed != 1 || len(result.Knowledge) != 1 || calls.Load() != 2 {
+				t.Fatalf("retry did not save one page and accept one batch: %+v (%d calls)", result, calls.Load())
+			}
+		})
+	}
+}
+
+func TestDistillationFailureSuggestsConfigurationWithoutAutomaticallyRepeatingIt(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		stop string
+		code string
+	}{
+		{err: errors.New("maximum context length"), code: "context_overflow"},
+		{err: provider.IdleTimeoutError{Idle: time.Second}, code: "idle_timeout"},
+		{err: context.DeadlineExceeded, code: "agent_timeout"},
+		{err: &openai.APIError{HTTPStatusCode: http.StatusTooManyRequests}, code: "rate_limited"},
+		{err: &openai.APIError{HTTPStatusCode: http.StatusUnauthorized}, code: "model_settings"},
+		{stop: "iteration_limit", code: "iteration_limit"},
+		{err: errors.New("unknown storage failure")},
+	} {
+		if code, retry := distillationFailure(tc.err, tc.stop, false); code != tc.code || retry {
+			t.Errorf("error=%v stop=%q: got %q retry=%v, want %q without an automatic retry", tc.err, tc.stop, code, retry, tc.code)
+		}
 	}
 }
 
@@ -551,5 +680,12 @@ func TestDistillationDropsADeletedTraceAnchorBeforeModelInput(t *testing.T) {
 	result := waitDistill(t, e, p.ID)
 	if result.State != "failed" || result.TurnID != "" || calls.Load() != 0 {
 		t.Fatalf("deleted turn still has reviewer work or a Trace: %+v requests=%d", result, calls.Load())
+	}
+	if _, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{ResumeReviewID: result.ReviewID}); err != nil {
+		t.Fatal(err)
+	}
+	finished := waitDistill(t, e, p.ID)
+	if finished.State != "completed" || finished.Progress.Remaining != 0 || finished.Progress.Skipped != 1 || calls.Load() != 0 {
+		t.Fatalf("resume did not account for the vanished source: %+v %+v", finished, finished.Progress)
 	}
 }

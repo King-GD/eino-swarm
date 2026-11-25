@@ -83,10 +83,13 @@ export function PhoneTaskPanelSheet({ view }: { view: PanelView }) {
       <button ref={closeButton} type="button" className="flex size-10 shrink-0 items-center justify-center rounded-md hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring" onClick={view.close} aria-label={t("thread.back")}><ChevronLeft className="size-5" aria-hidden /></button>
       <h2 className="min-w-0 flex-1 truncate text-sm font-medium">{caption}</h2>
       <Button type="button" variant="ghost" className="size-10 shrink-0 px-0" onClick={view.refresh} disabled={view.loading} aria-label={panelText(locale, "retry")}><RefreshCw className={`size-4 ${view.loading ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden /></Button>
+      {view.current ? <Button type="button" variant="outline" className="shrink-0 px-2 text-xs" disabled={!view.connected || Boolean(view.closingPanelId)}
+        onClick={() => view.current && void view.closePanel(view.current.id)}>{panelText(locale, "closeInstance")}</Button> : null}
       <Button type="button" variant="ghost" className="size-10 shrink-0 px-0" onClick={view.close} aria-label={t("home.close")}><X className="size-5" aria-hidden /></Button>
     </header>
     {!view.connected ? <p role="status" className="border-b border-border px-3 py-2 text-xs text-muted-foreground">{panelText(locale, "disconnected")}</p> : null}
     {view.loading ? <p role="status" className="px-3 py-1 text-xs text-muted-foreground">{panelText(locale, "loading")}</p> : null}
+    {view.closeError ? <p role="alert" className="px-3 py-2 text-xs text-destructive">{panelText(locale, "closeFailed")}</p> : null}
     {view.error ? <p role="alert" className="px-3 py-2 text-xs text-destructive">{view.error}</p> : null}
     {!view.panels.length && !view.loading && !view.error ? <p role="status" className="p-3 text-sm text-muted-foreground">{panelText(locale, "loading")}</p> : null}
     {view.panels.length > 1 ? <label className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1 text-xs">

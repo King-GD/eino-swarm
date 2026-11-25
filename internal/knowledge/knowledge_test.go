@@ -284,14 +284,21 @@ func TestPageCollisionChecksAllNamesAndConcurrentRevisions(t *testing.T) {
 		}
 	}
 	other := writePage(t, store, Page{ID: "other", Type: "entry", Title: "Same names"})
-	if result := snapshotWiki(t, store).Search("same name", 2); len(result) != 2 || result[0].ID != page.ID ||
+	snapshot := snapshotWiki(t, store)
+	if result := snapshot.Search("same name", 2); len(result) != 2 || result[0].ID != page.ID ||
 		result[1].ID != other.ID {
 		t.Fatalf("exact result failed to lead prefix search: %+v", result)
 	}
-	if result := snapshotWiki(t, store).Search("SEARCH BODY", 1); len(result) != 1 || result[0].ID != page.ID {
+	if result := snapshot.SearchPage("same name", 1, 1); len(result) != 1 || result[0].ID != other.ID {
+		t.Fatalf("next search page failed to skip the exact match: %+v", result)
+	}
+	if result := snapshot.SearchPage("same name", -1, 1); len(result) != 0 {
+		t.Fatalf("negative search offset returned %+v", result)
+	}
+	if result := snapshot.Search("SEARCH BODY", 1); len(result) != 1 || result[0].ID != page.ID {
 		t.Fatalf("body search = %+v", result)
 	}
-	if result := snapshotWiki(t, store).Search("", 0); len(result) != 0 {
+	if result := snapshot.Search("", 0); len(result) != 0 {
 		t.Fatalf("nonpositive search limit returned %+v", result)
 	}
 

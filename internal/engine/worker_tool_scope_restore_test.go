@@ -54,7 +54,7 @@ func TestNuwaWorkerToolScopeSurvivesColdCheckpointAndEvent(t *testing.T) {
 				}
 				if calls.Add(1) == 1 {
 					nuwaValidationTool(w, request.scheduleCompletionRequest, "restored-scope-record", "record_work",
-						`{"kind":"fact","title":"Restored observation","summary":"The original scope was retained."}`)
+						`{"scope":"project","kind":"fact","title":"Restored observation","summary":"The original scope was retained."}`)
 					return
 				}
 				var receipt struct{ OK bool }

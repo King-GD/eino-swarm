@@ -41,9 +41,12 @@ def family_cases(model: mc.Model) -> list[mc.Case]:
 
 
 class CaseTable(unittest.TestCase):
-    def test_easm_protocol_models_remain_in_the_full_suite(self):
+    def test_panel_protocol_models_remain_in_the_full_suite(self):
         # Removing a whole family would evade checks which only iterate MODELS.
         for name, filename in (("panel-mcp-admission", "PanelMCPAdmission.tla"),
+                               ("panel-instance", "PanelInstance.tla"),
+                               ("panel-close-ordering", "PanelCloseOrdering.tla"),
+                               ("panel-close-delivery", "PanelCloseDelivery.tla"),
                                ("easm-collection", "EASMCollection.tla"),
                                ("easm-collection-interleaving", "EASMCollection.tla")):
             with self.subTest(model=name):
@@ -130,7 +133,9 @@ class RegistrationGuards(unittest.TestCase):
                      "panel-projection-omitted",
                      "panel-ownership-steal", "panel-ownership-recovery",
                      "panel-producer-stop", "panel-producer-early-return",
-                     "panel-producer-origin-identity"):
+                     "panel-producer-origin-identity",
+                     "panel-close-ordering-rollback", "panel-close-ordering-publication",
+                     "panel-close-delivery-stale-payload", "panel-close-delivery-stale-ack"):
             remaining = [c for c in mc.CASES if c.name != name]
             with self.subTest(case=name):
                 self.assert_case_table_fails("test_every_switch_is_shown_to_break_an_invariant", remaining)
@@ -141,6 +146,7 @@ class RegistrationGuards(unittest.TestCase):
                      "panel-projection-reach-new-panel", "panel-ownership-reach-recovery",
                      "panel-projection-reach-omitted",
                      "panel-producer-reach-stop", "reach-refused-panel-recovery",
+                     "panel-close-ordering-reach-crash", "panel-close-delivery-reach-ack-crossing",
                      "mobile-panel-reach-snapshot", "mobile-panel-reach-patch", "mobile-panel-reach-visit", "mobile-panel-reach-refresh"):
             remaining = [c for c in mc.CASES if c.name != name]
             with self.subTest(case=name):
@@ -161,13 +167,56 @@ class RegistrationGuards(unittest.TestCase):
                 self.assert_case_table_fails("test_every_witness_is_checked_alone_on_the_current_design", remaining)
 
     def test_inspector_registry_keeps_observed_faults_and_focus_witnesses(self):
-        for name in ("fallback", "project-status", "foreign-row", "signal-owner", "signal-replaced", "signal-deleted", "signal-replayed"):
+        for name in ("fallback", "project-status", "foreign-row", "signal-owner", "signal-replaced", "signal-deleted", "signal-replayed",
+                     "work-mode", "work-focus"):
             with self.subTest(case=name):
                 remaining = [c for c in mc.CASES if c.name != "inspector-registry-" + name]
                 self.assert_case_table_fails("test_every_safety_invariant_is_shown_to_catch_something", remaining)
-        for name in ("filtered", "open", "stale-owner", "superseded", "deleted", "replay"):
+        for name in ("filtered", "open", "stale-owner", "superseded", "deleted", "replay", "standalone-work"):
             with self.subTest(witness=name):
                 remaining = [c for c in mc.CASES if c.name != "inspector-registry-reach-" + name]
+                self.assert_case_table_fails("test_every_witness_is_checked_alone_on_the_current_design", remaining)
+
+    def test_work_pruning_keeps_faults_and_restore_witnesses(self):
+        for name in ("deletes-record", "direct-only", "keeps-all", "sticky",
+                     "reconfirm-on-restore", "reconfirm-on-patch", "ignores-version", "ignores-inactive"):
+            with self.subTest(case=name):
+                remaining = [c for c in mc.CASES if c.name != "work-pruning-" + name]
+                self.assert_case_table_fails("test_every_switch_is_shown_to_break_an_invariant", remaining)
+        for name in ("collapsed-branch", "inactive-chain", "restored-id", "restored-stale", "confirmed", "reveal"):
+            with self.subTest(witness=name):
+                remaining = [c for c in mc.CASES if c.name != "work-pruning-reach-" + name]
+                self.assert_case_table_fails("test_every_witness_is_checked_alone_on_the_current_design", remaining)
+
+    def test_work_records_keep_scope_faults_and_read_witnesses(self):
+        for name in ("nuwa-promote-without-closure", "nuwa-private-leak"):
+            with self.subTest(case=name):
+                remaining = [c for c in mc.CASES if c.name != name]
+                self.assert_case_table_fails("test_every_safety_invariant_is_shown_to_catch_something", remaining)
+        for name in ("nuwa-reach-peer-promotion", "nuwa-reach-standalone-work"):
+            with self.subTest(witness=name):
+                remaining = [c for c in mc.CASES if c.name != name]
+                self.assert_case_table_fails("test_every_witness_is_checked_alone_on_the_current_design", remaining)
+
+    def test_work_merge_keeps_commit_faults_and_targeted_outcomes(self):
+        faults = {
+            "stale-thread": ("PromoteIgnoresThreadRevision", "MergeAdmissionUsesSnapshot"),
+            "stale-project": ("PromoteIgnoresProjectRevision", "MergeAdmissionUsesSnapshot"),
+            "moved-owner": ("PromoteIgnoresMove", "MergeAdmissionUsesSnapshot"),
+            "stale-generation": ("PromoteIgnoresDataGeneration", "MergeAdmissionUsesSnapshot"),
+            "partial-commit": ("PromotePartiallyCommits", "MergeRollbackKeepsCommittedState"),
+            "early-publication": ("PromotePublishesStaged", "MergePublicationIsCommitted"),
+            "open-closure": ("PromoteWithoutClosure", "MergeCommitsClosureAndRevisions"),
+        }
+        cases = {case.name: case for case in mc.CASES}
+        for name, (switch, invariant) in faults.items():
+            with self.subTest(fault=name):
+                case = cases["nuwa-merge-" + name]
+                self.assertEqual(case.switches, {switch})
+                self.assertEqual(case.violates, invariant)
+        for name in ("publication", "rollback", "stale-thread", "stale-project", "moved-owner", "restore", "standalone"):
+            with self.subTest(witness=name):
+                remaining = [case for case in mc.CASES if case.name != "nuwa-merge-reach-" + name]
                 self.assert_case_table_fails("test_every_witness_is_checked_alone_on_the_current_design", remaining)
 
     def assert_case_table_fails(self, method, cases):
@@ -511,6 +560,8 @@ EventuallyDone == <>(phase = "done")
                      "schedule-current", "schedule-pre-cancel-authority",
                      "schedule-claimed-cancel-ignored", "schedule-manager-cancel-masks-human",
                      "schedule-retarget-after-terminal", "schedule-reach-cancel-storage-refusal",
+                     "schedule-answer-current", "schedule-answer-external-mislabelled-twice",
+                     "schedule-answer-mixed-bypass", "schedule-answer-external-new-required",
                      "consent-current", "consent-pre-cancel-authority"):
             outcome, log = mc.run_case(by_name[name], jar, out)
             self.assertIsNone(mc.judge(by_name[name], outcome), log.read_text()[-2000:])

@@ -74,7 +74,7 @@ func TestNuwaRetainedWorkerCitesEvidenceObservedByNextWake(t *testing.T) {
 					return
 				}
 				readReceipt <- read
-				call("adopted-record", "record_work", `{"kind":"fact","title":"Source observation","own_tool_call_ids":["adopted-read"]}`)
+				call("adopted-record", "record_work", `{"scope":"project","kind":"fact","title":"Source observation","own_tool_call_ids":["adopted-read"]}`)
 			case 3:
 				recordReply <- result("adopted-record")
 				answer("Source inspection ended.")

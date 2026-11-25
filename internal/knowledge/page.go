@@ -20,6 +20,7 @@ type Page struct {
 	Fields        map[string]any `yaml:"fields,omitempty" json:"fields,omitempty"`
 	Links         []Link         `yaml:"links,omitempty" json:"links,omitempty"`
 	Sources       []Source       `yaml:"sources,omitempty" json:"sources,omitempty"`
+	Wiki          *WikiPage      `yaml:"wiki,omitempty" json:"wiki,omitempty"`
 	AsOf          string         `yaml:"as_of,omitempty" json:"as_of,omitempty"`
 	UpdatedAt     time.Time      `yaml:"updated_at,omitempty" json:"updated_at,omitzero"`
 	UpdatedTurn   string         `yaml:"updated_turn,omitempty" json:"updated_turn,omitempty"`
@@ -100,6 +101,9 @@ func validatePageIdentity(page Page, index schemaIndex) error {
 }
 
 func contentError(page Page, index schemaIndex) error {
+	if page.Wiki != nil && (page.Type != wikiNodeType || page.Wiki.Written < 0 || page.Wiki.Written > len(page.Wiki.Evidence)) {
+		return fmt.Errorf("%w: invalid wiki document progress", ErrInvalid)
+	}
 	kind := index.types[page.Type]
 	for name := range page.Fields {
 		if !slices.ContainsFunc(kind.Fields, func(field Field) bool { return field.ID == name }) {
@@ -205,6 +209,11 @@ func clonePage(page Page) Page {
 	page.Aliases = slices.Clone(page.Aliases)
 	page.Links = slices.Clone(page.Links)
 	page.Sources = slices.Clone(page.Sources)
+	if page.Wiki != nil {
+		wiki := *page.Wiki
+		wiki.Evidence = slices.Clone(wiki.Evidence)
+		page.Wiki = &wiki
+	}
 	if page.Fields != nil {
 		cloned := make(map[string]any, len(page.Fields))
 		for k, v := range page.Fields {

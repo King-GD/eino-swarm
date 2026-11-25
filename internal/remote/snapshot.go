@@ -248,6 +248,7 @@ func threadDetail(eng *engine.Engine, th *store.Thread, cfg config.RemoteConfig)
 		Unread:          th.CompletedSeq > th.ReadCompletedSeq,
 		CompletedSeq:    th.CompletedSeq,
 		ID:              th.ID,
+		ProjectID:       th.ProjectID,
 		Title:           strings.TrimSpace(th.Title),
 		Goal:            th.Goal,
 		GoalOn:          strings.TrimSpace(th.Goal) != "",

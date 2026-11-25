@@ -24,6 +24,10 @@ func TestEventMessageIdentitySurvivesReopenWithoutChangingLegacyRows(t *testing.
 		t.Fatal(err)
 	}
 	// Reopen an actual pre-field schema so AutoMigrate has to add the column.
+	// Legacy databases also predate the trigger that uses this identity.
+	if err := s.DB().Exec("DROP TRIGGER startup_recovery_event_added").Error; err != nil {
+		t.Fatal(err)
+	}
 	if err := s.DB().Exec("ALTER TABLE events DROP COLUMN message_id").Error; err != nil {
 		t.Fatal(err)
 	}

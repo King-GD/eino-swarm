@@ -44,7 +44,7 @@ import type { ClientCatalog } from "./local-clients"
 import type { SendImage } from "./paste-image"
 import type { ThreadLog } from "./thread-log"
 import { distillationPath, type DistillRequest, type DistillResult } from "./distillation"
-import { knowledgePath, type KnowledgePage, type KnowledgeStatus, type KnowledgeTree } from "./knowledge"
+import { knowledgePath, type KnowledgeGraph, type KnowledgePage, type KnowledgeStatus, type KnowledgeTree } from "./knowledge"
 import type { ComposerDraftRecord } from "./composer-draft"
 import type { MCPServerInput, MCPServerView, MCPToolCatalog } from "./mcp-settings"
 
@@ -583,10 +583,12 @@ export const api = {
       body: JSON.stringify({ ids }),
     }).then((r) => r.projects),
 
-  distillStatus: (projectId: string, signal?: AbortSignal) =>
-    request<DistillResult>(distillationPath(projectId), { signal, cache: "no-store" }),
-  startDistillation: (projectId: string, input: DistillRequest) =>
-    request<DistillResult>(distillationPath(projectId), { method: "POST", body: JSON.stringify(input) }),
+  distillStatus: (projectId: string, signal?: AbortSignal, wikiGraph = false) =>
+    request<DistillResult>(distillationPath(projectId, wikiGraph), { signal, cache: "no-store" }),
+  startDistillation: (projectId: string, input: DistillRequest, wikiGraph = false) =>
+    request<DistillResult>(distillationPath(projectId), {
+      method: "POST", body: JSON.stringify(wikiGraph ? { ...input, wiki_graph: true } : input),
+    }),
 
   knowledgeStatus: (projectId: string, signal?: AbortSignal) =>
     request<KnowledgeStatus>(knowledgePath(projectId), { signal, cache: "no-store" }),
@@ -594,6 +596,8 @@ export const api = {
     request<KnowledgeStatus>(knowledgePath(projectId), { method: "POST" }),
   knowledgeTree: (projectId: string, view: string, signal?: AbortSignal) =>
     request<KnowledgeTree>(`${knowledgePath(projectId)}/tree?view=${encodeURIComponent(view)}`, { signal, cache: "no-store" }),
+  knowledgeGraph: (projectId: string, signal?: AbortSignal) =>
+    request<KnowledgeGraph>(`${knowledgePath(projectId)}/graph`, { signal, cache: "no-store" }),
   knowledgePage: (projectId: string, page: string, signal?: AbortSignal) =>
     request<KnowledgePage>(`${knowledgePath(projectId)}/pages/${encodeURIComponent(page)}`, { signal, cache: "no-store" }),
   revealKnowledge: (projectId: string) =>
@@ -888,6 +892,11 @@ export const api = {
 
   inputImageURL: (id: string, imageId: string) =>
     `/api/threads/${id}/input-images/${encodeURIComponent(imageId)}`,
+  extractImageText: (id: string, imageId: string, signal: AbortSignal) =>
+    request<{ text: string }>(
+      `/api/threads/${encodeURIComponent(id)}/input-images/${encodeURIComponent(imageId)}/ocr`,
+      { method: "POST", signal },
+    ),
   deleteFile: (id: string, path: string, location?: FileLocation) =>
     request<void>(
       `/api/threads/${id}/download/${path.split("/").map(encodeURIComponent).join("/")}${fileQuery(location)}`,

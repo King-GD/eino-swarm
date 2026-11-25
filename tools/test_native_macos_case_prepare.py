@@ -140,6 +140,32 @@ class PreparationTests(unittest.TestCase):
         self.assertFalse(Path(receipt["case_root"]).exists())
         self.assertTrue(all(process.poll() is not None for process in self.processes))
 
+    def test_private_model_opt_in_only_changes_the_owned_desktop_argv(self):
+        executable = self.app / "Contents/MacOS/fixture"
+        executable.write_text("#!" + sys.executable + "\n"
+                              "import json, os, sys, time\n"
+                              "from pathlib import Path\n"
+                              "path = Path(os.environ['ZWAI_NATIVE_EVIDENCE']) / 'desktop-argv.json'\n"
+                              "path.write_text(json.dumps(sys.argv[1:]))\n"
+                              "time.sleep(120)\n")
+        scenario = """import os, time
+from pathlib import Path
+path = Path(os.environ["ZWAI_NATIVE_EVIDENCE"]) / "desktop-argv.json"
+while not path.exists():
+    time.sleep(.01)
+"""
+        for mock_mode in (True, False):
+            with self.subTest(mock_mode=mock_mode):
+                entry = (runner.main if mock_mode else
+                         lambda *args, **kwargs: runner.main(*args, **kwargs, mock=False))
+                code, evidence, receipt = self.main(lambda *args: None, scenario, entry=entry)
+                self.assertEqual(code, 0)
+                self.assertIs(receipt["mock"], mock_mode)
+                argv = ["desktop"] + (["--mock"] if mock_mode else [])
+                argv += ["--data-dir", receipt["data_dir"]]
+                self.assertEqual(json.loads((evidence / "desktop-argv.json").read_text()), argv)
+                self.assert_clean(receipt)
+
     def test_prepare_refusal_reaps_registered_bridge_and_child_before_app_launch(self):
         owned = []
         def prepare(*args):

@@ -201,8 +201,11 @@ test("enlarges the selected sent image within the viewport and after reload", as
   const detail = page.getByRole("dialog", { name: "detail.jpg", exact: true })
   await expect(detail.getByAltText("detail.jpg")).toBeVisible()
   await expect(detail.getByAltText("landscape.png")).toHaveCount(0)
-  await page.keyboard.press("Tab")
+  const extract = detail.getByRole("button", { name: "Extract text" })
+  await expect(extract).toBeVisible()
   await expect(detail.getByRole("button", { name: "Close image preview" })).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(extract).toBeFocused()
   await page.keyboard.press("Shift+Tab")
   await expect(detail.getByRole("button", { name: "Close image preview" })).toBeFocused()
   await detail.getByRole("button", { name: "Close image preview" }).click()
@@ -218,6 +221,35 @@ test("enlarges the selected sent image within the viewport and after reload", as
   await readEarlierTranscript(page, trigger)
   await trigger.click()
   await expect(page.getByRole("dialog", { name: "landscape.png", exact: true }).getByAltText("landscape.png")).toBeVisible()
+})
+
+test("extracts text only on request and only from the selected sent image", async ({ page }) => {
+  const calls: string[] = []
+  page.on("request", req => {
+    if (req.method() === "POST" && req.url().endsWith("/ocr")) calls.push(new URL(req.url()).pathname)
+  })
+  await freshConversation(page)
+  await dropFilesOnComposer(page, [
+    { name: "landscape.png", mime: "image/png", b64: previewPngBytes.toString("base64") },
+    { name: "detail.jpg", mime: "image/jpeg", b64: jpegB64 },
+  ], "drop")
+  await send(page, "Check these images")
+  await waitForIdle(page)
+  await page.getByRole("button", { name: "Enlarge detail.jpg", exact: true }).click()
+  const dialog = page.getByRole("dialog", { name: "detail.jpg" })
+  const extract = dialog.getByRole("button", { name: "Extract text" })
+  await expect(extract).toBeEnabled()
+  expect(calls).toEqual([])
+  const src = await dialog.getByAltText("detail.jpg").getAttribute("src")
+  const target = `${src}/ocr`
+  await extract.click()
+  await expect(dialog.getByRole("alert")).toHaveText("An authorized image text recognition model is required.")
+  expect(calls).toEqual([target])
+
+  await page.route(url => url.pathname === target, route => route.fulfill({ json: { text: "First line\nSecond line" } }))
+  await extract.click()
+  await expect(dialog.getByRole("textbox", { name: "Extracted text" })).toHaveValue("First line\nSecond line")
+  expect(calls).toEqual([target, target])
 })
 
 test("Escape closes a sent image preview without interrupting the active task", async ({ page }) => {

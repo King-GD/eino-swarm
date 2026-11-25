@@ -9,6 +9,9 @@ silently lose a guard, invariant or witness.
 
 | Specification | Finite scope | Code boundary and checked rule |
 | --- | --- | --- |
+| `PanelInstance.tla` | One binding, one observation and one source | Host visibility depends on committed observations or a running source. The initial snapshot stays hidden. Closing the instance leaves the turn running. |
+| `PanelCloseOrdering.tla` | One target and one sibling source, one captured publication, one failed close followed by a retry, one process restart | Store close commits its marker, interrupted status and deletion together. The engine cancels only the target after a successful write and acknowledges after dispatching cancellation. Late new writes cannot commit. Restart retains the marker. |
+| `PanelCloseDelivery.tla` | One instance, two visits and one in-flight reply | The PC snapshot and phone manifest/body paths both fence a reply captured before an acknowledged close. A previous visit's acknowledgement cannot change the new visit. |
 | `TaskPanel.tla` | One panel, two operation IDs, two digests, one captured request competing with another writer, two browser windows | `PublishTaskPanel`: accepted retries preserve identity, changed bodies conflict, new writes compare their captured base, commit precedes delivery. Its revision counts accepted data publications, abstracting lifecycle-only increments. The connection branch re-finds the observed extra-SSE/two-window draft starvation. |
 | `PanelOwnership.tla` | Two publisher identities; one live source; one malformed and one healthy recovery thread | `PublishTaskPanel` refuses a different writer while a source is running. `RecoverTaskPanelSourcesForThread` and `Engine.Restore` isolate failure to its owning conversation. |
 | `PanelMCPAdmission.tla` | One frozen role and source invocation, two destination identities, manager or six worker tool scopes | `resolveMCPSurface`, `bindPanelMCP`, `runPanelSource`, `runEASMSource` and the MCP caller: captured bindings do not expand with later settings, restored destinations match, worker execution scope is required, and session/live-switch checks retain their actual sampling points. |
@@ -144,3 +147,38 @@ the model and HTTP regression reject a successful receipt if that write fails.
 The models are checked independently; real HTTP regressions bind their shared
 role/source interface to the implementation rather than proving an arbitrary
 composition of the two specifications.
+
+## Instance close audit
+
+`PanelCloseOrdering` separates SQLite commit, cancellation dispatch,
+acknowledgement and producer exit. Its restart witness interrupts a close after
+the durable commit and before cancellation. Its publication witnesses cover
+both successful publication before close and refusal of an earlier captured
+publication after close. A separate mutation attempts a write using the closed
+revision, so the closed-state guard is checked independently of the revision
+guard. Foreign scope, failed writes, lost deletion, sibling cancellation,
+premature acknowledgement and lost persistence each have their own switch.
+
+| Boundary | Implementation evidence |
+| --- | --- |
+| Storage transaction, receipt and retry | `TestTaskPanelCloseDeliveryFailureLeavesSourceRunning`, `TestTaskPanelCloseRejectsCapturedPublicationAndPreservesHistoricalReceipt` |
+| Persistent marker, restart and late writes | `TestTaskPanelCloseSurvivesReopeningDatabaseAndRejectsLateWrites` |
+| Actual running source and conversation | `TestTaskPanelSourceRunsAndStopsThroughActualManagerHTTP/close` observes cancellation of the real loopback request and a normal turn completion without repeating the request. |
+| Scope and frozen transfer | `TestPhoneTaskPanelManifestUsesExistingSealedLink` rejects a foreign close and refuses continuation of the closed instance's transfer. |
+| Acknowledgement crossing a delayed reply | `frontend/src/store/task-panel-ordering-audit.test.ts` holds a Web GET without delivering SSE deletion. `mobile/src/lib/use-task-panels.test.tsx` holds the old body and the following manifest separately. Both also exercise acknowledgement from a previous scope. |
+
+Implementation mutations run in isolated copies. Removing the Store's
+closed-row guard admits a new write at the closed revision. Removing the Web
+snapshot filter reintroduces the closed instance. On the phone, removing the
+manifest filter restores the entry, while removing the post-read guard leaves
+patch metadata for the closed instance. The unchanged regression passes in
+each case.
+
+The close ordering model begins with two registered sources and assumes
+atomic Store operations. The delivery model abstracts message bytes and
+decoding, and checks one reply and two visits. A fresh post-close read samples
+durable state. Delivery is asynchronous before a client observes the close.
+The models do not cover replacing the database with a historical backup,
+encryption, native UI behavior, or when an already-issued external request
+finishes unwinding. A successful close can be returned while the cancelled
+producer is still running its cleanup.

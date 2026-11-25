@@ -2,6 +2,7 @@ package com.lubyruffy.zwai;
 
 import static org.junit.Assert.*;
 
+import android.accessibilityservice.AccessibilityService;
 import android.app.Activity;
 import android.app.Instrumentation;
 import android.app.UiAutomation;
@@ -47,8 +48,20 @@ public class FilePreviewControlsTest {
     private interface PreviewCase { void run() throws Exception; }
 
     private void runPreviewCase(String name, String query, PreviewCase test) throws Exception {
+        runFileCase(name, query, () -> {
+            waitNativeControl("Back");
+            click("Back");
+            waitButton("Open Sweep the unused exports");
+            click("Open Sweep the unused exports");
+            waitButton("Outputs"); click("Outputs");
+            waitButton("outputs"); click("outputs");
+            test.run();
+        });
+    }
+
+    private void runFileCase(String name, String query, PreviewCase test) throws Exception {
         deadline = SystemClock.uptimeMillis() + 120000;
-        evidenceDirectory = new File(instrumentation.getTargetContext().getExternalFilesDir(null),
+        evidenceDirectory = new File(instrumentation.getTargetContext().getFilesDir(),
             name + "-" + UUID.randomUUID());
         assertTrue(evidenceDirectory.mkdir());
         Bundle identity = new Bundle();
@@ -67,16 +80,9 @@ public class FilePreviewControlsTest {
         Activity reached = instrumentation.startActivitySync(launch);
         assertTrue(reached instanceof BridgeActivity);
         activity = (BridgeActivity) reached;
-        instrumentation.runOnMainSync(() -> activity.getBridge().getWebView()
-            .loadUrl("https://localhost/?mock=1&tick=0" + query));
         Throwable primary = null;
         try {
-            waitNativeBack();
-            click("Back");
-            waitButton("Open Sweep the unused exports");
-            click("Open Sweep the unused exports");
-            waitButton("Outputs"); click("Outputs");
-            waitButton("outputs"); click("outputs");
+            selectOfflineFiles(query);
             test.run();
         } catch (Exception | AssertionError failure) {
             primary = failure;
@@ -87,6 +93,51 @@ public class FilePreviewControlsTest {
             try { instrumentation.runOnMainSync(activity::finish); }
             catch (RuntimeException cleanup) { if (primary != null) primary.addSuppressed(cleanup); else throw cleanup; }
         }
+    }
+
+    private void selectOfflineFiles(String query) throws Exception {
+        // Fresh installs start in Account mode. Select Local only for the
+        // packaged offline fixture, once the app's own WebView is loaded.
+        AtomicReference<WebView> ready = new AtomicReference<>();
+        long end = Math.min(deadline, SystemClock.uptimeMillis() + 15000);
+        while (ready.get() == null && SystemClock.uptimeMillis() < end) {
+            instrumentation.runOnMainSync(() -> {
+                WebView view = activity.getBridge() == null ? null : activity.getBridge().getWebView();
+                if (view != null && view.getProgress() == 100 && view.getUrl() != null
+                    && view.getUrl().startsWith("https://localhost/")) ready.set(view);
+            });
+            if (ready.get() == null) SystemClock.sleep(100);
+        }
+        WebView view = ready.get();
+        assertNotNull("The packaged local page must finish loading", view);
+        CountDownLatch selected = new CountDownLatch(1);
+        AtomicReference<String> confirmation = new AtomicReference<>();
+        instrumentation.runOnMainSync(() -> view.evaluateJavascript(
+            "if (location.origin === 'https://localhost') {"
+                + "localStorage.setItem('zwai.phone.mode','local');"
+                + "localStorage.setItem('zwai.phone.locale','en');true; } else { false; }",
+            result -> { confirmation.set(result); selected.countDown(); }));
+        assertTrue("Offline mode selection must be acknowledged", selected.await(5, TimeUnit.SECONDS));
+        assertEquals("Offline input belongs to the installed local WebView", "true", confirmation.get());
+        instrumentation.runOnMainSync(() -> view.loadUrl("https://localhost/?mock=1&tick=0" + query));
+    }
+
+    @Test
+    public void transcriptFileLinkOpensTaskPreview() throws Exception {
+        runFileCase("transcript-file-links", "&history=file-links&file-preview=task-workspaces", () -> {
+            waitNativeControl("Back");
+            waitButton("the task result");
+            click("the task result");
+            waitState(s -> s.getJSONObject("text").getString("content").equals("Current task deliverable"));
+            waitNativeControl("Download");
+            capture("transcript-file-link-preview");
+            assertTrue("Android system Back must be admitted once", ui.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK));
+            actions.put(new JSONObject().put("action", "system_back"));
+            waitButton("the task result");
+            waitNativeControl("the task result");
+            assertEquals("", dom().getJSONObject("text").getString("content"));
+            capture("transcript-file-link-return");
+        });
     }
 
     @Test
@@ -485,14 +536,14 @@ public class FilePreviewControlsTest {
         });
     }
 
-    private void waitNativeBack() {
+    private void waitNativeControl(String label) {
         long end = Math.min(deadline, SystemClock.uptimeMillis() + 25000);
         while (SystemClock.uptimeMillis() < end) {
             for (AccessibilityNodeInfo node : nodes())
-                if (node.isVisibleToUser() && named(node, "Back")) return;
+                if (node.isVisibleToUser() && named(node, label)) return;
             SystemClock.sleep(100);
         }
-        fail("Initial packaged native Back control was not painted");
+        fail("Packaged native control was not painted: " + label);
     }
 
     private JSONObject button(JSONObject snapshot, String label) throws Exception {
@@ -510,15 +561,6 @@ public class FilePreviewControlsTest {
 
     private void click(String label) throws Exception {
         assertTrue("No input after the original case deadline", SystemClock.uptimeMillis() < deadline);
-        List<AccessibilityNodeInfo> matches = new ArrayList<>();
-        for (AccessibilityNodeInfo node : nodes())
-            if (node.isVisibleToUser() && node.isEnabled() && node.isClickable() && named(node, label)) matches.add(node);
-        assertTrue("Native target must be unique: " + label, matches.size() <= 1);
-        if (matches.size() == 1) {
-            assertTrue("One native AX press must acknowledge", matches.get(0).performAction(AccessibilityNodeInfo.ACTION_CLICK));
-            actions.put(new JSONObject().put("action", "native_AX_click").put("label", label));
-            return;
-        }
         JSONObject snapshot = dom(), target = button(snapshot, label);
         assertNotNull("No visible native control: " + label, target);
         assertTrue(target.getBoolean("enabled") && target.getBoolean("hit"));

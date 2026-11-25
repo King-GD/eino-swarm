@@ -20,6 +20,7 @@ EXTENDS Naturals, Sequences, FiniteSets
 
 CONSTANTS
     PanelCursorAsChatID,  \* named panel frames incorrectly overwrite the chat SSE id
+    WorkRevisionAsChatID, \* named work invalidations incorrectly overwrite the chat SSE id
     MarkerUnstored,       \* the rewind marker is broadcast with seq 0 and never stored
     MarkerAfterUnlock,    \* the rewind marker is broadcast after the record lock is released
     BroadcastAfterUnlock, \* a stored row is broadcast after the record lock is released
@@ -182,15 +183,17 @@ Restart ==
     /\ budget' = [budget EXCEPT !.restart = @ - 1]
     /\ UNCHANGED <<stored, view, highest, top, ghost, panelCursor, chatIdMixed>>
 
-(* writeSSE(panel_ready/panel_update, seq=0) emits no id field. The body
-   owns a different cursor; record, catch-up and reconnect retain their chat id. *)
-PanelFrame == /\ up /\ panelCursor < MaxSeq
-              /\ panelCursor' = panelCursor + 1
-              /\ highest' = IF PanelCursorAsChatID THEN Max({highest, panelCursor + 1}) ELSE highest
-              /\ chatIdMixed' = (chatIdMixed \/ PanelCursorAsChatID)
-              /\ UNCHANGED <<stored, next, outbox, pending, chan, lagged, up, view, budget, top, ghost>>
+(* Named inspector frames carry the panel cursor or the work revision pair
+   only in their body. The ordinal bounds both kinds for model checking. *)
+InspectorFrame(mixID) ==
+    /\ up /\ panelCursor < MaxSeq
+    /\ panelCursor' = panelCursor + 1
+    /\ highest' = IF mixID THEN Max({highest, panelCursor + 1}) ELSE highest
+    /\ chatIdMixed' = (chatIdMixed \/ mixID)
+    /\ UNCHANGED <<stored, next, outbox, pending, chan, lagged, up, view, budget, top, ghost>>
 
-Next == PanelFrame \/ Record \/ Flush \/ Rewind \/ EmitMarker \/ Deliver \/ CatchUp
+Next == InspectorFrame(PanelCursorAsChatID) \/ InspectorFrame(WorkRevisionAsChatID)
+        \/ Record \/ Flush \/ Rewind \/ EmitMarker \/ Deliver \/ CatchUp
         \/ Drop \/ Reconnect \/ Restart
 
 Spec == Init /\ [][Next]_vars

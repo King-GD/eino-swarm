@@ -1,3 +1,4 @@
+import { knowledgeZh } from "./messages-knowledge"
 import { accountZh } from "./messages-account"
 import { pcWaitZh } from "./messages-pc-wait"
 import { generationZh } from "./messages-generation"
@@ -6,6 +7,7 @@ import type { MessageKey } from "./messages-en"
 
 export const zh: Record<MessageKey, string> = {
   ...pcWaitZh,
+  ...knowledgeZh,
   ...speechZh,
   "account.capabilitiesUnknown": "暂时无法确认网关可用功能，已保留设置，请点击下方重试。",
   "selection.actions": "选中文字操作",
@@ -196,6 +198,8 @@ export const zh: Record<MessageKey, string> = {
   "files.refresh": "刷新文件列表",
   "files.search": "搜索文件",
   "files.searching": "正在查找…",
+  "files.openPreview": "打开 {path}",
+  "files.chooseMatch": "请选择要打开的文件",
   "files.loadingDir": "正在读取这个目录…",
   "files.loading": "正在读取文件…",
   "files.progressLabel": "文件加载进度",
@@ -334,6 +338,8 @@ export const zh: Record<MessageKey, string> = {
   "notice.modelServiceRateLimited": "模型服务正在限流。",
   "notice.modelServiceUnavailable": "模型服务不可用。",
   "notice.modelServiceTransport": "与模型服务的连接中断。",
+  "notice.modelRetryReadTimeout": "接收模型响应超时，正在重试。",
+  "notice.modelServiceReadTimeout": "接收模型响应超时。",
 
   "notice.goalCompleted": "目标已完成。",
 

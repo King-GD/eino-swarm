@@ -4,7 +4,56 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/cloudwego/eino/components/tool"
 )
+
+// Pressure is advisory. A misleading prompt must not make an agent discard
+// useful memory while the real write tool still has enough room to retain it.
+func TestMemoryToolStillAcceptsFittingGrowthUnderPressure(t *testing.T) {
+	store := NewLimited(t.TempDir(), 100, 90)
+	before, err := store.Overwrite(strings.Repeat("a", 80))
+	if err != nil || before.Percent() != 80 {
+		t.Fatalf("pressure fixture: %+v %v", before, err)
+	}
+	mem := Tools(store, nil)[0].(tool.InvokableTool)
+	// Eighteen new characters plus the two-character note separator fill the
+	// remaining twenty characters exactly. No note is shortened or removed.
+	result := run(t, mem, map[string]any{"action": "add", "content": strings.Repeat("b", 18)})
+	if result["success"] != true || result["usage"] != "100/100" {
+		t.Fatalf("fitting growth must remain writable at 80%%: %v", result)
+	}
+	after, err := store.Read()
+	if err != nil || len(after.Entries) != 2 || after.Entries[0] != before.Entries[0] || after.Chars != 100 {
+		t.Fatalf("the write lost existing memory or ignored separator costs: %+v %v", after, err)
+	}
+	if refused := run(t, mem, map[string]any{"action": "add", "content": "c"}); refused["success"] != false || refused["available_chars"] != float64(0) {
+		t.Fatalf("a real total overflow must still be refused: %v", refused)
+	}
+}
+
+// A replacement spends only its net increase from the remaining total budget,
+// while its entire new content must still fit the independent per-note cap.
+func TestMemoryToolCanGrowAReplacementWhileItsEntryStillFits(t *testing.T) {
+	store := NewLimited(t.TempDir(), 100, 90)
+	if _, err := store.Overwrite(strings.Repeat("a", 80)); err != nil {
+		t.Fatal(err)
+	}
+	mem := Tools(store, nil)[0].(tool.InvokableTool)
+	grown := strings.Repeat("b", 90)
+	result := run(t, mem, map[string]any{"action": "replace", "old_text": "a", "content": grown})
+	if result["success"] != true || result["usage"] != "90/100" {
+		t.Fatalf("a replacement may spend its fitting net growth: %v", result)
+	}
+	tooLong := run(t, mem, map[string]any{"action": "replace", "old_text": "b", "content": strings.Repeat("c", 91)})
+	if tooLong["success"] != false || tooLong["entry_max"] != float64(90) {
+		t.Fatalf("remaining total capacity cannot waive the per-note cap: %v", tooLong)
+	}
+	after, err := store.Read()
+	if err != nil || len(after.Entries) != 1 || after.Entries[0] != grown {
+		t.Fatalf("the refused replacement must preserve the successful one: %+v %v", after, err)
+	}
+}
 
 func TestPromptCarriesTheProjectInstructionAndTheNotes(t *testing.T) {
 	snap := Snapshot{
@@ -38,8 +87,13 @@ func TestPromptCarriesTheProjectInstructionAndTheNotes(t *testing.T) {
 	if !strings.Contains(out, ToolMemory) {
 		t.Fatalf("the prompt must name the tool that maintains the notes:\n%s", out)
 	}
-	if !strings.Contains(out, "status that will change") || !strings.Contains(out, "reduces the character count") {
-		t.Fatalf("the prompt must say a growing replace still has to fit:\n%s", out)
+	for _, required := range []string{"status that will change", "remaining total budget", "per-note cap", "separator", "does not necessarily free space"} {
+		if !strings.Contains(out, required) {
+			t.Fatalf("the prompt must describe the actual write budget (%q missing):\n%s", required, out)
+		}
+	}
+	if strings.Contains(out, "the only write that lands") {
+		t.Fatalf("the prompt must not invent a reduction-only write policy:\n%s", out)
 	}
 	if !strings.Contains(out, "short, declarative notes") || !strings.Contains(out, "collides") {
 		t.Fatalf("the manager must see the same quality bar the tools enforce:\n%s", out)
@@ -324,20 +378,35 @@ func TestCatalogTidyMessageWrapsTheIndexWithoutInventingAConversation(t *testing
 	}
 }
 
-// At high fill the prompt has to say a growing write will be refused. The
-// usage header alone is a percentage a model treats as "still some room",
-// and then replace-with-more-detail is the next five failed calls.
-func TestPromptAtHighFillForbidsGrowingWrites(t *testing.T) {
-	out := PromptSections("", Snapshot{
-		Entries: []string{"a stored note that already fills most of the budget"},
-		Chars:   80,
-		Limit:   100,
-	}, nil, 50, true)
-	if !strings.Contains(out, "80%") {
-		t.Fatalf("usage header missing:\n%s", out)
-	}
-	if !strings.Contains(out, "will be refused") || !strings.Contains(out, "replacing a note with a longer one") {
-		t.Fatalf("a store at 80%% must say a growing write will be refused:\n%s", out)
+// The old assertion required refusing all growth at 80%, contradicting the
+// actual memory tool. Pressure should warn about the real remaining capacity
+// without making agents remove unrelated notes or invent another write gate.
+func TestPromptWarnsWhenMemoryIsUnderPressure(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		chars      int
+		freePhrase string
+	}{
+		{name: "threshold", chars: 80, freePhrase: "Free characters: 20"},
+		{name: "near full", chars: 99, freePhrase: "Free characters: 1"},
+		{name: "full", chars: 100, freePhrase: "Free characters: 0"},
+		{name: "legacy over budget", chars: 105, freePhrase: "Free characters: 0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := PromptSections("", Snapshot{
+				Entries: []string{"a stored note"}, Chars: tc.chars, Limit: 100,
+			}, nil, 50, true)
+			for _, required := range []string{tc.freePhrase, "capacity warning", "separator costs", "only related notes", "preserve unrelated notes"} {
+				if !strings.Contains(out, required) {
+					t.Fatalf("pressure advice must retain the actual budget and scope (%q missing):\n%s", required, out)
+				}
+			}
+			for _, falseClaim := range []string{"A write that increases the character count will be refused", "the only write that lands", "Shorten or drop notes before storing anything new", "Free characters: -5"} {
+				if strings.Contains(out, falseClaim) {
+					t.Fatalf("pressure must not invent write restrictions or negative capacity (%q):\n%s", falseClaim, out)
+				}
+			}
+		})
 	}
 }
 

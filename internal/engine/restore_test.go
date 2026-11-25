@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	swarm "github.com/LubyRuffy/eino-swarm"
+	"github.com/LubyRuffy/eino-swarm/internal/mcpclient"
 	"github.com/LubyRuffy/eino-swarm/internal/provider"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 	"github.com/cloudwego/eino/adk"
@@ -216,6 +217,71 @@ func TestRestoreKeepsParkedTurnAndReportsRealRecoveryFailure(t *testing.T) {
 	}
 }
 
+func TestSettledParkedCheckpointStaysClosedUntilItsEvidenceChanges(t *testing.T) {
+	e := newTestEngine(t)
+	th, turn, wake := plantParkedRestart(t, e)
+	finished := store.Event{ThreadID: th.ID, TurnID: turn.ID, Kind: "finished", AgentID: "worker-7", Text: "confirmed"}
+	if err := e.store.AppendEvent(&finished); err != nil {
+		t.Fatal(err)
+	}
+	assertSelection := func(want int) {
+		t.Helper()
+		got := -1
+		if err := e.Restore(t.Context(), func(done, total int) { got = total }); err != nil || got != want {
+			t.Fatalf("selected %d, want %d: %v", got, want, err)
+		}
+	}
+	assertSelection(1)
+	assertSelection(0)
+	if err := e.store.DB().Delete(&store.Event{}, "id=?", finished.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	assertSelection(1)
+	waitRestartState(t, func() bool {
+		events, _ := e.store.ListTurnEvents(turn.ID)
+		for _, event := range events {
+			if event.Kind == "generation_started" && event.AgentID == "worker-7" && event.Seq > finished.Seq {
+				return true
+			}
+		}
+		return false
+	})
+	got, err := e.store.GetSchedule(wake.ID)
+	if err != nil || !got.NextRunAt.Equal(wake.NextRunAt) {
+		t.Fatalf("restoring the original worker fired its future wake: %+v %v", got, err)
+	}
+}
+
+func TestStartupMCPReceiptRequiresRecoveryUntilTheOriginalContinue(t *testing.T) {
+	e := newTestEngine(t)
+	th, err := e.CreateThread("Blocked adapter", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn := plantUnfinishedTurn(t, e, th.ID, "complete the request")
+	if err := e.store.FinishTurn(turn.ID, store.TurnDone, "finished", ""); err != nil {
+		t.Fatal(err)
+	}
+	e.record(store.Event{ThreadID: th.ID, TurnID: turn.ID, Kind: store.KindMCPExecutionBlocked, Text: `{"code":"session_expired"}`})
+	var failure *mcpclient.ExecutionError
+	if err := e.Restore(t.Context(), nil); !errors.As(err, &failure) || failure.Code != "session_expired" {
+		t.Fatalf("startup lost the original adapter failure: %v", err)
+	}
+	trace, err := e.store.ListTurnEvents(turn.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := trace[len(trace)-1]
+	if last.Kind != "engine_restore" || !strings.Contains(last.Text, `"phase":"failed"`) || !strings.Contains(last.Text, `"checkpoint_reads":0`) {
+		t.Fatalf("missing targeted failure receipt: %+v", last)
+	}
+	e.record(store.Event{ThreadID: th.ID, TurnID: turn.ID, Kind: KindFailureContinued})
+	got := -1
+	if err := e.Restore(t.Context(), func(done, total int) { got = total }); err != nil || got != 0 {
+		t.Fatalf("settled adapter failure remained selected, total=%d err=%v", got, err)
+	}
+}
+
 func TestRestoreHandlesEmptyThreadsAndSupersededRunningRows(t *testing.T) {
 	e := newTestEngine(t)
 	if _, err := e.CreateThread("empty", "", ""); err != nil {
@@ -237,7 +303,7 @@ func TestRestoreHandlesEmptyThreadsAndSupersededRunningRows(t *testing.T) {
 }
 
 func TestRestoreReportsReadFailuresAndRetainsUnstartedTurns(t *testing.T) {
-	for _, boundary := range []string{"threads", "schedules", "turns", "checkpoint", "events", "cancel-after-turns", "cancel-progress"} {
+	for _, boundary := range []string{"candidates", "schedules", "turns", "checkpoint", "events", "cancel-after-turns", "cancel-progress"} {
 		t.Run(boundary, func(t *testing.T) {
 			e := newTestEngine(t)
 			th, _ := e.CreateThread("", "", "")
@@ -253,6 +319,7 @@ func TestRestoreReportsReadFailuresAndRetainsUnstartedTurns(t *testing.T) {
 				}
 				table, sql := db.Statement.Table, db.Statement.SQL.String()
 				matches := boundary == table && boundary != "events"
+				matches = matches || boundary == "candidates" && strings.Contains(sql, "WITH evidence AS")
 				matches = matches || boundary == "checkpoint" && table == "events" && strings.Contains(sql, "kind =")
 				matches = matches || boundary == "events" && table == "events" && strings.Contains(sql, "AND (kind IN")
 				if matches {
@@ -364,10 +431,9 @@ func TestRestorePullsOnlyTheInterruptedWorkersFutureWake(t *testing.T) {
 func TestRestoreDoesNotPullAnotherConversationsWake(t *testing.T) {
 	e := newTestEngine(t)
 	th, _, wake := plantParkedRestart(t, e)
-	snapshot := &restoreSnapshot{events: []store.Event{{Kind: "spawned", TurnID: "original", AgentID: "worker"}, {Kind: "finished", TurnID: "original", AgentID: "worker", Err: "context canceled"}}}
 	foreign := *wake
 	foreign.ThreadID = "another-conversation"
-	if err := e.pullInterruptedThreadWake(th.ID, snapshot, []store.Schedule{foreign}); err != nil {
+	if err := e.pullInterruptedThreadWake(th.ID, true, []store.Schedule{foreign}); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := e.store.GetSchedule(wake.ID)

@@ -93,6 +93,8 @@ export function modelRetryNotice(text?: string): string {
         return "The model service returned a response that could not be decoded. Retrying."
       case "model_transport":
         return "The connection to the model service dropped. Retrying."
+      case "model_read_timeout":
+        return "Model response read timed out. Retrying."
       case "model_idle":
         return "The model service stopped sending data. Retrying."
       default:

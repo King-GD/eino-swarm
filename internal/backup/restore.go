@@ -130,7 +130,7 @@ func restoreFull(ctx context.Context, conn *sql.Conn, dataDir string, arc *opene
 			}
 		}
 		if mutated {
-			if rerr := replaceAll(undo, conn, snapDB); rerr != nil {
+			if rerr := replaceAllRows(undo, conn, snapDB, true); rerr != nil {
 				err = errors.Join(err, rerr)
 			}
 		}

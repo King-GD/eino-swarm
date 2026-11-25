@@ -1,9 +1,11 @@
 import { WorkerModelRecovery } from "./worker-model-recovery"
+import { ModelRequestBlockedNotice } from "./generation-notice"
 
 import { AlertTriangle, RotateCcw } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { localizeNotice } from "@/lib/i18n"
+import { isModelRequestBlocked } from "@/lib/model-request-blocked"
 import { firstByteTimeoutDuration, firstByteTimeoutSettingsKey } from "@/lib/first-byte-timeout"
 import {
   isOutputBudgetError,
@@ -33,6 +35,7 @@ export function TranscriptError({
   const latest = useApp((s) => s.transcript.turns.at(-1))
   const unavailable = useApp((s) => !s.loaded || !s.activeId || s.status.awaiting_answer || s.meta?.startup === "restoring")
   const settingsOpen = useSettingsSheet((s) => s.open)
+  if (isModelRequestBlocked(text)) return <ModelRequestBlockedNotice />
   const retryable = onRetry && turnId && latest?.id === turnId && latest.status === "error"
   return (
     <div

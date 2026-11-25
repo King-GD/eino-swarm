@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	swarm "github.com/LubyRuffy/eino-swarm"
+	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/model"
@@ -55,7 +56,7 @@ func TestNuwaContextPreviewRespectsCompleteUnicodeBudget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	full, err := renderNuwaContext("项目😀", 17, nodes, "", 1<<20)
+	full, err := renderNuwaContext(store.WorkRevision{ProjectID: "项目😀", ProjectRevision: 17}, nodes, "", 1<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +64,7 @@ func TestNuwaContextPreviewRespectsCompleteUnicodeBudget(t *testing.T) {
 	if len(full) <= budget {
 		t.Fatal("fixture must distinguish UTF-8 bytes from the configured character budget")
 	}
-	exact, err := renderNuwaContext("项目😀", 17, nodes, "", budget)
+	exact, err := renderNuwaContext(store.WorkRevision{ProjectID: "项目😀", ProjectRevision: 17}, nodes, "", budget)
 	if err != nil || exact != full {
 		t.Fatalf("complete block did not fit its exact character budget: err=%v", err)
 	}
@@ -71,7 +72,7 @@ func TestNuwaContextPreviewRespectsCompleteUnicodeBudget(t *testing.T) {
 	if view.ProjectID != "项目😀" || view.Revision != 17 || view.Total != 1 || view.Omitted != 0 || len(view.Nodes) != 1 || view.Nodes[0].Summary != nodes[0].Summary || view.Nodes[0].Detail != "" || strings.Contains(exact, nodes[0].Detail) {
 		t.Fatalf("preview truncated summary or exposed on-demand detail: %+v", view)
 	}
-	limited, err := renderNuwaContext("项目😀", 17, nodes, "", budget-1)
+	limited, err := renderNuwaContext(store.WorkRevision{ProjectID: "项目😀", ProjectRevision: 17}, nodes, "", budget-1)
 	if err != nil || utf8.RuneCountInString(limited) > budget-1 {
 		t.Fatalf("one-character reduction exceeded the whole-block limit: err=%v", err)
 	}
@@ -88,12 +89,12 @@ func TestNuwaContextPreviewSkipsLargeNodesAndSortsDeterministically(t *testing.T
 	at := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
 	small := store.NuwaNode{ID: "small", Title: "small", UpdatedAt: at}
 	large := store.NuwaNode{ID: "large", Title: "large", Summary: strings.Repeat("大😀", 10000), UpdatedAt: at.Add(time.Second)}
-	text, err := renderNuwaContext("project", 9, []store.NuwaNode{small}, "", 1<<20)
+	text, err := renderNuwaContext(store.WorkRevision{ProjectID: "project", ProjectRevision: 9}, []store.NuwaNode{small}, "", 1<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
 	budget := utf8.RuneCountInString(text)
-	text, err = renderNuwaContext("project", 9, []store.NuwaNode{large, small}, "", budget)
+	text, err = renderNuwaContext(store.WorkRevision{ProjectID: "project", ProjectRevision: 9}, []store.NuwaNode{large, small}, "", budget)
 	if err != nil || utf8.RuneCountInString(text) > budget {
 		t.Fatalf("skip-large preview failed: err=%v", err)
 	}
@@ -105,11 +106,11 @@ func TestNuwaContextPreviewSkipsLargeNodesAndSortsDeterministically(t *testing.T
 	a.ID, b.ID, c.ID = "a", "b", "c"
 	c.UpdatedAt = at.Add(time.Second)
 	original := []store.NuwaNode{b, c, a}
-	first, err := renderNuwaContext("project", 9, original, "", 1<<20)
+	first, err := renderNuwaContext(store.WorkRevision{ProjectID: "project", ProjectRevision: 9}, original, "", 1<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := renderNuwaContext("project", 9, []store.NuwaNode{a, b, c}, "", 1<<20)
+	second, err := renderNuwaContext(store.WorkRevision{ProjectID: "project", ProjectRevision: 9}, []store.NuwaNode{a, b, c}, "", 1<<20)
 	if err != nil || first != second {
 		t.Fatalf("equal timestamps changed preview order with source order: err=%v", err)
 	}
@@ -124,7 +125,7 @@ func TestNuwaContextPreviewSkipsLargeNodesAndSortsDeterministically(t *testing.T
 
 func TestNuwaContextPreviewHandlesEmptyAndRefusesInvalidEnvelopes(t *testing.T) {
 	for _, nodes := range [][]store.NuwaNode{nil, {}} {
-		text, err := renderNuwaContext("project", 0, nodes, "", 1<<20)
+		text, err := renderNuwaContext(store.WorkRevision{ProjectID: "project", ProjectRevision: 0}, nodes, "", 1<<20)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -133,17 +134,17 @@ func TestNuwaContextPreviewHandlesEmptyAndRefusesInvalidEnvelopes(t *testing.T) 
 			t.Fatalf("empty project invented work: %+v", view)
 		}
 		budget := utf8.RuneCountInString(text)
-		if exact, err := renderNuwaContext("project", 0, nodes, "", budget); err != nil || exact != text {
+		if exact, err := renderNuwaContext(store.WorkRevision{ProjectID: "project", ProjectRevision: 0}, nodes, "", budget); err != nil || exact != text {
 			t.Fatalf("empty envelope did not fit exactly: err=%v", err)
 		}
 		for _, tooSmall := range []int{-1, 0, budget - 1} {
-			if text, err := renderNuwaContext("project", 0, nodes, "", tooSmall); err == nil || text != "" {
+			if text, err := renderNuwaContext(store.WorkRevision{ProjectID: "project", ProjectRevision: 0}, nodes, "", tooSmall); err == nil || text != "" {
 				t.Fatalf("undersized envelope sent partial state: budget=%d text=%q err=%v", tooSmall, text, err)
 			}
 		}
 	}
 	invalid := store.NuwaNode{ID: "invalid-time", Title: "invalid-time", Summary: "kept-summary", UpdatedAt: time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC)}
-	text, err := renderNuwaContext("project", 0, []store.NuwaNode{invalid}, "", 1<<20)
+	text, err := renderNuwaContext(store.WorkRevision{ProjectID: "project", ProjectRevision: 0}, []store.NuwaNode{invalid}, "", 1<<20)
 	if err != nil || !strings.Contains(text, "kept-summary") || strings.Contains(text, "created_at") || strings.Contains(text, "updated_at") {
 		t.Fatalf("storage time entered the prompt or dropped the record: text=%q err=%v", text, err)
 	}
@@ -196,14 +197,15 @@ func nuwaContextUnitFixture(t *testing.T) (*Engine, *store.Project, *store.Threa
 
 func TestNuwaContextPreviewKeepsPathFieldsAndSkipsARepeatedSnapshot(t *testing.T) {
 	recorded := store.NuwaNode{
-		ID: "path-node", Kind: "fact", Title: "stage", Status: "reported",
+		ID: "path-node", Kind: "artifact", Title: "stage", Status: "reported",
 		Summary: "carried-summary", DependsOn: []string{"earlier-step"}, Version: 4,
 		Detail: "private-detail", ThreadID: "thread-secret", TurnID: "turn-secret",
 		ProjectID: "project-secret", AgentID: "agent-secret",
 		StaleDependencies: []string{"earlier-step"},
+		IncompleteBasis:   true,
 		CreatedAt:         time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
 	}
-	text, err := renderNuwaContext("project", 4, []store.NuwaNode{recorded}, "", 1<<20)
+	text, err := renderNuwaContext(store.WorkRevision{ProjectID: "project", ProjectRevision: 4}, []store.NuwaNode{recorded}, "", 1<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,11 +219,14 @@ func TestNuwaContextPreviewKeepsPathFieldsAndSkipsARepeatedSnapshot(t *testing.T
 	if err := json.Unmarshal(preview.Nodes[0], &keys); err != nil {
 		t.Fatal(err)
 	}
-	allowed := map[string]bool{"id": true, "kind": true, "title": true, "status": true, "summary": true, "depends_on": true, "version": true, "stale_dependencies": true}
+	allowed := map[string]bool{"id": true, "kind": true, "title": true, "status": true, "summary": true, "depends_on": true, "version": true, "stale_dependencies": true, "incomplete_basis": true}
 	for key := range keys {
 		if !allowed[key] {
 			t.Fatalf("prompt node kept storage field %s", key)
 		}
+	}
+	if string(keys["incomplete_basis"]) != "true" {
+		t.Fatal("the model preview hid the missing artifact prerequisites")
 	}
 	for _, forbidden := range []string{"private-detail", "thread-secret", "turn-secret", "project-secret", "agent-secret", "created_at"} {
 		if strings.Contains(string(preview.Nodes[0]), forbidden) {
@@ -240,17 +245,31 @@ func TestNuwaContextPreviewKeepsPathFieldsAndSkipsARepeatedSnapshot(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
+	owner := withHistoryReadOwner(t.Context(), turn.ThreadID, turn.ID)
+	receipt, err := e.readNuwaWork(owner, turn.ProjectID, fmt.Sprintf(`{"id":%q}`, node.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := schema.AssistantMessage("", []schema.ToolCall{{ID: "preview-read", Type: "function",
+		Function: schema.FunctionCall{Name: "read_work", Arguments: "{}"},
+	}})
+	prompt := schema.UserMessage(node.ID + "\ncarried-summary")
+	oldRevision := strings.Replace(receipt, `"thread_revision":0`, `"thread_revision":999`, 1)
+	if receipt == oldRevision {
+		t.Fatal("fixture could not vary the thread revision alone")
+	}
 	calls := [][]*schema.Message{
 		{schema.UserMessage("Inspect the current state.")},
-		{schema.UserMessage(node.ID + "\ncarried-summary")},
-		{schema.UserMessage(node.ID)},
+		{prompt, call, schema.ToolMessage(receipt, "preview-read", schema.WithToolName("read_work"))},
+		{prompt},
+		{prompt, call, schema.ToolMessage(oldRevision, "preview-read", schema.WithToolName("read_work"))},
 	}
 	for _, messages := range calls {
 		if _, err := wrapped.Generate(t.Context(), messages); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if len(probe.requests) != 3 {
+	if len(probe.requests) != len(calls) {
 		t.Fatalf("requests=%d", len(probe.requests))
 	}
 	block := func(request []*schema.Message) string {
@@ -273,15 +292,17 @@ func TestNuwaContextPreviewKeepsPathFieldsAndSkipsARepeatedSnapshot(t *testing.T
 		t.Fatal("model request had no user message")
 		return ""
 	}
-	first, repeated, missing := block(probe.requests[0]), block(probe.requests[1]), block(probe.requests[2])
+	first, repeated := block(probe.requests[0]), block(probe.requests[1])
 	if !strings.Contains(first, "carried-summary") || strings.Contains(first, node.Detail) || strings.Contains(first, node.ThreadID) {
 		t.Fatal("first preview lost the summary or exposed storage identity")
 	}
 	if strings.Contains(repeated, "carried-summary") || !strings.Contains(repeated, `"unchanged"`) || !strings.Contains(userText(probe.requests[1]), "carried-summary") {
-		t.Fatal("request that already carried the record repeated the snapshot")
+		t.Fatal("request that already carried the snapshot repeated it")
 	}
-	if !strings.Contains(missing, "carried-summary") || strings.Contains(missing, `"unchanged"`) {
-		t.Fatal("missing summary did not restore the current snapshot")
+	for _, request := range probe.requests[2:] {
+		if preview := block(request); !strings.Contains(preview, "carried-summary") || strings.Contains(preview, `"unchanged"`) {
+			t.Fatal("user text or a differing thread revision incorrectly suppressed current records")
+		}
 	}
 }
 
@@ -395,7 +416,7 @@ type nuwaContextUnitFaultKey struct{}
 
 func decodeNuwaUnavailableUnit(t *testing.T, text, projectID, reason string) {
 	t.Helper()
-	if !strings.HasPrefix(text, "## Nuwa shared project state\n") || !utf8.ValidString(text) {
+	if !strings.HasPrefix(text, "## Work record preview\n") || !utf8.ValidString(text) {
 		t.Fatal("unavailable state lost its runtime heading or complete UTF-8")
 	}
 	start := strings.Index(text, "{")
@@ -492,7 +513,7 @@ func TestNuwaContextMiddlewareHandlesSnapshotFailuresAtActualADKModel(t *testing
 				}
 				err = runNuwaContextUnitADK(ctx, agent, streaming, []*schema.Message{schema.UserMessage("Inspect current state.")})
 				if failure == "budget" {
-					if err == nil || !strings.Contains(err.Error(), "shared state envelope") || !strings.Contains(err.Error(), "budget") || len(probe.requests) != 0 {
+					if err == nil || !strings.Contains(err.Error(), "work record preview") || !strings.Contains(err.Error(), "budget") || len(probe.requests) != 0 {
 						t.Fatalf("budget refusal reached inner model or lost its explicit cause: requests=%d err=%v", len(probe.requests), err)
 					}
 					return
@@ -534,7 +555,7 @@ func TestNuwaContextMiddlewareHandlesSnapshotFailuresAtActualADKModel(t *testing
 }
 
 func TestNuwaContextCancellationAndDisabledModesDoNotReadOrCallModel(t *testing.T) {
-	e := &Engine{}
+	e := &Engine{cfg: &config.Config{Swarm: config.SwarmConfig{WorkLedger: true}}}
 	for _, turn := range []*store.Turn{nil, {}, {ProjectID: "project"}, {NuwaEnabled: true}} {
 		if handlers := e.nuwaContextHandlers(turn); len(handlers) != 0 {
 			t.Fatalf("disabled/standalone turn gained a shared-state middleware: %+v", turn)

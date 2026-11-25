@@ -139,6 +139,10 @@ func (e *Engine) retryableFailure(threadID, wantID string) (*store.Turn, error) 
 	if last.ImageCommand || last.GoalContinue || last.ScheduleContinue || strings.TrimSpace(last.ScheduleRunID) != "" {
 		return nil, ErrNoFailedTurn
 	}
+	legacy, hasLegacyPrefix := strings.CutPrefix(last.Error, "model API request failed: HTTP 403 Forbidden: ")
+	if last.Error == modelRequestBlocked || hasLegacyPrefix && gatewayGuardMessage(legacy) {
+		return nil, ErrNoFailedTurn
+	}
 	return &last, nil
 }
 

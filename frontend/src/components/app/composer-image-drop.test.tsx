@@ -5,7 +5,18 @@ import { renderComposer } from "@/test/composer"
 import type { Attachment, Meta } from "@/lib/types"
 import { useApp } from "@/store/app"
 
-beforeEach(() => useApp.setState({ meta: { product_mode: "local", model_policy: { mode: "local", configurable: true, ready: true, scope: "local" } } as Meta }))
+beforeEach(() => useApp.setState({
+  meta: {
+    product_mode: "fofa",
+    model_policy: {
+      mode: "gateway", configurable: true, ready: true, scope: "gateway",
+      capabilities: {
+        authorized: true, available: true,
+        capabilities: { conversation: { supported: true, available: true, endpoints: ["chat_completions"] } },
+      },
+    },
+  } as Meta,
+}))
 
 describe("Composer desktop image input", () => {
   it.each([

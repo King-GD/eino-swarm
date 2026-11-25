@@ -15,11 +15,12 @@ import (
 )
 
 const fixtureScheduleClaim = "A new check on this conversation is armed every 90 seconds."
+const fixtureExternalPolling = "The archive service polls its queue every 45 seconds."
 
 // Even an ordinary human turn can falsely promise a future check. Exercise
 // the real streaming adapter, Registry, live bus and persisted replay together.
 func TestUnverifiedScheduleClaimNeverBecomesLiveOrStoredAnswer(t *testing.T) {
-	for _, mode := range []string{"no-call", "denied", "storage-failure", "old-wake", "cancelled", "goal-only"} {
+	for _, mode := range []string{"no-call", "denied", "storage-failure", "old-wake", "cancelled", "goal-only", "mixed-unverified"} {
 		t.Run(mode, func(t *testing.T) {
 			e, manager, checks := newScheduleAnswerFixture(t, mode, false)
 			th, err := e.CreateThread("schedule evidence", "", "")
@@ -55,6 +56,9 @@ func TestUnverifiedScheduleClaimNeverBecomesLiveOrStoredAnswer(t *testing.T) {
 			}
 			if got.Status != store.TurnError || !strings.Contains(got.Error, "schedule_claim_unverified") || got.Final != "" {
 				t.Fatalf("unsupported scheduling became success: %+v", got)
+			}
+			if mode == "mixed-unverified" && !strings.Contains(got.Error, "no_matching_schedule") {
+				t.Fatalf("the separate local claim must reach schedule matching: %s", got.Error)
 			}
 			wantCalls := int32(2)
 			if mode == "goal-only" {
@@ -115,6 +119,13 @@ func newScheduleAnswerFixture(t *testing.T, mode string, correct bool) (*Engine,
 	t.Helper()
 	manager, checks := &atomic.Int32{}, &atomic.Int32{}
 	var armAttempted, cancelAttempted atomic.Bool
+	const localClaim = `{"stance":"affirmed","temporal":"current","attribution":"assistant","quote":"` + fixtureScheduleClaim + `","scope":"thread","scope_quote":"on this conversation","new":true,"every_s":90}`
+	const externalClaim = `{"stance":"affirmed","temporal":"current","attribution":"assistant","quote":"` + fixtureExternalPolling + `","scope":"external","scope_quote":"The archive service","every_s":45}`
+	fixtureText, extracted := fixtureScheduleClaim, localClaim
+	if mode == "mixed-unverified" || mode == "mixed-success" {
+		fixtureText = fixtureExternalPolling + " " + fixtureText
+		extracted = externalClaim + "," + localClaim
+	}
 	endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Messages []*schema.Message `json:"messages"`
@@ -134,7 +145,7 @@ func newScheduleAnswerFixture(t *testing.T, mode string, correct bool) (*Engine,
 			if req.Stream || len(req.Tools) != 0 || len(req.Messages) != 2 {
 				t.Errorf("claim extractor has tools/replay: %+v", req)
 			}
-			claims := `{"claims":[{"stance":"affirmed","temporal":"current","attribution":"assistant","quote":"` + fixtureScheduleClaim + `","scope":"thread","scope_quote":"on this conversation","new":true,"every_s":90}]}`
+			claims := `{"claims":[` + extracted + `]}`
 			if correct && n > 1 {
 				claims = `{"claims":[]}`
 			}
@@ -171,8 +182,8 @@ func newScheduleAnswerFixture(t *testing.T, mode string, correct bool) (*Engine,
 			return
 		}
 		step := manager.Add(1)
-		if (mode == "denied" || mode == "storage-failure" || mode == "success" || mode == "cancelled") && armAttempted.CompareAndSwap(false, true) {
-			writeContextFlowReply(w, req.Stream, map[string]any{"content": fixtureScheduleClaim, "tool_calls": []any{map[string]any{"index": 0, "id": "arm-check", "type": "function", "function": map[string]any{"name": ToolScheduleWake, "arguments": `{"every_s":90,"prompt":"inspect remaining work"}`}}}}, "tool_calls")
+		if (mode == "denied" || mode == "storage-failure" || mode == "success" || mode == "mixed-success" || mode == "cancelled") && armAttempted.CompareAndSwap(false, true) {
+			writeContextFlowReply(w, req.Stream, map[string]any{"content": fixtureText, "tool_calls": []any{map[string]any{"index": 0, "id": "arm-check", "type": "function", "function": map[string]any{"name": ToolScheduleWake, "arguments": `{"every_s":90,"prompt":"inspect remaining work"}`}}}}, "tool_calls")
 			manager.Add(-1) // Count completed candidate answers, not tool rounds.
 			return
 		}
@@ -186,7 +197,7 @@ func newScheduleAnswerFixture(t *testing.T, mode string, correct bool) (*Engine,
 			manager.Add(-1)
 			return
 		}
-		text := fixtureScheduleClaim
+		text := fixtureText
 		if correct && step > 1 {
 			text = "No future check has been arranged."
 		}
@@ -211,7 +222,7 @@ func newScheduleAnswerFixture(t *testing.T, mode string, correct bool) (*Engine,
 }
 
 func TestVerifiedSchedulingAndNonClaimsKeepTheirRealMeaning(t *testing.T) {
-	for _, mode := range []string{"success", "negation", "quoted", "hypothetical", "corrected"} {
+	for _, mode := range []string{"success", "mixed-success", "negation", "quoted", "hypothetical", "corrected"} {
 		t.Run(mode, func(t *testing.T) {
 			e, manager, checks := newScheduleAnswerFixture(t, mode, mode == "corrected")
 			th, _ := e.CreateThread("schedule answer", "", "")
@@ -225,15 +236,19 @@ func TestVerifiedSchedulingAndNonClaimsKeepTheirRealMeaning(t *testing.T) {
 				wantCalls = 2
 			}
 			wantChecks := wantCalls
-			if mode == "success" {
+			if mode == "success" || mode == "mixed-success" {
 				wantChecks++ // The tool-round claim stayed private until the receipt was available.
 			}
 			if got.Status != wantStatus || manager.Load() != wantCalls || checks.Load() != wantChecks {
 				t.Fatalf("answer/call admission mismatch: turn=%+v manager=%d checks=%d", got, manager.Load(), checks.Load())
 			}
-			if mode == "success" {
+			if mode == "success" || mode == "mixed-success" {
+				wantFinal := fixtureScheduleClaim
+				if mode == "mixed-success" {
+					wantFinal = fixtureExternalPolling + " " + wantFinal
+				}
 				row, err := e.store.ActiveThreadWake(th.ID)
-				if err != nil || row == nil || row.ArmedTurnID != turn.ID || row.EveryS != 90 || got.Final != fixtureScheduleClaim {
+				if err != nil || row == nil || row.ArmedTurnID != turn.ID || row.EveryS != 90 || got.Final != wantFinal {
 					t.Fatalf("successful claim lost its exact receipt: row=%+v turn=%+v error=%v", row, got, err)
 				}
 			}

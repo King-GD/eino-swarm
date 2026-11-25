@@ -26,10 +26,11 @@ type RoleCapability struct {
 }
 
 type SourceCapabilities struct {
-	Authorized   bool                      `json:"authorized"`
-	Available    bool                      `json:"available"`
-	Configurable bool                      `json:"configurable"`
-	Capabilities map[string]RoleCapability `json:"capabilities"`
+	ResponsesRequestGzip bool                      `json:"responses_request_gzip,omitempty"`
+	Authorized           bool                      `json:"authorized"`
+	Available            bool                      `json:"available"`
+	Configurable         bool                      `json:"configurable"`
+	Capabilities         map[string]RoleCapability `json:"capabilities"`
 }
 
 type ClientCapabilities struct {

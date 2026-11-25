@@ -95,16 +95,21 @@ This requires a PC version supporting the project RPCs; older PCs show an update
 message. No project settings are stored in the phone's direct-model Chat scope.
 Recent desktop/mobile differences are tracked in [the parity audit](../docs/MOBILE_DESKTOP_PARITY.md).
 
+Tap the book icon beside a project or in one of its conversations to browse
+**Knowledge** on the paired PC. Search and open Markdown pages, follow links and
+related pages, and expand verified source excerpts. Tap an available history
+source to open its original conversation. The PC hosts the library and handles
+edits and distillation.
+
 Paired PC conversations can show the same task panels as desktop. A matching
 panel opens once, and **Task panels** in the conversation header reopens it.
 The full-screen view supports touch zoom, rotation and switching between
-available panels. Closing keeps the map position and does not stop collection
-on the PC. Progress and asset points update through the existing encrypted
+available panels. Returning to the conversation keeps the map position and collection continues. **Close panel instance** removes the selected instance across app restarts and interrupts only its collection. Progress and asset points update through the existing encrypted
 connection; reconnecting reads saved results without restarting collection.
 Conversations without a panel keep their ordinary header. An incompatible
 plugin reports an update requirement rather than loading different code.
 In the EASM panel, Android Back closes an open supply-chain detail first.
-The next Back closes the task panel and returns to the underlying screen.
+The next Back hides the panel sheet and returns to the underlying screen.
 See [Task panels](../docs/TASK_PANELS.md) for plugin authoring and data rules.
 
 Conversation Mermaid fences open as fit-to-width/height diagrams with touch zoom,
@@ -348,6 +353,8 @@ an older answer body whenever the tail contains only a divider. The current
 turn, live sequence and streaming output remain current while pages arrive.
 A failed page keeps the ready conversation, reports the error once and does not
 retry automatically. **Earlier** jumps to the preceding assistant reply.
+When the paired computer's gateway blocks a chat request for safety reasons,
+the phone shows one notice and lets you compose a different request.
 Current PCs send compact history for completed conversations and older pages.
 Expand **Thinking and tools** to request those steps, with further pages
 available inside the fold when needed. A running conversation retains its live
@@ -433,6 +440,9 @@ an ordinary message, then submit again explicitly.
 Ordinary quoted requests, paths and literal command text keep their usual
 behavior. Pure-text commands still use the PC engine's existing semantics.
 **Outputs** above the message box lists the paired PC conversation’s files.
+Tap a file path in a paired conversation to open its task preview from the
+message. When several files match a name, choose the full path. Back returns
+to the message or worker log and keeps the draft and scroll position.
 Tasks with their own file root open to **Results**. Tap a folder to load its
 complete contents, or search to list every match. A search does not show a shorter list first. Open a
 file to preview Markdown (.md/.markdown/.mdx) as a document, known source
@@ -865,7 +875,7 @@ rejects a read still shows the actual error and retains unread state.
 ### PC startup recovery
 
 The paired phone polls the read-only `meta` RPC for `startup` and `restore`
-conversation progress. While `restoring`, it displays the PC recovery banner,
+conversation progress for the host's selected recovery work. While `restoring`, it displays the PC recovery banner,
 retains unsent input and prevents new work until `ready`. Optional `restore.failed`
 keeps a static failure warning after recovery, with other work still usable. The PC independently
 rejects work mutations with `code: restoring`; a rejected Run now never marks

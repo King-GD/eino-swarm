@@ -77,7 +77,10 @@ func (e *Engine) resumeParkedThreadContext(ctx context.Context, th *store.Thread
 	if err != nil || len(turns) == 0 {
 		return 0, err
 	}
-	turn := &turns[len(turns)-1]
+	return e.resumeParkedTurn(ctx, th, &turns[len(turns)-1], snapshot)
+}
+
+func (e *Engine) resumeParkedTurn(ctx context.Context, th *store.Thread, turn *store.Turn, snapshot *restoreSnapshot) (int, error) {
 	retained := e.retainedWorkerIDs(turn, snapshot)
 	if turn.Status != store.TurnDone && len(retained) == 0 {
 		return 0, nil
@@ -153,6 +156,25 @@ func (e *Engine) resumeParkedThreadContext(ctx context.Context, th *store.Thread
 	}
 	rt.reapUnownedParked()
 	return len(running), nil
+}
+
+// A negative proof must hold independently of a goal or wake that could be
+// armed later. Bind it to the receipt revision, not to the live runtime.
+func (e *Engine) hasParkedRestoreWorkers(turn *store.Turn, snapshot *restoreSnapshot) bool {
+	checkpoint := e.checkpointForTurn(turn.ID, snapshot)
+	if checkpoint == nil || checkpoint.HumanStopped || checkpoint.Pause != "" || e.turnHasKind(turn.ID, KindUserStopRequested, snapshot) {
+		return false
+	}
+	if turn.Status == store.TurnDone {
+		return len(snapshot.running) > 0
+	}
+	retained := e.retainedWorkerIDs(turn, snapshot)
+	for _, w := range snapshot.running {
+		if retained[w.ID] {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *Engine) parkedRegistry(th *store.Thread, turn *store.Turn) (*swarm.Registry, error) {

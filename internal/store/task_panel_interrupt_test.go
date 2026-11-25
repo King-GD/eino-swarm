@@ -88,6 +88,9 @@ func TestTaskPanelInterruptStorageFailureKeepsPendingState(t *testing.T) {
 		t.Run(fault.stage+fault.table, func(t *testing.T) {
 			f := newPanelFixture(t)
 			p := f.open(t)
+			if _, e := f.s.StartTaskPanelSource(t.Context(), f.src, p.ID); e != nil {
+				t.Fatal(e)
+			}
 			injectPanelFault(t, f.s, fault.stage, fault.table, "")
 			if _, e := f.s.InterruptTaskPanelSource(t.Context(), f.src, p.ID); e == nil {
 				t.Fatal("fault ignored")

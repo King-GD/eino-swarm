@@ -69,6 +69,7 @@ type LinkPump struct {
 	panelMu       sync.Mutex
 	panelClosed   bool
 	panelTransfer *panelTransfer
+	knowledgeRead knowledgeReadState
 }
 
 func newLinkPump(eng *engine.Engine, cfg config.RemoteConfig, l *client.Link) *LinkPump {
@@ -91,6 +92,7 @@ func newLinkPump(eng *engine.Engine, cfg config.RemoteConfig, l *client.Link) *L
 }
 
 func (p *LinkPump) Close() {
+	p.stopKnowledgeRead()
 	p.stopTaskPanels()
 	p.stopSelectionTranslation()
 	p.stopAudio()
@@ -124,8 +126,10 @@ func (p *LinkPump) Dispatch(msg []byte) {
 		return
 	}
 	switch strings.TrimSpace(req.Op) {
-	case OpTaskPanels, OpTaskPanelRead, OpTaskPanelCancel:
+	case OpTaskPanels, OpTaskPanelRead, OpTaskPanelCancel, OpTaskPanelClose:
 		p.dispatchTaskPanels(req)
+	case OpKnowledgePage, OpKnowledgeCancel:
+		p.dispatchKnowledgeRead(req)
 	case OpWatch:
 		p.reply(p.startWatch(req))
 	case OpUnwatch:

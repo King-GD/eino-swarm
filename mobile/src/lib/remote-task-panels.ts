@@ -1,7 +1,7 @@
 import { sha256 } from "@noble/hashes/sha2.js"
 import { bytesToHex } from "./bytes"
 import type { RemoteLink } from "./link"
-import { OpTaskPanelCancel, OpTaskPanelRead, OpTaskPanels, type TaskPanelManifest, type TaskPanelTransfer } from "./rpc"
+import { OpTaskPanelCancel, OpTaskPanelClose, OpTaskPanelRead, OpTaskPanels, type TaskPanelManifest, type TaskPanelTransfer } from "./rpc"
 import type { PanelChange, TaskPanel } from "../../../frontend/src/task-panels/types"
 
 // Match the protocol ceiling, including the pinned definition and envelope.
@@ -36,6 +36,12 @@ export async function listTaskPanels(link: RemoteLink, threadId: string, signal?
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
   if (!result.ok) throw new TaskPanelReadError(result.code ?? "panel_read_failed", result.error ?? "Could not load task panels")
   return validatePanelManifest(result.task_panels, threadId)
+}
+
+export async function closeTaskPanel(link: RemoteLink, threadId: string, panelId: string, signal: AbortSignal): Promise<void> {
+  const result = await link.rpc({ op: OpTaskPanelClose, thread_id: threadId, panel_id: panelId }, { signal, dropOnTimeout: false })
+  if (signal.aborted) throw new DOMException("Aborted", "AbortError")
+  if (!result.ok) throw new TaskPanelReadError(result.code ?? "panel_close_failed", result.error ?? "Could not close panel")
 }
 
 function validateChunk(chunk: TaskPanelTransfer | undefined, expected: { threadId: string; panelId: string; offset: number; first?: TaskPanelTransfer }) {

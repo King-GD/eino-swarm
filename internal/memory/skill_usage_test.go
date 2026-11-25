@@ -222,25 +222,73 @@ func TestUsageEncodingRefusesAnUnrepresentableTimestamp(t *testing.T) {
 }
 
 func TestFamilyFoldRetainsSourcesWhenUsageCannotBeWritten(t *testing.T) {
-	s := newSkillStore(t)
-	plantSkill(t, s.Dir(), "source-audit-read", "When reading audit input", "Read the audit input.")
-	plantSkill(t, s.Dir(), "source-audit-check", "When checking audit input", "Check the audit input.")
-	if err := os.MkdirAll(filepath.Join(s.skillsDir(), "source-audit", SkillUsageFile), dirPerm); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.FoldSkillFamiliesReport(); err == nil {
-		t.Fatal("family fold ignored a usage write failure")
-	}
-	for _, name := range []string{"source-audit-read", "source-audit-check"} {
-		if _, err := s.ReadSkill(name); err != nil {
-			t.Fatalf("failed fold discarded %s: %v", name, err)
-		}
+	for _, existing := range []bool{false, true} {
+		t.Run(map[bool]string{false: "new-keeper", true: "existing-keeper"}[existing], func(t *testing.T) {
+			store := newSkillStore(t)
+			if existing {
+				plantSkill(t, store.Dir(), "source-audit", "When auditing inputs", "Preserve the original keeper step.")
+				seedSkillUsage(t, store, "source-audit", 3, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+			}
+			plantSkill(t, store.Dir(), "source-audit-read", "When reading audit input", "Read the audit input.")
+			plantSkill(t, store.Dir(), "source-audit-check", "When checking audit input", "Check the audit input.")
+			seedSkillUsage(t, store, "source-audit-read", 2, time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC))
+			seedSkillUsage(t, store, "source-audit-check", 4, time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+			blocked := filepath.Join(store.skillsDir(), "source-audit", SkillUsageFile+".tmp")
+			if err := os.MkdirAll(blocked, dirPerm); err != nil {
+				t.Fatal(err)
+			}
+			report, err := store.FoldSkillFamiliesReport()
+			if err == nil {
+				t.Fatal("family fold ignored a usage write failure")
+			}
+			action := "create"
+			before := 2
+			unchanged := 2
+			if existing {
+				action = "patch"
+				before = 3
+			}
+			if !report.Folded() || len(report.Changes) != 1 || report.Changes[0].Action != action || report.Changes[0].Name != "source-audit" || len(report.Merged) != 0 || len(report.Deleted) != 0 || report.Before != before || report.After != 3 || report.Unchanged != unchanged {
+				t.Fatalf("usage failure hid the saved keeper or claimed a completed merge: %+v", report)
+			}
+			if existing && (len(report.Created) != 0 || strings.Join(report.Patched, ",") != "source-audit") {
+				t.Fatalf("existing keeper partial write=%+v", report)
+			}
+			if !existing && (strings.Join(report.Created, ",") != "source-audit" || len(report.Patched) != 0) {
+				t.Fatalf("new keeper partial write=%+v", report)
+			}
+			for name, want := range map[string]int64{"source-audit-read": 2, "source-audit-check": 4} {
+				got, err := store.ReadSkill(name)
+				if err != nil || got.Views != want {
+					t.Fatalf("failed fold discarded source content or use: %s %+v %v", name, got, err)
+				}
+			}
+			kept, err := store.ReadSkill("source-audit")
+			if err != nil || !strings.Contains(kept.Body, "Read the audit input.") || !strings.Contains(kept.Body, "Check the audit input.") {
+				t.Fatalf("saved partial keeper lost source content: %+v %v", kept, err)
+			}
+			if err := os.Remove(blocked); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := store.FoldSkillFamiliesReport(); err != nil {
+				t.Fatal(err)
+			}
+			kept, err = store.ReadSkill("source-audit")
+			want := int64(6)
+			if existing {
+				want += 3
+			}
+			if err != nil || kept.Views != want {
+				t.Fatalf("retry lost or double-counted usage: %+v %v", kept, err)
+			}
+		})
 	}
 }
 
 func TestMergeDeleteFailureDoesNotDoubleCountOnRetry(t *testing.T) {
 	for _, fold := range []bool{false, true} {
 		t.Run(map[bool]string{false: "manual", true: "family"}[fold], func(t *testing.T) {
+			requireSkillRemovalPermissionFailure(t, false)
 			s := newSkillStore(t)
 			plantSkill(t, s.Dir(), "stable-audit", "When auditing records", "Inspect all recorded inputs.")
 			plantSkill(t, s.Dir(), "stable-audit-first", "When reading audit records", "Read all recorded inputs.")
@@ -254,9 +302,11 @@ func TestMergeDeleteFailureDoesNotDoubleCountOnRetry(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { _ = os.Chmod(blocked, dirPerm) })
+			var report FoldReport
 			merge := func(sources []string) error {
 				if fold {
-					_, err := s.FoldSkillFamiliesReport()
+					var err error
+					report, err = s.FoldSkillFamiliesReport()
 					return err
 				}
 				_, _, err := s.MergeSkills("stable-audit", sources, "", "")
@@ -264,6 +314,9 @@ func TestMergeDeleteFailureDoesNotDoubleCountOnRetry(t *testing.T) {
 			}
 			if err := merge([]string{"stable-audit-first", "stable-audit-second"}); err == nil {
 				t.Fatal("real source deletion failure was not reported")
+			}
+			if fold && (!report.Folded() || report.After != 2 || report.Unchanged != 1 || len(report.Changes) != 1 || report.Changes[0].Name != "stable-audit" || report.Changes[0].Text != "stable-audit-first" || strings.Join(report.Deleted, ",") != "stable-audit-first") {
+				t.Fatalf("failed family fold hid the saved keeper or reported an undeleted source: %+v", report)
 			}
 			kept, err := s.ReadSkill("stable-audit")
 			if err != nil || kept.Views != 5 {
@@ -291,32 +344,54 @@ func TestMergeDeleteFailureDoesNotDoubleCountOnRetry(t *testing.T) {
 }
 
 func TestPartialSourceDeletionRetainsUsageInTheKeeper(t *testing.T) {
-	s := newSkillStore(t)
-	plantSkill(t, s.Dir(), "audit-keeper", "When inspecting records", "Inspect all source records.")
-	plantSkill(t, s.Dir(), "audit-source", "When validating checks", "Validate each expected check.")
-	latest := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)
-	seedSkillUsage(t, s, "audit-keeper", 2, latest.Add(-time.Hour))
-	seedSkillUsage(t, s, "audit-source", 7, latest)
-	blocked := filepath.Join(s.skillsDir(), "audit-source", "protected")
-	if err := os.Mkdir(blocked, dirPerm); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(blocked, "retained"), []byte("owned fixture"), filePerm); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chmod(blocked, 0); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(blocked, dirPerm) })
-	if _, _, err := s.MergeSkills("audit-keeper", []string{"audit-source"}, "", ""); err == nil {
-		t.Fatal("a partial source delete was not reported")
-	}
-	if _, err := s.ReadSkill("audit-source"); !errors.Is(err, ErrNoMatch) {
-		t.Fatalf("fixture did not partially remove the source: %v", err)
-	}
-	kept, err := s.ReadSkill("audit-keeper")
-	if err != nil || kept.Views != 9 || !kept.LastViewedAt.Equal(latest) {
-		t.Fatalf("partial delete lost source use: %+v err=%v", kept, err)
+	for _, fold := range []bool{false, true} {
+		t.Run(map[bool]string{false: "manual", true: "family"}[fold], func(t *testing.T) {
+			requireSkillRemovalPermissionFailure(t, true)
+			store := newSkillStore(t)
+			keeper := "Inspect all source records and verify the active generation before marking the recorded batch complete."
+			source := "Do not inspect all source records and verify the active generation before marking the recorded batch complete."
+			plantSkill(t, store.Dir(), "audit-keeper", "When inspecting records", keeper)
+			plantSkill(t, store.Dir(), "audit-keeper-source", "When validating checks", source)
+			latest := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)
+			seedSkillUsage(t, store, "audit-keeper", 2, latest.Add(-time.Hour))
+			seedSkillUsage(t, store, "audit-keeper-source", 7, latest)
+			blocked := filepath.Join(store.skillsDir(), "audit-keeper-source", "protected")
+			if err := os.Mkdir(blocked, dirPerm); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(blocked, "retained"), []byte("owned fixture"), filePerm); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(blocked, 0); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.Chmod(blocked, dirPerm) })
+			var report FoldReport
+			var err error
+			if fold {
+				report, err = store.FoldSkillFamiliesReport()
+			} else {
+				_, _, err = store.MergeSkills("audit-keeper", []string{"audit-keeper-source"}, "", "")
+			}
+			if err == nil {
+				t.Fatal("a partial source delete was not reported")
+			}
+			if _, err := store.ReadSkill("audit-keeper-source"); !errors.Is(err, ErrNoMatch) {
+				t.Fatalf("fixture did not partially remove the source: %v", err)
+			}
+			kept, err := store.ReadSkill("audit-keeper")
+			if err != nil || kept.Views != 9 || !kept.LastViewedAt.Equal(latest) {
+				t.Fatalf("partial delete lost source use: %+v err=%v", kept, err)
+			}
+			for _, original := range []string{keeper, source} {
+				if !strings.Contains(strings.Join(strings.Fields(kept.Body), " "), strings.Join(strings.Fields(original), " ")) {
+					t.Fatalf("partial deletion lost the complete source body: %q", original)
+				}
+			}
+			if fold && (!report.Folded() || report.After != 1 || report.Unchanged != 0 || len(report.Changes) != 1 || report.Changes[0].Text != "audit-keeper-source" || strings.Join(report.Deleted, ",") != "audit-keeper-source") {
+				t.Fatalf("partial family receipt hid actual writes: %+v", report)
+			}
+		})
 	}
 }
 
@@ -348,4 +423,63 @@ func seedSkillUsage(t *testing.T, s *Store, name string, views int64, last time.
 	if err := os.WriteFile(filepath.Join(s.skillsDir(), name, SkillUsageFile), raw, filePerm); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// These failure tests need a real permission denial with a specific retained
+// source shape. Privilege and filesystem semantics vary, so probe the same
+// private-file operation rather than assuming a UID or operating system.
+func requireSkillRemovalPermissionFailure(t *testing.T, partial bool) {
+	t.Helper()
+	source := filepath.Join(t.TempDir(), "source")
+	if err := os.Mkdir(source, dirPerm); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(source, SkillFile)
+	const content = "permission probe"
+	if err := os.WriteFile(path, []byte(content), filePerm); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, SkillUsageFile), []byte("{}"), filePerm); err != nil {
+		t.Fatal(err)
+	}
+	blocked, mode := source, os.FileMode(0500)
+	if partial {
+		blocked, mode = filepath.Join(source, "protected"), 0
+		if err := os.Mkdir(blocked, dirPerm); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(blocked, "retained"), []byte(content), filePerm); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Chmod(blocked, mode); err != nil {
+		t.Fatalf("set up removal permission probe: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(blocked, dirPerm); err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("restore removal permission probe: %v", err)
+		}
+	})
+	err := os.RemoveAll(source)
+	if err == nil {
+		t.Skipf("filesystem permits removal despite mode %04o; cannot inject required permission failure", mode)
+	}
+	if !os.IsPermission(err) {
+		t.Fatalf("unexpected removal probe error: %v", err)
+	}
+	body, readErr := os.ReadFile(path)
+	if readErr == nil && string(body) != content {
+		t.Fatal("removal probe content changed unexpectedly")
+	}
+	missing := errors.Is(readErr, os.ErrNotExist)
+	if readErr != nil && !missing && !os.IsPermission(readErr) {
+		t.Fatalf("inspect removal probe source: %v", readErr)
+	}
+	if partial && !missing {
+		t.Skip("filesystem cannot reproduce partial source-file removal before the permission error")
+	}
+	if !partial && readErr != nil {
+		t.Skip("filesystem cannot reproduce a readable retained source after the permission error")
+	}
+	t.Logf("real removal permission probe succeeded: partial=%v source_missing=%v", partial, missing)
 }

@@ -323,7 +323,7 @@ func orphanedWorkersFromCheckpoint(events []store.Event, checkpoint *restartChec
 				s.nseed++
 			}
 			if s.restoredHistory != nil {
-				s.restoredHistory = append(s.restoredHistory, schema.ToolMessage(ev.Text, ev.ToolCallID))
+				s.restoredHistory = append(s.restoredHistory, restoredToolReceipt(ev.Text, ev.ToolCallID, ev.WorkRecordPayload))
 			}
 			s.inflight = false
 		case swarm.NotifyToolCall.String():
@@ -531,7 +531,7 @@ func (e *Engine) storedToSchema(r store.Message) adk.Message {
 		}
 		return e.schemaUser(r)
 	case schema.Tool:
-		return &schema.Message{Role: schema.Tool, Content: r.Content, ToolCallID: r.ToolCallID}
+		return restoredToolReceipt(r.Content, r.ToolCallID, r.WorkRecordPayload)
 	case schema.Assistant:
 		if strings.TrimSpace(r.Content) == "" && strings.TrimSpace(r.ToolCalls) == "" {
 			return nil

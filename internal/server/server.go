@@ -72,6 +72,7 @@ type Server struct {
 	updater      update.Checker
 	sideChats    chan struct{}
 	translations chan struct{}
+	imageOCR     chan struct{}
 	audioCalls   chan struct{}
 }
 
@@ -95,6 +96,7 @@ func New(opts Options) (*Server, error) {
 		updater:      opts.Updater,
 		sideChats:    make(chan struct{}, sideChatConcurrency),
 		translations: make(chan struct{}, selectionTranslationConcurrency),
+		imageOCR:     make(chan struct{}, imageOCRConcurrency),
 		audioCalls:   make(chan struct{}, speechHTTPConcurrency),
 	}
 	r := gin.New()
@@ -185,6 +187,10 @@ func New(opts Options) (*Server, error) {
 		api.DELETE("/threads/:id", s.deleteThread)
 
 		api.GET("/threads/:id/events", s.streamEvents)
+		api.GET("/threads/:id/work", s.getThreadWork)
+		api.GET("/threads/:id/work/events", s.streamThreadWork)
+		api.POST("/threads/:id/work/promote", s.promoteThreadWork)
+		api.POST("/threads/:id/work/distill", s.distillThreadWork)
 		api.GET("/threads/:id/log", s.listLog)
 		api.GET("/threads/:id/agents/:agent/log", s.listAgentLog)
 		api.POST("/threads/:id/turns", s.startTurn)
@@ -215,6 +221,7 @@ func New(opts Options) (*Server, error) {
 		api.GET("/threads/:id/download/*path", s.downloadFile)
 		api.DELETE("/threads/:id/download/*path", s.deleteFile)
 		api.GET("/threads/:id/input-images/:image_id", s.getInputImage)
+		api.POST("/threads/:id/input-images/:image_id/ocr", s.extractInputImageText)
 		api.GET("/threads/:id/generated-images/:image_id", s.getGeneratedImage)
 		api.POST("/threads/:id/reveal", s.reveal)
 		api.GET("/threads/:id/terminal", s.threadTerminal)
@@ -314,6 +321,10 @@ func (s *Server) fail(c *gin.Context, err error) {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "file_root_changed"})
 	case errors.Is(err, engine.ErrRestoring):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "restoring"})
+	case errors.Is(err, store.ErrNuwaConflict):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "work_conflict"})
+	case errors.Is(err, store.ErrInvalidNuwaNode):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "work_invalid"})
 	case errors.Is(err, store.ErrDraftConflict):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "draft_conflict"})
 	case errors.Is(err, store.ErrInvalidDraft):
