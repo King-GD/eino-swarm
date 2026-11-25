@@ -23,21 +23,25 @@ commit.
 
 | image | jobs | why |
 |---|---|---|
-| `ubuntu-24.04` | Go checks | Some packages still link the native shell's Gtk 4 / WebKit 6 libraries even with the `server` tag, so the job installs `libgtk-4-dev libwebkitgtk-6.0-dev libx11-dev` (their dependencies provide glib and libsoup) before the first Go build or test. The image is pinned because the dev package names follow the Ubuntu release. |
+| `macos-15-intel` | Go checks | The suite asserts the project's own desktop command set, macOS update/error behavior and lockfile timing, so it runs the untagged macOS build on the image that supplies the native libraries. Node 24 is installed for the frontend entry's toolchain, and the race run keeps the existing 25-minute package timeout. |
 | `macos-15-intel` | PC/Web offline E2E | The suite asserts a macOS settings titlebar (`render-probe-cover.spec.ts`) that the baseline asserts under the same platform condition, so Linux Chromium cannot satisfy it. The macOS image supplies the native libraries and installs only Chromium. The Intel image also has capacity while macOS ARM is short, and the full E2E suite runs there unchanged. |
 | `macos-15` | Documentation and Python tools | `make docs-check` has two tool regressions that read macOS process-identity symbols (`libc.sysctl`, and `/proc/1/exe` being refused). On this ARM64 image the linker ad-hoc signs the test's own freshly built fixtures, which the real-code-signature assertion checks. The job also installs `go` on PATH for the real-writer compile test, and runs the full tool suite unchanged. |
 | `ubuntu-latest` | Phone bundle, PC/Web checks, Upstream merge check | These jobs link no native shell package. |
 
-The Go and offline E2E jobs set `GOFLAGS=-tags=server`, which selects the
-headless server entry; Playwright's web server inherits it. CGO stays enabled
-because the race tests need it. The E2E job compiles `./cmd/zwai` before
-Playwright starts so the suite's 180-second web-server start budget is not
-spent on a cold build; the macOS image already provides the native libraries,
-so that job installs only Chromium.
+Only the offline E2E job sets `GOFLAGS=-tags=server`, which selects the
+headless server entry; Playwright's web server inherits it, and the job compiles
+`./cmd/zwai` before Playwright starts so the suite's 180-second web-server start
+budget is not spent on a cold build. The Go checks job deliberately runs the
+untagged build: the desktop command dispatch, the macOS update error and the
+lockfile timing regressions describe the project's own desktop build, not the
+server variant. macOS supplies the native libraries, so neither job installs
+Linux packages; the E2E job installs only Chromium.
 
-The Node jobs use Node 24, the version checked against both lockfiles. The Go
-checks job and the docs job read the version from `go.mod`; the docs job also
-needs Python 3 from the image and `go` on PATH for the real-writer compile test.
+The phone, frontend and Go jobs use Node 24, the version checked against both
+lockfiles; the Go job caches against `frontend/package-lock.json` for the
+frontend entry's toolchain. The Go checks job and the docs job read the version
+from `go.mod`; the docs job also needs Python 3 from the image and `go` on PATH
+for the real-writer compile test.
 
 ## Reading a failure
 
@@ -49,9 +53,9 @@ keeps `frontend/test-results/` (traces and error context) as the
 
 ## Running the same checks locally
 
-On a Linux machine the Go lines need `libgtk-4-dev libwebkitgtk-6.0-dev
-libx11-dev` from `apt-get` first, exactly as the Go checks job installs them.
-On macOS the existing system libraries are enough.
+On a Linux machine the local Go lines need `libgtk-4-dev libwebkitgtk-6.0-dev
+libx11-dev` from `apt-get`; CI runs the Go checks on macOS, where the system
+libraries are enough.
 
 ```bash
 make fmt-check vet test-go docs-check

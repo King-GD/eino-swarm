@@ -132,28 +132,26 @@ jobs:
 
   go:
     name: Go checks
-    # Pinned so the dev package names below stay valid on this image.
-    runs-on: ubuntu-24.04
+    # The suite asserts the project's own desktop command set, its macOS update
+    # and lockfile behavior, and a package-budgeted race run, so it uses the
+    # untagged macOS build rather than the Linux server variant. Node supplies
+    # the frontend entry's toolchain; the macOS image supplies the native libs.
+    runs-on: macos-15-intel
     timeout-minutes: 60
-    env:
-      # Selects the headless server entry. CGO stays on because the race tests
-      # need it, and the native shell's Gtk/WebKit packages are still imported.
-      GOFLAGS: "-tags=server"
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
-      # The first `go build`/`go test` links the native shell packages, so their
-      # pkg-config files have to exist before it runs.
-      - name: Install the Go build's Linux system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev libx11-dev
       - name: Formatting
         run: make fmt-check
       - name: Vet
