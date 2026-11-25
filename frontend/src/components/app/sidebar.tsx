@@ -10,7 +10,6 @@ import { SidebarThreadGroup } from "@/components/app/sidebar-thread-group"
 import { SidebarThreadRow } from "@/components/app/sidebar-thread-row"
 import { DestRail, useVisibleDest } from "@/components/app/dest-rail"
 import { ScheduleListPane } from "@/components/app/schedule-inbox"
-import { useApp } from "@/store/app"
 import {
   isProjectExpanded,
   readProjectExpanded,
@@ -33,17 +32,6 @@ import {
 import type { Project, SkillInfo, Thread } from "@/lib/types"
 import { useT } from "@/lib/use-t"
 import { cn } from "@/lib/utils"
-
-function SidebarVersion() {
-  const t = useT()
-  const version = useApp((s) => s.meta?.version ?? "")
-  if (!version) return null
-  return (
-    <p data-testid="sidebar-version" className="truncate px-2 pb-1 text-xs text-muted-foreground">
-      {t("sidebar.version", { version })}
-    </p>
-  )
-}
 
 function ListToolbar({
   onNew,
@@ -79,6 +67,7 @@ function ListToolbar({
           height: "var(--sidebar-row-height)",
         }}
         onClick={onSearch}
+        aria-label={searchLabel}
         title={searchLabel}
       >
         <Search />
@@ -325,9 +314,6 @@ export function Sidebar({
         ) : null}
         {pane === "scheduled" ? <ScheduleListPane /> : null}
 
-        <div className="mt-auto px-(--sidebar-list-px) pb-2">
-          <SidebarVersion />
-        </div>
       </div>
       ) : null}
       <ConfirmDeleteDialog

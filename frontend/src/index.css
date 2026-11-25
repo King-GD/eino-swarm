@@ -19,6 +19,13 @@
   --color-ring: hsl(var(--ring));
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
+  --color-content-foreground: hsl(var(--content-foreground));
+  --color-link: hsl(var(--link));
+  --color-accent-text: hsl(var(--accent-text));
+  --color-dropdown: hsl(var(--dropdown));
+  --color-tag: hsl(var(--tag));
+  --color-tips: hsl(var(--tips));
+  --color-tips-foreground: hsl(var(--tips-foreground));
 
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));
@@ -88,13 +95,31 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
 
-  --animate-accordion-down: accordion-down 0.2s ease-out;
-  --animate-accordion-up: accordion-up 0.2s ease-out;
-  --animate-breathe: breathe 1.6s ease-in-out infinite;
+  /* One motion language. A change of the same kind gets the same curve and
+     pace everywhere: arrive decelerating, leave accelerating, move evenly.
+     `--duration-press` is for repeated taps, `fast` for icon and menu swaps,
+     `base` for banners and panels, `slow` for a page-level entrance. */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --duration-press: 90ms;
+  --duration-fast: 140ms;
+  --duration-base: 200ms;
+  --duration-slow: 280ms;
+  --default-transition-duration: var(--duration-fast);
+  --default-transition-timing-function: var(--ease-in-out);
+
+  --animate-accordion-down: accordion-down var(--duration-base) var(--ease-out);
+  --animate-accordion-up: accordion-up var(--duration-fast) var(--ease-in);
+  --animate-breathe: breathe 1.6s var(--ease-in-out) infinite;
   --animate-marquee: marquee 12s linear infinite;
-  --animate-shimmer: shimmer 2.2s ease-in-out infinite;
-  --animate-swap-in: swap-in 0.22s ease-out both;
-  --animate-swap-out: swap-out 0.22s ease-out both;
+  --animate-shimmer: shimmer 2.2s var(--ease-in-out) infinite;
+  --animate-swap-in: swap-in var(--duration-base) var(--ease-out) both;
+  --animate-swap-out: swap-out var(--duration-base) var(--ease-in) both;
+  /* Arrival for a banner, toast or floating control: a short rise, never a
+     slide across the screen. Paired with a fade so the edge never flashes. */
+  --animate-rise-in: rise-in var(--duration-base) var(--ease-out) both;
+  --animate-pop-in: pop-in var(--duration-fast) var(--ease-out) both;
 
   @keyframes accordion-down {
     from {
@@ -157,6 +182,26 @@
     to {
       transform: translateY(-100%);
       opacity: 0;
+    }
+  }
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: none;
     }
   }
 }
@@ -276,6 +321,7 @@
      need. Sizes are rem so Settings → Font size scales the answer too. */
   font-family: var(--font-content, var(--font-sans));
   font-size: var(--ui-font-size);
+  color: hsl(var(--content-foreground));
   @apply min-w-0 leading-6;
   & > * + * {
     @apply mt-3;
@@ -285,26 +331,35 @@
   & h1 {
     @apply font-semibold mt-4;
     font-size: inherit;
+    color: hsl(var(--foreground));
   }
   & h2 {
     @apply font-semibold mt-4;
     font-size: inherit;
+    color: hsl(var(--foreground));
   }
   & h3 {
     @apply font-semibold mt-4;
     font-size: inherit;
+    color: hsl(var(--foreground));
   }
   & h4 {
     @apply font-semibold mt-4;
     font-size: inherit;
+    color: hsl(var(--foreground));
   }
   & h5 {
     @apply font-semibold mt-4;
     font-size: inherit;
+    color: hsl(var(--foreground));
   }
   & h6 {
     @apply font-semibold mt-4;
     font-size: inherit;
+    color: hsl(var(--foreground));
+  }
+  & strong {
+    color: hsl(var(--foreground));
   }
   & ul {
     @apply list-disc pl-5 space-y-1;
@@ -314,6 +369,7 @@
   }
   & a {
     @apply underline underline-offset-2 hover:text-foreground;
+    color: hsl(var(--link));
   }
   & blockquote {
     @apply border-l-2 border-border pl-3 text-muted-foreground;
@@ -373,6 +429,7 @@
   }
   & th {
     @apply border border-border bg-muted/50 px-3 py-1.5 text-left align-top font-medium;
+    color: hsl(var(--foreground));
     min-width: 10ch;
     overflow-wrap: anywhere;
   }
@@ -568,6 +625,10 @@
 
     --background: 0 0% 100%;
     --foreground: 240 10% 8%;
+    /* Answer body vs. emphasis. zwai keeps them equal, so its transcript
+       reads exactly as before; the fofa palette separates them. */
+    --content-foreground: 240 10% 8%;
+    --link: 240 10% 8%;
     --card: 0 0% 100%;
     --card-foreground: 240 10% 8%;
     --popover: 0 0% 100%;
@@ -696,6 +757,8 @@
   .dark {
     --background: 240 8% 6%;
     --foreground: 0 0% 95%;
+    --content-foreground: 0 0% 95%;
+    --link: 0 0% 95%;
     --card: 240 7% 9%;
     --card-foreground: 0 0% 95%;
     --popover: 240 7% 10%;
@@ -762,12 +825,20 @@
     --qr-plate: 0 0% 100%;
   }
 
-  /* FOFA palette. Values are the DESIGN.html 7.2 tokens (and fofa.info's
-     live --color-* sheet, which matches those hexes). shadcn names stay;
-     --brand-from / --brand-to are the official cyan↔blue gradient. */
+  /* FOFA palette. Colors come from FOFA's main site (var.scss and the home
+     search box); values intentionally depart from its hexes where contrast
+     requires it.
+     shadcn names stay; --brand-from / --brand-to are the cyan↔blue gradient. */
   html[data-palette="fofa"] {
     --background: 210 20% 98%;
     --foreground: 234 30% 18%;
+    --content-foreground: 202 12% 36%;
+    --link: 181 94% 26%;
+    --accent-text: 181 94% 26%;
+    --dropdown: 0 0% 100%;
+    --tag: 204 20% 95%;
+    --tips: 0 0% 0%;
+    --tips-foreground: 0 0% 100%;
     --card: 0 0% 100%;
     --card-foreground: 234 30% 18%;
     --popover: 0 0% 100%;
@@ -777,7 +848,7 @@
     --secondary: 204 20% 95%;
     --secondary-foreground: 234 30% 18%;
     --muted: 204 20% 95%;
-    --muted-foreground: 202 12% 41%;
+    --muted-foreground: 210 8% 46%;
     --accent: 204 20% 95%;
     --accent-foreground: 234 30% 18%;
     --destructive: 0 72% 51%;
@@ -786,19 +857,24 @@
     --input: 224 15% 86%;
     --ring: 180 95% 37%;
     --radius: 0.375rem;
+    /* Radius tiers: controls keep --radius-md's 4px, panels 8px, dialogs
+       16px; the composer keeps its own 15px. */
+    --radius-lg: 0.5rem;
     --brand-from: 213 99% 57%;
     --brand-to: 180 96% 48%;
     --brand-mark: 180 95% 37%;
 
-    --sidebar: 210 20% 98%;
+    /* White rail against the #f9fafb canvas, like FOFA's white nav. */
+    --sidebar: 0 0% 100%;
     --sidebar-foreground: 202 12% 41%;
     --sidebar-accent: 204 20% 95%;
     --sidebar-border: 223 18% 92%;
 
-    --running: 32 95% 44%;
-    --done: 142 76% 36%;
+    /* Running is the cyan signal; waiting on a human is FOFA's orange. */
+    --running: 180 95% 37%;
+    --done: 155 72% 30%;
     --failed: 0 72% 51%;
-    --ask: 180 95% 37%;
+    --ask: 23 77% 49%;
 
     --find: 180 60% 82%;
     --find-foreground: 222 77% 7%;
@@ -839,6 +915,15 @@
   html[data-palette="fofa"].dark {
     --background: 222 77% 7%;
     --foreground: 0 0% 100%;
+    /* Answers use FOFA's blue-gray body text; headings stay pure white. */
+    --content-foreground: 210 31% 74%;
+    --link: 180 96% 48%;
+    /* FOFA keeps cyan for shapes; cyan *text* on light stays the darker link. */
+    --accent-text: 180 96% 48%;
+    --dropdown: 223 38% 15%;
+    --tag: 209 78% 9%;
+    --tips: 0 0% 0%;
+    --tips-foreground: 0 0% 100%;
     --card: 222 50% 10%;
     --card-foreground: 0 0% 100%;
     --popover: 222 50% 10%;
@@ -848,28 +933,33 @@
     --secondary: 221 42% 14%;
     --secondary-foreground: 0 0% 100%;
     --muted: 221 42% 14%;
-    --muted-foreground: 210 31% 74%;
+    --muted-foreground: 210 12% 56%;
     --accent: 221 33% 20%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-    --border: 220 18% 23%;
-    --input: 221 42% 14%;
+    --border: 222 25% 18%;
+    --input: 220 18% 23%;
     --ring: 180 96% 48%;
     --radius: 0.375rem;
+    /* Radius tiers: controls keep --radius-md's 4px, panels 8px, dialogs
+       16px; the composer keeps its own 15px. */
+    --radius-lg: 0.5rem;
     --brand-from: 213 99% 57%;
     --brand-to: 180 96% 48%;
     --brand-mark: 214 100% 63%;
 
-    --sidebar: 222 77% 7%;
+    /* The rail sits one step below the canvas, like FOFA's #030a17 nav. */
+    --sidebar: 222 77% 5%;
     --sidebar-foreground: 210 31% 74%;
     --sidebar-accent: 221 42% 14%;
-    --sidebar-border: 220 18% 23%;
+    --sidebar-border: 222 25% 18%;
 
-    --running: 38 92% 50%;
-    --done: 142 71% 45%;
-    --failed: 0 84% 60%;
-    --ask: 180 96% 48%;
+    /* Running is the cyan signal; waiting on a human is FOFA's orange. */
+    --running: 180 96% 48%;
+    --done: 156 49% 49%;
+    --failed: 0 87% 69%;
+    --ask: 23 91% 56%;
 
     --find: 180 50% 22%;
     --find-foreground: 0 0% 100%;
@@ -1000,10 +1090,29 @@
   .animate-marquee,
   .animate-shimmer,
   .animate-ping,
+  .animate-breathe,
+  .animate-pulse,
   .animate-swap-in,
-  .animate-swap-out {
+  .animate-swap-out,
+  .animate-rise-in,
+  .animate-pop-in {
     animation: none !important;
   }
+}
+
+/* Radix presence layers (menus, dialogs, tooltips) get their pace from
+   `--default-transition-duration` (the plugin's animation duration default)
+   and their curve from the `ease-out` / `ease-in` animation utilities, which
+   are applied per `data-state` in the primitives. A bare `.animate-in` rule
+   would never match: every use is variant-prefixed. */
+
+/* A theme switch repaints every token at once. Elements whose transition uses
+   a colour would otherwise fade from the old palette while the rest snaps,
+   showing both palettes in one frame; the store adds this for two frames. */
+html[data-theme-switching] *,
+html[data-theme-switching] *::before,
+html[data-theme-switching] *::after {
+  transition: none !important;
 }
 
 /* Official FOFA search rim: cyan→blue gradient, 15px, no drop shadow.
@@ -1020,4 +1129,276 @@ html[data-palette="fofa"] [data-composer-box] {
 }
 html[data-palette="fofa"] [data-composer-box]:focus-within {
   border-color: transparent;
+}
+
+/* Stage 2 component form. Every rule below is scoped to
+   the fofa palette; zwai keeps its bubble, boxed tables and pill rows. */
+
+/* Execution log: dashed tick rail plus a monospace clock on each row. */
+html[data-palette="fofa"] [data-testid="single-work"] {
+  position: relative;
+  padding-left: 14px;
+}
+html[data-palette="fofa"] [data-testid="single-work"]::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: 4px;
+  bottom: 4px;
+  border-left: 1px dashed hsl(var(--border));
+}
+html[data-palette="fofa"] [data-tool-time] {
+  display: inline;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: hsl(var(--muted-foreground));
+}
+
+/* el-table: a level5 header band over transparent, ruled rows. */
+html[data-palette="fofa"] .md th,
+html[data-palette="fofa"] .md td {
+  border: 0;
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 9px 12px;
+  text-align: left;
+}
+html[data-palette="fofa"] .md th {
+  background-color: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  font-size: 12px;
+  font-weight: 400;
+}
+html[data-palette="fofa"] .md tbody tr:hover td {
+  background-color: hsl(var(--accent));
+}
+html[data-palette="fofa"] .md tr:last-child td {
+  border-bottom: 0;
+}
+
+/* The selected conversation is marked by a fading wash, not an edge bar. */
+html[data-palette="fofa"] [data-testid="thread-row"][aria-current="true"] {
+  background-color: transparent;
+  background-image: linear-gradient(90deg, hsl(var(--primary) / 0.12), transparent 72%);
+}
+
+html[data-palette="fofa"] [role="dialog"],
+html[data-palette="fofa"] [role="alertdialog"] {
+  border-radius: 20px;
+}
+
+/* el-button--primary: send is solid cyan with a 4px corner. */
+html[data-palette="fofa"] [data-send-button] {
+  border-radius: 4px;
+}
+html[data-palette="fofa"] [data-send-button]:not(:disabled) {
+  background-image: none;
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+/* Stage 5: every control follows FOFA's element-plus component. The hooks
+   are attributes on the shadcn components, so
+   zwai and the shared component markup stay unchanged. */
+
+/* el-button: 4px; primary is solid, default is a hairline, link is text. */
+html[data-palette="fofa"] [data-slot="button"] {
+  border-radius: 4px;
+}
+html[data-palette="fofa"] [data-slot="button"]:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px hsl(var(--accent-text) / 0.7);
+}
+html[data-palette="fofa"] [data-slot="button"][data-variant="default"]:hover {
+  background-color: hsl(var(--primary));
+  opacity: 0.9;
+}
+html[data-palette="fofa"] [data-slot="button"][data-variant="outline"],
+html[data-palette="fofa"] [data-slot="button"][data-variant="secondary"] {
+  background-color: transparent;
+  border-color: hsl(var(--border));
+  color: hsl(var(--secondary-foreground));
+}
+html[data-palette="fofa"] [data-slot="button"][data-variant="outline"]:hover,
+html[data-palette="fofa"] [data-slot="button"][data-variant="secondary"]:hover {
+  background-color: transparent;
+  border-color: hsl(var(--primary));
+  color: hsl(var(--accent-text));
+}
+html[data-palette="fofa"] [data-slot="button"][data-variant="ghost"],
+html[data-palette="fofa"] [data-slot="button"][data-variant="link"] {
+  background-color: transparent;
+}
+html[data-palette="fofa"] [data-slot="button"][data-variant="ghost"]:hover,
+html[data-palette="fofa"] [data-slot="button"][data-variant="link"]:hover {
+  color: hsl(var(--accent-text));
+}
+/* Icon actions are FOFA link buttons: ink changes, no slab. Row-shaped ghost
+   buttons keep their hover fill; they act as list rows, not toolbar icons. */
+html[data-palette="fofa"] [data-slot="button"][data-variant="ghost"][data-size^="icon"]:hover,
+html[data-palette="fofa"] [data-slot="button"][data-variant="link"]:hover {
+  background-color: transparent;
+}
+
+/* el-input: 6px, level3 fill, focus is a cyan border instead of a ring. */
+html[data-palette="fofa"] [data-slot="input"],
+html[data-palette="fofa"] [data-slot="textarea"] {
+  border-radius: 6px;
+  border-color: hsl(var(--input));
+  background-color: hsl(var(--card));
+}
+html[data-palette="fofa"] [data-slot="input"]:focus-visible,
+html[data-palette="fofa"] [data-slot="textarea"]:focus-visible {
+  outline: none;
+  border-color: hsl(var(--primary));
+  box-shadow: none;
+}
+/* The composer is itself a field: no second border inside the gradient rim. */
+html[data-palette="fofa"] [data-composer-box] [data-slot="textarea"] {
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow: none;
+}
+
+/* el-select-dropdown: dropdown fill, 6px, select-hover, cyan checked item. */
+html[data-palette="fofa"] [data-slot="select-trigger"] {
+  border-radius: 6px;
+  border-color: hsl(var(--input));
+  background-color: hsl(var(--card));
+}
+html[data-palette="fofa"] [data-slot="select-trigger"]:focus-visible {
+  outline: none;
+  border-color: hsl(var(--primary));
+  box-shadow: none;
+}
+html[data-palette="fofa"] [data-slot="select-content"],
+html[data-palette="fofa"] [data-slot="dropdown-content"] {
+  border-radius: 6px;
+  border-color: hsl(var(--border));
+  background-color: hsl(var(--dropdown));
+}
+html[data-palette="fofa"] [data-slot="select-item"],
+html[data-palette="fofa"] [data-slot="dropdown-item"] {
+  border-radius: 0;
+  color: hsl(var(--secondary-foreground));
+}
+html[data-palette="fofa"] [data-slot="select-item"]:focus,
+html[data-palette="fofa"] [data-slot="select-item"][data-highlighted],
+html[data-palette="fofa"] [data-slot="dropdown-item"]:focus,
+html[data-palette="fofa"] [data-slot="dropdown-item"][data-highlighted] {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--secondary-foreground));
+}
+html[data-palette="fofa"] [data-slot="select-item"][data-state="checked"] {
+  color: hsl(var(--accent-text));
+}
+
+/* el-tabs: no pill track, cyan label and a 2px bar under the active tab. */
+html[data-palette="fofa"] [data-slot="tabs-list"] {
+  height: auto;
+  padding: 0;
+  border-radius: 0;
+  background-color: transparent;
+}
+html[data-palette="fofa"] [data-slot="tabs-trigger"] {
+  position: relative;
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow: none;
+  color: hsl(var(--secondary-foreground));
+}
+html[data-palette="fofa"] [data-slot="tabs-trigger"]:hover {
+  color: hsl(var(--accent-text));
+}
+html[data-palette="fofa"] [data-slot="tabs-trigger"][data-state="active"] {
+  background-color: transparent;
+  color: hsl(var(--accent-text));
+  box-shadow: none;
+}
+html[data-palette="fofa"] [data-slot="tabs-trigger"][data-state="active"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background-color: hsl(var(--primary));
+}
+html[data-palette="fofa"] [data-tab-group] {
+  padding: 0;
+  border-radius: 0;
+  background-color: transparent;
+}
+html[data-palette="fofa"] [data-panel-tabs] {
+  border-bottom-color: transparent;
+}
+
+/* el-dialog: 20px, level3 fill, ruled header. */
+html[data-palette="fofa"] [data-slot="dialog-content"] {
+  border-radius: 20px;
+  border-color: hsl(var(--border));
+  background-color: hsl(var(--card));
+}
+html[data-palette="fofa"] [data-slot="dialog-header"] {
+  padding-bottom: 14px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+html[data-palette="fofa"] [data-slot="dialog-title"] {
+  font-size: 18px;
+  font-weight: 500;
+}
+html[data-palette="fofa"] [data-slot="dialog-overlay"] {
+  background-color: hsl(var(--background) / 0.8);
+}
+
+/* el-tag: one solid chip colour; state changes the ink only. */
+html[data-palette="fofa"] [data-slot="badge"] {
+  height: 20px;
+  border-radius: 4px;
+  border-color: transparent;
+  background-color: hsl(var(--tag));
+  color: hsl(var(--accent-text));
+  font-size: 11px;
+  line-height: 1;
+}
+html[data-palette="fofa"] [data-slot="badge"][data-variant="outline"] {
+  background-color: transparent;
+  color: hsl(var(--muted-foreground));
+}
+html[data-palette="fofa"] [data-slot="badge"][data-variant="success"] {
+  background-color: hsl(var(--tag));
+  color: hsl(var(--done));
+}
+html[data-palette="fofa"] [data-slot="badge"][data-variant="warning"] {
+  background-color: hsl(var(--tag));
+  color: hsl(var(--running));
+}
+html[data-palette="fofa"] [data-slot="badge"][data-variant="danger"] {
+  background-color: hsl(var(--tag));
+  color: hsl(var(--failed));
+}
+html[data-palette="fofa"] [data-slot="badge"][data-variant="ask"] {
+  background-color: hsl(var(--tag));
+  color: hsl(var(--ask));
+}
+
+/* el-popper.is-dark / el-message / el-switch. */
+html[data-palette="fofa"] [data-slot="tooltip-content"] {
+  max-width: 350px;
+  padding: 5px 9px;
+  border-radius: 4px;
+  background-color: hsl(var(--tips));
+  color: hsl(var(--tips-foreground));
+  font-size: 12px;
+}
+html[data-palette="fofa"] [data-slot="toast"] {
+  border-color: hsl(var(--border));
+  border-radius: 6px;
+  background-color: hsl(var(--card));
+  color: hsl(var(--secondary-foreground));
+}
+html[data-palette="fofa"] [data-slot="switch"][data-state="unchecked"] {
+  background-color: hsl(var(--secondary));
 }

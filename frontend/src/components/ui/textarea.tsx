@@ -7,6 +7,7 @@ const Textarea = React.forwardRef<
   React.ComponentProps<"textarea">
 >(({ className, ...props }, ref) => (
   <textarea
+    data-slot="textarea"
     className={cn(
       // Same chrome as Input. Without a border an empty box is just
       // leftover whitespace (New project's instruction, Memory notes).

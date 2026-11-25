@@ -32,6 +32,14 @@ export const CHART_SERIES_PAINT = [
 
 const AXIS = { fill: "hsl(var(--muted-foreground))", fontSize: 12 }
 const GRID = "hsl(var(--border))"
+/* Hover answers "which category is this" without painting a slab over the
+   plot: a token wash for a bar's column, a hairline for a line's crosshair. */
+const CURSOR_BAND = { fill: "hsl(var(--accent))", opacity: 0.7 }
+const CURSOR_LINE = {
+  stroke: "hsl(var(--muted-foreground))",
+  strokeOpacity: 0.35,
+  strokeWidth: 1,
+}
 
 function prefersReducedMotion(): boolean {
   if (typeof window === "undefined" || !window.matchMedia) return false
@@ -138,6 +146,12 @@ function renderMark(spec: ChartSpec, animate: boolean): ReactElement {
             stroke={CHART_SERIES_PAINT[i % CHART_SERIES_PAINT.length]}
             strokeWidth={2}
             dot={false}
+            activeDot={{
+              r: 4,
+              fill: CHART_SERIES_PAINT[i % CHART_SERIES_PAINT.length],
+              stroke: "hsl(var(--background))",
+              strokeWidth: 2,
+            }}
             isAnimationActive={animate}
           />
         ))}
@@ -182,6 +196,7 @@ function renderMark(spec: ChartSpec, animate: boolean): ReactElement {
 }
 
 function cartesianEls(spec: ChartSpec): ReactElement[] {
+  const bar = spec.type === "bar"
   // Recharts matches children by component type. A fragment is one child
   // that is not an Axis, so the plot would render with no scales.
   const els: ReactElement[] = [
@@ -200,9 +215,15 @@ function cartesianEls(spec: ChartSpec): ReactElement[] {
       axisLine={false}
       tickLine={false}
       width={40}
-      tickFormatter={(v: number) => formatTick(v, spec.unit)}
+      // The unit belongs to the tooltip and the table header. Repeating it on
+      // every tick crowded the axis until its own digits were clipped.
+      tickFormatter={(v: number) => compactTick(v)}
     />,
-    <Tooltip key="tip" content={<ChartTooltip unit={spec.unit} />} />,
+    <Tooltip
+      key="tip"
+      cursor={bar ? CURSOR_BAND : CURSOR_LINE}
+      content={<ChartTooltip unit={spec.unit} />}
+    />,
   ]
   if (spec.y.length > 1) {
     els.push(<Legend key="legend" wrapperStyle={{ fontSize: 12 }} />)
@@ -218,7 +239,7 @@ function ChartTooltip({
 }: TooltipProps<number, string> & { unit?: string }) {
   if (!active || !payload?.length) return null
   return (
-    <div className="rounded-md border border-border bg-popover px-2 py-1.5 text-xs text-popover-foreground">
+    <div className="min-w-40 rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-md">
       {label != null && label !== "" ? (
         <div className="mb-1 font-medium">{String(label)}</div>
       ) : null}
@@ -230,7 +251,7 @@ function ChartTooltip({
               style={{ background: String(row.color ?? CHART_SERIES_PAINT[0]) }}
             />
             <span className="text-muted-foreground">{row.name}</span>
-            <span>{formatTick(Number(row.value), unit ?? "")}</span>
+            <span className="ml-auto tabular-nums">{formatTick(Number(row.value), unit ?? "")}</span>
           </li>
         ))}
       </ul>
@@ -265,6 +286,20 @@ function ChartDataTable({ spec, caption }: { spec: ChartSpec; caption: string })
       </tbody>
     </table>
   )
+}
+
+function compactTick(n: number): string {
+  if (!Number.isFinite(n)) return ""
+  const abs = Math.abs(n)
+  if (abs >= 10_000) {
+    return new Intl.NumberFormat(undefined, {
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(n)
+  }
+  // Small domains still need their fraction: 0.25 / 0.5 / 0.75 must not
+  // collapse to 0 / 1 / 1.
+  return abs >= 100 || Number.isInteger(n) ? String(Math.round(n)) : n.toFixed(1)
 }
 
 function formatTick(n: number, unit: string): string {

@@ -59,7 +59,18 @@
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
 
-  --animate-generated-image: generated-image-appear 180ms ease-out both;
+  /* Same motion language as the desktop shell: one curve and pace per kind
+     of change. Phone sheets and the screen push keep their own timing. */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --duration-press: 90ms;
+  --duration-fast: 140ms;
+  --duration-base: 200ms;
+  --duration-slow: 280ms;
+  --default-transition-duration: var(--duration-fast);
+  --default-transition-timing-function: var(--ease-in-out);
+  --animate-generated-image: generated-image-appear var(--duration-base) var(--ease-out) both;
 
   @keyframes generated-image-appear {
     from { opacity: 0; }
@@ -75,6 +86,16 @@
   If we ever want to remove these styles, we need to add an explicit border
   color utility to any element that depends on these defaults.
 */
+/* Phones have no hover. Without a press state, tapping a plain button reads
+   as a no-op until the screen changes; every tappable answers the same way. */
+@media (hover: none) {
+  button:not(:disabled):active,
+  [role="button"]:not([aria-disabled="true"]):active,
+  a[href]:active {
+    opacity: 0.75;
+  }
+}
+
 @layer base {
   *,
   ::after,
@@ -121,6 +142,9 @@
   aspect-ratio: 1;
   overflow: hidden;
   flex: none;
+  /* The beam travels in cqh so its motion is a transform, not a top
+     animation that relayouts the viewfinder every frame. */
+  container-type: size;
 }
 
 @utility scan-corner {
@@ -163,12 +187,12 @@
   left: 6%;
   right: 6%;
   height: 2px;
-  top: 8%;
+  top: 0;
   background: hsl(var(--qr-plate));
   box-shadow:
     0 0 8px hsl(var(--qr-plate)),
     0 0 18px hsl(var(--running));
-  animation: scan-beam 2.2s ease-in-out infinite;
+  animation: scan-beam 2.2s var(--ease-in-out) infinite;
   &::before {
     content: '';
     position: absolute;
@@ -184,7 +208,7 @@
   }
   @media (prefers-reduced-motion: reduce) {
     animation: none;
-    top: 50%;
+    transform: translateY(50cqh);
   }
 }
 
@@ -423,13 +447,13 @@
   }
   @keyframes scan-beam {
     0% {
-      top: 8%;
+      transform: translateY(8cqh);
     }
     50% {
-      top: 90%;
+      transform: translateY(90cqh);
     }
     100% {
-      top: 8%;
+      transform: translateY(8cqh);
     }
   }
 }

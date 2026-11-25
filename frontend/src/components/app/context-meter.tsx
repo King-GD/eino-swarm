@@ -132,6 +132,9 @@ function Ring({ className, fill }: { className: string; fill: number }) {
         strokeLinecap="round"
         strokeDasharray={c}
         strokeDashoffset={c * (1 - clamped)}
+        // The ring changing size is the one number that moves often; easing it
+        // keeps a growing context from looking like a glitch.
+        className="transition-[stroke-dashoffset] duration-(--duration-slow) ease-out motion-reduce:transition-none"
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
       />
     </svg>

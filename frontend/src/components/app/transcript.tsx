@@ -301,7 +301,7 @@ export function Transcript({
           size="icon"
           data-testid="jump-to-latest"
           aria-label={t("transcript.jumpLatest")}
-          className="absolute right-4 z-20 rounded-full bg-background shadow-md bottom-[calc(var(--composer-pad)+0.75rem)]"
+          className="absolute right-4 z-20 rounded-full bg-background shadow-md motion-safe:animate-pop-in bottom-[calc(var(--composer-pad)+0.75rem)]"
           onClick={jumpToLatest}
         >
           <ChevronDown />

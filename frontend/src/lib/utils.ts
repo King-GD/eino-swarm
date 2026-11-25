@@ -87,6 +87,13 @@ export function formatTurnTime(iso: string): string {
 
 /** Calendar time on a transcript row. Seconds belong on the turn footer,
  *  not on every message. */
+/** HH:MM for log lines; the full date already sits on the request row. */
+export function formatClockTime(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ""
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+}
+
 export function formatMessageTime(iso: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ""

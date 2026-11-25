@@ -40,7 +40,7 @@ function GeneratedImage({ media, threadId }: { media: NonNullable<ImageGeneratio
       {status !== "loaded" ? <p role={status === "error" ? "alert" : "status"} className="px-3 py-2 text-sm text-muted-foreground">
         {t(status === "error" ? "imageGen.loadFailed" : "imageGen.loading")}
       </p> : null}
-      <div className={status === "loaded" ? "p-2 motion-safe:animate-in motion-safe:fade-in" : "invisible absolute pointer-events-none"}>
+      <div className={status === "loaded" ? "p-2 motion-safe:animate-in motion-safe:fade-in motion-safe:ease-out" : "invisible absolute pointer-events-none"}>
         <InputImageThumb src={src} name={name} large onLoad={() => setStatus("loaded")} onError={() => setStatus("error")} />
       </div>
       {status === "loaded" ? <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2 text-sm">

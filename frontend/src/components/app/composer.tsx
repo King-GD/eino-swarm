@@ -926,7 +926,8 @@ export function Composer({
               {corner.send ? (
                 <Button
                   size="icon"
-                  className="size-8 rounded-full"
+                  data-send-button=""
+                  className="size-8 rounded-full motion-safe:animate-pop-in"
                   disabled={sendDisabled}
                   onClick={() => void submit()}
                   aria-label={t("composer.send")}

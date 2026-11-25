@@ -165,7 +165,7 @@ export function RightPanel({
         }}
         className="flex min-h-0 flex-1 flex-col"
       >
-        <div className="thin-scrollbar overflow-x-auto border-b border-border px-2 py-1.5">
+        <div data-panel-tabs="" className="thin-scrollbar overflow-x-auto border-b border-border px-2 py-1.5">
           <TabsList className="h-auto min-w-full justify-start gap-2 bg-transparent p-0">
             {groups.filter((group) => group.tabs.length > 0).map(({ scope, label, icon: Icon, tabs }) => (
               <div
@@ -179,7 +179,7 @@ export function RightPanel({
                   <Icon aria-hidden="true" className="size-3 shrink-0" />
                   <span className="max-w-32 truncate" title={label}>{label}</span>
                 </div>
-                <div className="flex rounded-md bg-muted p-0.5">
+                <div data-tab-group="" className="flex rounded-md bg-muted p-0.5">
                   {tabs.map(({ id, label: tabLabel }) => (
                     <TabsTrigger key={id} value={id} className={cn(chromeTypeClass, "px-1.5")}>
                       {tabLabel}

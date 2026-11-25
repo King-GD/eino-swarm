@@ -508,7 +508,15 @@ test("the Models tab does not clip the add-endpoint button's border", async ({
   expect(room).toBeGreaterThanOrEqual(1)
 })
 test("switches color palette and remembers it", async ({ page, request }) => {
+  // Start from zwai even if an earlier crashed run left fofa behind.
+  await request.put("/api/settings", { data: { ui: { palette: "zwai" } } })
   await page.goto("/")
+  // Control radius before the switch, for the component-form comparison below.
+  const zwaiControlRadius = parseFloat(
+    await page
+      .getByRole("button", { name: "Settings" })
+      .evaluate((el) => getComputedStyle(el).borderRadius),
+  )
   try {
     await page.getByRole("button", { name: "Settings" }).click()
     const dialog = page.getByRole("dialog")
@@ -526,13 +534,34 @@ test("switches color palette and remembers it", async ({ page, request }) => {
       return {
         primary: s.getPropertyValue("--primary").trim(),
         background: s.getPropertyValue("--background").trim(),
+        foreground: s.getPropertyValue("--foreground").trim(),
+        content: s.getPropertyValue("--content-foreground").trim(),
         sidebar: s.getPropertyValue("--sidebar").trim(),
         brandFrom: s.getPropertyValue("--brand-from").trim(),
       }
     })
     expect(tokens.primary.startsWith("180")).toBe(true)
     expect(tokens.brandFrom.startsWith("213")).toBe(true)
-    expect(tokens.sidebar).toBe(tokens.background)
+    // The FOFA console keeps the rail a step away from the canvas and answers
+    // a step below headings. A shared value means the
+    // palette regressed to a flat recolor.
+    expect(tokens.sidebar).not.toBe(tokens.background)
+    expect(tokens.content).not.toBe(tokens.foreground)
+
+    // Stage 2 radius tier: controls sit tighter under fofa, panels wider.
+    // Measured on real elements because custom properties keep their calc()
+    // expression instead of a resolved length.
+    const fofaControlRadius = parseFloat(
+      await page
+        .getByRole("button", { name: "Settings" })
+        .evaluate((el) => getComputedStyle(el).borderRadius),
+    )
+    expect(fofaControlRadius).toBeLessThan(zwaiControlRadius)
+    const panelRadius = await root.evaluate((el) =>
+      getComputedStyle(el).getPropertyValue("--radius-lg").trim(),
+    )
+    // CSS serializes 0.5rem as ".5rem"; compare the length, not the text.
+    expect(parseFloat(panelRadius)).toBe(0.5)
 
     const saved = await (await request.get("/api/settings")).json()
     expect(saved.settings.ui.palette).toBe("fofa")

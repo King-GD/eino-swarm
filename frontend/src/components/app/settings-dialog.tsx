@@ -431,7 +431,7 @@ export function SettingsDialog({
         hideClose
         aria-describedby={undefined}
         onPointerDownOutside={(e) => e.preventDefault()}
-        className="inset-0 left-0 top-0 flex h-dvh max-h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none sm:rounded-none data-[state=open]:zoom-in-100"
+        className="inset-0 left-0 top-0 flex h-dvh max-h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none sm:rounded-none data-[state=open]:zoom-in-100 data-[state=closed]:zoom-out-100"
       >
         {trafficInset ? <SettingsTitlebar /> : null}
         {/* A form, so the API key field belongs to one and browsers stop

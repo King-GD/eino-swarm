@@ -17,7 +17,7 @@ import { formatMCPProgress, isMCPTool } from "@/lib/mcp-progress"
 import { execCommand, toolRowSummary, viewTool } from "@/lib/tool-view"
 import type { Block } from "@/lib/transcript"
 import { useT } from "@/lib/use-t"
-import { cn } from "@/lib/utils"
+import { cn, formatClockTime } from "@/lib/utils"
 
 export function ToolRow({ block, reveal, defaultCollapsed = false }: {
   block: Block
@@ -93,11 +93,20 @@ export function ToolRow({ block, reveal, defaultCollapsed = false }: {
           {view.diff ? (
             <EditCountMarks added={view.diff.added} removed={view.diff.removed} />
           ) : null}
-          {expanded ? (
-            <ChevronDown className="ml-auto size-3.5 shrink-0 opacity-60" />
-          ) : (
-            <ChevronRight className="ml-auto size-3.5 shrink-0 opacity-60" />
-          )}
+          <span className="ml-auto flex shrink-0 items-center gap-1.5">
+            {/* The fofa palette reads the log as timestamped lines; zwai
+                keeps the bare row. */}
+            {block.at ? (
+              <time data-tool-time="" dateTime={block.at} title={block.at} className="hidden">
+                {formatClockTime(block.at)}
+              </time>
+            ) : null}
+            {expanded ? (
+              <ChevronDown className="size-3.5 shrink-0 opacity-60" />
+            ) : (
+              <ChevronRight className="size-3.5 shrink-0 opacity-60" />
+            )}
+          </span>
         </>
       }
     >

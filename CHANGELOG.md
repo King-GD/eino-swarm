@@ -34,6 +34,14 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
+- 桌面、Web 与手机共用一套动效 token（90 ms 按下、140 ms 快速、200 ms 基础、280 ms 缓慢；同一组缓动曲线）。弹出层进出、横幅与停靠提示、进度条、复制反馈和图表悬停都按同一节奏只动画 `transform` / `opacity`；主题或明暗切换不再让半屏颜色渐变。系统开启“减少动态效果”时这些动画与平滑滚动关闭，最终状态仍完整可见。
+
+- 图表悬停改为主题色十字线与描边高亮点，提示框数值右对齐；纵轴刻度使用紧凑数字、不带单位，窄宽度下不再被单位挤断。
+
+- 侧栏底部不再常驻显示版本号，版本与运行模式仍在设置的关于页；侧栏搜索按钮带有可读名称。
+
+- The FOFA theme now carries FOFA's console structure. Colors: answers use the blue-gray body color under white headings, links get a dedicated color, the rail sits a step away from the canvas, and running / waiting-on-you / done keep separate colors. Form: your request keeps its bubble, each tool line gets a monospace clock on a dashed rail, tables keep horizontal rules only, the selected conversation gets a cyan fading wash, controls sit at 4px with 8px panels and 16px dialogs, and the send button carries the brand gradient. The zwai theme is unchanged and stays the default.
+
 - Local verification starts with the affected tests. Full suites run when the
   impact cannot be bounded or the integration or release workflow requires them.
 

@@ -39,7 +39,7 @@ export function SidebarSection({
           <ChevronRight
             data-testid="section-fold"
             className={cn(
-              "size-3 shrink-0 transition-opacity transition-transform",
+              "size-3 shrink-0 transition-[opacity,transform] motion-reduce:transition-none",
               open && "rotate-90",
               open
                 ? "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"

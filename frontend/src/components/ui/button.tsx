@@ -22,10 +22,10 @@ const buttonVariants = cva(
         default: "h-9 px-4 py-2",
         sm: "h-8 rounded-md px-3 text-[length:calc(var(--chrome-font-size)*0.92)]",
         lg: "h-10 rounded-md px-6",
-        icon: "size-9",
-        "icon-sm": "size-7 rounded-md",
-        "icon-xs": "size-6 rounded-md [&_svg]:size-3.5",
-        "icon-2xs": "size-5 rounded-sm [&_svg]:size-3",
+        icon: "size-9 motion-safe:active:scale-[0.96]",
+        "icon-sm": "size-7 rounded-md motion-safe:active:scale-[0.96]",
+        "icon-xs": "size-6 rounded-md motion-safe:active:scale-[0.96] [&_svg]:size-3.5",
+        "icon-2xs": "size-5 rounded-sm motion-safe:active:scale-[0.96] [&_svg]:size-3",
       },
     },
     defaultVariants: { variant: "default", size: "default" },
@@ -44,6 +44,9 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
+        data-slot="button"
+        data-variant={variant ?? "default"}
+        data-size={size ?? "default"}
         ref={ref}
         {...props}
       />

@@ -2734,6 +2734,16 @@ will ignore.
   is how another tab reads your conversations.
 - **The turn id is the debug handle.** Every event and model call carries it, the
   UI shows it, and `zwai trace <id>` reconstructs the run from it.
+- **One motion vocabulary.** Durations and easings are `@theme` tokens in
+  `frontend/src/index.css` (90 ms press, 140 ms fast, 200 ms base, 280 ms
+  slow; one out, in-out and in curve), with the same names in
+  `mobile/src/index.css`. Every state change animates only `transform` and
+  `opacity`: overlays enter and leave symmetrically at the fast token, banners
+  and the docked pins rise once when they mount, toasts pop in, and progress
+  bars scale from the left instead of animating `width`. `prefers-reduced-motion`
+  removes the movement and the smooth scrolling while leaving the final state
+  visible; a theme or light/dark switch suppresses colour transitions for
+  the two frames it repaints in.
 
 ## Release orchestration
 

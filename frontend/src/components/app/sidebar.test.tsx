@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { Sidebar } from "./sidebar"
+import { useApp } from "@/store/app"
 import { setDeskDest } from "@/lib/desk-nav"
 import {
   SIDEBAR_WIDTH_DEFAULT,
@@ -53,6 +54,23 @@ describe("Sidebar chrome", () => {
   // The window title bar owns the traffic lights and the hide toggle.
   // Projects is the home list. A loose new conversation lives on
   // Conversations, so it never sits under the yellow blob on this page.
+  it("names the search control for screen readers, not only by hover title", () => {
+    render(<Sidebar threads={[]} {...noop} />)
+    expect(
+      screen.getByRole("button", { name: "Search conversations (⌘K)" }),
+    ).toHaveAttribute("aria-label", "Search conversations (⌘K)")
+  })
+
+  it("keeps the build number out of the always-on list column", () => {
+    // The version is a diagnostic, not a thing to read every second; it
+    // stays in Settings → General and the app menu.
+    useApp.setState({ meta: { version: "9.9.9" } as never })
+    render(<Sidebar threads={[]} {...noop} />)
+    expect(screen.queryByText(/Version 9\.9\.9/)).toBeNull()
+    expect(screen.queryByTestId("sidebar-version")).toBeNull()
+    useApp.setState({ meta: undefined })
+  })
+
   it("does not offer a loose new conversation on the project list", () => {
     render(<Sidebar threads={[]} {...noop} />)
     expect(screen.queryByTestId("sidebar-chrome")).not.toBeInTheDocument()

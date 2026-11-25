@@ -33,9 +33,15 @@ export function HeatTrend({ heat, loading, className }: {
               <CartesianGrid stroke="hsl(var(--border))" vertical={false} />
               <XAxis dataKey="date" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "hsl(var(--border))" }} minTickGap={16} />
               <YAxis hide />
-              <Tooltip content={<HeatTooltip />} />
+              {/* Same hover language as every other chart: a hairline
+                  crosshair and a token-ringed point, not Recharts' gray. */}
+              <Tooltip
+                cursor={{ stroke: "hsl(var(--muted-foreground))", strokeOpacity: 0.35, strokeWidth: 1 }}
+                content={<HeatTooltip />}
+              />
               <Area type="monotone" dataKey="value" isAnimationActive={false} stroke={LINE} strokeWidth={2} fill={LINE} fillOpacity={0.12}
-                dot={{ r: 3, stroke: LINE, strokeWidth: 1.5, fill: "hsl(var(--card))" }} activeDot={{ r: 4 }} />
+                dot={{ r: 3, stroke: LINE, strokeWidth: 1.5, fill: "hsl(var(--card))" }}
+                activeDot={{ r: 4, fill: LINE, stroke: "hsl(var(--background))", strokeWidth: 2 }} />
             </AreaChart>
           </ResponsiveContainer>
         </div>

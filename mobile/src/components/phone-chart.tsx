@@ -118,7 +118,7 @@ function CartesianPlot({ spec }: { spec: ChartSpec }) {
           <g key={i}>
             <line x1={PAD_L} x2={VB_W - PAD_R} y1={y} y2={y} stroke={GRID} />
             <text x={PAD_L - 4} y={y + 3} textAnchor="end" fill={AXIS} fontSize="10">
-              {formatTick(v, spec.unit)}
+              {compactTick(v)}
             </text>
           </g>
         )
@@ -377,9 +377,18 @@ function labelIndexes(count: number): number[] {
   return out
 }
 
-function formatTick(n: number, unit: string): string {
+/** Axis numbers stay bare: the unit repeats in the tooltip and the data
+ *  table, and on a phone width a per-tick unit pushes the digits out. */
+function compactTick(n: number): string {
   if (!Number.isFinite(n)) return ""
   const abs = Math.abs(n)
-  const text = abs >= 100 || Number.isInteger(n) ? String(Math.round(n)) : n.toFixed(1)
-  return unit ? `${text} ${unit}` : text
+  if (abs >= 10_000) {
+    return new Intl.NumberFormat(undefined, {
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(n)
+  }
+  // Small domains still need their fraction: 0.25 / 0.5 / 0.75 must not
+  // collapse to 0 / 1 / 1.
+  return abs >= 100 || Number.isInteger(n) ? String(Math.round(n)) : n.toFixed(1)
 }

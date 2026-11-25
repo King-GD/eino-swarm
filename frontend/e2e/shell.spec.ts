@@ -608,7 +608,11 @@ test("desktop shell shows the build and asks before installing a release", async
     })
   })
   await page.goto("/?shell=desktop")
-  await expect(page.getByTestId("sidebar-version")).toContainText(/Version /)
+  // The build lives in Settings → General now; the shell itself stays quiet.
+  await page.getByRole("button", { name: "Settings" }).click()
+  const settingsDialog = page.getByRole("dialog")
+  await expect(settingsDialog.getByText(/Version .* mode/)).toBeVisible()
+  await settingsDialog.getByRole("button", { name: "Back to app" }).click()
   const notice = page.getByTestId("desktop-update")
   await expect(notice.getByRole("status")).toHaveText(
     "Version 9.9.9 is available. Update?",

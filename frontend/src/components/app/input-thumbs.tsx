@@ -58,7 +58,7 @@ export function InputImageThumb({ src, name, large = false, onLoad, onError }: {
       </DialogTrigger>
       {open ? (
         <DialogContent
-          className="input-image-preview data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-1/2"
+          className="input-image-preview"
           hideClose
           aria-describedby={undefined}
         >

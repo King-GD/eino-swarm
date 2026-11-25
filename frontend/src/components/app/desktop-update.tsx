@@ -61,8 +61,10 @@ export function DesktopUpdateBanner() {
           <div role="progressbar" aria-label={t("update.progressLabel")}
             aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}
             className="h-1 overflow-hidden rounded-full bg-muted">
-            <div className={cn("h-full bg-primary transition-[width]", percent === undefined && "w-1/3 motion-safe:animate-pulse")}
-              style={percent === undefined ? undefined : { width: `${percent}%` }} />
+            {/* scaleX paints on the compositor; a width transition relayouts
+                the row on every frame of a download. */}
+            <div className={cn("h-full bg-primary transition-transform", percent === undefined ? "w-1/3 motion-safe:animate-pulse" : "w-full origin-left")}
+              style={percent === undefined ? undefined : { transform: `scaleX(${percent / 100})` }} />
           </div>
         ) : null}
       </div>
