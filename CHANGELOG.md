@@ -40,6 +40,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 - 侧栏底部不再常驻显示版本号，版本与运行模式仍在设置的关于页；侧栏搜索按钮带有可读名称。
 
+- 侧栏与面板的拖拽分隔条保留 8px 拖动区域，悬停或键盘聚焦时只画 2px 细线，不再出现整条粗色块。
+
 - The FOFA theme now carries FOFA's console structure. Colors: answers use the blue-gray body color under white headings, links get a dedicated color, the rail sits a step away from the canvas, and running / waiting-on-you / done keep separate colors. Form: your request keeps its bubble, each tool line gets a monospace clock on a dashed rail, tables keep horizontal rules only, the selected conversation gets a cyan fading wash, controls sit at 4px with 8px panels and 16px dialogs, and the send button carries the brand gradient. The zwai theme is unchanged and stays the default.
 
 - Local verification starts with the affected tests. Full suites run when the
