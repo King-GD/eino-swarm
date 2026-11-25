@@ -710,7 +710,13 @@
     /* Width of the macOS traffic lights plus a gap. The desktop shell
        overwrites this from the native button frames; the fallback is only
        for the first paint and for unit tests. */
-    --traffic-light-inset: 4.75rem;
+    --traffic-light-inset: 78px;
+
+    --titlebar-height: calc(var(--chrome-font-size) * 3 + 3px);
+    /* Only the macOS desktop row must match internal/desktop.TitlebarHeight. */
+    --macos-titlebar-height: 46px;
+    --titlebar-control: 28px;
+    --titlebar-icon: 16px;
 
     /* Visible lines of a live thought. Keep THOUGHT_VISIBLE_LINES in sync. */
     --thought-lines: 10;
@@ -1019,9 +1025,9 @@
     overscroll-behavior: none;
   }
 
-  /* The desktop window hides its title bar. Dragging the top 48px is native
-     (InvisibleTitleBarHeight); a double-click zoom is JS, and it looks at
-     this variable so buttons in the chrome do not zoom the window. */
+  /* macOS hides its title bar and uses InvisibleTitleBarHeight for the native
+     drag strip. The JS double-click handler also checks this variable so
+     chrome buttons cannot zoom the window. */
   [data-drag-region] {
     --wails-draggable: drag;
   }

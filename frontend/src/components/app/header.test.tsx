@@ -1,8 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { Header } from "./header"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { setDeskDest } from "@/lib/desk-nav"
 import {
   SIDEBAR_WIDTH_DEFAULT,
   SIDEBAR_WIDTH_VAR,
@@ -23,6 +24,8 @@ function renderHeader(props: Partial<Parameters<typeof Header>[0]> = {}) {
         onTogglePanel={vi.fn()}
         onToggleSidebar={vi.fn()}
         onOpenTerminal={vi.fn()}
+        onNew={vi.fn()}
+        onSearch={vi.fn()}
         terminalOpen={false}
         terminalEnabled
         {...props}
@@ -56,23 +59,17 @@ describe("Header sidebar toggle", () => {
     )
   })
 
-  it("reserves the icon rail once the list is gone so the title stays with the transcript", () => {
+  it("keeps the toggle in the leading group while the list is hidden", () => {
     renderHeader({ sidebarOpen: false })
-    expect(screen.getByTestId("titlebar-leading").style.width).toBe(
-      "var(--dest-rail-width)",
-    )
-    expect(
-      screen.getByRole("button", { name: "Show conversations" }).closest(
-        "[data-testid=titlebar-leading]",
-      ),
-    ).toBeNull()
+    const leading = screen.getByTestId("titlebar-leading")
+    expect(leading.style.width).toBe("")
+    expect(leading).toHaveClass("min-w-(--dest-rail-width)")
+    expect(within(leading).getByRole("button", { name: "Show conversations" })).toBeVisible()
   })
 
   it("clears the traffic lights before the show button when the list is gone", () => {
     renderHeader({ sidebarOpen: false, trafficInset: true })
-    expect(screen.getByTestId("titlebar-leading").style.width).toBe(
-      "max(var(--dest-rail-width), var(--traffic-light-inset))",
-    )
+    expect(screen.getByTestId("titlebar-leading")).toHaveClass("pl-traffic")
   })
 
   it("pads for traffic lights on the desktop title bar", () => {
@@ -88,6 +85,53 @@ describe("Header sidebar toggle", () => {
   it("marks the bar as window chrome so a double-click can zoom", () => {
     renderHeader()
     expect(screen.getByRole("banner")).toHaveAttribute("data-drag-region")
+  })
+})
+
+describe("Header list controls", () => {
+  afterEach(() => {
+    act(() => setDeskDest("projects"))
+    localStorage.clear()
+  })
+
+  it("offers named new and search actions within the sidebar's width", () => {
+    act(() => setDeskDest("chats"))
+    const onNew = vi.fn()
+    const onSearch = vi.fn()
+    renderHeader({ onNew, onSearch })
+    const leading = screen.getByTestId("titlebar-leading")
+    const newButton = within(leading).getByRole("button", {
+      name: /^New conversation$/,
+    })
+    fireEvent.click(newButton)
+    expect(onNew).toHaveBeenCalled()
+    const search = within(leading).getByRole("button", {
+      name: "Search conversations (⌘K)",
+    })
+    fireEvent.click(search)
+    expect(onSearch).toHaveBeenCalled()
+  })
+
+  it("keeps a loose new conversation off the project list", () => {
+    act(() => setDeskDest("projects"))
+    renderHeader()
+    expect(
+      screen.getByRole("button", { name: "Search conversations (⌘K)" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /^New conversation$/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("hides both controls with the list", () => {
+    act(() => setDeskDest("chats"))
+    renderHeader({ sidebarOpen: false })
+    expect(
+      screen.queryByRole("button", { name: /^New conversation$/ }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Search conversations (⌘K)" }),
+    ).not.toBeInTheDocument()
   })
 })
 
@@ -117,9 +161,7 @@ describe("Header project chip", () => {
     expect(name.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(title.parentElement).toContainElement(name)
     expect(title).toHaveClass("truncate")
-    expect(title.className).toContain("font-normal")
-    expect(title.className).toContain("--chrome-font-size")
-    expect(title.className).not.toMatch(/\bfont-medium\b/)
+    expect(title).toHaveClass("text-(length:--chrome-font-size)", "font-medium")
     expect(title.parentElement).toHaveClass("items-center")
   })
 

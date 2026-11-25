@@ -18,6 +18,93 @@ test("launch with an existing conversation stays on the home page", async ({
   await expect(page.getByTestId("transcript")).toHaveCount(0)
 })
 
+test("the compact window title bar spans the sidebar, conversation and panel", async ({ page }) => {
+  await page.goto("/")
+  await page.getByTestId("dest-chats").click()
+  const bar = page.getByRole("banner")
+  const list = page.getByTestId("conversation-list")
+  const leading = page.getByTestId("titlebar-leading")
+  const title = page.getByTestId("thread-title")
+  const panel = page.getByTestId("side-panel")
+  const tabs = panel.getByRole("tablist")
+  const panelToggle = bar.getByRole("button", { name: /toggle side panel/i })
+  const hideList = bar.getByRole("button", { name: "Hide conversations" })
+
+  await expect(tabs).toBeVisible()
+  const barBox = (await bar.boundingBox())!
+  const listBox = (await list.boundingBox())!
+  const leadingBox = (await leading.boundingBox())!
+  const titleBox = (await title.boundingBox())!
+  const panelBox = (await panel.boundingBox())!
+  const toggleBox = (await panelToggle.boundingBox())!
+  expect(barBox.x + barBox.width).toBe(panelBox.x + panelBox.width)
+  expect(panelBox.y).toBe(barBox.y + barBox.height)
+  expect(Math.abs(leadingBox.width - listBox.width)).toBeLessThan(1)
+  expect(titleBox.x).toBeGreaterThan(leadingBox.x + leadingBox.width)
+  expect(titleBox.x).toBeLessThan(leadingBox.x + leadingBox.width + 20)
+  expect(toggleBox.x).toBeGreaterThan(panelBox.x)
+
+  const toggleListX = (await hideList.boundingBox())?.x
+  await hideList.click()
+  const showList = bar.getByRole("button", { name: "Show conversations" })
+  await expect(showList).toBeVisible()
+  expect((await showList.boundingBox())?.x).toBe(toggleListX)
+  await showList.click()
+  await panelToggle.click()
+  await expect(tabs).toBeHidden()
+  expect((await panelToggle.boundingBox())?.x).toBe(toggleBox.x)
+})
+
+for (const { surface, mac, desktop } of [
+  { surface: "macOS desktop", mac: true, desktop: true },
+  { surface: "macOS browser", mac: true, desktop: false },
+  { surface: "Windows desktop", mac: false, desktop: true },
+]) {
+  test(`${surface} uses the right title bar height for larger UI text`, async ({ page, request }) => {
+    await page.addInitScript(({ mac }) => {
+      Object.defineProperty(navigator, "platform", { value: mac ? "MacIntel" : "Win32" })
+      Object.defineProperty(navigator, "userAgent", { value: mac ? "Mac OS X" : "Windows NT" })
+    }, { mac })
+    const route = desktop ? "/?shell=desktop" : "/"
+    await page.goto(route)
+    const bar = page.getByRole("banner")
+    const hasTrafficLights = mac && desktop
+    const normalHeight = hasTrafficLights ? "46px" : "42px"
+    await expect(bar).toBeVisible()
+    if (hasTrafficLights) {
+      const barBounds = (await bar.boundingBox())!
+      const controls = [
+        bar.getByRole("button", { name: "Hide conversations" }),
+        bar.getByTestId("thread-title"),
+        bar.getByRole("button", { name: "Toggle side panel" }),
+      ]
+      for (const control of controls) {
+        const box = (await control.boundingBox())!
+        expect.soft(box.y + box.height / 2).toBeCloseTo(barBounds.y + barBounds.height / 2, 1)
+      }
+    }
+    expect(await bar.evaluate((el) => getComputedStyle(el).height)).toBe(normalHeight)
+    const settings = await request.get("/api/settings")
+    const previous = (await settings.json()).settings.ui.ui_font_size
+    try {
+      const updated = await request.put("/api/settings", { data: { ui: { ui_font_size: "large" } } })
+      await expect(updated).toBeOK()
+      await page.reload()
+      await expect(page.locator("html")).toHaveAttribute("data-ui-font-size", "large")
+      await expect(bar).toHaveCSS("height", hasTrafficLights ? "46px" : "51px")
+
+      await page.getByRole("button", { name: "Settings", exact: true }).click()
+      await expect(page.getByRole("dialog")).toBeVisible()
+      const settingsStrip = page.getByTestId("settings-titlebar")
+      if (hasTrafficLights) await expect(settingsStrip).toHaveCSS("height", "46px")
+      else await expect(settingsStrip).toHaveCount(0)
+    } finally {
+      const restored = await request.put("/api/settings", { data: { ui: { ui_font_size: previous } } })
+      await expect(restored).toBeOK()
+    }
+  })
+}
+
 test("keyboard shortcuts open the palette, a conversation and the panel", async ({
   page,
 }) => {
@@ -41,22 +128,26 @@ test("keyboard shortcuts open the palette, a conversation and the panel", async 
   await expect(page.getByRole("tab", { name: "Agents" })).toBeVisible()
 
   // ⌘B hides the list column the way Codex hides theirs, and brings it
-  // back. The icon rail stays, and the control lives in the title bar so
-  // hiding the list cannot trap the reader.
+  // back. The icon rail stays, and the controls live in the title bar so
+  // hiding the list cannot trap the reader. New and search belong to that
+  // same row now, not to a second header inside the list.
   const hideList = page.getByRole("banner").getByRole("button", {
     name: "Hide conversations",
   })
   await expect(hideList).toBeVisible()
   const newConversation = page.getByRole("button", { name: "New conversation", exact: true })
-  const headerBox = await page.getByRole("banner").boundingBox()
-  const listBox = await newConversation.boundingBox()
-  expect(headerBox).not.toBeNull()
-  expect(listBox).not.toBeNull()
-  expect(headerBox!.y + headerBox!.height).toBeLessThanOrEqual(listBox!.y + 1)
+  await expect(
+    page.getByRole("banner").getByRole("button", { name: "New conversation", exact: true }),
+  ).toBeVisible()
+  const search = page
+    .getByRole("banner")
+    .getByRole("button", { name: "Search conversations (⌘K)" })
+  await expect(search).toBeVisible()
 
   await expect(newConversation).toBeVisible()
   await page.keyboard.press("ControlOrMeta+b")
   await expect(newConversation).toBeHidden()
+  await expect(search).toBeHidden()
   await expect(page.getByTestId("dest-rail")).toBeVisible()
   await expect(page.getByTestId("dest-projects")).toBeVisible()
   await expect(

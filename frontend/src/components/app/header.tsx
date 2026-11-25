@@ -1,9 +1,10 @@
-import { MessageSquare, PanelLeft, PanelRight, SquareTerminal, WifiOff } from "lucide-react"
+import { Folder, MessageSquare, MessageSquarePlus, PanelLeft, PanelRight, Search, SquareTerminal, WifiOff } from "lucide-react"
 import { useEffect, useState, type RefObject } from "react"
 
 import { CopyButton } from "@/components/app/copy-button"
 import { AskMark } from "@/components/app/ask-mark"
 import { WaitMark } from "@/components/app/wait-mark"
+import { useVisibleDest } from "@/components/app/dest-rail"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -28,9 +29,10 @@ export interface SideChatToggle {
   toggle: () => void
 }
 
-/** The window title bar. It spans the full width: traffic lights + sidebar
- *  toggle on the left (Codex/Cursor), the conversation on the rest. In desktop
- *  mode it is also the drag region; a double-click zooms like Finder. */
+const actionClass = "size-(--titlebar-control) shrink-0 [&_svg]:size-(--titlebar-icon)"
+
+/** The full-width window title bar. On desktop its blank areas drag the
+ *  window and a double-click zooms like Finder. */
 export function Header({
   thread,
   project,
@@ -43,6 +45,8 @@ export function Header({
   onTogglePanel,
   onToggleSidebar,
   onOpenTerminal,
+  onNew,
+  onSearch,
   terminalOpen,
   terminalEnabled,
   sideChat,
@@ -63,12 +67,15 @@ export function Header({
   onTogglePanel: () => void
   onToggleSidebar: () => void
   onOpenTerminal: () => void
+  onNew: () => void
+  onSearch: () => void
   terminalOpen: boolean
   terminalEnabled: boolean
   sideChat?: SideChatToggle
 }) {
   const t = useT()
   const scheduled = useApp((s) => s.scheduleInboxOpen)
+  const pane = useVisibleDest()
   // The elapsed clock ticks here, not in App: a once-a-second setState in
   // the shell used to re-parse every markdown block in the conversation.
   const [now, setNow] = useState(() => Date.now())
@@ -84,56 +91,75 @@ export function Header({
   const listLabel = sidebarOpen
     ? t("header.hideConversations")
     : t("header.showConversations")
-  const listToggle = (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      className="shrink-0"
-      onClick={onToggleSidebar}
-      aria-label={listLabel}
-      title={`${listLabel} (⌘B)`}
-    >
-      <PanelLeft />
-    </Button>
-  )
-  // The list column hides. The icon rail does not, so the title still
-  // starts where the transcript does. On the desktop the traffic lights
-  // are wider than that rail; the spacer has to clear them or the toggle
-  // sits under the yellow blob.
-  const leadingWidth = sidebarOpen
-    ? `var(${SIDEBAR_WIDTH_VAR}, ${SIDEBAR_WIDTH_DEFAULT}px)`
-    : trafficInset
-      ? "max(var(--dest-rail-width), var(--traffic-light-inset))"
-      : "var(--dest-rail-width)"
   return (
     <header
       data-drag-region
-      className="flex h-12 shrink-0 items-center border-b border-border bg-background"
+      className={cn(
+        "flex shrink-0 items-center bg-background",
+        // Paint the rule outside flex layout so the controls centre in the whole native strip.
+        trafficInset
+          ? "relative h-(--macos-titlebar-height) after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-border"
+          : "h-(--titlebar-height) border-b border-border",
+      )}
     >
       <div
         data-testid="titlebar-leading"
         className={cn(
-          "flex h-full shrink-0 items-center",
-          sidebarOpen && (trafficInset ? "pl-traffic" : "pl-3"),
+          "flex h-full min-w-(--dest-rail-width) shrink-0 items-center pr-2 text-muted-foreground",
+          trafficInset ? "pl-traffic" : "pl-3",
+          sidebarOpen && "border-r border-sidebar-border bg-sidebar",
         )}
-        style={{ width: leadingWidth }}
+        style={{ width: sidebarOpen ? `var(${SIDEBAR_WIDTH_VAR}, ${SIDEBAR_WIDTH_DEFAULT}px)` : undefined }}
       >
-        {sidebarOpen ? listToggle : null}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className={actionClass}
+          onClick={onToggleSidebar}
+          aria-label={listLabel}
+          aria-expanded={sidebarOpen}
+          title={`${listLabel} (⌘B)`}
+        >
+          <PanelLeft />
+        </Button>
+        {sidebarOpen && (pane === "projects" || pane === "chats") ? (
+          <div className="ml-auto flex items-center gap-1">
+            {pane === "chats" ? (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className={actionClass}
+                onClick={onNew}
+                aria-label={t("sidebar.newConversation")}
+                title={t("sidebar.newConversation")}
+              >
+                <MessageSquarePlus />
+              </Button>
+            ) : null}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className={actionClass}
+              onClick={onSearch}
+              aria-label={t("sidebar.search")}
+              title={t("sidebar.search")}
+            >
+              <Search />
+            </Button>
+          </div>
+        ) : null}
       </div>
-      {sidebarOpen ? null : listToggle}
-      <div className="flex min-w-0 flex-1 items-center gap-2 pr-4">
-        {/* One line: a stacked project name under the title was two rows in
-            a 48px bar. The model name lives on the composer; repeating it here
-            ate the same row. */}
+      <div className="flex min-w-0 flex-1 items-center gap-2 px-3">
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
           {!scheduled && project ? (
             <>
+              <Folder aria-hidden="true" className="size-(--titlebar-icon) shrink-0 text-muted-foreground" />
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
                     className={cn(
                       chromeTypeClass,
-                      "max-w-48 shrink-0 truncate text-muted-foreground",
+                      "min-w-0 max-w-48 truncate text-muted-foreground",
                     )}
                     data-testid="thread-project"
                   >
@@ -148,7 +174,7 @@ export function Header({
             </>
           ) : null}
           <p
-            className={cn(chromeTypeClass, "min-w-0 truncate")}
+            className={cn(chromeTypeClass, "min-w-0 truncate font-medium")}
             data-testid="thread-title"
           >
             {scheduled ? t("schedule.inboxTitle") : thread?.title || t("header.newConversation")}
@@ -217,7 +243,7 @@ export function Header({
           </Tooltip>
         ) : null}
 
-        <div className="flex items-center" data-no-drag>
+        <div className="flex shrink-0 items-center gap-1" data-no-drag>
           <Button
             variant="ghost"
             size="icon-sm"
@@ -230,7 +256,10 @@ export function Header({
                 : t("header.terminalDisabled")
             }
             aria-pressed={terminalOpen}
-            className={terminalOpen ? "text-foreground" : "text-muted-foreground"}
+            className={cn(
+              actionClass,
+              terminalOpen ? "text-foreground" : "text-muted-foreground",
+            )}
           >
             <SquareTerminal />
           </Button>
@@ -245,7 +274,10 @@ export function Header({
               title={t(sideChat.open ? "sideChat.close" : "sideChat.open")}
               aria-expanded={sideChat.open}
               aria-controls={sideChat.open ? "side-chat" : undefined}
-              className={sideChat.open ? "text-foreground" : "text-muted-foreground"}
+              className={cn(
+                actionClass,
+                sideChat.open ? "text-foreground" : "text-muted-foreground",
+              )}
             >
               <MessageSquare />
             </Button>
@@ -256,8 +288,9 @@ export function Header({
               size="icon-sm"
               onClick={onTogglePanel}
               aria-label={t("header.togglePanel")}
+              aria-expanded={panelOpen}
               title={`${t("header.togglePanel")} (⌘\\)`}
-              className={panelOpen ? "text-foreground" : "text-muted-foreground"}
+              className={cn(actionClass, panelOpen ? "text-foreground" : "text-muted-foreground")}
             >
               <PanelRight />
             </Button>

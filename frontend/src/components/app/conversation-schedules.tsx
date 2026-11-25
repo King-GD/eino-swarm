@@ -23,7 +23,7 @@ function scheduleLinkKey(rows: Schedule[]): string {
 }
 
 /** Waits aimed at this conversation, and the job that minted it.
- *  Sits above the rail tabs so it stays visible without a tab change. */
+ *  Sits below the panel tabs so it stays visible without a tab change. */
 export function ConversationSchedules({ threadId }: { threadId?: string }) {
   const t = useT()
   const schedules = useApp((s) => s.schedules)

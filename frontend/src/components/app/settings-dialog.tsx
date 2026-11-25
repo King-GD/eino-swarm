@@ -128,14 +128,15 @@ export const SETTINGS_HOME_SECTION: SettingsSectionId = "general"
  *  column so the sidebar colour runs under the traffic lights. */
 const RAIL_WIDTH = "w-56"
 
-/** Empty strip matching native InvisibleTitleBarHeight (h-12). Settings
- *  covers the app header, so without this the lights sit on Back to app. */
+/** Empty strip matching native InvisibleTitleBarHeight.
+ *  Settings covers the app header, so without this the lights sit on Back to
+ *  app. */
 function SettingsTitlebar() {
   return (
     <div
       data-drag-region
       data-testid="settings-titlebar"
-      className="flex h-12 shrink-0"
+      className="flex h-(--macos-titlebar-height) shrink-0"
     >
       <div
         className={cn(

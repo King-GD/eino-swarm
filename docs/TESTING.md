@@ -7686,8 +7686,9 @@ Several things are tested here, some as pure logic and some in jsdom:
   ends.
 - **`src/components/app/header.tsx`**, rendered in jsdom: the title bar always
   has a Hide/Show conversations control, pads for traffic lights on desktop,
-  sizes the leading cluster from `--zwai-sidebar-width` while the list is
-  open so the title starts with the transcript, is marked as window chrome so
+  keeps the toggle next to the traffic lights when the list closes, sizes the
+  leading cluster from `--zwai-sidebar-width` while the list is open, keeps
+  the named list actions within that cluster, is marked as window chrome so
   a double-click can zoom, and a conversation in a project prefixes the title
   with the project name on the same line — which directory the tools are
   pointed at is otherwise invisible. The model name is not repeated here; it
@@ -7697,6 +7698,10 @@ Several things are tested here, some as pure logic and some in jsdom:
   `awaiting_continue` stays Waiting. Conversation width, developer view, who
   else is connected, theme and language live in the sidebar app menu, not on
   this bar.
+  Shell browser tests check the full-width title bar, title inset, stable
+  toggle positions and panel tabs below the bar. The macOS desktop branch
+  stays at 46px, with the title and controls centered across the full height.
+  The browser and Windows branches follow UI font size.
 - **`src/lib/settings-persist.ts`**: edits coalesce into one `PUT` after
   400ms; `flush` writes immediately; a failed write does not block the next.
   Only changed sections are submitted; a changed `ui` section carries normalized
@@ -8047,8 +8052,9 @@ a client at all is verified in the engine and reducer tests.
   checkout's source and served-asset checks read-only.
   Double-click the title bar: the window should zoom,
   then restore on the next double-click. On macOS the traffic lights and the
-  sidebar toggle must share one baseline in that title bar; New conversation
-  starts on the row below.   Opening Settings, **Back to app** must sit on the
+  sidebar toggle must share one center line in the compact title bar. The
+  toggle stays beside the lights when the list closes, and inspector tabs
+  start below the title bar. Opening Settings, **Back to app** must sit on the
   row under the lights, not in the drag strip. On macOS, the first desktop
   launch may prompt for Local Network access (LAN model endpoints); denying
   it looks like `no route to host` while Terminal curl still works. ⌘Q should return the shell promptly without

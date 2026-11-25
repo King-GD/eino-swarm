@@ -2,6 +2,7 @@ import { Loader2 } from "lucide-react"
 import { useId } from "react"
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import type { TooltipProps } from "recharts"
+import { glassSurface } from "../../../lib/glass"
 import { useEasmText } from "../../../lib/easm/messages"
 import type { EasmResult } from "../../../lib/easm/types"
 
@@ -12,7 +13,7 @@ const LINE = "hsl(var(--chart-1))"
 function HeatTooltip({ active, payload, label }: TooltipProps<number, string>) {
   if (!active || !payload?.length) return null
   return (
-    <div className="rounded-md border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-md">{label}</div>
+    <div className={`rounded-lg px-3 py-2 text-xs text-popover-foreground ${glassSurface}`}>{label}</div>
   )
 }
 

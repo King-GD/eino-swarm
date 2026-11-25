@@ -156,7 +156,6 @@ export function RightPanel({
         min={260}
         max={640}
       />
-      <ConversationSchedules key={threadId ?? ""} threadId={threadId} />
       <Tabs
         value={visibleTab}
         onValueChange={(v) => {
@@ -165,21 +164,29 @@ export function RightPanel({
         }}
         className="flex min-h-0 flex-1 flex-col"
       >
-        <div data-panel-tabs="" className="thin-scrollbar overflow-x-auto border-b border-border px-2 py-1.5">
-          <TabsList className="h-auto min-w-full justify-start gap-2 bg-transparent p-0">
+        <div
+          data-panel-tabs=""
+          className="thin-scrollbar shrink-0 overflow-x-auto border-b border-border px-2 py-1.5"
+        >
+          <TabsList className="h-auto min-w-max justify-start gap-2 bg-transparent p-0">
             {groups.filter((group) => group.tabs.length > 0).map(({ scope, label, icon: Icon, tabs }) => (
               <div
                 key={scope}
                 role="group"
                 aria-label={label}
                 data-testid={`inspector-${scope}-scope`}
-                className={cn("space-y-0.5", scope === "project" && "border-l border-border pl-2")}
+                className={cn("flex items-center gap-1.5", scope === "project" && "border-l border-border pl-2")}
               >
-                <div className={cn("flex items-center gap-1 px-1 text-muted-foreground", chromeTypeClass)}>
-                  <Icon aria-hidden="true" className="size-3 shrink-0" />
-                  <span className="max-w-32 truncate" title={label}>{label}</span>
+                {/* The scope names would push the second group off a 352px
+                    panel; the icon and the divider carry the grouping, and
+                    the group's aria-label still names it. */}
+                <div
+                  className="flex shrink-0 items-center text-muted-foreground"
+                  title={label}
+                >
+                  <Icon aria-hidden="true" className="size-4" />
                 </div>
-                <div data-tab-group="" className="flex rounded-md bg-muted p-0.5">
+                <div data-tab-group="" className="flex shrink-0 rounded-md bg-muted p-0.5">
                   {tabs.map(({ id, label: tabLabel }) => (
                     <TabsTrigger key={id} value={id} className={cn(chromeTypeClass, "px-1.5")}>
                       {tabLabel}
@@ -196,6 +203,7 @@ export function RightPanel({
             ))}
           </TabsList>
         </div>
+        <ConversationSchedules key={threadId ?? ""} threadId={threadId} />
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {registeredPanels.map((panel) => (

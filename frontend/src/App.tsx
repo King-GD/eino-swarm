@@ -416,13 +416,14 @@ function AppShell() {
         onTogglePanel={togglePanel}
         onToggleSidebar={toggleSidebar}
         onOpenTerminal={spawnTerminal}
+        onNew={() => void startThread()}
+        onSearch={() => setPaletteOpen(true)}
         sideChat={side.toggle}
       />
       <ShellColumns>
         <AppSidebar
             listOpen={sidebarOpen}
             onNew={() => void startThread()}
-            onSearch={() => setPaletteOpen(true)}
             onSettings={openSettings}
             onToggleTheme={toggleTheme}
             onToggleLocale={toggleLocale}
@@ -632,7 +633,6 @@ function AppProjectDialog({
 function AppSidebar({
   listOpen,
   onNew,
-  onSearch,
   onSettings,
   onToggleTheme,
   onToggleLocale,
@@ -646,7 +646,6 @@ function AppSidebar({
 }: {
   listOpen: boolean
   onNew: () => void
-  onSearch: () => void
   onSettings: () => void
   onToggleTheme: () => void
   onToggleLocale: () => void
@@ -696,7 +695,6 @@ function AppSidebar({
       onRename={(id, title) => void renameThread(id, title)}
       onDelete={(id) => void deleteThread(id)}
       onReorder={(ids) => void reorderThreads(ids)}
-      onSearch={onSearch}
       onSettings={onSettings}
       onToggleTheme={onToggleTheme}
       onToggleLocale={onToggleLocale}

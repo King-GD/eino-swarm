@@ -20,7 +20,9 @@ import type { TooltipProps } from "recharts"
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { chartSpecsEqual, type ChartSpec } from "@/lib/chart-spec"
+import { glassSurface } from "@/lib/glass"
 import { useT } from "@/lib/use-t"
+import { cn } from "@/lib/utils"
 
 export const CHART_SERIES_PAINT = [
   "hsl(var(--chart-1))",
@@ -239,7 +241,7 @@ function ChartTooltip({
 }: TooltipProps<number, string> & { unit?: string }) {
   if (!active || !payload?.length) return null
   return (
-    <div className="min-w-40 rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-md">
+    <div className={cn("min-w-40 rounded-lg px-3 py-2 text-xs text-popover-foreground", glassSurface)}>
       {label != null && label !== "" ? (
         <div className="mb-1 font-medium">{String(label)}</div>
       ) : null}

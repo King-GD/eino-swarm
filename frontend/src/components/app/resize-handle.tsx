@@ -42,6 +42,7 @@ export function ResizeHandle({
   return (
     <div
       role="separator"
+      data-no-drag
       aria-orientation={vertical ? "horizontal" : "vertical"}
       aria-label={label}
       tabIndex={0}
