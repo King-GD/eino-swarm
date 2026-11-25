@@ -1126,6 +1126,14 @@ opens the full graph and locates and opens a titled page via its alias.
   identity. Its reachability cases and seeded faults check the model's
   sensitivity. The Go and browser tests exercise the implementation.
 - Native desktop acceptance uses the isolated ci-macOS candidate procedure.
+- `internal/remote/knowledge_test.go` drives real sealed pairlink frames
+  through project search and pagination, full Unicode page reads, scope/token
+  refusal, mid-read edits and global disable. The phone transfer tests check
+  scope, chunk identity and checksums before accepting a page.
+  `mobile/e2e/project-knowledge.spec.ts` exercises project entry, search,
+  navigation, source excerpts and old-PC feedback in both browser profiles.
+  The packaged iOS check uses `IOS_LAYOUT_SCENARIO=ios-project-knowledge.swift`
+  with the disposable fixture and reaches a source through the native app.
 
 ## Original project-history SQL and source reports (`F-410`, `C-036`)
 

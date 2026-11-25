@@ -1,9 +1,11 @@
+import { knowledgeEn } from "./messages-knowledge"
 import { accountEn } from "./messages-account"
 import { pcWaitEn } from "./messages-pc-wait"
 import { generationEn } from "./messages-generation"
 import { speechEn } from "./messages-speech"
 export const en = {
   ...pcWaitEn,
+  ...knowledgeEn,
   ...speechEn,
   "account.capabilitiesUnknown": "Gateway capabilities could not be verified. Your saved settings are retained; retry below.",
   "selection.actions": "Selected text actions",

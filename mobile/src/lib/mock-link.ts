@@ -576,7 +576,7 @@ export class MockHost {
     return {
       ...(compactHistoryFixture(th.id) ? { turns: compactTurnSummaries() } : {}),
       ...(new URLSearchParams(location.search).get("history") === "restore-pending" && !th.running ? { turns: [{ id: "stored-before-restart", status: "running" }] } : {}),
-      id: th.id,
+      id: th.id, project_id: th.projectID || undefined,
       title: th.title,
       ...(this.legacyCompletion ? {} : { unread: (th.completedSeq ?? 0) > (th.readSeq ?? 0), completed_seq: th.completedSeq ?? 0 }),
       ...mockGoalDetail(th),

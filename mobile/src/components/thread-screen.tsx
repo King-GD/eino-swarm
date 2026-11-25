@@ -10,6 +10,7 @@ import { IterationLimitCard } from "@/components/iteration-limit-card"
 import { Composer, type ComposerExtra } from "@/components/composer"
 import { DeliveryMenu } from "@/components/delivery-menu"
 import { FileBrowser } from "@/components/file-browser"
+import { KnowledgeButton } from "@/components/knowledge-screen"
 import { GoalBanner, ScheduleBanner } from "@/components/status-banners"
 import { SelectionActions } from "@/components/selection-actions"
 import { ThreadLog } from "@/components/thread-blocks"
@@ -46,6 +47,7 @@ export function ThreadScreen({
   caughtUp = true,
   onBack,
   onOpenAccount,
+  onOpenKnowledge,
   onOlder,
   followups = [],
   onSend,
@@ -84,6 +86,7 @@ export function ThreadScreen({
   caughtUp?: boolean
   onBack: () => void
   onOpenAccount?: () => void
+  onOpenKnowledge?: () => void
   onOlder?: (turnId?: string) => Promise<number | undefined> | void
   followups?: FollowupView[]
   onSend: (text: string, extra?: ComposerExtra) => void
@@ -384,6 +387,7 @@ export function ThreadScreen({
             <GitBranch className="size-5" aria-hidden />
           </Button>
         ) : null}
+        {agentPage === "chat" && onOpenKnowledge ? <KnowledgeButton onClick={onOpenKnowledge} /> : null}
         {agentPage === "chat" && onOpenAccount ? <AccountButton onClick={onOpenAccount} /> : null}
       </header>
       <GoalBanner

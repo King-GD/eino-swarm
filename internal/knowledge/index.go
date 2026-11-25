@@ -117,14 +117,26 @@ func cloneConnections(connections []Connection) []Connection {
 // Search matches IDs, titles, aliases and Markdown content in deterministic
 // page order. Exact normalized identity matches precede substring matches.
 func (s *Snapshot) Search(query string, limit int) []PageRef {
+	return s.SearchPage(query, 0, limit)
+}
+
+// SearchPage returns the same ordered matches without allocating the earlier pages.
+func (s *Snapshot) SearchPage(query string, offset, limit int) []PageRef {
 	result := []PageRef{}
-	if limit <= 0 {
+	if offset < 0 || limit <= 0 {
 		return result
+	}
+	add := func(page PageRef) {
+		if offset > 0 {
+			offset--
+		} else {
+			result = append(result, page)
+		}
 	}
 	key := normalizedName(query)
 	matched := map[string]bool{}
 	for _, page := range s.names[key] {
-		result = append(result, page)
+		add(page)
 		matched[page.ID] = true
 		if len(result) == limit {
 			return result
@@ -133,7 +145,7 @@ func (s *Snapshot) Search(query string, limit int) []PageRef {
 	for _, id := range s.ordered {
 		page := s.pages[id].page
 		if !matched[id] && pageContains(page, key) {
-			result = append(result, page.ref())
+			add(page.ref())
 			if len(result) == limit {
 				break
 			}

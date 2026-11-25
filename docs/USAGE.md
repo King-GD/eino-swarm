@@ -850,6 +850,12 @@ Search by title or alias to focus a page. Select any node to open it, or
 use the open button beside the search field. **Fit the whole knowledge
 graph** restores the overview.
 
+On a paired phone, tap **Knowledge** beside a project or in a project
+conversation header. Search or page through the results, open a document
+and follow its Wiki links, related pages or backlinks. Expand a source excerpt
+to read the saved original text, or tap an available source to open its
+conversation on the phone.
+
 Open **Distill** from **Memory** or **Knowledge**. Choose **Latest turn** for
 the most recent successful turn, **Current task** for this conversation or
 **Current project** for the project's retained conversations, including archived

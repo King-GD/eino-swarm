@@ -1,3 +1,4 @@
+import { knowledgeZh } from "./messages-knowledge"
 import { accountZh } from "./messages-account"
 import { pcWaitZh } from "./messages-pc-wait"
 import { generationZh } from "./messages-generation"
@@ -6,6 +7,7 @@ import type { MessageKey } from "./messages-en"
 
 export const zh: Record<MessageKey, string> = {
   ...pcWaitZh,
+  ...knowledgeZh,
   ...speechZh,
   "account.capabilitiesUnknown": "暂时无法确认网关可用功能，已保留设置，请点击下方重试。",
   "selection.actions": "选中文字操作",

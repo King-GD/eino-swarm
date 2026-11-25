@@ -29,12 +29,13 @@ Only current behavior is listed here. See [FEATURES.md](FEATURES.md) for user en
 
 ## C-053 Project knowledge keeps stable pages and attributable sources
 
-- 范围：`F-138`，项目知识工具、PC／Web 浏览、备份与删除。一个项目一份 schema，文件为事实来源。全局开关默认开启，关闭后隐藏面板、拒绝知识库工具与写入。首个非计划回合可幂等初始化 schema，普通状态读取不会创建 schema。
+- 范围：`F-138`，项目知识工具、PC／Web 与配对手机浏览、备份与删除。一个项目一份 schema，文件为事实来源。全局开关默认开启，关闭后 PC／Web 隐藏面板，知识库工具、配对读取与写入均被拒绝。首个非计划回合可幂等初始化 schema，普通状态读取不会创建 schema。
 - 图谱：每个已加载页面对应一个节点，显示标题，以页面 ID 定位。已解析的 Wiki 链接和有效类型关系按无向页面对合并，孤立页面保留，缺页仍列在待处理。改标题不改变连线。
 - 文件身份：页面 ID 为项目内唯一稳定 slug。创建与更新校验规范化后的标题和别名；修改标题保留 ID。结构化关系按 schema 校验，缺少必填关系进入待处理。视图按路径截断环路，允许多父节点。正文 wikilink 与反链可从文件重建。
 - 写入：宿主从可信回合身份盖章。引擎内更新、删除和增量 schema 共用项目写入锁，以 revision 为前置条件，验证后原子发布文件。直接改文件不参与引擎锁。代理的知识工具只可新增 schema 定义。计划模式只读，Nuwa 与共享协作记录使用同样的写权限。知识工具按项目和回合绑定。
 - 证据：工具写入的历史引用必须是本项目中存在的可引用记录。时间、来源分类和持久身份由宿主确定。读时复核可用性，删除、倒带或项目归属变化后保留引用和页面，并拒绝将复用的 seq 当作原记录。可编辑的引导消息绑定保存时的正文指纹，改写同一消息后旧引用显示不可用。直接编辑的无盖章定位符按当前历史解析。可追溯引用仍需检查语义支持。外部 URI 不会触发宿主请求。
 - 客户端：右侧范围不改变标签值和现有激活行为。项目级提炼与 Memory 共用后台复查，范围、权限和回执见 `C-054`。HTTP 页面路径须是有效 slug。删除项目清除应用管理的知识目录，项目和完整备份包含 schema 与页面。
+- 配对读取：仅通过当前 PC 已配对的连接发起。列表按项目分页，页面读取校验 slug。每条连接仅保留一份有界的页面快照，分块校验项目、页面、传输身份、偏移和 SHA-256 后才显示；完成、取消或断开时释放。项目删除和全局关闭撤销后续分块。切换电脑或数据代次丢弃先前页面及未完成请求。
 - 实现 `internal/knowledge`、`internal/engine/knowledge.go`、`internal/server/project_knowledge.go`、`frontend/src/components/app/knowledge-panel.tsx`；验证：`internal/server/project_knowledge_test.go`、`internal/engine/knowledge_test.go`、`internal/backup/backup_test.go`、`frontend/e2e/project-knowledge.spec.ts`、`models/knowledge/ProjectKnowledge.tla`。
 
 ## C-048 Voice configuration follows the execution source
