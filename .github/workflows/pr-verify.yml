@@ -1,0 +1,214 @@
+name: PR verification
+
+# Pull requests into the verification branch only. Drafts are not filtered:
+# an unfinished pull request still has to keep the checks green.
+on:
+  pull_request:
+    branches: [ci/verify]
+
+# The workflow can read the checkout and nothing else. No job needs a secret.
+permissions:
+  contents: read
+
+# A newer push to the same pull request supersedes its older run.
+concurrency:
+  group: pr-verify-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  phone:
+    name: Phone bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The pull request head, not the synthetic merge commit, so failures
+          # name the contributor's own tree.
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      # The phone bundle must stand on its own: these checks pass even when no
+      # PC frontend install exists anywhere on the runner.
+      - name: Assert the PC bundle is absent
+        run: test ! -e frontend/node_modules
+      - name: Install phone packages
+        run: cd mobile && npm ci
+      - name: Build phone bundle
+        run: cd mobile && npm run build
+      - name: Phone unit tests
+        run: cd mobile && npm test
+      - name: Assert the phone checks did not create the PC bundle
+        run: test ! -e frontend/node_modules
+
+  pc-web:
+    name: PC/Web checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # `make frontend` builds the bundle through the Go generator.
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install frontend packages
+        run: cd frontend && npm ci
+      - name: Type check
+        run: cd frontend && npm run lint
+      # Builds dist/ and writes its source stamp. It runs before the unit tests
+      # so a bundle regression reports on its own, separate from a test failure.
+      - name: Production bundle
+        run: make frontend
+      - name: Front-end unit tests
+        run: cd frontend && npm test
+
+  # The offline browser suite is a separate job so its long run cannot hide the
+  # type, bundle and unit results above, and a failing unit test does not stop
+  # the browser evidence from being produced.
+  pc-web-e2e:
+    name: PC/Web offline E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      # The native shell needs gtk/webkit; the Linux runner builds the headless
+      # server entry instead. Playwright's web server inherits this too.
+      GOFLAGS: "-tags=server"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install frontend packages
+        run: cd frontend && npm ci
+      # The bundle and its source stamp let the web server serve dist/ rather
+      # than rebuild it while the suite is already running.
+      - name: Production bundle
+        run: make frontend
+      # Compile the server entry once, before Playwright starts, so the suite's
+      # 180-second web-server start budget is not spent on a cold build. The
+      # disposable binary only warms the Go build cache.
+      - name: Warm the Go build cache
+        run: go build -o "$RUNNER_TEMP/zwai" ./cmd/zwai
+      - name: Install the suite browser and its Linux dependencies
+        run: cd frontend && npx playwright install --with-deps chromium
+      - name: Offline browser E2E
+        run: cd frontend && npm run e2e
+      - name: Keep the E2E evidence when the suite fails
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-evidence-pr-${{ github.event.pull_request.number }}-${{ github.run_attempt }}
+          path: |
+            frontend/test-results/
+            frontend/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  go:
+    name: Go checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # Only the headless server entry is built and tested on Linux. CGO stays
+      # on because the race tests need it.
+      GOFLAGS: "-tags=server"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Formatting
+        run: make fmt-check
+      - name: Vet
+        run: make vet
+      - name: Compile every package
+        run: go build ./...
+      - name: Race tests
+        run: make test-go
+
+  docs:
+    name: Documentation and Python tools
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Documentation and tool checks
+        run: make docs-check
+
+  upstream:
+    name: Upstream merge check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          # merge-tree needs both sides' full history to find the merge bases.
+          fetch-depth: 0
+          persist-credentials: false
+      # Read-only compatibility probe. One fetch serves both the recorded base
+      # revision and the comparison, so they cannot name different upstream
+      # commits when upstream moves during the run. Nothing is merged, committed
+      # or pushed.
+      - name: Fetch upstream main and compare trees
+        run: |
+          git fetch --no-tags https://github.com/LubyRuffy/eino-swarm.git refs/heads/main
+          base=$(git rev-parse FETCH_HEAD)
+          head=$(git rev-parse HEAD)
+          {
+            echo "### Compared revisions"
+            echo ""
+            echo "- candidate head: \`$head\`"
+            echo "- upstream base: \`$base\`"
+          } > revisions.txt
+          cat revisions.txt
+          set +e
+          git merge-tree --write-tree --name-only "$base" HEAD > merge-tree.txt 2>&1
+          status=$?
+          set -e
+          cat merge-tree.txt
+          {
+            cat revisions.txt
+            echo ""
+            echo "### merge-tree exit status"
+            echo '```text'
+            echo "$status"
+            echo '```'
+            echo "### merge-tree output"
+            echo '```text'
+            cat merge-tree.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" -ne 0 ]; then
+            echo "merge-tree against upstream main failed (exit $status); see the step summary" >&2
+            exit "$status"
+          fi
