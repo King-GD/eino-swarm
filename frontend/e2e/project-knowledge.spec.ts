@@ -207,7 +207,7 @@ test("Wiki build shows saved source batches before a long record finishes", asyn
   await page.route((url) => url.pathname === endpoint, async (route) => {
     const request = route.request()
     if (request.method() === "POST") {
-      expect(request.postDataJSON()).toEqual({ scope: "thread", thread_id: threadId, wiki_graph: true })
+      expect(request.postDataJSON()).toEqual({ scope: "thread", thread_id: threadId, wiki_review: true, wiki_graph: true })
       started = true
     } else if (new URL(request.url()).searchParams.get("wiki_graph") !== "true") {
       await route.continue()
@@ -224,7 +224,7 @@ test("Wiki build shows saved source batches before a long record finishes", asyn
   try {
     await knowledgeTab(page).click()
     await page.getByTestId("knowledge-build").click()
-    await page.getByRole("menuitem", { name: "Current task", exact: true }).click()
+    await page.getByRole("menuitem", { name: "Current task with model review", exact: true }).click()
     const status = page.getByTestId("project-wiki-build-status")
     await expect(status.getByTestId("wiki-source-batches")).toHaveText("The first source batch is awaiting verification.")
     accepted = true
@@ -254,7 +254,7 @@ test("Wiki build opens and cites a node from the local graph while review is sti
   await page.route((url) => url.pathname === endpoint, async (route) => {
     const request = route.request()
     if (request.method() === "POST") {
-      expect(request.postDataJSON()).toEqual({ scope: "thread", thread_id: threadId, wiki_graph: true })
+      expect(request.postDataJSON()).toEqual({ scope: "thread", thread_id: threadId, wiki_review: true, wiki_graph: true })
       started = true
     } else if (new URL(request.url()).searchParams.get("wiki_graph") !== "true") {
       await route.continue()
@@ -282,7 +282,7 @@ test("Wiki build opens and cites a node from the local graph while review is sti
     expect((await page.request.post(`${project}/knowledge`)).ok()).toBe(true)
     await knowledgeTab(page).click()
     await page.getByTestId("knowledge-build").click()
-    await page.getByRole("menuitem", { name: "Current task", exact: true }).click()
+    await page.getByRole("menuitem", { name: "Current task with model review", exact: true }).click()
     const status = page.getByTestId("project-wiki-build-status")
     await expect(status.getByTestId("wiki-scan-progress")).toHaveText("Scanned 128 of 23252 records")
     await page.getByRole("button", { name: "Graph", exact: true }).click()
@@ -324,10 +324,10 @@ test("Wiki build publishes its graph, documents, and sources independently of di
     const admitted = page.waitForResponse((response) => response.request().method() === "POST" &&
       new URL(response.url()).pathname === endpoint)
     await page.getByTestId("knowledge-build").click()
-    await page.getByRole("menuitem", { name: "Current task", exact: true }).click()
+    await page.getByRole("menuitem", { name: "Current task with model review", exact: true }).click()
     const response = await admitted
     expect(response.status()).toBe(202)
-    expect(response.request().postDataJSON()).toEqual({ scope: "thread", thread_id: threadId, wiki_graph: true })
+    expect(response.request().postDataJSON()).toEqual({ scope: "thread", thread_id: threadId, wiki_review: true, wiki_graph: true })
     const status = page.getByTestId("project-wiki-build-status")
     await expect(status.getByRole("status")).toContainText("Wiki graph and documents are ready.")
     await expect(status.getByRole("progressbar", { name: "Wiki document progress" })).toHaveAttribute("aria-valuenow", "100")
@@ -346,6 +346,42 @@ test("Wiki build publishes its graph, documents, and sources independently of di
     expect(await (await page.request.get(endpoint)).json()).toEqual({ state: "idle" })
   } finally {
     await page.request.delete(`/api/projects/${projectId}`)
+  }
+})
+
+test("Wiki build defaults to local documents with no model review progress", async ({ page }) => {
+  const { projectId, threadId } = await openProjectConversation(page, `Local wiki ${Date.now()}`)
+  const project = `/api/projects/${projectId}`
+  const host = "reference.example.test"
+  try {
+    await send(page, `Read the original at https://${host}/reference.`)
+    await waitForIdle(page)
+    await knowledgeTab(page).click()
+    const admitted = page.waitForResponse((response) => response.request().method() === "POST" &&
+      new URL(response.url()).pathname === `${project}/distill`)
+    await page.getByTestId("knowledge-build").click()
+    await expect(page.getByRole("menuitem", { name: "Current task with model review" })).toBeVisible()
+    await page.getByRole("menuitem", { name: "Current task", exact: true }).click()
+    const response = await admitted
+    expect(response.status()).toBe(202)
+    expect(response.request().postDataJSON()).toEqual({ scope: "thread", thread_id: threadId, wiki_graph: true })
+    expect(await response.json()).toMatchObject({ wiki_review: false })
+    const status = page.getByTestId("project-wiki-build-status")
+    await expect(status.getByRole("status")).toContainText("Local wiki graph and documents are ready. Model review was skipped.")
+    await expect(status.getByRole("progressbar")).toHaveCount(2)
+    await expect(status.getByTestId("project-distill-progress")).toHaveCount(0)
+    await expect(status.getByRole("progressbar", { name: "Wiki document progress" })).toHaveAttribute("aria-valuenow", "100")
+    const graph = await (await page.request.get(`${project}/knowledge/graph`)).json()
+    const node = graph.nodes.find((entry: { title: string; type: string }) => entry.title === host && entry.type === "wiki-node")
+    expect(node).toBeTruthy()
+    const article = await (await page.request.get(`${project}/knowledge/pages/${node.id}`)).json()
+    expect(article).toMatchObject({
+      wiki: { document_pending: false },
+      body: expect.stringContaining(host),
+      sources: expect.arrayContaining([expect.objectContaining({ available: true, thread_id: threadId })]),
+    })
+  } finally {
+    await page.request.delete(project)
   }
 })
 

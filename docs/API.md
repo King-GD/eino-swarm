@@ -1876,14 +1876,20 @@ job still has pending records returns `409 distillation_pending`.
 Use `wiki_graph: true` on POST to start a graph build with `thread` or
 `project` scope, or to pause or resume that graph build with its review ID.
 With the global Knowledge setting enabled, the build initializes the project
-wiki if needed and uses an independent checkpoint.
-Use `GET /api/projects/:id/distill?wiki_graph=true` for its status. A wiki
-receipt reports `wiki_phase: "scan" | "graph" | "documents"`.
+wiki if needed and uses an independent checkpoint. New builds default to
+local scanning followed by document publication, with zero model requests.
+Supply `wiki_review: true` to include model review. Only a new graph build
+accepts this option. Pause and resume preserve the original choice.
+Use `GET /api/projects/:id/distill?wiki_graph=true` for status. New receipts
+include the selected `wiki_review` boolean. Older receipts with the field
+absent retain their original review behavior. `wiki_phase` is `scan`,
+`graph` (model review), or `documents`.
 `wiki_scan_processed` counts frozen records accounted for locally, including
-`wiki_scan_skipped` for unavailable or ineligible records. `wiki_scan_deferred`
-counts records above the 8 MiB local parsing limit reserved for semantic review. After local
-publication, `wiki_scan_complete` reports that the first graph can be browsed.
-The existing progress object counts semantic review, including previously
+`wiki_scan_skipped` for unavailable or ineligible records and `wiki_scan_deferred`
+for records above the 8 MiB local parsing limit. A reviewed build can still
+read the latter in segments. `wiki_scan_complete` follows local publication.
+For local builds, `progress` counts the scan and includes both types of skips.
+For builds with model review, it counts semantic review, including previously
 accepted immutable records and skips. `wiki_documents` and `wiki_documented`
 track pages and written documents, including batches during semantic review.
 A generated page exposes `wiki.kind`, `wiki.category` and

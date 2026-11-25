@@ -50,7 +50,7 @@ func TestWikiBuildHonorsKnowledgeSwitchAtAdmissionAndPublication(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	req := DistillationRequest{Scope: "thread", ThreadID: th.ID, WikiGraph: true}
+	req := DistillationRequest{Scope: "thread", ThreadID: th.ID, WikiGraph: true, WikiReview: new(true)}
 	toggle(false)
 	if _, err := e.StartProjectDistillation(t.Context(), p.ID, req); !errors.Is(err, ErrDistillationTargets) || requests.Load() != 0 {
 		t.Fatalf("disabled Knowledge admitted wiki extraction: %v, requests=%d", err, requests.Load())
@@ -143,7 +143,7 @@ func TestWikiBuildRetriesIncompleteCoverageWithoutAdvancing(t *testing.T) {
 	}
 	th := knowledgeFixtureThread(t, e, p.ID, "Original task")
 	distillEvent(t, e, th, store.TurnDone, KindUser, "Source that contains no graph facts.")
-	started, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{Scope: "project", WikiGraph: true})
+	started, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{Scope: "project", WikiGraph: true, WikiReview: new(true)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,7 @@ func TestWikiBuildNarrowsARefusedBatchWithoutLosingSourceBytes(t *testing.T) {
 	}
 	th := knowledgeFixtureThread(t, e, p.ID, "Source")
 	distillEvent(t, e, th, store.TurnDone, KindUser, source)
-	if _, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{Scope: "thread", ThreadID: th.ID, WikiGraph: true}); err != nil {
+	if _, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{Scope: "thread", ThreadID: th.ID, WikiGraph: true, WikiReview: new(true)}); err != nil {
 		t.Fatal(err)
 	}
 	for deadline := time.Now().Add(8 * time.Second); time.Now().Before(deadline); {
@@ -421,7 +421,7 @@ func TestWikiBuildPublishesVerifiedObservationsAndResumesFullSource(t *testing.T
 	}); err != nil {
 		t.Fatal(err)
 	}
-	start, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{Scope: "thread", ThreadID: th.ID, WikiGraph: true})
+	start, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{Scope: "thread", ThreadID: th.ID, WikiGraph: true, WikiReview: new(true)})
 	if err != nil || !start.WikiGraph || !start.FullText || start.MemoryEnabled {
 		t.Fatalf("wiki build did not get independent full-source admission: %+v %v", start, err)
 	}

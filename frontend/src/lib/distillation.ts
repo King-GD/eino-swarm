@@ -10,6 +10,7 @@ export type DistillRequest = {
   thread_id?: string
   enable_knowledge?: boolean
   full_text?: boolean
+  wiki_review?: boolean
 } | { pause_review_id: string } | { resume_review_id: string }
 
 export interface DistillResult {
@@ -18,6 +19,7 @@ export interface DistillResult {
   scope?: DistillScope
   full_text?: boolean
   wiki_graph?: boolean
+  wiki_review?: boolean
   wiki_phase?: "scan" | "graph" | "documents"
   wiki_scan_processed?: number
   wiki_scan_skipped?: number

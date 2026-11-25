@@ -3,12 +3,14 @@ EXTENDS Naturals
 
 CONSTANTS DocumentBeforeGraph, CompleteBeforeDocuments, LoseDocumentCheckpoint,
           ReviewBeforeLocalScan, ScanWithoutPublication, LoseLocalCheckpoint,
-          ReviewWithoutDecision, DocumentWithoutNode
+          ReviewWithoutDecision, DocumentWithoutNode, ReviewWithoutRequest,
+          LocalDocumentsBeforeScan
 Sources == {1, 2}
 VARIABLES scanned, localPublished, noLocalWitness, decisions, pending,
           sources, nodes, documents, published, phase, running
+VARIABLE reviewRequested
 vars == <<scanned, localPublished, noLocalWitness, decisions, pending,
-          sources, nodes, documents, published, phase, running>>
+          sources, nodes, documents, published, phase, running, reviewRequested>>
 
 Init == /\ scanned = {}
         /\ localPublished = {}
@@ -21,6 +23,7 @@ Init == /\ scanned = {}
         /\ published = {}
         /\ phase = "scan"
         /\ running = TRUE
+        /\ reviewRequested \in BOOLEAN
 
 (* StageWikiNodes can precede a durable receipt. A retry may acknowledge
    the same existing node, whereas no receipt can cover unpublished work. *)
@@ -42,6 +45,7 @@ CheckpointLocal == /\ running /\ phase = "scan"
                    /\ UNCHANGED <<localPublished, noLocalWitness, decisions, pending, sources, nodes, documents, published, phase, running>>
 
 BeginReview == /\ running /\ phase = "scan"
+               /\ reviewRequested \/ ReviewWithoutRequest
                /\ scanned = Sources \/ ReviewBeforeLocalScan
                /\ phase' = "graph"
                /\ UNCHANGED <<scanned, localPublished, noLocalWitness, decisions, pending, sources, nodes, documents, published, running>>
@@ -71,8 +75,11 @@ PreviewDocument == /\ running /\ phase = "graph"
                          /\ published' = published \cup {node}
                    /\ UNCHANGED <<scanned, localPublished, noLocalWitness, decisions, pending, sources, nodes, phase, running>>
 
-BeginDocuments == /\ running /\ phase = "graph"
-                  /\ sources = Sources \/ DocumentBeforeGraph
+BeginDocuments == /\ running
+                  /\ \/ /\ phase = "graph"
+                        /\ sources = Sources \/ DocumentBeforeGraph
+                     \/ /\ phase = "scan" /\ ~reviewRequested
+                        /\ scanned = Sources \/ LocalDocumentsBeforeScan
                   /\ phase' = "documents"
                   /\ UNCHANGED <<scanned, localPublished, noLocalWitness, decisions, pending, sources, nodes, documents, published, running>>
 
@@ -97,14 +104,18 @@ Resume == /\ ~running
           /\ documents' = IF LoseDocumentCheckpoint THEN {} ELSE published
           /\ UNCHANGED <<localPublished, noLocalWitness, decisions, pending, sources, nodes, published, phase>>
 
-Spec == Init /\ [][PublishLocal \/ NoLocalMatch \/ CheckpointLocal \/ BeginReview \/ ReviewNeedsRepair \/ ReviewDecision \/ Extract \/ PreviewDocument \/ BeginDocuments \/ PublishDocument \/ Finish \/ Pause \/ Resume]_vars
+Next == /\ UNCHANGED reviewRequested
+        /\ PublishLocal \/ NoLocalMatch \/ CheckpointLocal \/ BeginReview \/ ReviewNeedsRepair \/ ReviewDecision \/ Extract \/ PreviewDocument \/ BeginDocuments \/ PublishDocument \/ Finish \/ Pause \/ Resume
+Spec == Init /\ [][Next]_vars
 
 TypeOK == /\ scanned \subseteq Sources /\ localPublished \subseteq Sources
           /\ noLocalWitness \subseteq Sources /\ decisions \subseteq Sources /\ pending \subseteq Sources
           /\ sources \subseteq Sources /\ nodes \subseteq Sources
           /\ documents \subseteq Sources /\ published \subseteq Sources
           /\ phase \in {"scan", "graph", "documents", "completed"} /\ running \in BOOLEAN
-GraphFirst == phase \in {"documents", "completed"} => sources = Sources
+          /\ reviewRequested \in BOOLEAN
+GraphFirst == reviewRequested /\ phase \in {"documents", "completed"} => sources = Sources
+NoUnrequestedReview == ~reviewRequested => phase # "graph" /\ decisions = {} /\ pending = {} /\ sources = {}
 LocalCheckpointHasEvidence == scanned \subseteq (localPublished \cup noLocalWitness)
 ReviewCheckpointHasDecision == sources \subseteq decisions
 ReviewFollowsLocalScan == phase # "scan" => scanned = Sources
@@ -113,4 +124,6 @@ DocumentsHaveNodes == documents \subseteq nodes
 DocumentsCovered == phase = "completed" => documents = nodes
 KeepPublished == published = documents
 NeverPausedPartwayThroughDocuments == ~(~running /\ phase = "documents" /\ documents # {} /\ documents # nodes)
+NeverCompletesLocalBuild == ~(~reviewRequested /\ phase = "completed" /\ documents # {})
+NeverCompletesReviewedBuild == ~(reviewRequested /\ phase = "completed" /\ sources = Sources)
 ===============================================================================

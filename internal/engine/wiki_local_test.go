@@ -16,6 +16,70 @@ import (
 
 const wikiLocalWindowBytes = 128 << 10
 
+func TestWikiBuildDefaultsToLocalDocumentsWithoutModelRequests(t *testing.T) {
+	const original = "See https://reference.example.test/release for the record."
+	e, requests := distillWire(t, func(w http.ResponseWriter, req scheduleCompletionRequest, _ int) {
+		nuwaValidationTool(w, req, "review", wikiExtractTool, `{"reviewed":[1],"nodes":[],"links":[]}`)
+	})
+	p, err := e.CreateProject("Local wiki", "", "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	th := knowledgeFixtureThread(t, e, p.ID, "Local evidence")
+	_, source := distillEvent(t, e, th, store.TurnDone, KindUser, original)
+	gate := e.reviews.begin(p.ID)
+	gate <- struct{}{}
+	release := sync.OnceFunc(func() {
+		<-gate
+		e.reviews.done()
+	})
+	defer release()
+	if _, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{Scope: "thread", ThreadID: th.ID, WikiGraph: true}); err != nil {
+		t.Fatal(err)
+	}
+	got := waitLocalWiki(t, e, p.ID)
+	if calls := requests.Load(); calls != 0 {
+		t.Fatalf("default construction sent %d requests to the actual model HTTP endpoint", calls)
+	}
+	if got.State != "completed" || got.WikiPhase != "documents" || !got.WikiScanComplete ||
+		got.WikiDocuments != 1 || got.WikiDocumented != 1 || got.Progress.Remaining != 0 || got.Progress.Batches != 0 ||
+		got.WikiReview == nil || *got.WikiReview {
+		t.Fatalf("local run did not finish its scan and documents independently: %+v, progress: %+v", got, got.Progress)
+	}
+	kb, err := e.ProjectKnowledge(p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap, err := kb.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	graph, err := snap.Graph()
+	if err != nil || len(graph.Nodes) != 1 {
+		t.Fatalf("local graph: %+v %v", graph, err)
+	}
+	page, err := e.ProjectKnowledgePage(t.Context(), p.ID, graph.Nodes[0].ID)
+	if err != nil || len(page.WikiObservations) != 1 ||
+		page.WikiObservations[0].Source.Seq != source.Seq || !strings.Contains(original, page.WikiObservations[0].Quote) {
+		t.Fatalf("local article lost its original evidence: %+v %v", page, err)
+	}
+	release()
+	if _, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{
+		Scope: "thread", ThreadID: th.ID, WikiGraph: true, WikiReview: new(true),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	reviewed := waitLocalWiki(t, e, p.ID)
+	if reviewed.State != "completed" || reviewed.Progress.Batches != 1 || requests.Load() != 1 ||
+		reviewed.WikiReview == nil || !*reviewed.WikiReview {
+		t.Fatalf("explicit review must cover the locally scanned source: %+v requests=%d", reviewed, requests.Load())
+	}
+	after, err := e.ProjectKnowledgePage(t.Context(), p.ID, graph.Nodes[0].ID)
+	if err != nil || after.Revision != page.Revision {
+		t.Fatalf("review rerendered an unchanged local document: %+v %v", after, err)
+	}
+}
+
 func TestWikiBuildPublishesLocalNodesWhileTheModelIsWaiting(t *testing.T) {
 	const quote = "The reference is https://example.test/notes."
 	entered := make(chan struct{})
@@ -37,7 +101,7 @@ func TestWikiBuildPublishesLocalNodesWhileTheModelIsWaiting(t *testing.T) {
 	}
 	th := knowledgeFixtureThread(t, e, p.ID, "History")
 	turn, source := distillEvent(t, e, th, store.TurnDone, KindUser, quote)
-	if _, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{Scope: "thread", ThreadID: th.ID, WikiGraph: true}); err != nil {
+	if _, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{Scope: "thread", ThreadID: th.ID, WikiGraph: true, WikiReview: new(true)}); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -88,6 +152,50 @@ func TestWikiBuildPublishesLocalNodesWhileTheModelIsWaiting(t *testing.T) {
 	t.Fatalf("local node title missing from the graph: %+v", graph.Nodes)
 }
 
+func TestWikiBuildResumesLegacyReceiptsWithTheirOriginalModelReview(t *testing.T) {
+	for _, phase := range []string{"scan", "graph"} {
+		t.Run(phase, func(t *testing.T) {
+			e, requests := distillWire(t, func(w http.ResponseWriter, req scheduleCompletionRequest, _ int) {
+				nuwaValidationTool(w, req, "legacy", wikiExtractTool, `{"reviewed":[1],"nodes":[],"links":[]}`)
+			})
+			p, err := e.CreateProject("Old wiki build", "", "", true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			th := knowledgeFixtureThread(t, e, p.ID, "Original task")
+			turn, event := distillEvent(t, e, th, store.TurnDone, KindUser, "Retain this observation.")
+			if _, err := e.EnableProjectKnowledge(p.ID); err != nil {
+				t.Fatal(err)
+			}
+			result := DistillationResult{
+				ReviewID: "legacy-wiki", State: "interrupted", Scope: "thread",
+				FullText: true, WikiGraph: true, WikiPhase: phase, KnowledgeEnabled: true,
+				ThreadID: th.ID, TurnID: turn.ID,
+			}
+			if phase == "graph" {
+				result.WikiScanComplete, result.WikiScanProcessed, result.WikiScanCursor = true, 1, event.ID
+			}
+			row := store.ProjectDistillation{
+				ID: result.ReviewID, ProjectID: p.ID, State: result.State, WikiGraph: true, ProviderID: turn.ProviderID,
+			}
+			if _, err := e.store.StartDistillationQueue(t.Context(), row, th.ID, func(total int) ([]byte, error) {
+				result.Progress = &DistillationProgress{Total: total, Remaining: total, CoverageKnown: true}
+				return json.Marshal(result)
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{WikiGraph: true, ResumeReviewID: row.ID}); err != nil {
+				t.Fatal(err)
+			}
+			got := waitLocalWiki(t, e, p.ID)
+			if got.State != "completed" || got.ReviewID != row.ID || !got.WikiScanComplete ||
+				got.Progress.Processed != 1 || got.Progress.Batches != 1 || requests.Load() != 1 {
+				t.Fatalf("legacy %s checkpoint lost its review: %+v progress=%+v requests=%d", phase, got, got.Progress, requests.Load())
+			}
+		})
+	}
+}
+
 func TestWikiLocalResumeKeepsPublishedNodesAfterCheckpointFailure(t *testing.T) {
 	e, requests := distillWire(t, func(w http.ResponseWriter, req scheduleCompletionRequest, _ int) {
 		nuwaValidationTool(w, req, "repair-resume", wikiExtractTool, `{"reviewed":[1],"nodes":[],"links":[]}`)
@@ -132,7 +240,8 @@ func TestWikiLocalResumeKeepsPublishedNodesAfterCheckpointFailure(t *testing.T) 
 		t.Fatal(err)
 	}
 	got := waitLocalWiki(t, e, p.ID)
-	if got.State != "completed" || !got.WikiScanComplete || got.WikiScanProcessed != 1 || got.Progress.Processed != 1 || requests.Load() != 1 {
+	if got.State != "completed" || !got.WikiScanComplete || got.WikiScanProcessed != 1 ||
+		got.Progress.Processed != 1 || got.Uncertain || got.WikiDocumented != 1 || requests.Load() != 0 {
 		t.Fatalf("local checkpoint did not recover: %+v %+v requests=%d", got, got.Progress, requests.Load())
 	}
 	after, err := kb.Snapshot()
@@ -168,7 +277,7 @@ func TestWikiBuildOnlyRevisitsNewImmutableHistory(t *testing.T) {
 	build := func(body string, total int) {
 		t.Helper()
 		distillEvent(t, e, th, store.TurnDone, KindUser, body)
-		if _, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{Scope: "project", WikiGraph: true}); err != nil {
+		if _, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{Scope: "project", WikiGraph: true, WikiReview: new(true)}); err != nil {
 			t.Fatal(err)
 		}
 		got := waitLocalWiki(t, e, p.ID)
@@ -224,12 +333,7 @@ func waitLocalWiki(t *testing.T, e *Engine, projectID string) DistillationResult
 
 func TestWikiLocalPreservesLargeStructuredSourceContext(t *testing.T) {
 	t.Run("bounded structured source", func(t *testing.T) {
-		e, _ := distillWire(t, func(w http.ResponseWriter, r scheduleCompletionRequest, _ int) {
-			// Report ordinary refusal. The test checks the graph the local
-			// phase made visible before the model needed to finish.
-			nuwaValidationTool(w, r, "no-review", wikiExtractTool, `{"reviewed":[],"nodes":[],"links":[]}`)
-		})
-		e.cfg.Memory.ReviewMaxIterations = 1
+		e := newTestEngine(t)
 		p, err := e.CreateProject("Structured observation", "", "", true)
 		if err != nil {
 			t.Fatal(err)
@@ -241,7 +345,7 @@ func TestWikiLocalPreservesLargeStructuredSourceContext(t *testing.T) {
 			t.Fatal(err)
 		}
 		result := waitLocalWiki(t, e, p.ID)
-		if !result.WikiScanComplete || result.WikiScanProcessed != 1 || result.WikiScanSkipped != 0 || result.WikiScanDeferred != 0 {
+		if result.State != "completed" || !result.WikiScanComplete || result.WikiScanProcessed != 1 || result.WikiScanSkipped != 0 || result.WikiScanDeferred != 0 {
 			t.Fatalf("the structured record was not scanned: %+v", result)
 		}
 		kb, err := e.ProjectKnowledge(p.ID)
@@ -272,10 +376,7 @@ func TestWikiLocalPreservesLargeStructuredSourceContext(t *testing.T) {
 }
 
 func TestWikiLocalDoesNotInventAnIdentifierAtTheReadBoundary(t *testing.T) {
-	e, _ := distillWire(t, func(w http.ResponseWriter, req scheduleCompletionRequest, _ int) {
-		nuwaValidationTool(w, req, "no-review", wikiExtractTool, `{"reviewed":[],"nodes":[],"links":[]}`)
-	})
-	e.cfg.Memory.ReviewMaxIterations = 1
+	e := newTestEngine(t)
 	p, err := e.CreateProject("Complete identifiers", "", "", true)
 	if err != nil {
 		t.Fatal(err)

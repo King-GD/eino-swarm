@@ -22,6 +22,7 @@ type DistillationRequest struct {
 	EnableKnowledge bool   `json:"enable_knowledge"`
 	FullText        bool   `json:"full_text"`
 	WikiGraph       bool   `json:"wiki_graph"`
+	WikiReview      *bool  `json:"wiki_review"`
 	ResumeReviewID  string `json:"resume_review_id"`
 	PauseReviewID   string `json:"pause_review_id"`
 }
@@ -42,6 +43,7 @@ type DistillationResult struct {
 	Scope             string                `json:"scope,omitempty"`
 	FullText          bool                  `json:"full_text,omitempty"`
 	WikiGraph         bool                  `json:"wiki_graph,omitempty"`
+	WikiReview        *bool                 `json:"wiki_review,omitempty"`
 	WikiPhase         string                `json:"wiki_phase,omitempty"`
 	WikiScanCursor    uint                  `json:"wiki_scan_cursor,omitempty"`
 	WikiScanProcessed int                   `json:"wiki_scan_processed,omitempty"`
@@ -152,8 +154,11 @@ func (e *Engine) projectDistillationStatus(ctx context.Context, projectID string
 
 // StartProjectDistillation admits at most one manual review per project.
 func (e *Engine) StartProjectDistillation(ctx context.Context, projectID string, req DistillationRequest) (DistillationResult, error) {
+	if req.WikiReview != nil && !req.WikiGraph {
+		return DistillationResult{}, ErrDistillationScope
+	}
 	if req.ResumeReviewID != "" || req.PauseReviewID != "" {
-		if req.Scope != "" || req.ThreadID != "" || req.EnableKnowledge || req.FullText || (req.ResumeReviewID != "" && req.PauseReviewID != "") {
+		if req.Scope != "" || req.ThreadID != "" || req.EnableKnowledge || req.FullText || req.WikiReview != nil || (req.ResumeReviewID != "" && req.PauseReviewID != "") {
 			return DistillationResult{}, ErrDistillationScope
 		}
 		return e.controlDistillation(ctx, projectID, req)
@@ -262,6 +267,7 @@ func (e *Engine) StartProjectDistillation(ctx context.Context, projectID string,
 	}
 	if req.WikiGraph {
 		result.WikiPhase = "scan"
+		result.WikiReview = new(req.WikiReview != nil && *req.WikiReview)
 	}
 	if !result.MemoryEnabled && !result.KnowledgeEnabled {
 		return DistillationResult{}, ErrDistillationTargets

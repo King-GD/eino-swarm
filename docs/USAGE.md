@@ -890,10 +890,11 @@ failure that needs a settings change, follow the message in either panel,
 then choose **Resume distillation** to keep the progress already saved.
 
 In **Knowledge → Build wiki graph**, choose **Current task** or **Current project**
-to build a graph from retained history. Local scanning publishes explicit
-identifiers, supported structured names and evidenced relationships. Open
-**Graph** to search nodes and view their cited excerpts while the model
-reviews ambiguous names, events and relationships. A link uses one
+to scan retained history and publish explicit identifiers, supported
+structured names, evidenced relationships and documents locally. To also
+review ambiguous names, events and relationships with a model, choose a scope
+under **Include model review**. Open **Graph** to search nodes and view their
+cited excerpts as soon as the local scan completes. A link uses one
 undirected line per pair. For large graphs the overview lays out a bounded
 selection, and search can find every node in the project. Once observations
 are verified, the builder appends them to the documents in batches and
@@ -904,8 +905,10 @@ are excluded from the graph. Older generated pages recognized as those
 labels appear in **Pending**, where you can open their saved text and
 original citations.
 
-The panel tracks scanned records, source review and document updates.
-Pause and resume use the saved positions, and subsequent builds reuse
+The panel tracks scanned records and document updates. When selected,
+model review has its own progress. Records over the local scan size limit
+can be reviewed in an explicit review build. Pause and resume preserve the
+saved positions and chosen mode. Subsequent builds reuse
 accepted immutable records. Sources with changed content are checked again.
 The graph build has its own receipt alongside **Distill**.
 

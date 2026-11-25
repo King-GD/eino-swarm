@@ -63,7 +63,7 @@ func TestWikiReviewRepairsOnlyTheUnresolvedItemsAtTheModelBoundary(t *testing.T)
 	th := knowledgeFixtureThread(t, e, p.ID, "Evidence")
 	distillEvent(t, e, th, store.TurnDone, KindUser, first)
 	distillEvent(t, e, th, store.TurnDone, KindUser, second)
-	if _, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{Scope: "thread", ThreadID: th.ID, WikiGraph: true}); err != nil {
+	if _, err := e.StartProjectDistillation(t.Context(), p.ID, DistillationRequest{Scope: "thread", ThreadID: th.ID, WikiGraph: true, WikiReview: new(true)}); err != nil {
 		t.Fatal(err)
 	}
 	for deadline := time.Now().Add(8 * time.Second); time.Now().Before(deadline); {

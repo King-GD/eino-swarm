@@ -20,12 +20,22 @@ type wikiDraftResult struct {
 	err      error
 }
 
+func (r DistillationResult) wikiReviewEnabled() bool {
+	// Receipts created before the option always proceeded to model review.
+	return r.WikiReview == nil || *r.WikiReview
+}
+
 func (e *Engine) runWikiBuild(ctx context.Context, gate chan struct{}, job *projectDistillWork, cursor uint) {
 	if !job.result.WikiScanComplete && job.result.WikiPhase != "documents" {
 		if err := e.runWikiLocalScan(ctx, job, cursor); err != nil {
 			stopDistillation(ctx, &job.result, err)
 			return
 		}
+	}
+	if !job.result.wikiReviewEnabled() {
+		// The document pass uses the normal file locks without waiting for a reviewer.
+		e.renderWikiBuild(ctx, nil, job, cursor)
+		return
 	}
 	if err := e.renderAvailableWikiDocuments(ctx, job, cursor); err != nil {
 		stopDistillation(ctx, &job.result, err)
@@ -220,14 +230,18 @@ func (e *Engine) renderAvailableWikiDocuments(ctx context.Context, job *projectD
 func (e *Engine) renderWikiBuild(ctx context.Context, gate chan struct{}, job *projectDistillWork, cursor uint) {
 	checkpoint := &distillCheckpoint{e: e, current: &job.result, from: cursor, projectID: job.projectID}
 	for {
-		select {
-		case gate <- struct{}{}:
-		case <-ctx.Done():
-			job.result.State = "interrupted"
-			return
-		}
 		err := func() error {
-			defer func() { <-gate }()
+			if gate != nil {
+				select {
+				case gate <- struct{}{}:
+					defer func() { <-gate }()
+				case <-ctx.Done():
+					return context.Cause(ctx)
+				}
+			}
+			if err := context.Cause(ctx); err != nil {
+				return err
+			}
 			return e.renderWikiDocumentBatch(ctx, job, checkpoint, cursor, true)
 		}()
 		if err != nil {
@@ -266,8 +280,8 @@ func (e *Engine) renderWikiDocumentBatch(ctx context.Context, job *projectDistil
 	if !finalPass && written == total && total == result.WikiDocuments && written == result.WikiDocumented {
 		return nil
 	}
-	if finalPass && result.WikiPhase == "graph" {
-		// Freeze the final document denominator after source review.
+	if finalPass && result.WikiPhase != "documents" {
+		// Freeze the denominator after the last stage that can create nodes.
 		result.WikiPhase, result.WikiDocuments, result.WikiDocumented = "documents", total, written
 	} else if written < total {
 		if err := checkpoint.beforeWrite(); err != nil {
@@ -286,6 +300,9 @@ func (e *Engine) renderWikiDocumentBatch(ctx context.Context, job *projectDistil
 		return fmt.Errorf("wiki graph changed during document publication: %d of %d pages remain associated with this run", total, result.WikiDocuments)
 	}
 	result.WikiDocuments, result.WikiDocumented = total, written
+	if finalPass && !result.wikiReviewEnabled() {
+		result.Uncertain = false
+	}
 	if finalPass && written == total {
 		result.State = "completed"
 	}

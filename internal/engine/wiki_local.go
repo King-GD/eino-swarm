@@ -81,7 +81,14 @@ func (e *Engine) scanWikiLocalWindow(ctx context.Context, job *projectDistillWor
 	next.WikiScanSkipped += batch.skipped
 	next.WikiScanDeferred += batch.deferred
 	next.WikiScanComplete = next.WikiScanProcessed == next.Progress.Total
-	if next.WikiScanComplete {
+	if !next.wikiReviewEnabled() {
+		progress := *next.Progress
+		progress.Processed = next.WikiScanProcessed
+		progress.Remaining = progress.Total - progress.Processed
+		progress.Skipped = next.WikiScanSkipped + next.WikiScanDeferred
+		next.Progress = &progress
+		next.Uncertain = false
+	} else if next.WikiScanComplete {
 		next.WikiPhase = "graph"
 	}
 	row, err := next.row(job.projectID)

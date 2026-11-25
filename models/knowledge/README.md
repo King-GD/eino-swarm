@@ -75,3 +75,22 @@ first batch or reset the cursor on resume. The reachability case completes
 both batches across an interruption. The model treats acceptance as one
 step. The engine and backup tests check the persisted queue and the uncertain
 interval between file publication and the SQLite checkpoint.
+
+## Wiki build modes
+
+`WikiBuild.tla` models two source positions, two possible pages, and one run
+whose review choice stays fixed across pause and resume. `CheckpointLocal`
+represents `scanWikiLocalWindow` committing a receipt after publishing files
+or finding no local match. `BeginReview` and `ReviewDecision` represent the
+opt-in gate and the verified model boundary in `runWikiBuild`. A local-only
+run reaches `BeginDocuments` directly after scanning. `BeginDocuments` and
+`Finish` correspond to freezing the document count and recording completion
+in `renderWikiDocumentBatch`.
+
+The model checks document coverage and that a local build never enters
+review or records a semantic decision. Fault cases demonstrate early local
+document publication and unrequested review. Reachability witnesses finish
+both modes, without any fairness assumption. The model abstracts whole
+records and pages. The loopback and store tests exercise the real HTTP model
+boundary, SQLite receipts, resume of older mode-less receipts, and files
+published before a failed checkpoint.

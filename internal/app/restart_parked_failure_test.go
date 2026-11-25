@@ -107,19 +107,22 @@ func TestNewReportsParkedRecoveryFailureWithoutClaimingWorkResumed(t *testing.T)
 			if err != nil {
 				t.Fatal(err)
 			}
-			var warning string
+			warned := false
 			for _, line := range strings.Split(string(logs), "\n") {
-				if strings.Contains(line, `msg="could not resume parked workers from a previous run"`) {
-					warning = line
+				if !strings.Contains(line, " thread="+th.ID+" ") {
+					continue
+				}
+				if strings.Contains(line, `msg="engine conversation restoration"`) &&
+					strings.Contains(line, " phase=restored ") {
+					t.Fatalf("failed recovery claimed success: %s", line)
+				}
+				if strings.Contains(line, " level=WARN ") && strings.Contains(line, " err=") &&
+					strings.Contains(line, test.reason) {
+					warned = true
 				}
 			}
-			for _, detail := range []string{"level=WARN", "err=", th.ID, test.reason} {
-				if !strings.Contains(warning, detail) {
-					t.Fatalf("startup did not expose %q in its recovery warning: %s", detail, logs)
-				}
-			}
-			if strings.Contains(string(logs), `msg="resumed parked workers from a previous run"`) {
-				t.Fatalf("failed recovery claimed workers resumed: %s", logs)
+			if !warned {
+				t.Fatalf("startup did not warn for conversation %s with cause %q: %s", th.ID, test.reason, logs)
 			}
 			if status := a.Engine.Status(th.ID); status.Running || status.Workers != 0 || !status.Waiting || a.Engine.ActiveWork() != 0 {
 				t.Fatalf("failed recovery claimed live work or lost the future wake: %+v", status)

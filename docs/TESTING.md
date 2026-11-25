@@ -1076,15 +1076,22 @@ The Wiki loopback tests hold model review while the local scan publishes
 searchable observations, check source drill-down, replay partially published
 files after a receipt failure and verify incremental reuse. Actual model
 requests exercise item-level repair, a smaller retry that covers the original
-UTF-8 data, and pauses inside a source. The web suite verifies that an open graph
+UTF-8 data, and pauses inside a source. Test the default build against the real
+loopback model adapter. It publishes cited documents while the model-review slot
+is held and makes zero model requests. A later opt-in build reviews the same
+source with its local result already saved. Resume older scan and graph receipts
+without the mode field and check that both retain model review. The Web suite
+exercises both menu choices and progress displays and verifies that an open graph
 refreshes, search reaches nodes outside a large overview and an available
 citation shows its excerpt. Measure the time from the actual build action to
 searchable graph and original citation on an isolated history copy.
 
 `wiki-build-*` checks the bounded scan/review/document protocol in
 `models/knowledge/WikiBuild.tla`. A local scan checkpoint requires publication,
-review requires a complete local scan, and final completion requires all
-semantic windows and documents. Negated progress witnesses exercise pause during
+review requires a complete local scan and an explicit review mode. Final
+completion requires saved documents and, in review mode, all semantic windows.
+Fault switches admit review without a request and documents before a full local
+scan. Negated witnesses find successful completion in both modes and pause during
 local scan and article publication. The model represents complete source and
 document units, with file publication and receipt acknowledgement distinct.
 SQLite/file failure and exact source identity are verified in behavioral tests.
@@ -3813,11 +3820,14 @@ measured 2.011 s for first upgrade after listening, then 0.011 s, 1.247 s and
 
 The targeted race tests cover trigger rollback, per-conversation migration
 retry, rewind invalidation, parked worker selection, backup import and search
-backfill starting after readiness.
+backfill starting after readiness. The app tests inject a scan failure in a
+pending recovery candidate and verify WAL release. Parked-worker failures
+retain their checkpoint and future wake, with a warning, failed Trace receipt
+and a ready engine.
 
 ```bash
 go test ./cmd/zwai -run '^TestIndexedEngineStartupScalesWithPendingConversations$' -timeout 4m -count=1 -v
-go test -race ./internal/store ./internal/engine ./internal/app ./internal/backup -run 'TestStartup|TestSettledParkedCheckpoint|TestSemanticStartupBackfill|TestPortableBackupRecreatesRecoveryPointers' -timeout 2m -count=1
+go test -race ./internal/store ./internal/engine ./internal/app ./internal/backup -run 'TestStartup|TestSettledParkedCheckpoint|TestSemanticStartupBackfill|TestPortableBackupRecreatesRecoveryPointers|TestNew(ReportsParkedRecoveryFailure|RejectsFatalRecovery)' -timeout 2m -count=1
 ```
 
 `BenchmarkRestoreSnapshotLargeHistory` uses 100,001 historical tool-result rows

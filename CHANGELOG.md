@@ -23,9 +23,9 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 - The Knowledge panel opens a full project graph with page titles as nodes,
   one undirected line per connected pair, zoom and search by title or alias. (`F-138`, `C-053`)
-- Build a wiki graph from a task or project's retained history. Entities,
-  events, and evidence links appear first, then the builder fills in the
-  documents in a separately tracked pass. (`F-138`, `C-054`)
+- Build a wiki graph and cited documents from a task or project's retained
+  history without a model call. The build menu also offers scopes with model
+  review for semantic entities, events and links. (`F-138`, `C-054`, #189)
 
 - Desktop and Web conversations have a Work records tab. Agents can keep
   private tasks, facts and results, then explicitly share records and their

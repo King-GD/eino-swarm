@@ -2731,8 +2731,10 @@ local and semantic checkpoints. The local scanner reads source windows, verifies
 project ownership and stages attributable nodes and explicit edges in the
 Markdown store. The persisted receipt makes the first graph available before
 model input. Per-source acknowledgements reuse immutable records across builds;
-current source identities and editable captions govern reuse. The semantic
-reviewer repairs unresolved items while retaining previously validated items
+current source identities and editable captions govern reuse. New builds
+publish documents directly after the local scan unless model review was
+requested. Receipts persist the choice across pause and resume. In review
+mode, the semantic reviewer repairs unresolved items while retaining previously validated items
 within the same draft. The host commits complete windows in order and
 progressively appends verified observations to the documents. The graph uses the
 same in-memory wiki index as the tree and page views. Page IDs remain stable

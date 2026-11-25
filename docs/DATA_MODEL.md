@@ -267,7 +267,10 @@ Their restore resets the latest receipt for the replaced project.
 
 This per-project row keeps the source cursor, route and JSON receipt for a
 wiki build. It shares the frozen `project_distillation_sources` queue by
-review ID. Full database backup, omitted conversations and project deletion
+review ID. The JSON receipt writes an explicit `wiki_review` boolean for new
+runs. An absent field retains the old model-review mode. The local cursor
+advances with the scan and the semantic cursor advances only with review.
+Full database backup, omitted conversations and project deletion
 follow the same receipt policy as manual reviews. The Markdown files hold
 node kind, category, verified observations and the number of observations
 already written to the article. This lets the document pass recover its

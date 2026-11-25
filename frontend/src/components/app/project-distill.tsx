@@ -37,6 +37,11 @@ const fullTextScopes = [
   ["project", "knowledge.distillProjectFullText"],
 ] as const
 
+const wikiReviewScopes = [
+  ["thread", "knowledge.wikiReviewTask"],
+  ["project", "knowledge.wikiReviewProject"],
+] as const
+
 export function ProjectDistillMenu({ projectId, threadId, knowledgeEnabled, wikiGraph = false }: ProjectDistillProps) {
   const t = useT()
   const store = wikiGraph ? useWikiBuild : useDistillation
@@ -59,12 +64,11 @@ export function ProjectDistillMenu({ projectId, threadId, knowledgeEnabled, wiki
     return () => controller.abort()
   }, [projectId, knowledgeAvailable, knowledgeEnabled, refreshKey, wikiGraph])
 
-  const start = (scope: DistillScope, enableKnowledge: boolean, fullText = false) => {
+  const start = (scope: DistillScope, options: { enable_knowledge?: true; full_text?: true; wiki_review?: true } = {}) => {
     void store.getState().start(projectId, {
       scope,
       ...(scope === "project" ? {} : { thread_id: threadId }),
-      ...(enableKnowledge ? { enable_knowledge: true } : {}),
-      ...(fullText ? { full_text: true } : {}),
+      ...options,
     })
   }
   const testId = wikiGraph ? "knowledge-build" : "knowledge-distill"
@@ -88,14 +92,23 @@ export function ProjectDistillMenu({ projectId, threadId, knowledgeEnabled, wiki
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        {wikiGraph ? <DropdownMenuLabel>{t("knowledge.wikiLocalOptions")}</DropdownMenuLabel> : null}
         {scopes.filter(([scope]) => !wikiGraph || scope !== "latest_turn").map(([scope, key]) => (
-          <DropdownMenuItem key={scope} disabled={scope !== "project" && !threadId} onSelect={() => start(scope, false)}>{t(key)}</DropdownMenuItem>
+          <DropdownMenuItem key={scope} disabled={scope !== "project" && !threadId} onSelect={() => start(scope)}>{t(key)}</DropdownMenuItem>
         ))}
-        {wikiGraph ? null : <>
+        {wikiGraph ? <>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>{t("knowledge.wikiReviewOptions")}</DropdownMenuLabel>
+          {wikiReviewScopes.map(([scope, key]) => (
+            <DropdownMenuItem key={scope} disabled={scope === "thread" && !threadId} onSelect={() => start(scope, { wiki_review: true })}>
+              {t(key)}
+            </DropdownMenuItem>
+          ))}
+        </> : <>
           <DropdownMenuSeparator />
           <DropdownMenuLabel>{t("knowledge.distillFullTextOptions")}</DropdownMenuLabel>
           {fullTextScopes.map(([scope, key]) => (
-            <DropdownMenuItem key={scope} disabled={scope === "thread" && !threadId} onSelect={() => start(scope, false, true)}>
+            <DropdownMenuItem key={scope} disabled={scope === "thread" && !threadId} onSelect={() => start(scope, { full_text: true })}>
               {t(key)}
             </DropdownMenuItem>
           ))}
@@ -107,7 +120,7 @@ export function ProjectDistillMenu({ projectId, threadId, knowledgeEnabled, wiki
                 key={scope}
                 aria-label={`${t("knowledge.enableAndDistill")} · ${t(key)}`}
                 disabled={scope !== "project" && !threadId}
-                onSelect={() => start(scope, true)}
+                onSelect={() => start(scope, { enable_knowledge: true })}
               >{t(key)}</DropdownMenuItem>
             ))}
             {fullTextScopes.map(([scope, key]) => (
@@ -115,7 +128,7 @@ export function ProjectDistillMenu({ projectId, threadId, knowledgeEnabled, wiki
                 key={key}
                 aria-label={`${t("knowledge.enableAndDistill")} · ${t(key)}`}
                 disabled={scope === "thread" && !threadId}
-                onSelect={() => start(scope, true, true)}
+                onSelect={() => start(scope, { enable_knowledge: true, full_text: true })}
               >{t(key)}</DropdownMenuItem>
             ))}
           </> : null}
@@ -161,6 +174,7 @@ export function ProjectDistillStatus({ projectId, wikiGraph = false }: { project
   const historyOmitted = result?.history_omitted
   const progress = result?.progress
   const wikiPhase = result?.wiki_phase
+  const localWiki = wikiGraph && result?.wiki_review === false
   const scanComplete = result?.wiki_scan_complete === true
   const scanProcessed = result?.wiki_scan_processed ?? 0
   const scanSkipped = result?.wiki_scan_skipped ?? 0
@@ -191,7 +205,9 @@ export function ProjectDistillStatus({ projectId, wikiGraph = false }: { project
     if (id) void store.getState().start(projectId, running ? { pause_review_id: id } : { resume_review_id: id })
   }
   const hasChanges = changes.length + pages.length > 0
-  const status = wikiGraph && state && state !== "idle"
+  const status = localWiki && state === "completed"
+    ? t("knowledge.wikiLocalComplete")
+    : wikiGraph && state && state !== "idle"
     ? t(running && phaseLabel ? phaseLabel : `knowledge.wikiState.${state}`)
     : state === "completed" && !hasChanges
     ? t("knowledge.distillNoChanges")
@@ -216,16 +232,16 @@ export function ProjectDistillStatus({ projectId, wikiGraph = false }: { project
           <p aria-live="polite" data-testid="wiki-scan-progress">
             {t("knowledge.wikiScanProgress", { done: scanProcessed, total: progress.total })}
             {scanSkipped ? ` · ${t("knowledge.wikiScanSkipped", { count: scanSkipped })}` : ""}
-            {scanDeferred ? ` · ${t("knowledge.wikiScanDeferred", { count: scanDeferred })}` : ""}
+            {scanDeferred ? ` · ${t(localWiki ? "knowledge.wikiScanTooLarge" : "knowledge.wikiScanDeferred", { count: scanDeferred })}` : ""}
           </p>
         </>
       ) : null}
-      {!scanning && (progress || state === "running") ? (
+      {!localWiki && !scanning && (progress || (!wikiGraph && state === "running")) ? (
         <ReviewProgressBar label={t(wikiGraph ? reviewLabel : "knowledge.distillProgressLabel")} percent={percent} />
       ) : null}
       {progress ? (
         <div className="flex flex-wrap items-center gap-x-2">
-          {!scanning ? (
+          {!localWiki && !scanning ? (
             <p aria-live="polite" data-testid="project-distill-progress">
               {t(showScan ? "knowledge.wikiReviewProgress" : "knowledge.distillProgress",
                 { done: progress.processed, total: progress.total, remaining: progress.remaining })}
@@ -239,7 +255,7 @@ export function ProjectDistillStatus({ projectId, wikiGraph = false }: { project
           ) : null}
         </div>
       ) : null}
-      {wikiGraph && result?.wiki_phase === "graph" && progress && (progress.batches > 0 || running) ? (
+      {wikiGraph && !localWiki && wikiPhase === "graph" && progress && (progress.batches > 0 || running) ? (
         <p aria-live="polite" data-testid="wiki-source-batches">
           {progress.batches > 0 ? t("knowledge.wikiSourceBatches", { count: progress.batches }) : t("knowledge.wikiFirstBatch")}
         </p>
@@ -256,7 +272,7 @@ export function ProjectDistillStatus({ projectId, wikiGraph = false }: { project
       {segment ? <p>{t("knowledge.distillSegmentProgress", segment)}</p> : null}
       {excerpted > 0 ? <p>{t("knowledge.distillExcerpted", { count: excerpted })}</p> : null}
       {oversizedSkipped > 0 ? <p>{t("knowledge.distillOversizedSkipped", { count: oversizedSkipped })}</p> : null}
-      {unavailable > 0 ? <p>{t("knowledge.distillSkipped", { count: unavailable })}</p> : null}
+      {!localWiki && unavailable > 0 ? <p>{t("knowledge.distillSkipped", { count: unavailable })}</p> : null}
       {historyOmitted && !progress?.coverage_known ? <p>{t(progress ? "knowledge.distillClipped" : "knowledge.distillOmitted")}</p> : null}
       {result?.uncertain && !active ? <p>{t("knowledge.distillUncertain")}</p> : null}
       {error ? (

@@ -252,10 +252,11 @@ MODELS = {
         Model(
             "wiki-build", ROOT / "models" / "knowledge" / "WikiBuild.tla",
             ("DocumentBeforeGraph", "CompleteBeforeDocuments", "LoseDocumentCheckpoint",
-             "ReviewBeforeLocalScan", "ScanWithoutPublication", "LoseLocalCheckpoint", "ReviewWithoutDecision", "DocumentWithoutNode"),
+             "ReviewBeforeLocalScan", "ScanWithoutPublication", "LoseLocalCheckpoint", "ReviewWithoutDecision",
+             "DocumentWithoutNode", "ReviewWithoutRequest", "LocalDocumentsBeforeScan"),
             ("TypeOK", "GraphFirst", "DocumentsCovered", "KeepPublished",
              "LocalCheckpointHasEvidence", "ReviewFollowsLocalScan", "DocumentsHaveNodes",
-             "ReviewCheckpointHasDecision"), (),
+             "ReviewCheckpointHasDecision", "NoUnrequestedReview"), (),
         ),
         Model(
             "project-distillation", ROOT / "models" / "knowledge" / "ProjectDistillation.tla",
@@ -520,7 +521,7 @@ def _askpub(name: str, source: str, switches: tuple[str, ...] = (), violates: st
 
 
 CASES: tuple[Case, ...] = (
-    _case("wiki-build-current", "extract all source windows, then finish all documents", model="wiki-build"),
+    _case("wiki-build-current", "publish local and optionally reviewed documents after scanning", model="wiki-build"),
     *(_case("wiki-build-" + guard, "seeded: " + guard, (guard,), invariant, model="wiki-build")
       for guard, invariant in (("DocumentBeforeGraph", "GraphFirst"),
                                ("CompleteBeforeDocuments", "DocumentsCovered"),
@@ -529,11 +530,17 @@ CASES: tuple[Case, ...] = (
                                ("ScanWithoutPublication", "LocalCheckpointHasEvidence"),
                                ("LoseLocalCheckpoint", "ReviewFollowsLocalScan"),
                                ("ReviewWithoutDecision", "ReviewCheckpointHasDecision"),
-                               ("DocumentWithoutNode", "DocumentsHaveNodes"))),
+                               ("DocumentWithoutNode", "DocumentsHaveNodes"),
+                               ("ReviewWithoutRequest", "NoUnrequestedReview"),
+                               ("LocalDocumentsBeforeScan", "ReviewFollowsLocalScan"))),
     _case("wiki-build-paused-scan", "interrupt after one durable local window",
           witness="NeverPausedDuringPartialLocalScan", model="wiki-build"),
     _case("wiki-build-paused-documents", "pause after publishing only part of the article queue",
           witness="NeverPausedPartwayThroughDocuments", model="wiki-build"),
+    _case("wiki-build-local-completes", "finish a nonempty wiki without model decisions",
+          witness="NeverCompletesLocalBuild", model="wiki-build"),
+    _case("wiki-build-reviewed-completes", "finish a wiki after all review decisions",
+          witness="NeverCompletesReviewedBuild", model="wiki-build"),
     _case("distillation-progress-current", "accepted batches cover the whole frozen history",
           model="distillation-progress"),
     *(_case("distillation-progress-" + guard, "seeded: " + guard, (guard,), invariant,
