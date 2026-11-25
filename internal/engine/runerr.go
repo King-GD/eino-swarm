@@ -24,6 +24,26 @@ const publicModelReadTimeout = "model response read timed out"
 
 const publicModelResponseInvalid = "the model service returned a response that could not be decoded"
 
+const modelRequestBlocked = "model_request_blocked"
+
+func gatewayGuardMessage(message string) bool {
+	return strings.EqualFold(strings.TrimSuffix(strings.TrimSpace(message), "."), "request blocked by the integration security guard")
+}
+
+// Only the gateway's explicit policy rejection qualifies. Other 403s can
+// represent credentials or provider access the user can repair.
+func isModelRequestBlocked(err error) bool {
+	var api *einoopenai.APIError
+	var sdk *openai.APIError
+	switch {
+	case errors.As(err, &api) && api != nil:
+		return api.HTTPStatusCode == http.StatusForbidden && gatewayGuardMessage(api.Message)
+	case errors.As(err, &sdk) && sdk != nil:
+		return sdk.HTTPStatusCode == http.StatusForbidden && gatewayGuardMessage(sdk.Message)
+	}
+	return false
+}
+
 // publicContextOverflow is the transcript line when the endpoint rejects
 // the call because input plus the requested output does not fit the window.
 // The provider paragraph stays in Trace. This sentence is stable when a

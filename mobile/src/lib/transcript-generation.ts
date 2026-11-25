@@ -1,8 +1,9 @@
 import type { CompactBlock } from "./transcript"
 import type { RemoteEvent } from "./rpc"
+import { isModelRequestBlocked, MODEL_REQUEST_BLOCKED } from "../../../frontend/src/lib/model-request-blocked"
 
 export type GenerationInterruption = {
-  reason: "engine_restart" | "process_exit" | "output_limit" | "model_error" | "timeout" | "cancelled" | "unknown"
+  reason: "engine_restart" | "process_exit" | "output_limit" | "model_error" | "timeout" | "cancelled" | "unknown" | typeof MODEL_REQUEST_BLOCKED
   detail: string
   recovery: "pending" | "recovered" | "none"
   seq: number
@@ -12,9 +13,11 @@ export type GenerationInterruption = {
 export function generationEvent(blocks: CompactBlock[], ev: RemoteEvent): CompactBlock[] {
   let body: Record<string, unknown> = {}
   try { body = JSON.parse(ev.text) ?? {} } catch { /* Old records have no cause. */ }
+  const detail = typeof body.detail === "string" ? body.detail : ""
+  const blocked = body.reason === MODEL_REQUEST_BLOCKED || body.reason === "model_error" && isModelRequestBlocked(detail)
   let generation: GenerationInterruption = {
-    reason: ["engine_restart", "process_exit", "output_limit", "model_error", "timeout", "cancelled"].includes(String(body.reason)) ? body.reason as GenerationInterruption["reason"] : "unknown",
-    detail: typeof body.detail === "string" ? body.detail : "",
+    reason: blocked ? MODEL_REQUEST_BLOCKED : ["engine_restart", "process_exit", "output_limit", "model_error", "timeout", "cancelled"].includes(String(body.reason)) ? body.reason as GenerationInterruption["reason"] : "unknown",
+    detail: blocked ? "" : detail,
     recovery: ev.kind === "generation_recovered" ? "recovered" : body.recovery === "pending" ? "pending" : "none",
     seq: ev.seq,
   }

@@ -3,6 +3,25 @@ import { writeFile } from "node:fs/promises"
 
 const API_ERROR = "model API request failed: HTTP 502 Bad Gateway: unexpected end of JSON input"
 
+for (const history of ["model-request-blocked", "legacy-model-request-blocked"]) {
+  test(`phone shows one safety notice for ${history} after reopening`, async ({ page }, info) => {
+    await page.addInitScript(() => localStorage.setItem("zwai.phone.locale", "zh"))
+    await page.goto(`/?mock=1&tick=0&history=${history}`)
+    for (const phase of ["initial", "reloaded"]) {
+      await page.getByRole("button", { name: "返回", exact: true }).click()
+      await page.getByRole("button", { name: "打开 Sweep the unused exports", exact: true }).click()
+      const transcript = page.getByTestId("transcript")
+      const notice = transcript.getByRole("status").filter({ hasText: "这条请求因安全限制未能处理。你可以调整请求内容，或换个问题继续。" })
+      await expect(notice).toHaveCount(1)
+      await expect(notice).toBeVisible()
+      await expect(transcript.getByRole("button", { name: "重试", exact: true })).toHaveCount(0)
+      await expect(transcript).not.toContainText(/integration security guard|model_request_blocked/)
+      await writeFile(info.outputPath(`request-blocked-${phase}.png`), await page.screenshot({ animations: "disabled" }), { mode: 0o600 })
+      if (phase === "initial") await page.reload()
+    }
+  })
+}
+
 test("phone localizes an interrupted model response and its retries after reload", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("zwai.phone.locale", "zh"))
   await page.goto("/?mock=1&tick=0&history=model-read-timeout")

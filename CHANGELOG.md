@@ -106,6 +106,9 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Gateway safety refusals show one localized chat notice on desktop, Web and
+  paired phones. The blocked turn cannot be retried. (`F-130`, `C-035`)
+
 - Wiki graphs exclude workflow and editorial labels. Previously generated
   labels appear in Pending with their saved citations. (`F-138`, `C-053`, `C-054`)
 

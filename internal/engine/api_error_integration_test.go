@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -41,6 +42,45 @@ func TestAPIAuthenticationFailureEndsTheSameTurnWithoutRetry(t *testing.T) {
 				fmt.Sprintf("error, status code: %d, status: %d %s, message: request not authorized", status, status, http.StatusText(status)),
 				1, 0)
 		})
+	}
+}
+
+func TestGatewaySafetyRefusalStopsTheTurnWithoutResending(t *testing.T) {
+	const message = "Request blocked by the integration security guard."
+	e, requests := newAPIErrorEngine(t, http.StatusForbidden, `{"error":{"message":"`+message+`","type":"invalid_request_error"}}`)
+	turn := assertAPIErrorTurn(t, e, requests, "model_request_blocked",
+		"error, status code: 403, status: 403 Forbidden, message: "+message, 1, 0)
+	events, err := e.Store().ListTurnEvents(turn.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	interruptions := 0
+	for _, event := range events {
+		switch event.Kind {
+		case KindModelBackoff:
+			t.Errorf("safety refusal entered backoff: %+v", event)
+		case swarm.NotifyGenerationInterrupted.String():
+			interruptions++
+			var body swarm.GenerationInterruption
+			if err := json.Unmarshal([]byte(event.Text), &body); err != nil || body.Reason != "model_request_blocked" || body.Detail != "" || body.Recovery != "none" {
+				t.Errorf("generation interruption=%+v, err=%v", body, err)
+			}
+		}
+	}
+	if interruptions != 1 {
+		t.Errorf("generation interruptions=%d, want 1", interruptions)
+	}
+	if _, err := e.RetryFailedTurn(turn.ThreadID, turn.ID); !errors.Is(err, ErrNoFailedTurn) {
+		t.Fatalf("retry admission for the current receipt: %v", err)
+	}
+	if err := e.Store().FinishTurn(turn.ID, store.TurnError, "", "model API request failed: HTTP 403 Forbidden: "+message); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.RetryFailedTurn(turn.ThreadID, turn.ID); !errors.Is(err, ErrNoFailedTurn) {
+		t.Fatalf("retry admission for the historical receipt: %v", err)
+	}
+	if requests.Load() != 1 {
+		t.Errorf("blocked input was sent %d times", requests.Load())
 	}
 }
 
@@ -255,7 +295,7 @@ func TestAPIBackoffCancellationCannotSendTheWaitingRetry(t *testing.T) {
 	}
 }
 
-func assertAPIErrorTurn(t *testing.T, e *Engine, requests *atomic.Int32, publicError, rawError string, attempts, retries int, reason ...string) {
+func assertAPIErrorTurn(t *testing.T, e *Engine, requests *atomic.Int32, publicError, rawError string, attempts, retries int, reason ...string) *store.Turn {
 	t.Helper()
 	thread, err := e.CreateThread("API failure regression", "", "")
 	if err != nil {
@@ -331,4 +371,5 @@ func assertAPIErrorTurn(t *testing.T, e *Engine, requests *atomic.Int32, publicE
 	if got := int(requests.Load()); got != attempts {
 		t.Errorf("real offline HTTP attempts=%d, want %d", got, attempts)
 	}
+	return got
 }

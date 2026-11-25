@@ -301,10 +301,14 @@ separate from successful or failed workers. Reopening keeps that state even
 when a cancellation receipt arrives after cleanup. Cleanup alone never means
 a task completed. Explicitly resuming a worker can run it again.
 
-When the latest human turn fails on desktop or web, **Retry** continues from
+When the latest human turn offers **Retry** on desktop or web, it continues from
 the context stored at that failure, including tool results already recorded.
 The same turn continues. Retry stays disabled while Settings is open or the
 conversation is busy.
+
+If the gateway blocks a request for safety reasons, chat shows one notice.
+You can adjust the request or ask something else. The failed turn has no
+**Retry** action, and Trace retains the original model call error.
 
 If the manager hits its tool-round limit, the transcript asks whether to add
 another slice. **Manager tool rounds** opens Settings → Swarm on that field.

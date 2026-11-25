@@ -193,6 +193,15 @@ export class MockHost {
         this.seed(done, reasoningOnlyTurn(false), false)
       } else if (history === "model-response-error" || history === "model-read-timeout") {
         this.seed(done, modelFailureHistory(history === "model-read-timeout"), false)
+      } else if (history === "model-request-blocked" || history === "legacy-model-request-blocked") {
+        const legacy = history === "legacy-model-request-blocked"
+        const turnID = "blocked-turn"
+        const error = legacy ? "model API request failed: HTTP 403 Forbidden: Request blocked by the integration security guard." : "model_request_blocked"
+        this.seed(done, [
+          { kind: "user_message", turnID, text: "Perform the requested check" },
+          { kind: "generation_interrupted", turnID, agentID: "manager", messageID: "blocked", text: JSON.stringify({ reason: legacy ? "model_error" : error, detail: legacy ? error : "", recovery: "none" }) },
+          { kind: "error", turnID, agentID: "manager", err: error },
+        ], false)
       } else if (new URLSearchParams(location.search).get("history") === "api-error") {
         this.seed(done, [
           { kind: "error", agentID: "manager", err: "model API request failed: HTTP 502 Bad Gateway: unexpected end of JSON input" },

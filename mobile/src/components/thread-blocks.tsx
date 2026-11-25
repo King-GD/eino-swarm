@@ -1,5 +1,5 @@
 import { BackoffNotice } from "./backoff-notice"
-import { GenerationNotice } from "./generation-notice"
+import { GenerationNotice, ModelRequestBlockedNotice } from "./generation-notice"
 import { IterationLimitCard } from "./iteration-limit-card"
 import { useCallback, useEffect, useState } from "react"
 import { ChevronRight, Loader2 } from "lucide-react"
@@ -32,6 +32,7 @@ import type { RemoteLink } from "@/lib/link"
 import type { HistoryWork } from "@/lib/rpc"
 import { LazyHistoryWork } from "@/components/lazy-history-work"
 import { gatewayImageCode } from "@/lib/paired-image-generation"
+import { isModelRequestBlocked, visibleModelRequestNotices } from "../../../frontend/src/lib/model-request-blocked"
 
 export function renderBlock(b: CompactBlock) {
   if (b.kind === "turn_end") {
@@ -97,6 +98,7 @@ export function renderBlock(b: CompactBlock) {
     return null
   }
   if (b.kind === "error" || (b.kind === "finish" && b.failed)) {
+    if (isModelRequestBlocked(b.text)) return <ModelRequestBlockedNotice />
     return <p className="text-sm text-destructive">{localizeNotice(b.text)}</p>
   }
   if (b.kind === "finish" && b.cancelled) {
@@ -311,11 +313,12 @@ export function ThreadLog({
   historyAgent?: string
 }) {
   const deferred = historyWork.filter((range) => !range.agent_ids || range.agent_ids.includes(historyAgent))
-  const items = foldPhoneItems(deferred.length ? blocks.filter((block) => {
+  const visible = visibleModelRequestNotices(blocks)
+  const items = foldPhoneItems(deferred.length ? visible.filter((block) => {
     if (block.kind !== "reasoning" && block.kind !== "tool") return true
     const seq = block.sourceSeq ?? 0
     return !deferred.some((range) => seq >= range.from && seq <= range.through)
-  }) : blocks)
+  }) : visible)
   let lastWork = -1
   items.forEach((item, i) => {
     if (item.type === "block" && item.block.kind === "turn_end") {

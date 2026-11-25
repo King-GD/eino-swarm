@@ -353,6 +353,8 @@ an older answer body whenever the tail contains only a divider. The current
 turn, live sequence and streaming output remain current while pages arrive.
 A failed page keeps the ready conversation, reports the error once and does not
 retry automatically. **Earlier** jumps to the preceding assistant reply.
+When the paired computer's gateway blocks a chat request for safety reasons,
+the phone shows one notice and lets you compose a different request.
 Current PCs send compact history for completed conversations and older pages.
 Expand **Thinking and tools** to request those steps, with further pages
 available inside the fold when needed. A running conversation retains its live

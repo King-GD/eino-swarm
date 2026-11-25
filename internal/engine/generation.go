@@ -133,7 +133,9 @@ func (a *accumulator) generation(n swarm.Notification) {
 				}
 			}
 		}
-		if n.Err != nil && body.Reason == "model_error" {
+		if body.Reason == "model_error" && isModelRequestBlocked(n.Err) {
+			body.Reason, body.Detail = modelRequestBlocked, ""
+		} else if n.Err != nil && body.Reason == "model_error" {
 			detail := strings.Join(strings.Fields(publicTurnError(n.Err)), " ")
 			detail = publicAPIBearer.ReplaceAllString(detail, "[redacted]")
 			detail = publicAPICredentials.ReplaceAllString(detail, "[redacted]")

@@ -8866,6 +8866,12 @@ through paired history playback on Chromium and iPhone WebKit.
 
 `cd frontend && ZWAI_E2E_MODEL_API_ERROR=1 npm run e2e -- api-error.spec.ts` runs the desktop Web path against a local empty-502 HTTP endpoint through the real SDK. The flag selects the API-error test group and starts the app without `--mock`. The regular offline-provider suite skips these tests. Check Chat, the same-turn Trace and Full log, return/reload persistence, three HTTP calls and two retries, and the retained screenshots/Trace JSON.
 
+The same Web suite checks a gateway safety 403 through the real SDK and chat.
+It verifies one notice and no Retry before and after reload, direct retry
+refusal and one model request. `TestGatewaySafetyRefusalStopsTheTurnWithoutResending`
+checks durable receipts and original model call Trace. The paired phone
+`api-error.spec.ts` exercises both current and legacy receipts on reload.
+
 `cd frontend && ZWAI_E2E_MODEL_API_ERROR=1 npm run e2e -- transcript-error-retry.spec.ts`
 uses a keyless loopback model to fail the original turn, then verifies
 `POST /api/threads/:id/retry` with `{turn_id}`, the same turn id, no rewind,

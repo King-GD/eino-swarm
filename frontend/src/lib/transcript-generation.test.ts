@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { visibleModelRequestNotices } from "./model-request-blocked"
 import { emptyTranscript, reduceEvent, reduceEvents } from "./transcript"
 import type { SwarmEvent } from "./types"
 
@@ -10,6 +11,18 @@ const recovered = event("generation_recovered", 6, { ...interrupted, kind: "gene
 const thought = event("reasoning_delta", 0, { message_id: "first", text: "partial thought" })
 
 describe("generation interruption", () => {
+  it.each([false, true])("shows one safety notice for the same historical turn (terminal first: %s)", (terminalFirst) => {
+    const error = "model API request failed: HTTP 403 Forbidden: Request blocked by the integration security guard."
+    const receipt = event("generation_interrupted", 2, { agent_id: "manager", message_id: "blocked", text: JSON.stringify({ reason: "model_error", detail: error, recovery: "none" }) })
+    const terminal = event("error", 3, { agent_id: "manager", err: error })
+    const other = { ...receipt, turn_id: "another-turn", message_id: "other", seq: 4 }
+    const state = reduceEvents(emptyTranscript(), [...(terminalFirst ? [terminal, receipt] : [receipt, terminal]), other])
+    const blocks = state.agents.manager.blocks
+    expect(blocks.filter((b) => b.generation)).toHaveLength(2)
+    const visible = visibleModelRequestNotices(blocks)
+    expect(visible.map((b) => [b.turnId, b.kind])).toEqual([["turn", "error"], ["another-turn", "notice"]])
+  })
+
   it("closes one generation without failing its recovering worker and preserves the reason after recovery", () => {
     let state = reduceEvents(emptyTranscript(), [event("spawned", 1), thought, interrupted])
     expect(state.agents.worker.status).toBe("running")

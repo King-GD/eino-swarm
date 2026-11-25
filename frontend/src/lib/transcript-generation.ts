@@ -2,9 +2,10 @@ import { t, type Locale } from "./i18n"
 import type { AgentState } from "./transcript"
 import type { SwarmEvent } from "./types"
 import { block, replaceComplete, replaceStreaming } from "./transcript-blocks"
+import { isModelRequestBlocked, MODEL_REQUEST_BLOCKED } from "./model-request-blocked"
 
 export type GenerationInterruption = {
-  reason: "engine_restart" | "process_exit" | "output_limit" | "model_error" | "timeout" | "cancelled" | "unknown"
+  reason: "engine_restart" | "process_exit" | "output_limit" | "model_error" | "timeout" | "cancelled" | "unknown" | typeof MODEL_REQUEST_BLOCKED
   detail: string
   recovery: "pending" | "recovered" | "none"
   seq: number
@@ -14,10 +15,11 @@ export type GenerationInterruption = {
 export function parseGeneration(ev: SwarmEvent): GenerationInterruption {
   let body: Record<string, unknown> = {}
   try { body = JSON.parse(ev.text ?? "") ?? {} } catch { /* Older records may have no envelope. */ }
-  const reason = body.reason
+  const detail = typeof body.detail === "string" ? body.detail : ""
+  const blocked = body.reason === MODEL_REQUEST_BLOCKED || body.reason === "model_error" && isModelRequestBlocked(detail)
   return {
-    reason: ["engine_restart", "process_exit", "output_limit", "model_error", "timeout", "cancelled"].includes(String(reason)) ? reason as GenerationInterruption["reason"] : "unknown",
-    detail: typeof body.detail === "string" ? body.detail : "",
+    reason: blocked ? MODEL_REQUEST_BLOCKED : ["engine_restart", "process_exit", "output_limit", "model_error", "timeout", "cancelled"].includes(String(body.reason)) ? body.reason as GenerationInterruption["reason"] : "unknown",
+    detail: blocked ? "" : detail,
     recovery: ev.kind === "generation_recovered" ? "recovered" : body.recovery === "pending" ? "pending" : "none",
     seq: ev.seq,
   }
@@ -55,6 +57,7 @@ export function recoverLegacyGeneration(agent: AgentState, ev: SwarmEvent) {
 }
 
 export function generationNotice(generation: GenerationInterruption, locale: Locale): string {
+  if (generation.reason === MODEL_REQUEST_BLOCKED) return t(locale, "generation.requestBlocked")
   return `${t(locale, "generation.interrupted", { reason: t(locale, `generation.reason.${generation.reason}`) })} ${t(locale, `generation.recovery.${generation.recovery}`)}`
 }
 

@@ -167,6 +167,60 @@ test(`${responseCase.name} stays visible in Chat and the same turn Trace after r
 
 }
 
+test("a gateway safety refusal shows one notice and cannot be retried live or after reload", async ({ page, request }, info) => {
+  test.skip(process.env.ZWAI_E2E_MODEL_API_ERROR !== "1", "requires the opt-in keyless loopback model endpoint")
+  const guardMessage = "Request blocked by the integration security guard."
+  let attempts = 0
+  const endpoint = createServer((incoming, response) => {
+    attempts++
+    incoming.resume()
+    response.writeHead(403, { "Content-Type": "application/json" })
+    response.end(JSON.stringify({ error: { message: guardMessage, type: "invalid_request_error" } }))
+  })
+  await new Promise<void>((resolve) => endpoint.listen(0, "127.0.0.1", resolve))
+  try {
+    const address = endpoint.address()
+    if (!address || typeof address === "string") throw new Error("loopback model endpoint did not listen")
+    const { settings } = await (await request.get("/api/settings")).json()
+    expect((await request.put("/api/settings", { data: {
+      models: { default: "fixture-provider", providers: [{
+        id: "fixture-provider", label: "Offline API regression", base_url: `http://127.0.0.1:${address.port}`,
+        model: "fixture-model", api_key: "", context_window: 128000,
+      }] },
+      swarm: { ...settings.swarm, auto_title: false },
+      memory: { ...settings.memory, auto_review: false },
+    } })).ok()).toBe(true)
+
+    await freshConversation(page)
+    const threadId = await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id")
+    const accepted = page.waitForResponse((response) => response.request().method() === "POST"
+      && new URL(response.url()).pathname === `/api/threads/${threadId}/deliver`)
+    await composer(page).fill("Perform the requested check")
+    await composer(page).press("Enter")
+    const started = await accepted
+    expect(started.status()).toBe(202)
+    const { turn } = await started.json()
+    const transcript = page.getByTestId("transcript")
+    for (const phase of ["live", "reloaded"]) {
+      await waitForIdle(page)
+      const notice = transcript.getByRole("status").filter({ hasText: "This request couldn’t be processed due to safety restrictions. You can rephrase it or ask something else." })
+      await expect(notice).toHaveCount(1)
+      await expect(notice).toBeVisible()
+      await expect(transcript.getByTestId("transcript-error-retry")).toHaveCount(0)
+      await expect(transcript).not.toContainText(guardMessage)
+      await expect(composer(page)).toBeEnabled()
+      await writeFile(info.outputPath(`request-blocked-${phase}.png`), await page.screenshot({ animations: "disabled" }), { mode: 0o600 })
+      if (phase === "live") await reloadOpenConversation(page)
+    }
+    const retry = await request.post(`/api/threads/${threadId}/retry`, { data: { turn_id: turn.id } })
+    expect(retry.status()).toBe(409)
+    expect(await retry.json()).toMatchObject({ code: "no_failed_turn" })
+    expect(attempts).toBe(1)
+  } finally {
+    await new Promise<void>((resolve) => { endpoint.close(() => resolve()); endpoint.closeAllConnections() })
+  }
+})
+
 test("a first-byte timeout guides configuration and a longer wait reaches the model response", async ({ page, request }, info) => {
   test.skip(process.env.ZWAI_E2E_MODEL_API_ERROR !== "1", "requires the opt-in keyless loopback model endpoint")
   let attempts = 0
@@ -211,7 +265,7 @@ test("a first-byte timeout guides configuration and a longer wait reaches the mo
         id: "slow-start", label: "Offline slow start", base_url: `http://127.0.0.1:${address.port}`,
         model: "offline", api_key: "", timeout_seconds: 1, first_byte_timeout_seconds: 1,
       }] },
-      swarm: { ...settings.swarm, auto_title: false },
+      swarm: { ...settings.swarm, auto_title: false, composer_predictions: false },
       memory: { ...settings.memory, auto_review: false },
     } })).ok()).toBe(true)
 
@@ -326,7 +380,7 @@ test("queued human messages run FIFO after a scheduled first-byte timeout withou
         id: "queue-after-error", label: "Offline queued-message regression", base_url: `http://127.0.0.1:${address.port}`,
         model: "offline", api_key: "", first_byte_timeout_seconds: 2, timeout_seconds: 3,
       }] },
-      swarm: { ...settings.swarm, auto_title: false },
+      swarm: { ...settings.swarm, auto_title: false, composer_predictions: false },
       memory: { ...settings.memory, auto_review: false },
     } })).ok()).toBe(true)
     await freshConversation(page)
@@ -349,11 +403,12 @@ test("queued human messages run FIFO after a scheduled first-byte timeout withou
     const queueIDs: string[] = []
     for (const text of queued) {
       const accepted = page.waitForResponse((response) => response.request().method() === "POST"
-        && new URL(response.url()).pathname === `/api/threads/${threadID}/followups`)
+        && new URL(response.url()).pathname === `/api/threads/${threadID}/deliver`)
       await composer(page).fill(text)
       await composer(page).press("Enter")
       const response = await accepted
       expect(response.status()).toBe(202)
+      expect(response.request().postDataJSON()).toMatchObject({ mode: "queue", text })
       queueIDs.push((await response.json()).followup.id)
     }
     const tray = page.getByTestId("followup-queue")

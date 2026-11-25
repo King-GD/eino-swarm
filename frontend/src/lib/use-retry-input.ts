@@ -3,6 +3,7 @@ import { useShallow } from "zustand/react/shallow"
 
 import { useApp, type AppState } from "@/store/app"
 import { useSettingsSheet } from "@/store/settings-sheet"
+import { isModelRequestBlocked } from "./model-request-blocked"
 import { MANAGER_ID } from "./transcript"
 
 type RetryState = Pick<AppState, "activeId" | "loaded" | "transcript" | "turns" | "status" | "meta" | "historyHasMore">
@@ -20,7 +21,7 @@ function continuableFailure(state: RetryState, turnId: string): boolean {
   const latest = state.transcript.turns.at(-1)
   if (!state.activeId || latest?.id !== turnId || latest.status !== "error") return false
   const failed = state.turns.find((turn) => turn.id === turnId)
-  if (!failed) return false
+  if (!failed || isModelRequestBlocked(latest.error) || isModelRequestBlocked(failed.error)) return false
   if (failed.thread_id !== state.activeId || failed.seq <= 0) return false
   if (failed.image_command || failed.goal_continue || failed.schedule_continue || failed.schedule_run_id) return false
   if (state.turns.some((turn) => turn.thread_id === state.activeId && turn.seq > failed.seq)) return false

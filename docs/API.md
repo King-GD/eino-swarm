@@ -2921,7 +2921,8 @@ reused. The current `max_completion_tokens` applies to the continuation.
 
 `400` when `turn_id` is missing or blank. `409 no_failed_turn` when that id
 is not the latest failed human turn, including a goal or schedule turn, a
-cancelled turn, or a turn with no stored user message. `409 busy` while a
+cancelled turn, a turn with no stored user message, or a gateway safety
+refusal (`model_request_blocked` or its legacy error text). `409 busy` while a
 turn is running. `409 restoring` while startup recovery is in progress.
 
 ```json
@@ -3065,8 +3066,10 @@ overlap: apply a stored `(thread_id, seq)` only once, including side effects.
 also preserves the optional field; clients that do not use it remain compatible.
 
 Generation interruption `reason` is `engine_restart`, `process_exit`,
-`output_limit`, `model_error`, `timeout`, `cancelled` or `unknown`. `detail`
-contains the recorded cause; a process exit alone does not prove its trigger.
+`output_limit`, `model_error`, `model_request_blocked`, `timeout`, `cancelled`
+or `unknown`. `detail` contains the recorded cause when available. A process
+exit alone does not prove its trigger. A gateway safety refusal has empty
+`detail`, with the original HTTP failure available in Trace model calls.
 `recovery` is `pending` (recovery is arranged), `recovered` (execution resumed)
 or `none` (no recovery is arranged). Lifecycle events retain the output's
 original turn for Trace even if its worker outlives that manager check.
@@ -3143,7 +3146,7 @@ shortening only the bounded detail text.
 | `schedule_report` | the scheduled check reported. `text` is JSON `{findings,quiet}`. Empty findings / `quiet:true` hide that turn's chat bubbles; the events stay in the log. When this event is omitted after `schedule_fired` and `done` is empty, the client treats the turn the same way. A findings report plus empty `done` keeps the fired chip |
 | `schedule_cancelled` | a wait was cancelled. `text` is the schedule id. `role: "human"` on the wake target records an explicit human cancellation and denies further manager waits until later human permission. The transcript shows a short chip, not the raw id |
 | `done` | the turn finished; `text` is the final answer. Empty / whitespace `text` hides chat bubbles only after `schedule_fired` when that turn did not already report findings. An armed `schedule`, `goal_continued`, compact, or other notice plus empty `done` stays visible. Non-empty `text` after a fire is findings and keeps the fired chip |
-| `error` | the turn failed; `err` explains |
+| `error` | the turn failed; `err` explains. A gateway safety refusal on the manager call uses `model_request_blocked` here and in `turn.error` |
 | `ready` | replay is complete (no `seq`, not stored) |
 
 When `tools.enabled` includes `exec_session`, eligible ordinary manager
