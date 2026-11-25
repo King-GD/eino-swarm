@@ -145,6 +145,10 @@ var EASMCloudLabels = map[string]CloudLabel{
 	"allelink":           {"万物易联", CloudCategoryCDN},
 	"cdnify":             {"CDNify", CloudCategoryCDN},
 	"cdnsun":             {"CDNsun", CloudCategoryCDN},
+	"cloudxns":           {"CloudXNS", CloudCategoryCDN},
+	"g-core labs":        {"G-Core Labs", CloudCategoryCDN},
+	"new1cloud":          {"新一云", CloudCategoryCDN},
+	"reapleaf":           {"Reapleaf", CloudCategoryCDN},
 
 	// Edge protection.
 	"aliyundun":         {"阿里云盾", CloudCategoryWAF},

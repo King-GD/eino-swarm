@@ -47,6 +47,21 @@ it("shows the assets behind each provider with its category and services", () =>
   expect(rows[3].children[1]).toHaveTextContent("—")
 })
 
+// The maintained names are Chinese. Another language shows the provider as
+// FOFA reported it, and the same stored row follows a language switch.
+it("shows the maintained name only in Chinese and the source name otherwise", () => {
+  const en = easmText("en")
+  const clouds = [{ name: "akamai", display_name: "阿卡迈", category: "cdn" as const, assets: 7, ips: 3, services: [] }]
+  const view = render(<EasmTextContext value={en}><CloudTable clouds={clouds} /></EasmTextContext>)
+  const row = () => within(screen.getByTestId("easm-clouds")).getAllByRole("row")[1]
+  expect(row()).toHaveTextContent("akamai")
+  expect(row()).not.toHaveTextContent("阿卡迈")
+  expect(row().children[1]).toHaveTextContent(en.cloudCategories.cdn)
+  expect(row().children[1]).not.toHaveAttribute("title")
+  view.rerender(<EasmTextContext value={zh}><CloudTable clouds={clouds} /></EasmTextContext>)
+  expect(row()).toHaveTextContent("阿卡迈")
+})
+
 // A panel stored before the table existed has no clouds field; it renders as an
 // empty section rather than failing the whole portrait.
 it("renders a panel stored without the table as an empty section", () => {

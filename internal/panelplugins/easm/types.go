@@ -269,7 +269,8 @@ type Component struct {
 
 // Cloud is one hosting provider row: the company's assets behind that provider,
 // not the provider's own footprint. Category is a stable key the renderer words
-// in the user's language; the producer never stores prose.
+// in the user's language. Name is FOFA's spelling; DisplayName is the maintained
+// Chinese name, which the renderer shows only in Chinese, as FOFA AI does.
 type Cloud struct {
 	Name        string         `json:"name"`
 	DisplayName string         `json:"display_name,omitempty"`

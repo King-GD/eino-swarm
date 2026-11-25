@@ -38,6 +38,9 @@ const en = {
   cloudCaption: (count: number) => `Cloud providers hosting the confirmed assets; ${count} providers`,
   cloudProvider: "Provider", cloudCategory: "Category", cloudAssets: "Assets", cloudIPs: "IPs", cloudServices: "Main services",
   cloudService: (name: string, count: string) => `${name} ${count}`,
+  // display_name is the maintained Chinese name; other languages keep the
+  // provider as FOFA reports it, as FOFA AI does.
+  translatedProviderNames: false as boolean,
   cloudCategories: {
     cdn: "CDN", waf: "WAF", cloud: "Cloud", storage: "Storage", mail: "Mail",
     platform: "Hosting", own: "Own", unknown: "—",
@@ -90,6 +93,7 @@ const zh: EasmText = {
   cloudCaption: (count) => `企业资产所在的云服务商，共 ${count} 家`,
   cloudProvider: "云商", cloudCategory: "类别", cloudAssets: "资产", cloudIPs: "IP", cloudServices: "主要服务",
   cloudService: (name, count) => `${name} ${count}`,
+  translatedProviderNames: true,
   cloudCategories: {
     cdn: "CDN", waf: "防护", cloud: "主机", storage: "存储", mail: "邮件",
     platform: "托管", own: "自有", unknown: "—",

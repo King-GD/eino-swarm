@@ -44,14 +44,15 @@ export function CloudTable({ clouds, loading = false, className }: {
           </thead>
           <tbody>
             {rows.map((cloud) => {
-              const name = cloud.display_name || cloud.name
+              // Chosen at render time, so a stored panel follows a language switch.
+              const name = (text.translatedProviderNames && cloud.display_name) || cloud.name
               const services = cloud.services.length
                 ? cloud.services.map((service) => text.cloudService(service.name, formatCount(service.count, text))).join(text.listSeparator)
                 : "—"
               return (
                 <tr key={cloud.name} className="border-b hover:bg-accent">
                   <td className="h-[43px] truncate px-1.5" title={cloud.name}>{name}</td>
-                  <td className="px-1.5 text-muted-foreground" title={cloud.category}>{categories[cloud.category] ?? text.cloudCategories.unknown}</td>
+                  <td className="px-1.5 text-muted-foreground">{categories[cloud.category] ?? text.cloudCategories.unknown}</td>
                   <td className="px-1.5 text-right tabular-nums">{formatCount(cloud.assets, text)}</td>
                   <td className="px-1.5 text-right tabular-nums">{formatCount(cloud.ips, text)}</td>
                   <td className="truncate px-1.5 text-muted-foreground" title={services}>{services}</td>
