@@ -82,9 +82,10 @@ jobs:
   # the browser evidence from being produced.
   pc-web-e2e:
     name: PC/Web offline E2E
-    # 24.04 is the image whose Gtk 4 / WebKit 6 package names this job installs
-    # below; a moving ubuntu-latest can change them.
-    runs-on: ubuntu-24.04
+    # The suite asserts a macOS settings titlebar (render probe cover) that the
+    # baseline asserts under the same platform condition; Linux Chromium cannot
+    # produce it. The Intel image also has capacity while macOS ARM is short.
+    runs-on: macos-15-intel
     timeout-minutes: 120
     env:
       # Selects the headless server entry. Playwright's web server inherits it.
@@ -103,14 +104,6 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      # Even with the server tag the tree still imports the native shell's
-      # Gtk/WebKit packages, so the first Go build needs their pkg-config
-      # files. The transitive dependencies provide glib and libsoup. CGO stays
-      # enabled because those packages are cgo bindings.
-      - name: Install the Go build's Linux system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev libx11-dev
       - name: Install frontend packages
         run: cd frontend && npm ci
       # The bundle and its source stamp let the web server serve dist/ rather
@@ -122,8 +115,8 @@ jobs:
       # disposable binary only warms the Go build cache.
       - name: Warm the Go build cache
         run: go build -o "$RUNNER_TEMP/zwai" ./cmd/zwai
-      - name: Install the suite browser and its Linux dependencies
-        run: cd frontend && npx playwright install --with-deps chromium
+      - name: Install the suite browser
+        run: cd frontend && npx playwright install chromium
       - name: Offline browser E2E
         run: cd frontend && npm run e2e
       - name: Keep the E2E evidence when the suite fails
