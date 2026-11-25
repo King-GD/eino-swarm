@@ -164,9 +164,9 @@ func TestCloudsKeepTheLargestProvidersAndOrderServicesStably(t *testing.T) {
 	}
 }
 
-// The counts come from the distribution, so a service lookup that fails or
-// returns malformed buckets leaves only that row's services empty. The other
-// rows and the step itself still finish.
+// The counts come from the distribution, so they are published even when a
+// service lookup fails or returns malformed buckets. The step itself fails:
+// the empty services are unfinished work, and the next collection repeats them.
 func TestCloudsKeepCountsWhenOneServiceLookupFails(t *testing.T) {
 	for name, broken := range map[string]func(string) (string, error){
 		"tool error":       func(string) (string, error) { return "", errors.New("unreachable") },
@@ -185,7 +185,7 @@ func TestCloudsKeepCountsWhenOneServiceLookupFails(t *testing.T) {
 			},
 		}
 		state := runMetrics(t, nil, onlyRoles(RoleStats), caller.caller())
-		if got := stepStatus(state, StepClouds); got.Status != statusDone {
+		if got := stepStatus(state, StepClouds); got.Status != statusFailed {
 			t.Fatalf("%s: clouds step = %+v", name, got)
 		}
 		want := []Cloud{
@@ -222,15 +222,15 @@ func TestCloudsRefuseBucketsThatCannotBeShown(t *testing.T) {
 	}
 }
 
-// A name the filter cannot quote still has its counts; only its services are
-// unavailable.
+// A name the filter cannot quote still has its counts. Its services cannot be
+// requested, so the step fails and the next collection repeats them.
 func TestCloudsShowAnUnfilterableProviderWithoutServices(t *testing.T) {
 	caller := &cloudCaller{
 		distribution: `{"query":"org=\"Subject\"","aggs":{"cloud_name":[{"name":"a\"b","count":2,"uniq":{"ip":1}}]}}`,
 		services:     func(query string) (string, error) { return cloudServiceReply(query, `[{"name":"NGINX","count":2}]`) },
 	}
 	state := runMetrics(t, nil, onlyRoles(RoleStats), caller.caller())
-	if got := stepStatus(state, StepClouds); got.Status != statusDone {
+	if got := stepStatus(state, StepClouds); got.Status != statusFailed {
 		t.Fatalf("clouds step = %+v", got)
 	}
 	if len(caller.sent) != 0 || len(state.Clouds) != 1 || state.Clouds[0].Assets != 2 || len(state.Clouds[0].Services) != 0 {
@@ -238,9 +238,10 @@ func TestCloudsShowAnUnfilterableProviderWithoutServices(t *testing.T) {
 	}
 }
 
-// The stats backend is rate limited, so a full table must not send every
-// service lookup at once.
-func TestCloudServiceLookupsStayWithinTheConcurrencyBound(t *testing.T) {
+// The stats backend is rate limited, so the whole panel shares one request
+// budget: the service lookups and the other aggregations together must not
+// exceed it.
+func TestPanelRequestsStayWithinTheSharedBudget(t *testing.T) {
 	var buckets []string
 	for i := range 20 {
 		buckets = append(buckets, fmt.Sprintf(`{"name":"Provider %02d","count":%d,"uniq":{"ip":1}}`, i, 100-i))
@@ -249,23 +250,29 @@ func TestCloudServiceLookupsStayWithinTheConcurrencyBound(t *testing.T) {
 	var mu sync.Mutex
 	inFlight, peak := 0, 0
 	caller := &cloudCaller{distribution: distribution, services: func(query string) (string, error) {
+		time.Sleep(5 * time.Millisecond)
+		return cloudServiceReply(query, `[]`)
+	}}
+	base := caller.caller()
+	tracked := CallerFunc(func(ctx context.Context, tool string, arguments map[string]any) (json.RawMessage, error) {
 		mu.Lock()
 		inFlight++
 		peak = max(peak, inFlight)
 		mu.Unlock()
-		time.Sleep(5 * time.Millisecond)
-		mu.Lock()
-		inFlight--
-		mu.Unlock()
-		return cloudServiceReply(query, `[]`)
-	}}
-	settings := onlyRoles(RoleStats)
+		defer func() {
+			mu.Lock()
+			inFlight--
+			mu.Unlock()
+		}()
+		return base.Call(ctx, tool, arguments)
+	})
+	settings := testSettings()
 	settings.MaxClouds = 20
-	state := runMetrics(t, nil, settings, caller.caller())
+	state := runMetrics(t, nil, settings, tracked)
 	if got := stepStatus(state, StepClouds); got.Status != statusDone || len(state.Clouds) != 20 {
 		t.Fatalf("clouds step = %+v, rows = %d", got, len(state.Clouds))
 	}
-	if len(caller.sent) != 20 || peak > cloudServiceLookups || peak < 2 {
+	if len(caller.sent) != 20 || peak > panelRequestSlots || peak < 2 {
 		t.Fatalf("requests = %d, peak concurrency = %d", len(caller.sent), peak)
 	}
 	// Rows keep the distribution's order regardless of which lookup finished first.
@@ -424,5 +431,54 @@ func TestRepeatingQueryOnAPanelStoredBeforeTheTableRunsOnlyClouds(t *testing.T) 
 	}
 	if state.Clouds == nil {
 		t.Fatal("clouds were not published as a list")
+	}
+}
+
+// A request the backend refuses as rate limited is repeated once after a pause.
+// The pause must outlast the backend's one-second window, and a second refusal
+// fails the step instead of looping.
+func TestRateLimitedRequestIsRetriedOnce(t *testing.T) {
+	var mu sync.Mutex
+	attempts := 0
+	base := aggregationReplies(`{"size":7,"distinct":{"ip":3}}`, `{"hot_trend":[{"date":"2026-01-02","value":2}]}`)
+	limited := CallerFunc(func(ctx context.Context, tool string, arguments map[string]any) (json.RawMessage, error) {
+		if arguments["fields"] == "ip" {
+			mu.Lock()
+			attempts++
+			attempt := attempts
+			mu.Unlock()
+			if attempt == 1 {
+				return nil, &ToolError{Code: rateLimitedCode}
+			}
+		}
+		return base.Call(ctx, tool, arguments)
+	})
+	started := time.Now()
+	state := runMetrics(t, nil, testSettings(), limited)
+	elapsed := time.Since(started)
+	if attempts != 2 {
+		t.Fatalf("summary attempts = %d, want the first refusal and one repeat", attempts)
+	}
+	if elapsed < rateLimitRetryWait {
+		t.Fatalf("retried after %s, shorter than the backend window", elapsed)
+	}
+	if got := stepStatus(state, StepSummary); got.Status != statusDone || state.Summary == nil || state.Summary.FOFAAssets == nil || *state.Summary.FOFAAssets != 7 {
+		t.Fatalf("summary step = %+v, summary = %+v", got, state.Summary)
+	}
+
+	refused := 0
+	always := CallerFunc(func(ctx context.Context, tool string, arguments map[string]any) (json.RawMessage, error) {
+		if arguments["fields"] == "ip" {
+			refused++
+			return nil, &ToolError{Code: rateLimitedCode}
+		}
+		return base.Call(ctx, tool, arguments)
+	})
+	failed := runMetrics(t, nil, onlyRoles(RoleStats), always)
+	if refused != 2 {
+		t.Fatalf("refused requests = %d, want one repeat and then a stop", refused)
+	}
+	if got := stepStatus(failed, StepSummary); got.Status != statusFailed || got.Code != rateLimitedCode {
+		t.Fatalf("summary step = %+v", got)
 	}
 }

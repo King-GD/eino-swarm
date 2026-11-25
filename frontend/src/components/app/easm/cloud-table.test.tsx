@@ -39,6 +39,9 @@ it("shows the assets behind each provider with its category and services", () =>
   expect(rows[1]).toHaveTextContent("CDN")
   expect(rows[1]).toHaveTextContent("1,135")
   expect(rows[1]).toHaveTextContent("NGINX 980、OpenResty 54")
+  // The counts are text, not a tooltip: a narrow panel wraps the cell, and a
+  // title cannot be read by tapping.
+  expect(rows[1].lastElementChild).not.toHaveAttribute("title")
   expect(rows[2]).toHaveTextContent("Tencent Mail")
   expect(rows[2]).toHaveTextContent("邮件")
   // No services reported is a dash, not a blank cell.

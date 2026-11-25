@@ -25,11 +25,6 @@ const cloudBucketLimit = 100
 // and the published list is trimmed afterwards.
 const cloudServiceFloor = 5
 
-// cloudServiceLookups bounds the per-provider service requests in flight. The
-// stats backend is rate limited to five requests a second; FOFA AI uses the
-// same bound for its chart requests.
-const cloudServiceLookups = 4
-
 // cloudBucket is one cloud_name bucket. uniq carries the bucket's own distinct
 // IP count because the request asks for uniq_count=ip.
 type cloudBucket struct {
@@ -53,8 +48,9 @@ type cloudRow struct {
 
 // clouds aggregates the query's assets by hosting provider. One request gives
 // every row its asset and distinct-IP counts; each shown provider then gets one
-// filtered request for its services. A provider whose service lookup fails
-// keeps its counts with an empty service list: the counts do not depend on it.
+// filtered request for its services. The counts are published either way: a
+// failed service lookup fails the step so the next collection repeats it,
+// while a finished lookup publishes the step as done.
 func (r *run) clouds(ctx context.Context) error {
 	var reply struct {
 		Query json.RawMessage `json:"query"`
@@ -83,8 +79,9 @@ func (r *run) clouds(ctx context.Context) error {
 		rows = rows[:r.settings.MaxClouds]
 	}
 	clouds := make([]Cloud, len(rows))
-	slots := make(chan struct{}, cloudServiceLookups)
 	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var failed error
 	for i, row := range rows {
 		clouds[i] = Cloud{
 			Name:        row.names[0],
@@ -97,15 +94,14 @@ func (r *run) clouds(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			select {
-			case slots <- struct{}{}:
-			case <-ctx.Done():
+			services, err := r.cloudServices(ctx, row)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				failed = err
 				return
 			}
-			defer func() { <-slots }()
-			if services, err := r.cloudServices(ctx, row); err == nil {
-				clouds[i].Services = services
-			}
+			clouds[i].Services = services
 		}()
 	}
 	wg.Wait()
@@ -113,7 +109,7 @@ func (r *run) clouds(ctx context.Context) error {
 		return err
 	}
 	r.apply(func(state *State) { state.Clouds = clouds })
-	return nil
+	return failed
 }
 
 // mergeCloudRows folds the source's spellings into one row per provider and
@@ -152,6 +148,9 @@ func mergeCloudRows(buckets []cloudBucket) ([]cloudRow, error) {
 		}
 		row.assets += count
 		row.ips += ips
+		// Case-only spellings fold into one: measured against the live stats
+		// API, cloud_name="CLOUDFRONT" returns the same buckets as
+		// cloud_name="cloudfront", so the filter matches either spelling.
 		if !containsFold(row.names, name) {
 			row.names = append(row.names, name)
 		}

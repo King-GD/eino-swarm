@@ -198,6 +198,13 @@ test("EASM lists hosting providers below the supply chain in the source spelling
   const supply = await panel.getByRole("heading", { name: "Supply chain / third-party components" }).boundingBox()
   const clouds = await panel.getByRole("heading", { name: "Cloud providers" }).boundingBox()
   expect(supply && clouds && clouds.y > supply.y).toBe(true)
+
+  // A phone-width panel must not cut the service counts off: the cell wraps,
+  // and a title tooltip cannot be read by tapping.
+  await page.setViewportSize({ width: 390, height: 800 })
+  const services = row.getByRole("cell").last()
+  await expect(services).toContainText("NGINX 5")
+  await expect.poll(async () => services.evaluate((cell) => cell.scrollWidth <= cell.clientWidth + 1)).toBe(true)
 })
 
 // An interrupted run (Stop, restart) must not leave a spinner after reload.

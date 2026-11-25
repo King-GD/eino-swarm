@@ -55,7 +55,10 @@ export function CloudTable({ clouds, loading = false, className }: {
                   <td className="px-1.5 text-muted-foreground">{categories[cloud.category] ?? text.cloudCategories.unknown}</td>
                   <td className="px-1.5 text-right tabular-nums">{formatCount(cloud.assets, text)}</td>
                   <td className="px-1.5 text-right tabular-nums">{formatCount(cloud.ips, text)}</td>
-                  <td className="truncate px-1.5 text-muted-foreground" title={services}>{services}</td>
+                  {/* The services wrap instead of truncating: a narrow panel used
+                      to cut the counts off, and a title attribute cannot be read
+                      by tapping. */}
+                  <td className="px-1.5 wrap-break-word text-muted-foreground">{services}</td>
                 </tr>
               )
             })}
