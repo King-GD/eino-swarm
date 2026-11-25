@@ -12,6 +12,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 - Under FOFA, the context-usage hover card uses the ordinary dark tooltip instead of a bordered solid panel, its ring icon has no hover slab, and a card waiting on your answer keeps a neutral border with the orange heading.
 
+### Fixed
+
+- The native window-corner cover test expects the colour actually painted at the sampled corner, which is the title bar rail when the sidebar is open.
+
 ### Removed
 
 - Removed two superseded FOFA design prototypes and unused styles for inspector tab groups.

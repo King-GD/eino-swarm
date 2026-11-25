@@ -12,6 +12,20 @@ const script = process.env.ZWAI_TEST_RECOVERY_COVER_SCRIPT
 
 const colour = (css: string) => css.match(/[\d.]+/g)!.slice(0, 3).map(Number)
 
+// The native cover samples the window corner, not a fixed element. The title
+// bar's leading rail can sit there with its own fill, so the expectation is the
+// first opaque surface actually painted at that point.
+async function cornerColour(page: Page) {
+  return colour(await page.evaluate(() => {
+    for (const element of document.elementsFromPoint(8, 8)) {
+      const fill = getComputedStyle(element).backgroundColor
+      const alpha = fill.match(/[\d.]+/g)?.[3]
+      if (fill !== "transparent" && alpha !== "0") return fill
+    }
+    return getComputedStyle(document.body).backgroundColor
+  }))
+}
+
 async function pointerState(page: Page) {
   return page.evaluate(() => ({
     value: document.body.style.getPropertyValue("pointer-events"),
@@ -24,7 +38,7 @@ test("a real modal keeps its input guard while the native cover reads the dimmed
   await page.goto("/?shell=desktop")
   const header = page.locator("header").first()
   await expect(header).toBeVisible()
-  const background = colour(await header.evaluate((element) => getComputedStyle(element).backgroundColor))
+  const background = await cornerColour(page)
   await page.getByRole("button", { name: "New project", exact: true }).click()
   const dialog = page.getByRole("dialog")
   await expect(dialog).toBeVisible()
@@ -84,7 +98,7 @@ test("native corner notifications follow real settings and theme changes", async
       host._wails = { invoke(message) { if (message.startsWith("{")) host.__coverNotices!.push(JSON.parse(message)) } }
     })
     const notices = () => page.evaluate(() => (window as Window & { __coverNotices?: Array<{ type: string; colour: number[] }> }).__coverNotices ?? [])
-    const headerColour = async () => colour(await page.locator("header").first().evaluate((element) => getComputedStyle(element).backgroundColor))
+    const headerColour = () => cornerColour(page)
     expect(await page.evaluate(script)).toEqual(await headerColour())
     await page.getByRole("button", { name: "Settings", exact: true }).click()
     const dialog = page.getByRole("dialog")
