@@ -18,8 +18,6 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Removed
 
-- Removed two superseded FOFA design prototypes and unused styles for inspector tab groups.
-
 - PC and Web no longer scan or show local Claude, Codex or Cursor tasks, even with old enabled settings. Paired phones receive no local task data and hide the entry when connected to older hosts. This retires `F-223`, `C-014` and `C-018`. (`F-220`, `C-006`)
 
 ### Added
