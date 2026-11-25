@@ -112,6 +112,10 @@ func Open(path string) (*Store, error) {
 		_ = sqlDB.Close()
 		return nil, fmt.Errorf("store: backfill turn project owners: %w", err)
 	}
+	if err := ensureStartupRecovery(db); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("store: initialize startup recovery index: %w", err)
+	}
 	return s, nil
 }
 

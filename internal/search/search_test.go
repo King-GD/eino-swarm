@@ -422,6 +422,7 @@ func TestEmbeddingOverflowIsDrainedNotDropped(t *testing.T) {
 	svc := New(st, embed, cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	svc.Start()
 	t.Cleanup(svc.Stop)
+	svc.WaitIdle()
 
 	first := addThread(t, st, "gamma", "unique-body needle")
 	svc.Index(first.ID)

@@ -17,6 +17,15 @@ type SearchConfig struct {
 	EmbeddingModel string `yaml:"embedding_model" json:"embedding_model"`
 }
 
+// SearchSnapshot pairs the live search settings with the default provider
+// they may use. Startup backfill and Settings saves can run concurrently.
+func (c *Config) SearchSnapshot() (SearchConfig, string) {
+	mu := c.mutex()
+	mu.RLock()
+	defer mu.RUnlock()
+	return c.Search, c.Models.Default
+}
+
 // SemanticEnabled depends only on whether an embedding model is configured.
 func (s SearchConfig) SemanticEnabled() bool {
 	return strings.TrimSpace(s.EmbeddingModel) != ""

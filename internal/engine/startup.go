@@ -8,7 +8,7 @@ import (
 // ErrRestoring means the engine is serving history while restoring its owners.
 var ErrRestoring = errors.New("engine: restoring unfinished tasks")
 
-// RestoreProgress counts conversations whose durable startup state was examined.
+// RestoreProgress counts conversations selected for startup recovery.
 type RestoreProgress struct {
 	Completed int `json:"completed"`
 	Total     int `json:"total"`

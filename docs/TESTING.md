@@ -3799,6 +3799,27 @@ go test -race -count=1 ./internal/engine -run 'TestRestoreBindsTheOriginalQuesti
 
 ### Large-history restoration measurement
 
+`TestIndexedEngineStartupScalesWithPendingConversations` starts real engine
+children against an isolated SQLite library of 317 conversations and
+1,207,770 historical events. The first process builds the legacy generation
+projection. Later processes observe actual queries from listener publication
+through the ready lease. This timing test uses a non-race process. It asserts
+zero history reads for settled conversations, ready within one second with zero
+pending and within ten seconds with ten pending, and completion of all twelve
+original turns in another round.
+The offline mock avoids network wait and native UI. The 2026-11-25 macOS run
+measured 2.011 s for first upgrade after listening, then 0.011 s, 1.247 s and
+1.155 s for zero, ten and twelve pending conversations, respectively.
+
+The targeted race tests cover trigger rollback, per-conversation migration
+retry, rewind invalidation, parked worker selection, backup import and search
+backfill starting after readiness.
+
+```bash
+go test ./cmd/zwai -run '^TestIndexedEngineStartupScalesWithPendingConversations$' -timeout 4m -count=1 -v
+go test -race ./internal/store ./internal/engine ./internal/app ./internal/backup -run 'TestStartup|TestSettledParkedCheckpoint|TestSemanticStartupBackfill|TestPortableBackupRecreatesRecoveryPointers' -timeout 2m -count=1
+```
+
 `BenchmarkRestoreSnapshotLargeHistory` uses 100,001 historical tool-result rows
 (each 1,080 bytes) and two checkpoint bodies of 2,240,246 bytes each. On the
 2026-10-24 Apple M3 Max run, three repetitions measured **125.695 ms/op**,

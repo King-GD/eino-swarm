@@ -22,15 +22,31 @@ func (e *RestoreFailures) Error() string {
 }
 func (e *RestoreFailures) Unwrap() error { return e.Err }
 
-// Restore owns startup recovery before scheduling. Each conversation gets one
-// immutable event/checkpoint snapshot, also passed to the resumed bootstrap.
+// Restore owns startup recovery before scheduling. Only indexed conversations
+// enter the recovery loop. Resumptions share one immutable bootstrap snapshot.
 func (e *Engine) Restore(ctx context.Context, progress func(completed, total int)) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	threads, err := e.store.ListThreads(true, "")
+	started := time.Now()
+	backfilled, err := e.store.BackfillStartupRecovery(ctx)
 	if err != nil {
 		return err
+	}
+	if backfilled > 0 {
+		e.log.Info("engine startup", "phase", "recovery_index_backfilled", "threads", backfilled, "duration_ms", time.Since(started).Milliseconds())
+	}
+	started = time.Now()
+	threads, err := e.store.StartupRecoveryCandidates(ctx, e.clock(), e.cfg.SwarmSnapshot().GoalAutoTurns())
+	if err != nil {
+		return err
+	}
+	e.log.Info("engine startup", "phase", "recovery_candidates", "threads", len(threads), "duration_ms", time.Since(started).Milliseconds())
+	if progress != nil {
+		progress(0, len(threads))
+	}
+	if len(threads) == 0 || ctx.Err() != nil {
+		return ctx.Err()
 	}
 	schedules, err := e.store.ListSchedules()
 	if err != nil {
@@ -40,28 +56,20 @@ func (e *Engine) Restore(ctx context.Context, progress func(completed, total int
 	for _, row := range schedules {
 		byThread[row.ThreadID] = append(byThread[row.ThreadID], row)
 	}
-	if progress != nil {
-		progress(0, len(threads))
-	}
 	var failures []error
-	for i := range threads {
+	for i, thread := range threads {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		e.restoreMu.Lock()
-		_, err := e.store.RecoverTaskPanelSourcesForThread(ctx, threads[i].ID)
-		if err != nil {
-			err = fmt.Errorf("recover panel source observations: %w", err)
-		} else {
-			err = e.restoreThread(ctx, &threads[i], byThread[threads[i].ID])
-		}
+		err := e.restoreCandidate(ctx, thread, byThread[thread.ThreadID])
 		e.restoreMu.Unlock()
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			e.log.Warn("could not resume parked workers from a previous run", "thread", threads[i].ID, "err", err)
-			failures = append(failures, fmt.Errorf("restore conversation %s: %w", threads[i].ID, err))
+			e.log.Warn("could not restore a conversation from a previous run", "thread", thread.ThreadID, "err", err)
+			failures = append(failures, fmt.Errorf("restore conversation %s: %w", thread.ThreadID, err))
 		}
 		if progress != nil {
 			progress(i+1, len(threads))
@@ -73,21 +81,22 @@ func (e *Engine) Restore(ctx context.Context, progress func(completed, total int
 	return nil
 }
 
-func (e *Engine) restoreThread(ctx context.Context, th *store.Thread, schedules []store.Schedule) (err error) {
+func (e *Engine) restoreThread(ctx context.Context, candidate store.StartupRecoveryCandidate, schedules []store.Schedule) (err error) {
 	started := time.Now()
-	turns, err := e.store.ListTurns(th.ID)
+	threadID := candidate.ThreadID
+	turns, err := e.store.StartupTurns(ctx, threadID)
 	if err != nil || len(turns) == 0 {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	snapshot, err := e.loadRestoreSnapshot(ctx, th.ID)
+	snapshot, err := e.loadRestoreSnapshot(ctx, threadID)
 	if err != nil {
 		return err
 	}
 	latest := turns[len(turns)-1]
-	defer func() { e.recordRestoreSnapshot(&latest, snapshot, started, err, ctx.Err()) }()
+	defer func() { e.recordRestoreResult(&latest, len(snapshot.events), 1, started, err, ctx.Err()) }()
 	running := make([]store.Turn, 0)
 	for _, turn := range turns {
 		if turn.Status == store.TurnRunning {
@@ -107,20 +116,29 @@ func (e *Engine) restoreThread(ctx context.Context, th *store.Thread, schedules 
 		_, err = e.resumeOrphanedTurn(ctx, resume[0], snapshot)
 		return err
 	}
-	count, err := e.resumeParkedThreadContext(ctx, th, snapshot)
+	th, err := e.store.GetThread(threadID)
+	if err != nil {
+		return err
+	}
+	count, err := e.resumeParkedTurn(ctx, th, &latest, snapshot)
 	if err != nil {
 		return err
 	}
 	if count == 0 {
-		if st := e.Status(th.ID); !st.Running && st.Workers == 0 {
-			e.stopOrphanedGenerations(th.ID, e.turnHasKind(latest.ID, KindUserStopRequested, snapshot), snapshot)
+		if st := e.Status(threadID); !st.Running && st.Workers == 0 {
+			e.stopOrphanedGenerations(threadID, e.turnHasKind(latest.ID, KindUserStopRequested, snapshot), snapshot)
 		}
 	}
-	return e.pullInterruptedThreadWake(th.ID, snapshot, schedules)
+	interrupted := len(processStoppedWorkers(snapshot.events)) > 0
+	if err := e.store.RememberSettledStartupWorkers(ctx, threadID, candidate.WorkerRevision,
+		!e.hasParkedRestoreWorkers(&latest, snapshot), !interrupted); err != nil {
+		return err
+	}
+	return e.pullInterruptedThreadWake(threadID, interrupted, schedules)
 }
 
-func (e *Engine) pullInterruptedThreadWake(threadID string, snapshot *restoreSnapshot, rows []store.Schedule) error {
-	if len(processStoppedWorkers(snapshot.events)) == 0 {
+func (e *Engine) pullInterruptedThreadWake(threadID string, interrupted bool, rows []store.Schedule) error {
+	if !interrupted {
 		return nil
 	}
 	now := e.clock()

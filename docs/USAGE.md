@@ -1191,8 +1191,10 @@ the background, so its network wait does not hold the window closed. Startup
 errors show the current attempt's log and actual process failure.
 
 The desktop and Web window can attach while unfinished work is restoring. PC
-and phone show recovery progress and keep saved history available. New work
-waits until recovery ends. Individual recovery failures leave a visible
+and phone show progress for the conversations with recovery work. Completed
+conversations stay in the list and load history when opened. The first launch
+after upgrading an older library may take longer while it builds the recovery
+index. New work waits until recovery ends. Individual recovery failures leave a visible
 failure count and the original Trace. Other work stays usable. Stop remains
 available and is persisted before that conversation can resume. Goal editing
 and its keyboard shortcuts pause during recovery. A refused goal edit stays

@@ -366,7 +366,10 @@ account does not refetch it. The offline provider (`--mock`) never reaches a
 network, so it always reports `signed_out`.
 
 `startup` is `restoring` while the serving process restores conversation state,
-then `ready`. `restore.completed/total` counts examined conversations. Optional
+then `ready`. `restore.total` counts conversations selected for recovery or
+lifecycle reconciliation. `restore.completed` counts those already processed,
+including failed attempts. A settled conversation is excluded. Before the
+selection is available, the counters are zero. Optional
 `restore.failed` counts individual conversations that could not be restored;
 running and parked failures both count, with `engine_restore.phase: "failed"`
 and their original cause retained in the original-turn Trace and engine log.

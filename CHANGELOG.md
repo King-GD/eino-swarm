@@ -55,6 +55,11 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
+- On restart, restore only conversations with pending work or lifecycle receipts
+  to settle. Progress counts those conversations. Finished history loads when
+  opened, and semantic search backfill starts after the engine is ready.
+  Older libraries build their recovery index on first startup. (`F-110`, `C-027`)
+
 - Current-task and current-project distillation process history in saved
   batches for notes, Skills and Knowledge. Both panels show processed and
   remaining records, and interrupted runs can resume after an app restart.

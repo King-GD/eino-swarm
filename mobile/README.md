@@ -873,7 +873,7 @@ rejects a read still shows the actual error and retains unread state.
 ### PC startup recovery
 
 The paired phone polls the read-only `meta` RPC for `startup` and `restore`
-conversation progress. While `restoring`, it displays the PC recovery banner,
+conversation progress for the host's selected recovery work. While `restoring`, it displays the PC recovery banner,
 retains unsent input and prevents new work until `ready`. Optional `restore.failed`
 keeps a static failure warning after recovery, with other work still usable. The PC independently
 rejects work mutations with `code: restoring`; a rejected Run now never marks

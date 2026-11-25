@@ -152,10 +152,18 @@ launcher's child; a competing loser is reaped when its single Acquire fails.
 `app.New(DeferRestore:true)` constructs the engine and routes without recovering
 history. `serveEngine` listens, publishes a `restoring` lease and serves HTTP,
 then owns synchronous `App.Restore`; the idle watcher counts recovery as active
-work. `Engine.Restore` builds one indexed checkpoint/event snapshot per conversation,
-passes it through the restored runtime bootstrap, including the validated identity
-of an unanswered human call and both manager correction
-allowances, and records `engine_restore` measurements on the original turn. The
+work. `Engine.Restore` selects pending conversations from durable turn, panel,
+schedule and generation state and the indexed worker recovery evidence.
+SQLite maintains open and pending generation pointers and invalidates settled
+worker proofs in the source write transaction. A legacy library builds its
+generation projection once, committing each conversation separately. A later
+rewind or incompatible source edit rebuilds the affected projection. Settled
+conversations keep their history on disk until a client opens it. Recovery
+progress counts the selected conversations. Runnable work gets one shared
+checkpoint/event snapshot. Receipt-only recovery reads the relevant lifecycle
+rows. The resumed bootstrap receives the snapshot, the validated identity
+of an unanswered human call and both manager correction allowances. The
+recovery path records `engine_restore` measurements on the original turn. The
 filtered events retain `model_retry` and `max_iterations_continued` receipts across
 checkpoints. A new human cap continuation discards the startup snapshot before
 reading its new durable allowance receipt; later work does not reuse that snapshot. Running and parked recovery failures are
@@ -164,7 +172,8 @@ other conversations continue. The compatibility `ResumeOrphanedTurns` entry
 returns accepted resumptions together with the same typed aggregate, preserving
 per-conversation causes. Stop is serialized with each conversation's
 restoration. Only after recovery finishes does the scheduler start and metadata
-become `ready`. PC and phone show progress; work mutations are gated on both
+become `ready`. Search embedding backfill starts in its own worker after this
+transition. PC and phone show progress; work mutations are gated on both
 HTTP and encrypted RPC while reads, drafts, presence and Stop remain available.
 Shutdown cancels recovery and waits before closing its store.
 

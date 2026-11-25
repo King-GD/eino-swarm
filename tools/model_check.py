@@ -341,9 +341,10 @@ MODELS = {
             "lifecycle", ROOT / "models" / "lifecycle" / "EngineLifecycle.tla",
             ("DeadlineKillsChild", "RestoreBeforeListen", "StopRacesRestore", "PresenceAfterWindow", "HeadlessWaiterUnheld",
              "IdleCommitNonAtomic", "FinishUngated", "SummaryUsesWriteBudget", "ParkedNotCheckpointed", "IdleCountsOnlyManagers",
-             "ParkedAdmissionNonAtomic", "ParkedOwnerCheckedLate", "RestoreOwnerCheckedLate"),
+             "ParkedAdmissionNonAtomic", "ParkedOwnerCheckedLate", "RestoreOwnerCheckedLate", "SkipParkedIndexEntry"),
             ("TypeOK", "WorkHasLiveOwner", "CheckpointHasOwner", "StopIsFinal", "WindowHasEngine",
-             "RegistryAlwaysAccounted", "RestoreOwnsProject", "ParkedSuccessorOwnsProject", "SummaryLeavesWriteBudget"),
+             "RegistryAlwaysAccounted", "RestoreOwnsProject", "ParkedSuccessorOwnsProject", "SummaryLeavesWriteBudget",
+             "ReadyHasNoPendingCheckpoint"),
             (("MaxTurns", 2),),
         ),
         Model(
@@ -1306,6 +1307,8 @@ CASES: tuple[Case, ...] = (
           ("SummaryUsesWriteBudget",), "SummaryLeavesWriteBudget"),
     _case("parked-not-checkpointed", "guard from 5d7b305: the checkpoint covers parked registries",
           ("ParkedNotCheckpointed",), "WorkHasLiveOwner"),
+    _case("skip-parked-index-entry", "a completed manager must leave the parked checkpoint indexed",
+          ("SkipParkedIndexEntry",), "ReadyHasNoPendingCheckpoint"),
     _case("idle-counts-only-managers", "guard required by f341e05: idle load includes parked "
           "workers, restoration and handoff (Engine.ActiveWork)",
           ("IdleCountsOnlyManagers",), "WorkHasLiveOwner"),
@@ -1317,6 +1320,7 @@ CASES: tuple[Case, ...] = (
     # Witnesses: the scenarios behind the invariants are reachable.
     _case("reach-restored-window", "witness", witness="NeverRestoredIntoWindow"),
     _case("reach-parked-checkpoint", "witness", witness="NeverParkedCheckpoint"),
+    _case("reach-ready-without-recovery", "witness", witness="NeverReadyWithoutRecovery"),
     _case("reach-parked-successor", "witness", witness="NeverParkedSuccessor"),
     _case("reach-refused-parked-successor", "witness", witness="NeverRefusedParkedSuccessor"),
     _case("reach-refused-foreign-parked-successor", "witness", witness="NeverRefusedForeignParkedSuccessor"),

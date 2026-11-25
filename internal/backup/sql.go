@@ -165,6 +165,9 @@ func knownTables(ctx context.Context, conn *sql.Conn, schema string) error {
 		if name == "thread_fts" || strings.HasPrefix(name, "thread_fts_") {
 			return nil
 		}
+		if name == "startup_recovery_threads" || name == "startup_recovery_generations" {
+			return nil
+		}
 		if _, ok := known[name]; !ok {
 			return invalidf("unexpected table %s", name)
 		}
@@ -332,6 +335,41 @@ func stripWikiScanCache(ctx context.Context, q queryer, schema string) error {
 	} {
 		if _, err := q.ExecContext(ctx, statement); err != nil {
 			return fmt.Errorf("backup: remove derived Wiki scan cache: %w", err)
+		}
+	}
+	return nil
+}
+
+// Recovery receipts point to database-local event row IDs. Portable copies
+// carry the source records and rebuild their own projection on import.
+func stripStartupRecoveryIndex(ctx context.Context, q queryer, schema string) error {
+	if !identRe.MatchString(schema) {
+		return invalidf("schema")
+	}
+	var triggers []string
+	if err := readStrings(ctx, q, `SELECT name FROM `+schema+`.sqlite_master
+		WHERE type='trigger' AND name GLOB 'startup_recovery_*'`, nil, 1, func(v []string) error {
+		triggers = append(triggers, v[0])
+		return nil
+	}); err != nil {
+		return err
+	}
+	for _, name := range triggers {
+		quoted, err := quoteIdent(name)
+		if err != nil {
+			return err
+		}
+		if _, err := q.ExecContext(ctx, `DROP TRIGGER `+schema+`.`+quoted); err != nil {
+			return fmt.Errorf("backup: remove startup recovery trigger: %w", err)
+		}
+	}
+	for _, statement := range []string{
+		`DROP TABLE IF EXISTS ` + schema + `.startup_recovery_generations`,
+		`DROP TABLE IF EXISTS ` + schema + `.startup_recovery_threads`,
+		`DROP INDEX IF EXISTS ` + schema + `.idx_startup_running_turn`,
+	} {
+		if _, err := q.ExecContext(ctx, statement); err != nil {
+			return fmt.Errorf("backup: remove startup recovery index: %w", err)
 		}
 	}
 	return nil

@@ -51,6 +51,19 @@ no cgo and no system SQLite to install. The file is opened with
 `journal_mode=WAL`, `busy_timeout=5000` and `foreign_keys=1`: WAL is what keeps
 the UI's reads from blocking behind a write-heavy streaming turn.
 
+`startup_recovery_generations` points to original open generation events and
+pending interruption events by conversation and message ID. The two pointers
+settle independently. `startup_recovery_threads` tracks generation backfill
+and ties negative parked-worker and interrupted-wake proofs to the worker
+evidence revision that was read. A persistent interruption hint lets an
+ordinary future wake skip worker history on startup. Recovery can also query unresolved turn,
+panel source and schedule report state directly from the original tables.
+SQLite triggers maintain or invalidate the projections with source writes.
+An old database builds its projection once per conversation. Rewind, editing
+or inserting out-of-order generation receipts invalidates the affected
+conversation. Backup archives carry source rows. The destination derives its
+own pointers from the imported event IDs.
+
 `task_panel_rows.closed` records a human close for the conversation and instance.
 It defaults to false for existing rows and survives restart, rewind and backup.
 A close atomically persists the marker, interrupts any durable running source,

@@ -41,6 +41,7 @@ CONSTANTS
     ParkedAdmissionNonAtomic, \* choose/take drops the parked runtime before successor occupancy
     ParkedOwnerCheckedLate, \* attach retained workers before validating their project
     RestoreOwnerCheckedLate, \* occupy before checking a tagged worker's project
+    SkipParkedIndexEntry,   \* a terminal manager hides its live parked checkpoint
     MaxTurns
 
 Engines == {"old", "new"}
@@ -321,11 +322,22 @@ Publish ==
 
 ReadCheckpoint ==
     /\ eng["new"] = RestoringHere /\ restorePhase = "pending"
+    /\ checkpoint # "none"
     /\ IF stopped THEN snapshot' = "none"
        ELSE snapshot' \in (IF checkpoint = "none" THEN {"none"} ELSE {checkpoint, "foreign"})
     /\ restorePhase' = "read"
     /\ UNCHANGED <<eng, lease, stopping, sampled, hold, launcher, target, deadline,
                    work, owner, checkpoint, stopped, stopAcked, gate, turns, successor>>
+
+(* Startup can publish ready directly only with no outstanding indexed work.
+   The fault models an index that clears a parked worker with its manager. *)
+SkipSettledRecovery ==
+    /\ eng["new"] = RestoringHere /\ restorePhase = "pending"
+    /\ checkpoint = "none" \/ (SkipParkedIndexEntry /\ checkpoint = "parked" /\ ~stopped)
+    /\ restorePhase' = "done"
+    /\ eng' = IF RestoreBeforeListen THEN eng ELSE [eng EXCEPT !["new"] = "serving"]
+    /\ UNCHANGED <<lease, stopping, sampled, hold, launcher, target, deadline,
+                   work, owner, checkpoint, snapshot, stopped, stopAcked, gate, turns, successor>>
 
 (* Engine.Restore first settles this conversation's orphaned panel sources
    under restoreMu. A storage/identity failure refuses this conversation before
@@ -436,7 +448,7 @@ LifecycleStep ==
     \/ BeginHandoff \/ Ack \/ OldAlreadyGone \/ HandoffTimesOut
     \/ OldExits \/ Spawn \/ DeadlineExpires \/ DeadlineKillsReplacement
     \/ HumanCancelsLaunch
-    \/ Publish \/ ReadCheckpoint \/ OccupyRuntime \/ RefuseForeignRuntime \/ RefusePanelRecovery
+    \/ Publish \/ SkipSettledRecovery \/ ReadCheckpoint \/ OccupyRuntime \/ RefuseForeignRuntime \/ RefusePanelRecovery
     \/ UnheldWebReady \/ Reserve \/ Attach \/ FrontendAttaches \/ WindowCloses
     \/ \E e \in Engines : IdleCommit(e) \/ IdleSample(e) \/ IdleExit(e)
 
@@ -483,6 +495,9 @@ CheckpointHasOwner ==
 (* An acknowledged Stop is never undone by restoration. *)
 StopIsFinal == stopAcked => work = "none"
 
+ReadyHasNoPendingCheckpoint ==
+    (eng["new"] = "serving" /\ restorePhase = "done") => checkpoint = "none"
+
 (* A privately held parked Registry must still be counted by its runtime. *)
 RegistryAlwaysAccounted == successor = "detached" => work # "none"
 
@@ -501,6 +516,7 @@ SummaryLeavesWriteBudget == handoffPhase # "summary_exhausted"
 NeverRestoredIntoWindow ==
     ~(launcher = "opened" /\ target = "new" /\ owner = "new" /\ work # "none")
 NeverParkedCheckpoint == ~(checkpoint = "parked")
+NeverReadyWithoutRecovery == ~(eng["new"] = "serving" /\ restorePhase = "done" /\ owner = "old")
 NeverRefusedForeignRuntime == restorePhase # "owner_refused"
 NeverRefusedPanelRecovery == restorePhase # "panel_refused"
 NeverParkedSuccessor == ~(successor = "admitted" /\ work = "running" /\ turns > 0)
