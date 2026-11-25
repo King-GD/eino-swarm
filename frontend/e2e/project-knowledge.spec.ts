@@ -243,9 +243,12 @@ test("Wiki build opens and cites a node from the local graph while review is sti
   const quote = "Retained observation appeared in the first source."
   const source = { kind: "event", seq: 114, thread_id: threadId, classification: "primary", available: true }
   const nodes = [
-    ...Array.from({ length: 3_000 }, (_, i) => ({ id: `entry-${i}`, title: `Entry ${i}`, type: "wiki-node" })),
+    ...Array.from({ length: 6_269 }, (_, i) => ({ id: `entry-${i}`, title: `Entry ${i}`, type: "wiki-node" })),
     node,
   ]
+  const edges = Array.from({ length: 316 }, (_, i) => ({
+    source: `entry-${i * 2}`, target: `entry-${i * 2 + 1}`, wikilink: true,
+  }))
   let started = false
   let ready = false
   await page.route((url) => url.pathname === endpoint, async (route) => {
@@ -267,7 +270,7 @@ test("Wiki build opens and cites a node from the local graph while review is sti
     } : { state: "idle" } })
   })
   await page.route((url) => url.pathname === `${project}/knowledge/graph`,
-    (route) => route.fulfill({ json: { nodes: ready ? nodes : [], edges: [] } }))
+    (route) => route.fulfill({ json: { nodes: ready ? nodes : [], edges: ready ? edges : [] } }))
   await page.route((url) => url.pathname === `${project}/knowledge/pages/${node.id}`, (route) => route.fulfill({ json: {
     ...node,
     body: "",
@@ -287,7 +290,13 @@ test("Wiki build opens and cites a node from the local graph while review is sti
     await expect(graph).toContainText("No pages yet.")
     ready = true
     await expect(graph.getByRole("searchbox")).toBeVisible()
-    await expect(graph).toContainText("Pages 3001 · Connections 0")
+    await expect(graph).toContainText(`Pages ${nodes.length} · Connections ${edges.length}`)
+    const unlinked = graph.getByRole("button", { name: `Unlinked pages (${nodes.length - edges.length * 2})`, exact: true })
+    await unlinked.click()
+    await expect(unlinked).toHaveAttribute("aria-expanded", "true")
+    await expect(graph.getByRole("button", { name: /Entry 632.*wiki-node/ })).toBeVisible()
+    await graph.getByRole("button", { name: "Show more" }).click()
+    await expect(graph.getByRole("button", { name: /Entry 640.*wiki-node/ })).toBeVisible()
     await graph.getByRole("searchbox").fill(node.title)
     await graph.getByRole("button", { name: new RegExp(node.title) }).click()
     await graph.getByRole("button", { name: `Open ${node.title}` }).click()
@@ -298,7 +307,7 @@ test("Wiki build opens and cites a node from the local graph while review is sti
     await expect(status.getByRole("status")).toContainText("Graph ready · review in progress")
     await expect(status.getByTestId("wiki-scan-progress")).toContainText("Large records queued for review · 1")
     await expect(status.getByTestId("project-distill-progress")).toContainText("Reviewed 0 of 23252 records")
-    await expect(status.getByTestId("wiki-document-progress")).toHaveText("Documents updated · 64 of 3001")
+    await expect(status.getByTestId("wiki-document-progress")).toHaveText(`Documents updated · 64 of ${nodes.length}`)
   } finally {
     await page.request.delete(project)
   }
@@ -456,8 +465,10 @@ test("Distillation shows the saved batch progress and continues after reopening"
   }
 })
 
-test("The project graph connects titled pages and opens a node found by alias", async ({ page }) => {
+test("The project graph connects titled pages, opens aliases and moves generated workflow labels to Pending", async ({ page }) => {
   const titles = ["Release checklist", "Review criteria", "Standalone note"]
+  const projectTitle = `Wiki graph ${Date.now()}`
+  const labels = [...titles, projectTitle]
   await page.addInitScript((labels) => {
     const visible: Record<string, boolean> = {}
     Object.assign(window, { visibleKnowledgeLabels: visible })
@@ -471,20 +482,34 @@ test("The project graph connects titled pages and opens a node found by alias", 
       const left = x * a + e - (this.textAlign === "right" ? textWidth : 0)
       visible[text] = left >= 0 && left + textWidth <= this.canvas.width && y * d + f > 0 && y * d + f < this.canvas.height
     }
-  }, titles)
-  const { projectId } = await openProjectConversation(page, `Wiki graph ${Date.now()}`)
+  }, labels)
+  const { projectId } = await openProjectConversation(page, projectTitle)
   const base = `/api/projects/${projectId}/knowledge`
   try {
     expect((await page.request.post(base)).ok()).toBe(true)
     const { data_dir: dataDir } = await (await page.request.get("/api/meta")).json() as { data_dir: string }
-    const entries = join(dataDir, "projects", projectId, "knowledge", "pages", "entries")
-    await mkdir(entries, { recursive: true })
+    const knowledgeDir = join(dataDir, "projects", projectId, "knowledge")
+    const entries = join(knowledgeDir, "pages", "entries")
+    const generated = join(knowledgeDir, "pages", "wiki-nodes")
+    await Promise.all([mkdir(entries, { recursive: true }), mkdir(generated, { recursive: true })])
     await Promise.all([
+      writeFile(join(knowledgeDir, "schema.yaml"), [
+        "version: 1", "types:", "  - id: entry", "    dir: entries", "  - id: wiki-node",
+        "    dir: wiki-nodes", "relations:", "  - id: related", "    from: [entry]", "    to: [entry]", "",
+      ].join("\n")),
       writeFile(join(entries, "first.md"), "---\nid: first\ntype: entry\ntitle: Release checklist\naliases: [Ready list]\nlinks:\n  - rel: related\n    to: second\n---\n[[second]] and [[missing]].\n"),
       writeFile(join(entries, "second.md"), "---\nid: second\ntype: entry\ntitle: Review criteria\n---\n[[first]]\n"),
       writeFile(join(entries, "isolated.md"), "---\nid: isolated\ntype: entry\ntitle: Standalone note\n---\nAn independent page.\n"),
+      writeFile(join(generated, "status-label.md"), [
+        "---", "id: status-label", "type: wiki-node", "title: Waiting for confirmation", "wiki:",
+        "  kind: entity", "  category: page_title", "  job: prior-review", "  evidence:",
+        "    - source: {kind: event, thread_id: th_fixture, seq: 1}",
+        "      quote: Waiting for confirmation", "---", "Saved observation.", "",
+      ].join("\n")),
     ])
     await knowledgeTab(page).click()
+    await expect(page.getByTestId("knowledge-tree").getByRole("button", { name: "Release checklist" })).toBeVisible()
+    await expect(page.getByRole("button", { name: "Waiting for confirmation", exact: true })).toHaveCount(0)
     const response = page.waitForResponse((reply) => new URL(reply.url()).pathname === base + "/graph")
     await page.getByRole("button", { name: "Graph", exact: true }).click()
     const { nodes, edges } = await (await response).json()
@@ -494,13 +519,14 @@ test("The project graph connects titled pages and opens a node found by alias", 
     ])
     const dialog = page.getByRole("dialog", { name: "Knowledge graph" })
     await expect(dialog).toContainText("Pages 3 · Connections 1")
+    await expect(dialog.getByText("Project membership", { exact: true })).toBeVisible()
     const host = dialog.getByTestId("knowledge-graph-canvas")
     await expect(host.locator("canvas")).toBeVisible()
     await dialog.getByRole("button", { name: "Fit the whole knowledge graph" }).click()
     await expect.poll(() => page.evaluate((labels) => {
       const shown = (window as Window & { visibleKnowledgeLabels?: Record<string, boolean> }).visibleKnowledgeLabels
       return labels.every((label) => shown?.[label])
-    }, titles)).toBe(true)
+    }, labels)).toBe(true)
     await dialog.screenshot({ path: test.info().outputPath("knowledge-graph.png"), animations: "disabled" })
 
     await dialog.getByRole("searchbox", { name: "Find a page in the graph" }).fill("ready list")
@@ -519,6 +545,14 @@ test("The project graph connects titled pages and opens a node found by alias", 
 
     await expect(dialog).toBeHidden()
     await expect(page.getByTestId("knowledge-page").getByRole("heading", { name: "Release checklist" })).toBeVisible()
+    await page.getByTestId("knowledge-back").click()
+    await page.getByTestId("knowledge-view").click()
+    await page.getByRole("option", { name: "Pending", exact: true }).click()
+    await expect(page.getByText("Generated workflow or editorial label", { exact: true })).toBeVisible()
+    await page.getByRole("button", { name: "status-label", exact: true }).click()
+    const reviewPage = page.getByTestId("knowledge-page")
+    await expect(reviewPage.getByRole("heading", { name: "Waiting for confirmation" })).toBeVisible()
+    await expect(reviewPage.getByText("Saved observation.", { exact: true })).toBeVisible()
   } finally {
     await page.request.delete(`/api/projects/${projectId}`)
   }

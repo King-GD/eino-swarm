@@ -34,7 +34,7 @@ func mockWikiBuild(turn int, messages []*schema.Message) *schema.Message {
 				for !utf8.RuneStart(quote[end]) {
 					end--
 				}
-				quote = quote[:end]
+				quote = strings.TrimSpace(quote[:end])
 			}
 			nodes = append(nodes, map[string]any{
 				"key": match[1], "title": quote, "kind": "entity", "category": "observation",

@@ -30,6 +30,7 @@ type wikiDraftRepair struct {
 	reviewed     map[int64]bool
 	nodes        map[string]wikiModelNode
 	invalidNodes map[string]error
+	omittedNodes map[string]bool
 	links        map[wikiModelLink]bool
 	pendingLinks map[wikiLinkPair]wikiModelLink
 }
@@ -41,7 +42,7 @@ func newWikiDraftRepair(first wikiProposal) (*wikiDraftRepair, error) {
 	return &wikiDraftRepair{
 		reviewed: make(map[int64]bool), nodes: make(map[string]wikiModelNode),
 		invalidNodes: make(map[string]error), links: make(map[wikiModelLink]bool),
-		pendingLinks: make(map[wikiLinkPair]wikiModelLink),
+		omittedNodes: make(map[string]bool), pendingLinks: make(map[wikiLinkPair]wikiModelLink),
 	}, nil
 }
 
@@ -114,8 +115,16 @@ func (r *wikiDraftRepair) apply(p wikiProposal, visible map[int64]store.Event) (
 		delete(r.invalidNodes, key)
 	}
 	for _, node := range wikiSubmitted(p.Nodes) {
+		err := wikiNodeEvidenceError(node, visible)
+		if errors.Is(err, errWikiNonSubject) {
+			delete(r.nodes, node.Key)
+			delete(r.invalidNodes, node.Key)
+			r.omittedNodes[node.Key] = true
+			continue
+		}
+		delete(r.omittedNodes, node.Key)
 		r.nodes[node.Key] = node
-		if err := wikiNodeEvidenceError(node, visible); err != nil {
+		if err != nil {
 			r.invalidNodes[node.Key] = err
 		} else {
 			delete(r.invalidNodes, node.Key)
@@ -135,19 +144,25 @@ func (r *wikiDraftRepair) apply(p wikiProposal, visible map[int64]store.Event) (
 	for _, link := range wikiSubmitted(p.Links) {
 		pair := (wikiLinkPair{link.From, link.To}).canonical()
 		link.From, link.To = pair.From, pair.To
-		if wikiLinkSupported(link, names, visible) {
+		switch {
+		case r.omittedNodes[link.From] || r.omittedNodes[link.To]:
+			delete(r.pendingLinks, pair)
+		case wikiLinkSupported(link, names, visible):
 			r.links[link] = true
 			delete(r.pendingLinks, pair)
-		} else {
+		default:
 			r.pendingLinks[pair] = link
 		}
 	}
 	for _, pair := range slices.SortedFunc(maps.Keys(r.pendingLinks), wikiPairOrder) {
 		link := r.pendingLinks[pair]
-		if wikiLinkSupported(link, names, visible) {
+		switch {
+		case r.omittedNodes[link.From] || r.omittedNodes[link.To]:
+			delete(r.pendingLinks, pair)
+		case wikiLinkSupported(link, names, visible):
 			r.links[link] = true
 			delete(r.pendingLinks, pair)
-		} else {
+		default:
 			issues = append(issues, fmt.Sprintf("link %q to %q needs two supported nodes and one exact quote containing both names", pair.From, pair.To))
 		}
 	}

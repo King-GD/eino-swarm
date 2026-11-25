@@ -19,7 +19,7 @@ export interface KnowledgeNode {
 }
 
 export interface KnowledgeIssue {
-  kind: "broken_link" | "stale" | "missing_relation" | "invalid_page"
+  kind: "broken_link" | "stale" | "missing_relation" | "invalid_page" | "wiki_non_subject"
   page_id?: string
   target?: string
   relation?: string

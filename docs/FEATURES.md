@@ -240,10 +240,10 @@ This is the current user-facing capability map. The code and tests named below a
 
 - 目的：在一个项目内用可编辑的 Markdown 页面积累、查找和追溯跨对话的知识。
 - 入口：PC／Web 右侧 Knowledge 标签、提炼菜单、对话 wikilink、项目回合的 `read_knowledge`／`record_knowledge` 和项目知识库 HTTP 路由。Agents、Files、Trace、工作记录和任务面板可绑定当前会话，Memory 和 Knowledge 属项目范围，所有标签共用一条标签栏并用浅底色区分。
-- 输入与输出：项目 schema、稳定页面 ID、Markdown、历史引用；提供类型或关系树、待处理项、单页、反链、来源、Trace 和宽幅预览。Knowledge 的「关系图」按标题显示项目内的全部页面，通过已解析的关系和 Wiki 链接连线，可搜索、缩放并打开对应页面。Memory 与 Knowledge 共用一次后台提炼，支持最近成功回合、当前任务和当前项目。启用项目记忆、自动复盘和知识库后，成功非计划回合的自动复盘也可写入知识库。当前任务和当前项目按保存的历史范围分批合并笔记、Skills 与知识库变更，可暂停和继续。两个面板显示已处理数、剩余数、同一回执与 Trace。
+- 输入与输出：项目 schema、稳定页面 ID、Markdown、历史引用；提供类型或关系树、待处理项、单页、反链、来源、Trace 和宽幅预览。Knowledge 的「关系图」从项目根节点可达所有可浏览页面，归属线连接各关系簇。大量未关联页面折叠为可浏览分组，搜索仍覆盖这些页面。可缩放、按标题或别名查找并打开页面。Memory 与 Knowledge 共用一次后台提炼，支持最近成功回合、当前任务和当前项目。启用项目记忆、自动复盘和知识库后，成功非计划回合的自动复盘也可写入知识库。当前任务和当前项目按保存的历史范围分批合并笔记、Skills 与知识库变更，可暂停和继续。两个面板显示已处理数、剩余数、同一回执与 Trace。
 - 前置与失败：Settings 中的全局开关默认开启。首次非计划回合可初始化项目知识库，也可在面板先手动初始化。关闭后隐藏面板并停止知识库提炼。部分提交保留实际写入回执。无项目对话提示移动到项目。相同名称、旧 revision 和错误来源拒绝写入；已保存来源失效时给出提示。
 - 提炼进度条反映已保存的批次进度，区分只读摘录与整条跳过。当前任务和当前项目默认摘录，也可选择全文分段，两个面板显示当前长记录的进度，暂停和重启后继续。引文校验与暂时性服务失败可触发一次未写入批次的重试，配置类失败给出对应的调整提示。
-- 「构建 Wiki 图谱」为当前任务或项目本地扫描可引用历史，先发布带原文来源的节点和明确关系。图谱可在后台语义复核期间搜索和浏览，已核对的正文分批补写。面板分别展示扫描、复核和文档进度。重新构建会复用已确认的历史记录，暂停与续跑使用独立回执。
+- 「构建 Wiki 图谱」为当前任务或项目本地扫描可引用历史，先发布带原文来源的节点和明确关系。图谱可在后台语义复核期间搜索和浏览，已核对的正文分批补写。明确属于操作、状态或栏目标签的生成候选会被排除，已生成的同类页面可从待处理打开。面板分别展示扫描、复核和文档进度。重新构建会复用已确认的历史记录，暂停与续跑使用独立回执。
 - iOS／Android 配对后的项目列表和项目对话提供知识库入口。手机可搜索和翻页，打开 Markdown、Wiki 链接、关联页面、反链及可用原文摘录，并从来源打开原始对话。项目知识库未启用或电脑端版本较旧时给出明确状态。
 - 契约：`C-053`、`C-054`、`C-036`、`C-044`。
 - 实现证据：`internal/knowledge`、`internal/engine/knowledge.go`、`internal/server/project_knowledge.go`、`frontend/src/components/app/knowledge-panel.tsx`、`frontend/e2e/project-knowledge.spec.ts`、`internal/remote/knowledge.go`、`mobile/src/components/knowledge-screen.tsx`、`mobile/e2e/project-knowledge.spec.ts`。

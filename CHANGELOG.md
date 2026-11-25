@@ -97,6 +97,13 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Wiki graphs exclude workflow and editorial labels. Previously generated
+  labels appear in Pending with their saved citations. (`F-138`, `C-053`, `C-054`)
+
+- Knowledge graphs start at a project root. Relationship clusters are
+  connected by membership lines, and large sets of unlinked pages remain
+  browsable in their own branch. (`F-138`, `C-053`)
+
 - The mobile work records build resolves shared styling libraries from the
   phone dependencies in a clean checkout. (`F-139`)
 

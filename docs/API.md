@@ -1919,7 +1919,8 @@ success retains its committed items. Both panels poll this endpoint.
 ### `GET /api/projects/:id/knowledge` · `POST /api/projects/:id/knowledge`
 
 Both return a status object with `enabled`, `page_count` and
-`pending_count`. An enabled project also returns `schema` and its content
+`pending_count`. The page count includes stored pages flagged for review.
+An enabled project also returns `schema` and its content
 `revision`. POST needs no body. It publishes a neutral starting schema
 only when absent. GET for an existing project with no schema returns
 `{"enabled":false,"page_count":0,"pending_count":0}`. An unknown project
@@ -1932,17 +1933,20 @@ view ID defined in the project schema. The response contains `view`,
 `nodes` and, when present, `issues`. A node has `id`, `label`, `kind`
 (`type`, `relation`, `page`), and optional `type`, `aliases`, `children`
 and `cycle`. A bounded graph view can set `truncated`. Lint can report
-`broken_link`, `stale`, `missing_relation` and `invalid_page`. An unknown
+`broken_link`, `stale`, `missing_relation`, `invalid_page` and
+`wiki_non_subject`. The last code flags a generated workflow or editorial
+label. Those pages are available by ID and appear in the pending view. An unknown
 view is `400`; a disabled knowledge base is `404` with `knowledge_disabled`.
 
 ### `GET /api/projects/:id/knowledge/graph`
 
 Return the project's read-only relationship graph. `nodes` contains one
-entry per page, including unlinked pages, with its stable `id`, display
+entry per browsable page, including unlinked pages, with its stable `id`, display
 `title`, `type` and optional `aliases`. Each `edges` entry connects one pair
 of pages. The `source` and `target` fields give the endpoint IDs in lexical
 order. The optional `relations` and `wikilink` flag combine the evidence
-from both pages. Missing targets remain in the pending view. A disabled
+from both pages. Missing targets and pages flagged as `wiki_non_subject`
+remain in the pending view. A disabled
 knowledge base returns `404 knowledge_disabled`.
 
 ### `GET /api/projects/:id/knowledge/pages/:page`

@@ -20,7 +20,7 @@ type GraphEdge struct {
 	Wikilink  bool     `json:"wikilink,omitempty"`
 }
 
-// Graph keeps one node per real page and one undirected edge per page pair.
+// Graph keeps one node per browsable page and one undirected edge per pair.
 // The reverse indexes already exclude missing targets and invalid relations.
 func (s *Snapshot) Graph() (Graph, error) {
 	if !s.Enabled() {
@@ -39,16 +39,24 @@ func (s *Snapshot) Graph() (Graph, error) {
 		return &graph.Edges[index]
 	}
 	for _, target := range s.ordered {
+		if s.reviewOnly[target] {
+			continue
+		}
 		page := s.pages[target].page
 		graph.Nodes = append(graph.Nodes, GraphNode{PageRef: page.ref(), Aliases: slices.Clone(page.Aliases)})
 		for _, link := range s.incoming[target] {
+			if s.reviewOnly[link.Target] {
+				continue
+			}
 			edge := edgeFor(link.Target, target)
 			if !slices.Contains(edge.Relations, link.Relation) {
 				edge.Relations = append(edge.Relations, link.Relation)
 			}
 		}
 		for _, source := range s.mentions[target] {
-			edgeFor(source.ID, target).Wikilink = true
+			if !s.reviewOnly[source.ID] {
+				edgeFor(source.ID, target).Wikilink = true
+			}
 		}
 	}
 	return graph, nil

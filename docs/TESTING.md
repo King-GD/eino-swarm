@@ -1107,7 +1107,19 @@ and verifies its automatic refresh before reading Trace.
 `TestKnowledgeGraphRetainsOneNodePerPageAcrossTitleChanges` checks stable IDs,
 merged evidence from reciprocal links, isolated pages and aliases. The HTTP route
 test checks project scoping and missing targets. The knowledge Playwright suite
-opens the full graph and locates and opens a titled page via its alias.
+checks that the project root and titled pages are drawn, locates a page by
+alias, opens a legacy workflow label from Pending, and browses and opens a
+page in a collapsed unlinked branch.
+`TestLegacyWikiLabelsRemainInspectableOutsideBrowsing` checks that generated
+labels and their graph edges stay out of normal navigation while saved
+citations, manual pages and observed events remain accessible.
+`TestWikiReviewRepairsOnlyTheUnresolvedItemsAtTheModelBoundary` checks host
+omission of workflow labels and their dependent links alongside citation repair
+through the model adapter.
+`frontend/src/lib/knowledge-layout.test.ts` checks reachability from the
+project root for disconnected components, cycles and a 6,270-page sparse
+graph with 316 saved links. It checks that opening a leaf retains its path
+and that saved page relationships are preserved.
 
 - `go test -race -cover ./internal/knowledge ./internal/engine ./internal/server ./internal/backup`
   exercises schema and file validation, graph derivation, revision conflicts,
