@@ -10,6 +10,10 @@ const script = process.env.ZWAI_TEST_RECOVERY_COVER_SCRIPT
   ? readFileSync(process.env.ZWAI_TEST_RECOVERY_COVER_SCRIPT, "utf8")
   : generated[1]
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, "platform", { value: "MacIntel" }))
+})
+
 const colour = (css: string) => css.match(/[\d.]+/g)!.slice(0, 3).map(Number)
 
 // The native cover samples the window corner, not a fixed element. The title
@@ -31,6 +35,27 @@ async function pointerState(page: Page) {
     value: document.body.style.getPropertyValue("pointer-events"),
     priority: document.body.style.getPropertyPriority("pointer-events"),
     computed: getComputedStyle(document.body).pointerEvents,
+  }))
+}
+
+type CoverNotice = { type: string; colour: number[] }
+type CoverHost = typeof window & { _wails?: { invoke(message: string): void }; __coverNotices: CoverNotice[] }
+
+async function startCoverNotifications(page: Page) {
+  // Make the corner change solely because of the UI action being tested.
+  await page.addStyleTag({ content: "* { animation: none !important; transition: none !important }" })
+  await page.evaluate(() => {
+    const host = window as CoverHost
+    host.__coverNotices = []
+    host._wails = { invoke(message) { if (message.startsWith("{")) host.__coverNotices.push(JSON.parse(message)) } }
+  })
+  return page.evaluate<number[]>(script)
+}
+
+function settledCoverNotices(page: Page) {
+  // The injected script batches colour sampling on the next frame.
+  return page.evaluate(() => new Promise<CoverNotice[]>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve((window as CoverHost).__coverNotices)))
   }))
 }
 
@@ -84,22 +109,40 @@ test("a real modal keeps its input guard while the native cover reads the dimmed
   }
 })
 
-test("native corner notifications follow real settings and theme changes", async ({ page, request }, info) => {
+test("the native cover follows both sidebar toggles on the next frame", async ({ page }) => {
+  await page.goto("/?shell=desktop")
+  const leading = page.getByTestId("titlebar-leading")
+  const hide = leading.getByRole("button", { name: "Hide conversations" })
+  const show = leading.getByRole("button", { name: "Show conversations" })
+  await expect(hide).toBeVisible()
+  const openColour = await cornerColour(page)
+  expect(await startCoverNotifications(page)).toEqual(openColour)
+
+  await hide.click()
+  await expect(show).toBeVisible()
+  const closedColour = await cornerColour(page)
+  expect(closedColour).not.toEqual(openColour)
+  expect(await settledCoverNotices(page)).toEqual([{ type: "zwai:render-cover", colour: closedColour }])
+
+  await show.click()
+  await expect(hide).toBeVisible()
+  expect(await settledCoverNotices(page)).toEqual([
+    { type: "zwai:render-cover", colour: closedColour },
+    { type: "zwai:render-cover", colour: openColour },
+  ])
+})
+
+test("the native cover stays quiet on same-colour settings changes and follows a new theme", async ({ page, request }, info) => {
   const settings = await request.get("/api/settings")
   expect(settings.ok()).toBe(true)
   const originalUI = (await settings.json()).settings.ui
+  await page.emulateMedia({ colorScheme: "light" })
   await page.goto("/?shell=desktop")
   await expect(page.locator("header").first()).toBeVisible()
   const originalTheme = await page.evaluate(() => localStorage.getItem("zwai.theme"))
   try {
-    await page.evaluate(() => {
-      const host = window as Window & { _wails?: { invoke(message: string): void }; __coverNotices?: Array<{ type: string; colour: number[] }> }
-      host.__coverNotices = []
-      host._wails = { invoke(message) { if (message.startsWith("{")) host.__coverNotices!.push(JSON.parse(message)) } }
-    })
-    const notices = () => page.evaluate(() => (window as Window & { __coverNotices?: Array<{ type: string; colour: number[] }> }).__coverNotices ?? [])
-    const headerColour = () => cornerColour(page)
-    expect(await page.evaluate(script)).toEqual(await headerColour())
+    const initial = await cornerColour(page)
+    expect(await startCoverNotifications(page)).toEqual(initial)
     await page.getByRole("button", { name: "Settings", exact: true }).click()
     const dialog = page.getByRole("dialog")
     await expect(dialog).toBeVisible()
@@ -107,16 +150,20 @@ test("native corner notifications follow real settings and theme changes", async
     const corner = page.getByTestId("settings-titlebar").locator(":scope > div").first()
     await expect(corner).toBeVisible()
     const settingsColour = async () => colour(await corner.evaluate((element) => getComputedStyle(element).backgroundColor))
-    await expect.poll(async () => (await notices()).at(-1)?.colour).toEqual(await settingsColour())
+    expect(await settingsColour()).toEqual(initial)
+    expect(await settledCoverNotices(page)).toEqual([])
     await dialog.getByRole("radio", { name: "Dark", exact: true }).click()
     await expect(page.locator("html")).toHaveClass(/dark/)
-    await expect.poll(async () => (await notices()).at(-1)?.colour).toEqual(await settingsColour())
+    const dark = await settingsColour()
+    expect(dark).not.toEqual(initial)
+    expect(await settledCoverNotices(page)).toEqual([{ type: "zwai:render-cover", colour: dark }])
     await dialog.getByRole("button", { name: "Back to app", exact: true }).click()
     await expect(dialog).toBeHidden()
-    await expect.poll(async () => (await notices()).at(-1)?.colour).toEqual(await headerColour())
-    expect((await notices()).every((notice) => notice.type === "zwai:render-cover" && notice.colour.length === 3)).toBe(true)
+    expect(await cornerColour(page)).toEqual(dark)
+    const notices = await settledCoverNotices(page)
+    expect(notices).toEqual([{ type: "zwai:render-cover", colour: dark }])
     await page.screenshot({ path: info.outputPath("native-cover-dark-theme.png"), animations: "disabled" })
-    await info.attach("native-corner-notifications", { body: JSON.stringify(await notices(), null, 2), contentType: "application/json" })
+    await info.attach("native-corner-notifications", { body: JSON.stringify(notices, null, 2), contentType: "application/json" })
   } finally {
     // Settings are shared by the suite; restore the exact server palette and
     // the browser's local theme even when a notification assertion fails.

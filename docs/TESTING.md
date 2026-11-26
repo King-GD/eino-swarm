@@ -2453,7 +2453,9 @@ isolated guest; a successful JS callback alone never accepts WebView painting.
 `frontend/e2e/render-probe-cover.spec.ts` runs the actual injected script in
 Chromium against a real Radix modal and theme/settings changes, including
 background compositing while body pointer input is disabled and exact restoration
-of that pointer state after synchronous sampling.
+of that pointer state after synchronous sampling. It turns off animations to
+verify next-frame notifications for both sidebar toggles, suppression when
+opening or closing same-colour Settings, and a fresh notification on theme change.
 
 Native macOS acceptance runs in the UTM **ci-macOS** guest. The user's host
 desktop may already be running zwai; do not launch or focus another desktop

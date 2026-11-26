@@ -1,5 +1,5 @@
 import { Folder, MessageSquare, MessageSquarePlus, PanelLeft, PanelRight, Search, SquareTerminal, WifiOff } from "lucide-react"
-import { useEffect, useState, type RefObject } from "react"
+import { useEffect, useLayoutEffect, useState, type RefObject } from "react"
 
 import { CopyButton } from "@/components/app/copy-button"
 import { AskMark } from "@/components/app/ask-mark"
@@ -76,6 +76,10 @@ export function Header({
   const t = useT()
   const scheduled = useApp((s) => s.scheduleInboxOpen)
   const pane = useVisibleDest()
+  useLayoutEffect(() => {
+    // Sample after the title bar has committed the new corner background.
+    if (trafficInset) document.dispatchEvent(new Event("zwai:render-cover-change"))
+  }, [sidebarOpen, trafficInset])
   // The elapsed clock ticks here, not in App: a once-a-second setState in
   // the shell used to re-parse every markdown block in the conversation.
   const [now, setNow] = useState(() => Date.now())

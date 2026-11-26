@@ -229,8 +229,9 @@ sample does not. Recovery then uses the existing one reload and successor
 window. That decision is `models/desktop/RendererRecovery.tla`: a flat body
 is not healthy paint, an unknown capture is not blank, and the one reload
 precedes a bounded successor only while the window is in front. Background
-sampling precedes the first probe and follows theme and
-dialog changes through a bounded same-origin message, independently of health
+sampling precedes the first probe and follows theme, dialog and sidebar changes.
+The sidebar schedules sampling on the next frame after its title bar commits.
+Only changed RGB values cross the same-origin bridge, independently of health
 and recovery budgets. A later decoration failure preserves the existing cover
 and continues real pixel checks.
 
