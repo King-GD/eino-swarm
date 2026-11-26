@@ -644,7 +644,9 @@ export function Composer({
           <div
             data-composer-box=""
             className={
-              "relative rounded-2xl border border-border bg-card shadow-sm transition-shadow focus-within:border-ring focus-within:shadow-md" +
+              // A palette may swap the hairline for a gradient rim painted
+              // under the padding box; the card fill stays on top of it.
+              "relative rounded-[var(--composer-radius,1rem)] border border-[var(--composer-border,hsl(var(--border)))] bg-card bg-[image:var(--composer-rim,none)] [background-clip:var(--composer-clip,border-box)] [background-origin:border-box] shadow-sm transition-shadow [--tw-shadow-color:var(--composer-shadow)] focus-within:border-[var(--composer-border,hsl(var(--ring)))] focus-within:shadow-md" +
               (armed || adding ? " min-h-36" : "")
             }
           >
@@ -885,8 +887,14 @@ export function Composer({
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <Badge variant="outline" className={cn(chromeTypeClass, "h-7 gap-1 border-transparent px-2")}>
-                  <ShieldCheck className="size-3" />
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    chromeTypeClass,
+                    "h-7 gap-1.5 border-transparent px-2 text-[length:var(--chrome-font-size)] font-medium text-content-foreground",
+                  )}
+                >
+                  <ShieldCheck className="size-3.5" />
                   {t("composer.fullAccess")}
                 </Badge>
               </TooltipTrigger>
@@ -920,7 +928,7 @@ export function Composer({
               {corner.send ? (
                 <Button
                   size="icon"
-                  className="size-8 rounded-full"
+                  className="size-8 rounded-[var(--send-radius,9999px)] motion-safe:animate-pop-in"
                   disabled={sendDisabled}
                   onClick={() => void submit()}
                   aria-label={t("composer.send")}

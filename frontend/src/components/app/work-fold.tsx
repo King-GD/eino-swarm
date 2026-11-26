@@ -59,7 +59,7 @@ export function TurnBlockList({
               single.tool?.name !== "spawn_agent" &&
               single.tool?.name !== "close_agent"))
         ) {
-          return <div key={single.id} data-testid="single-work">{renderBlock(single)}</div>
+          return <div key={single.id} data-testid="single-work" className="relative pl-[var(--work-rail-pad,0px)] before:absolute before:inset-y-1 before:left-px before:border-l-[length:var(--work-rail,0px)] before:border-dashed before:border-border">{renderBlock(single)}</div>
         }
         return (
           <WorkFold

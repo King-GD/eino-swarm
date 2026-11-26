@@ -609,9 +609,8 @@ describe("Settings dialog", () => {
     ).toBeInTheDocument()
   })
 
-  // Full-page Settings covers the app header. On the macOS desktop window
-  // the traffic lights still occupy the first 48px, so Back to app has to
-  // start under an empty drag strip — the Codex layout, not a padded label.
+  // Settings covers the app header, so it reserves the native drag strip
+  // above Back to app.
   it("keeps Back to app below the native title bar on desktop", async () => {
     renderDialog({ trafficInset: true })
     await waitSettingsLoaded()
@@ -619,7 +618,7 @@ describe("Settings dialog", () => {
     const titlebar = screen.getByTestId("settings-titlebar")
     const back = screen.getByRole("button", { name: "Back to app" })
     expect(titlebar).toHaveAttribute("data-drag-region")
-    expect(titlebar).toHaveClass("h-12")
+    expect(titlebar).toHaveClass("h-(--macos-titlebar-height)")
     expect(titlebar).not.toContainElement(back)
     expect(
       titlebar.compareDocumentPosition(back) & Node.DOCUMENT_POSITION_FOLLOWING,

@@ -64,7 +64,18 @@
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
 
-  --animate-generated-image: generated-image-appear 180ms ease-out both;
+  /* Same motion language as the desktop shell: one curve and pace per kind
+     of change. Phone sheets and the screen push keep their own timing. */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --duration-press: 90ms;
+  --duration-fast: 140ms;
+  --duration-base: 200ms;
+  --duration-slow: 280ms;
+  --default-transition-duration: var(--duration-fast);
+  --default-transition-timing-function: var(--ease-in-out);
+  --animate-generated-image: generated-image-appear var(--duration-base) var(--ease-out) both;
 
   @keyframes generated-image-appear {
     from { opacity: 0; }
@@ -80,6 +91,16 @@
   If we ever want to remove these styles, we need to add an explicit border
   color utility to any element that depends on these defaults.
 */
+/* Phones have no hover. Without a press state, tapping a plain button reads
+   as a no-op until the screen changes; every tappable answers the same way. */
+@media (hover: none) {
+  button:not(:disabled):active,
+  [role="button"]:not([aria-disabled="true"]):active,
+  a[href]:active {
+    opacity: 0.75;
+  }
+}
+
 @layer base {
   *,
   ::after,
@@ -164,22 +185,36 @@
 }
 
 @utility scan-beam {
+  /* A transparent track as tall as the frame, with the line on its top edge.
+     It moves by transform, not a top animation that relayouts the viewfinder
+     every frame. translateY(%) is relative to this box, which is the frame's
+     height; container query units would need Safari 16, and the phone
+     deployment target is iOS 15. */
   position: absolute;
   left: 6%;
   right: 6%;
-  height: 2px;
-  top: 8%;
-  background: hsl(var(--qr-plate));
-  box-shadow:
-    0 0 8px hsl(var(--qr-plate)),
-    0 0 18px hsl(var(--running));
-  animation: scan-beam 2.2s ease-in-out infinite;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  animation: scan-beam 2.2s var(--ease-in-out) infinite;
+  &::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    background: hsl(var(--qr-plate));
+    box-shadow:
+      0 0 8px hsl(var(--qr-plate)),
+      0 0 18px hsl(var(--running));
+  }
   &::before {
     content: '';
     position: absolute;
     left: 0;
     right: 0;
-    bottom: 2px;
+    bottom: 100%;
     height: 4.5rem;
     background: linear-gradient(
       to top,
@@ -189,7 +224,7 @@
   }
   @media (prefers-reduced-motion: reduce) {
     animation: none;
-    top: 50%;
+    transform: translateY(50%);
   }
 }
 
@@ -434,13 +469,13 @@
   }
   @keyframes scan-beam {
     0% {
-      top: 8%;
+      transform: translateY(8%);
     }
     50% {
-      top: 90%;
+      transform: translateY(90%);
     }
     100% {
-      top: 8%;
+      transform: translateY(8%);
     }
   }
 }

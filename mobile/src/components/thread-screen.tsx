@@ -21,6 +21,7 @@ import { PhoneWorkRecords, phoneWorkText } from "@/components/work-records"
 import { Button } from "@/components/ui/button"
 import { agentRosterText } from "@/lib/agent-label"
 import { installAndroidBack } from "@/lib/android-back"
+import { scrollBehavior } from "@/lib/motion"
 import { pairedSlashCommands } from "@/lib/composer-commands"
 import { t } from "@/lib/i18n"
 import { pendingIterationLimit } from "@/lib/iteration-limit"
@@ -343,7 +344,7 @@ export function ThreadScreen({
     if (!el) return
     stick.current = true
     setBehind(false)
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
+    el.scrollTo({ top: el.scrollHeight, behavior: scrollBehavior() })
   }
 
   const onPullStart = (y: number) => {

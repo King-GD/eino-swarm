@@ -42,6 +42,7 @@ export function ResizeHandle({
   return (
     <div
       role="separator"
+      data-no-drag
       aria-orientation={vertical ? "horizontal" : "vertical"}
       aria-label={label}
       tabIndex={0}
@@ -92,10 +93,11 @@ export function ResizeHandle({
         onWidthCommit?.(next)
       }}
       className={cn(
-        "absolute z-20 select-none touch-none hover:bg-ring/40 focus-visible:bg-ring/60 focus-visible:outline-hidden",
+        "absolute z-20 select-none touch-none focus-visible:outline-hidden",
+        "before:absolute before:rounded-full before:bg-ring/0 before:transition-colors before:content-[''] hover:before:bg-ring/60 focus-visible:before:bg-ring active:before:bg-ring",
         vertical
-          ? "inset-x-0 h-2 cursor-row-resize"
-          : "inset-y-0 w-2 cursor-col-resize",
+          ? "inset-x-0 h-2 cursor-row-resize before:inset-x-0 before:top-1/2 before:h-0.5 before:-translate-y-1/2"
+          : "inset-y-0 w-2 cursor-col-resize before:inset-y-0 before:left-1/2 before:w-0.5 before:-translate-x-1/2",
         edge === "left" && "-left-1",
         edge === "right" && "-right-1",
         edge === "top" && "-top-1",

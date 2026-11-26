@@ -170,8 +170,10 @@ export function SpeechCapture({ disabled, onStart, onText, onPhaseChange }: {
           </span>
           <div className="flex h-7 min-w-0 flex-1 items-center justify-center gap-[3px]" aria-hidden>
             {levels.map((value, index) => (
-              <span key={index} className="max-w-1 flex-1 rounded-full bg-current text-muted-foreground transition-[height] duration-100 motion-reduce:transition-none"
-                style={{ height: `${3 + 21 * value ** 0.65}px` }} />
+              // scaleY keeps the meter on the compositor; animating the bars'
+              // height relaid out the row on every frame of the recording.
+              <span key={index} className="h-6 max-w-1 flex-1 origin-center rounded-full bg-current text-muted-foreground transition-transform duration-100 motion-reduce:transition-none"
+                style={{ transform: `scaleY(${0.125 + 0.875 * value ** 0.65})` }} />
             ))}
           </div>
         </div>

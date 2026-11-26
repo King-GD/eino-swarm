@@ -1,4 +1,6 @@
-import { memo, useState, type ReactNode } from "react"
+import { memo, useId, useState, type ReactNode } from "react"
+
+import { ChartAreaGradient } from "../../../frontend/src/components/shared/chart-area-gradient"
 
 import { chartSpecsEqual, type ChartSpec } from "@/lib/chart-spec"
 import { t } from "@/lib/i18n"
@@ -92,13 +94,16 @@ const PAD_L = 46
 const PAD_R = 8
 const PAD_T = 8
 const PAD_B = 28
+/** Room above the top tick for the unit caption. */
+const UNIT_ROW = 12
 
 function CartesianPlot({ spec }: { spec: ChartSpec }) {
   const { lo, hi } = domain(spec)
+  const top = spec.unit ? PAD_T + UNIT_ROW : PAD_T
   const innerW = VB_W - PAD_L - PAD_R
-  const innerH = VB_H - PAD_T - PAD_B
+  const innerH = VB_H - top - PAD_B
   const ticks = 4
-  const yAt = (v: number) => PAD_T + (1 - (v - lo) / (hi - lo || 1)) * innerH
+  const yAt = (v: number) => top + (1 - (v - lo) / (hi - lo || 1)) * innerH
   const xAt = (i: number) =>
     PAD_L + (spec.data.length <= 1 ? innerW / 2 : (i / (spec.data.length - 1)) * innerW)
   const baseline = yAt(Math.min(Math.max(lo, 0), hi))
@@ -111,6 +116,13 @@ function CartesianPlot({ spec }: { spec: ChartSpec }) {
       className="h-52 w-full"
       role="img"
     >
+      {spec.unit ? (
+        // The phone plot has no hover tooltip, so this caption is the only
+        // place the default view says what the numbers count.
+        <text data-testid="phone-chart-unit" x={PAD_L - 4} y={PAD_T + 2} textAnchor="end" fill={AXIS} fontSize="10">
+          {spec.unit}
+        </text>
+      ) : null}
       {Array.from({ length: ticks + 1 }, (_, i) => {
         const v = lo + ((hi - lo) * i) / ticks
         const y = yAt(v)
@@ -118,7 +130,7 @@ function CartesianPlot({ spec }: { spec: ChartSpec }) {
           <g key={i}>
             <line x1={PAD_L} x2={VB_W - PAD_R} y1={y} y2={y} stroke={GRID} />
             <text x={PAD_L - 4} y={y + 3} textAnchor="end" fill={AXIS} fontSize="10">
-              {formatTick(v, spec.unit)}
+              {compactTick(v)}
             </text>
           </g>
         )
@@ -170,22 +182,19 @@ function SeriesMark({
   yAt: (v: number) => number
   baseline: number
 }) {
+  const id = `${useId()}-area`
   const color = PAINT[series % PAINT.length]
-  const pts = spec.data.map((row, i) => `${xAt(i)},${yAt(Number(row[seriesKey]))}`)
-  if (spec.type === "area") {
-    const first = xAt(0)
-    const last = xAt(spec.data.length - 1)
-    return (
-      <path
-        d={`M ${first} ${baseline} L ${pts.join(" L ")} L ${last} ${baseline} Z`}
-        fill={color}
-        fillOpacity={0.28}
-        stroke={color}
-        strokeWidth={2}
-      />
-    )
-  }
-  return <polyline points={pts.join(" ")} fill="none" stroke={color} strokeWidth={2} />
+  const values = spec.data.map((row) => Number(row[seriesKey]))
+  const pts = values.map((value, i) => `${xAt(i)},${yAt(value)}`)
+  const first = xAt(0)
+  const last = xAt(pts.length - 1)
+  return (
+    <>
+      <defs><ChartAreaGradient id={id} color={color} values={values} /></defs>
+      <path d={`M ${first} ${baseline} L ${pts.join(" L ")} L ${last} ${baseline} Z`} fill={`url(#${id})`} />
+      <polyline points={pts.join(" ")} fill="none" stroke={color} strokeWidth={2} />
+    </>
+  )
 }
 
 function Bars({
@@ -377,9 +386,18 @@ function labelIndexes(count: number): number[] {
   return out
 }
 
-function formatTick(n: number, unit: string): string {
+/** Tick numbers stay bare: the unit is captioned once above the axis, and
+ *  on a phone width a per-tick unit pushes the digits out. */
+function compactTick(n: number): string {
   if (!Number.isFinite(n)) return ""
   const abs = Math.abs(n)
-  const text = abs >= 100 || Number.isInteger(n) ? String(Math.round(n)) : n.toFixed(1)
-  return unit ? `${text} ${unit}` : text
+  if (abs >= 10_000) {
+    return new Intl.NumberFormat(undefined, {
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(n)
+  }
+  // Small domains still need their fraction: 0.25 / 0.5 / 0.75 must not
+  // collapse to 0 / 1 / 1.
+  return abs >= 100 || Number.isInteger(n) ? String(Math.round(n)) : n.toFixed(1)
 }

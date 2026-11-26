@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import {
   APPEARANCE_KEY,
   applyAppearance,
+  beginThemeRepaint,
   defaultAppearance,
   normalizeAppearance,
   normalizeContentWidth,
@@ -163,6 +164,43 @@ describe("toggleTranscriptMode", () => {
   it("flips the compact transcript and the full tool log", () => {
     expect(toggleTranscriptMode("user")).toBe("developer")
     expect(toggleTranscriptMode("developer")).toBe("user")
+  })
+})
+
+describe("beginThemeRepaint", () => {
+  it("clears the guard once the repaint frame has painted", () => {
+    const root = document.createElement("div")
+    const frames: FrameRequestCallback[] = []
+    const original = globalThis.requestAnimationFrame
+    globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      frames.push(cb)
+      return frames.length
+    }) as typeof globalThis.requestAnimationFrame
+    try {
+      beginThemeRepaint(root)
+      expect(root.hasAttribute("data-theme-switching")).toBe(true)
+      frames.shift()!(0)
+      expect(root.hasAttribute("data-theme-switching")).toBe(true)
+      frames.shift()!(0)
+      expect(root.hasAttribute("data-theme-switching")).toBe(false)
+    } finally {
+      globalThis.requestAnimationFrame = original
+    }
+  })
+
+  it("never leaves colour transitions off when frames are unavailable", () => {
+    // A webview without rAF must not strand the switch attribute, or every
+    // later hover would snap instead of fading.
+    const root = document.createElement("div")
+    const original = globalThis.requestAnimationFrame
+    // @ts-expect-error the test removes the browser seam
+    delete globalThis.requestAnimationFrame
+    try {
+      beginThemeRepaint(root)
+      expect(root.hasAttribute("data-theme-switching")).toBe(false)
+    } finally {
+      globalThis.requestAnimationFrame = original
+    }
   })
 })
 

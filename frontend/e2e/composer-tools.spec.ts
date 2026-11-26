@@ -2,6 +2,44 @@ import { expect, test, type APIRequestContext } from "@playwright/test"
 
 import { freshConversation, reloadOpenConversation } from "./session"
 
+test("FOFA switches keep a white thumb in the tools menu and settings", async ({ page, request }, info) => {
+  const { settings } = await (await request.get("/api/settings")).json()
+  try {
+    await expect(await request.put("/api/settings", { data: { ui: { palette: "fofa" } } })).toBeOK()
+    await page.emulateMedia({ colorScheme: "dark" })
+    await freshConversation(page)
+    await expect(page.locator("html")).toHaveAttribute("data-palette", "fofa")
+    await expect(page.locator("html")).toHaveClass(/\bdark\b/)
+    await page.getByRole("button", { name: "Tools", exact: true }).click()
+    const menu = page.getByTestId("composer-tools-menu")
+    const read = menu.getByRole("menuitemcheckbox", { name: "Read file (read)" })
+    const toolSwitch = read.locator('[role="switch"]')
+    const toolThumb = toolSwitch.locator("span")
+    await expect(toolSwitch).toHaveAttribute("data-state", "checked")
+    await expect(toolThumb).toHaveCSS("background-color", "rgb(255, 255, 255)", { timeout: 3_000 })
+    await menu.screenshot({ path: info.outputPath("fofa-switches-dark.png"), animations: "disabled" })
+
+    await read.click()
+    await expect(toolSwitch).toHaveAttribute("data-state", "unchecked")
+    await expect(toolSwitch).toHaveCSS("background-color", "rgb(126, 142, 158)")
+    await expect(toolThumb).toHaveCSS("background-color", "rgb(255, 255, 255)")
+    await page.emulateMedia({ colorScheme: "light" })
+    await expect(page.locator("html")).not.toHaveClass(/\bdark\b/)
+    await expect(toolThumb).toHaveCSS("background-color", "rgb(255, 255, 255)")
+    await menu.screenshot({ path: info.outputPath("fofa-switches-light.png"), animations: "disabled" })
+
+    await menu.getByRole("button", { name: "Tool settings", exact: true }).click()
+    const settingsSwitch = page.getByRole("dialog").getByRole("switch", { name: /Read file/i })
+    await expect(settingsSwitch).toHaveAttribute("data-state", "unchecked")
+    await expect(settingsSwitch).toHaveCSS("background-color", "rgb(126, 142, 158)")
+    await expect(settingsSwitch.locator("span")).toHaveCSS("background-color", "rgb(255, 255, 255)")
+  } finally {
+    await expect(await request.put("/api/settings", {
+      data: { ui: { palette: settings.ui.palette }, tools: settings.tools },
+    })).toBeOK()
+  }
+})
+
 test("the composer tool menu clears the input and lists MCP tools rather than servers", async ({ page, request }, info) => {
   const id = `e2e-tools-${Date.now()}`
   const hidden = `e2e-off-${Date.now()}`

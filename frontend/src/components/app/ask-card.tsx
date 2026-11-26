@@ -68,7 +68,7 @@ export function AskCardView({ card }: { card: AskCard }) {
       data-testid="ask-card"
       className={cn(
         "relative my-3 w-full rounded-2xl border bg-card p-4 shadow-md",
-        card.pending && "border-ask",
+        card.pending && "border-[var(--ask-card-border,hsl(var(--ask)))]",
       )}
     >
       <div className="flex items-center gap-2">

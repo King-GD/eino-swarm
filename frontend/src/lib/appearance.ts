@@ -322,9 +322,24 @@ function pxForCode(pref: Appearance): string {
   return FONT_SIZES[pref.codeFontSize]
 }
 
+/** A palette or light/dark switch repaints every token in one frame. Colour
+ *  transitions would fade the old tokens into the new ones, so half the chrome
+ *  mixes palettes while the rest snaps. Hold transitions off until that frame
+ *  has painted; `applyTheme` uses this too. */
+export function beginThemeRepaint(root: HTMLElement): void {
+  root.setAttribute("data-theme-switching", "")
+  const clear = () => root.removeAttribute("data-theme-switching")
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(() => requestAnimationFrame(clear))
+  } else {
+    clear()
+  }
+}
+
 export function applyAppearance(pref: Appearance): void {
   if (typeof document === "undefined") return
   const root = document.documentElement
+  if (root.dataset.palette !== pref.palette) beginThemeRepaint(root)
   root.style.setProperty("--font-sans", FONT_STACKS[pref.font])
   root.style.setProperty("--font-content", stackFor(pref.contentFont, pref.font))
   root.style.setProperty("--font-mono", stackFor(pref.codeFont, pref.font))

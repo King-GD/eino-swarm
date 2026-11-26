@@ -29,6 +29,14 @@ const searchHits = JSON.stringify({
 })
 
 describe("ToolRow", () => {
+  it("carries the tool's timestamp for the palette's log line", () => {
+    const block = toolBlock({})
+    render(<ToolRow block={block} defaultCollapsed />)
+    const stamp = document.querySelector("[data-tool-time]")
+    expect(stamp).not.toBeNull()
+    expect(stamp).toHaveAttribute("datetime", block.at)
+  })
+
   it("shows a real MCP progress snapshot as text and replaces it with the terminal result", () => {
     const block = toolBlock({ name: "mcp_local_check_012345abcdef", args: "{}", pending: true })
     const { rerender } = render(<ToolRow block={block} defaultCollapsed />)
