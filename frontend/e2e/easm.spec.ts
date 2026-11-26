@@ -81,6 +81,8 @@ test("EASM shows the first certificate source and hides detached clues after reo
   await page.goto("/")
   await openConversation()
   await expectRootedGraph(false)
+  await expect(panel.getByText("Asset attention trend", { exact: false })).toHaveCount(0)
+  await expect(panel.getByText("Supply chain / third-party components", { exact: false })).toHaveCount(0)
   await expect(stage).toHaveAttribute("data-layout-moving", "false", { timeout: 20_000 })
   const card = panel.getByTestId("easm-node-card")
   await stage.click({ position: await nodePoint(stage, laterDomain.id) })
@@ -136,6 +138,8 @@ test("EASM renders the producer state, words evidence and follows step status", 
   await panel.getByRole("button", { name: "Expand EASM", exact: true }).click()
   const dialog = page.getByRole("dialog")
   await expect(dialog.getByRole("progressbar", { name: "Loading asset data", exact: true })).toBeVisible()
+  await expect(dialog.getByRole("progressbar", { name: "Loading asset attention trend" })).toBeVisible()
+  await expect(dialog.getByRole("progressbar", { name: "Loading supply chain components" })).toBeVisible()
   await page.keyboard.press("Escape")
   await expect(dialog).toBeHidden()
 
@@ -164,17 +168,46 @@ test("EASM renders the producer state, words evidence and follows step status", 
       { op: "replace", path: "/collection/status", value: "done" },
       { op: "replace", path: "/collection/steps/2/status", value: "done" },
       { op: "replace", path: "/collection/steps/3/status", value: "done" },
-      { op: "replace", path: "/heat", value: [{ date: "2026-01-05", value: 3 }, { date: "2026-01-12", value: 8 }] },
+      { op: "replace", path: "/heat", value: [{ date: "2026-01-05", value: 0 }, { date: "2026-01-12", value: 0 }] },
     ],
   })
   await expect(panel).toHaveAttribute("data-revision", "3")
   await expect(panel.getByRole("progressbar")).toHaveCount(0)
   await expect(panel.getByTestId("easm-heat")).toBeVisible()
-  await expect(panel.getByText("No component data")).toBeVisible()
+  const heatRegion = { name: "Asset attention trend", exact: true }
+  const supplyRegion = { name: "Supply chain / third-party components", exact: true }
+  await expect(panel.getByRole("region", supplyRegion)).toHaveCount(0)
+  await expect(panel.getByText("Supply chain / third-party components", { exact: false })).toHaveCount(0)
+
+  await panel.getByRole("button", { name: "Expand EASM", exact: true }).click()
+  await expect(dialog.getByTestId("easm-heat")).toBeVisible()
+  await expect(dialog.getByRole("region", supplyRegion)).toHaveCount(0)
+  await expect(dialog.getByText("Supply chain / third-party components", { exact: false })).toHaveCount(0)
+
+  // A later query can return components even when trend collection fails.
+  await emit(page, {
+    cursor: 4, thread_id: thread, panel_id: "easm-e2e", revision: 4, base_revision: 3, kind: "snapshot", source_status: "finished",
+    state: {
+      ...portrait,
+      query: 'domain="fixture.test"',
+      collection: { status: "done", steps: [{ id: "heat", status: "failed" }, { id: "components", status: "done" }] },
+      components: [{ name: "Fixture component", count: 3 }],
+    },
+  })
+  await expect(panel).toHaveAttribute("data-revision", "4")
+  await expect(dialog.getByRole("region", heatRegion)).toHaveCount(0)
+  await expect(dialog.getByText("Asset attention trend · Collection failed", { exact: true })).toBeVisible()
+  await expect(dialog.getByRole("region", supplyRegion).getByText("Fixture component", { exact: true })).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(dialog).toBeHidden()
+  await expect(panel.getByRole("region", heatRegion)).toHaveCount(0)
+  await expect(panel.getByText("Asset attention trend · Collection failed", { exact: true })).toBeVisible()
+  await expect(panel.getByRole("region", supplyRegion).getByText("Fixture component", { exact: true })).toBeVisible()
 })
 
-// An interrupted run (Stop, restart) must not leave a spinner after reload.
-test("EASM shows no loading spinners for an interrupted empty collection", async ({ page }) => {
+// An interrupted run must explain the missing metrics without reserving room
+// for empty cards or presenting the result as a completed empty collection.
+test("EASM explains an interrupted collection and gives the expanded graph the full width", async ({ page }) => {
   const title = `EASM interrupted ${Date.now()}`
   const created = await (await page.request.post("/api/threads", { data: { title } })).json()
   const thread = created.thread.id as string
@@ -187,27 +220,45 @@ test("EASM shows no loading spinners for an interrupted empty collection", async
   await page.getByRole("button", { name: title, exact: true }).click()
   const panel = page.getByTestId("easm-task-panel")
   await expect(panel.getByText("No asset data", { exact: true })).toBeVisible()
-  await expect(panel.getByText("No attention trend data")).toBeVisible()
   await expect(panel.getByRole("progressbar")).toHaveCount(0)
+  await expect(panel.getByText("Asset attention trend · Collection interrupted", { exact: true })).toBeVisible()
+  await expect(panel.getByText("Supply chain / third-party components · Collection interrupted", { exact: true })).toBeVisible()
+  await expect(panel.getByRole("region", { name: "Asset attention trend", exact: true })).toHaveCount(0)
+  await expect(panel.getByRole("region", { name: "Supply chain / third-party components", exact: true })).toHaveCount(0)
+
+  await panel.getByRole("button", { name: "Expand EASM", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  await expect(dialog.getByText("Asset attention trend · Collection interrupted", { exact: true })).toBeVisible()
+  await expect(dialog.getByText("Supply chain / third-party components · Collection interrupted", { exact: true })).toBeVisible()
+  await expect(dialog.getByRole("region", { name: "Asset attention trend", exact: true })).toHaveCount(0)
+  await expect(dialog.getByRole("region", { name: "Supply chain / third-party components", exact: true })).toHaveCount(0)
+  const graph = dialog.getByRole("region", { name: "Asset relationship graph", exact: true })
+  await expect(graph).toBeVisible()
+  await expect.poll(async () => {
+    const [graphBox, dialogBox] = await Promise.all([graph.boundingBox(), dialog.boundingBox()])
+    return graphBox && dialogBox ? graphBox.width / dialogBox.width : 0
+  }).toBeGreaterThan(0.9)
 })
 
 // An engine restart interrupts a source in the middle of a collection. The
-// state it published still says every step is running, so a reload that trusts
-// only that snapshot spins forever; the host's receipt must end the wait.
+// state it published can still say a step is running. The host's receipt ends
+// that wait without overwriting a different step's recorded unavailability.
 test("EASM stops spinning when the host reports the source interrupted mid-collection", async ({ page }) => {
   const title = `EASM restarted ${Date.now()}`
   const created = await (await page.request.post("/api/threads", { data: { title } })).json()
   const thread = created.thread.id as string
   await servePanel(page, thread, {
     ...portrait, nodes: [], edges: [], summary: undefined,
-    collection: { status: "running", steps: portrait.collection.steps.map((step) => ({ ...step, status: "running" })) },
+    collection: { status: "running", steps: [{ id: "heat", status: "running" }, { id: "components", status: "unavailable" }] },
   }, "interrupted")
   await page.goto("/")
   await page.getByTestId("dest-chats").click()
   await page.getByRole("button", { name: title, exact: true }).click()
   const panel = page.getByTestId("easm-task-panel")
   await expect(panel.getByText("No asset data", { exact: true })).toBeVisible()
-  await expect(panel.getByText("No attention trend data")).toBeVisible()
-  await expect(panel.getByText("No component data")).toBeVisible()
   await expect(panel.getByRole("progressbar")).toHaveCount(0)
+  await expect(panel.getByText("Asset attention trend · Collection interrupted", { exact: true })).toBeVisible()
+  await expect(panel.getByText("Supply chain / third-party components · Source unavailable", { exact: true })).toBeVisible()
+  await expect(panel.getByRole("region", { name: "Asset attention trend", exact: true })).toHaveCount(0)
+  await expect(panel.getByRole("region", { name: "Supply chain / third-party components", exact: true })).toHaveCount(0)
 })

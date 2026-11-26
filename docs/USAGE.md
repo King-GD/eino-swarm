@@ -85,6 +85,12 @@ instance from this conversation, including after restart. A running source
 for that instance is interrupted while the conversation continues. Hiding the
 inspector keeps its panels available.
 
+In the EASM panel, heat trend and supply-chain cards appear when they have data
+or are waiting for results. A successful empty result or an unrequested metric
+leaves the card hidden. If a metric has no data after a failed, unavailable,
+or interrupted collection, a short status explains why. The expanded graph
+uses the available width when both cards are hidden.
+
 **Settings → Tools → Task panel plugins** controls the shared enable switch
 and the state and update byte limits. Select **Save panel settings** when
 you change these values. See [Task panels](TASK_PANELS.md) for source settings.

@@ -144,7 +144,21 @@ the bindings admitted for their turn.
 
 The receipt returns counts, step outcomes and what could not be placed (`nodes`, `edges`, `components`, `steps`, `unresolved_parents`, `refused_domains`). Bulk data stays in the panel. Collection receipts carry `next`, asking the agent to summarize the panel and end the turn. If a step failed or was unavailable, the receipt identifies it. A refused direct update leaves the last committed revision available.
 
-The renderer shows the graph, attention trend and component table and keeps all copy in `frontend/src/lib/easm/messages.ts`. Each section with data always shows it. Without data it shows the same spinner while the host reports the source `running` and its step is pending or running, or while the owning conversation is still running and the step has not finished (a first batch may be followed by one with a query). The host's `source_status` decides whether a producer is collecting now: a stored step that still says `running` after an engine restart or Stop proves nothing on its own. The graph is filled by whole batches, so no step owns it: it waits while a source call is collecting or the owning task can still push another batch. "No data" appears only once nothing more can arrive. The side panel and expanded graph share this loading behavior. Component trending days and KEV/CVE tags have no configured source yet and stay empty.
+The renderer shows the graph, attention trend and component table and keeps all
+copy in `frontend/src/lib/easm/messages.ts`. Each metric card shows available
+data, including heat points with a value of zero. An empty card shows a spinner
+while its step is collecting or the owning task can still supply a batch with a
+query. Successful empty results and unrequested metrics leave their respective
+cards hidden. Failed, unavailable and interrupted steps with no data show a
+short status outside the card. The host's `source_status` distinguishes live
+collection from a saved step that still says `running` after engine restart or
+Stop. The side panel and expanded view share these rules. The expanded graph
+uses the available width when neither card is shown.
+
+The graph receives whole batches and waits while the source is collecting or
+the owning task can still supply a batch. It displays its own empty state when
+no graph data arrives. Component trending days and KEV/CVE tags have no
+configured source yet and stay empty.
 
 ## Validation
 

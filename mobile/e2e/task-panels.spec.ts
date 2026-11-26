@@ -65,6 +65,31 @@ test("paired EASM shows the first certificate source and hides detached clues af
   await expectRootedGraph(true)
 })
 
+test("paired EASM hides successful empty metrics and explains failed collection", async ({ page }) => {
+  await page.goto("/?mock=1&tick=0&panels=easm")
+  await expect(page.getByTestId("transcript")).toBeVisible()
+  await control(page, "snapshot", "mobile-easm", {
+    ...savedEasmGraph,
+    collection: { status: "done", steps: [{ id: "heat", status: "done" }, { id: "components", status: "done" }] },
+  })
+  const panel = page.getByRole("dialog", { name: "Task panels" }).getByTestId("easm-task-panel")
+  const heatRegion = { name: "Asset attention trend", exact: true }
+  const supplyRegion = { name: "Supply chain / third-party components", exact: true }
+  await expect(panel).toHaveAttribute("data-revision", "1")
+  await expect(panel.getByText("Asset attention trend", { exact: false })).toHaveCount(0)
+  await expect(panel.getByText("Supply chain / third-party components", { exact: false })).toHaveCount(0)
+
+  await control(page, "snapshot", "mobile-easm", {
+    ...savedEasmGraph,
+    collection: { status: "done", steps: [{ id: "heat", status: "failed" }, { id: "components", status: "done" }] },
+    components: [{ name: "Fixture component", count: 3 }],
+  })
+  await expect(panel).toHaveAttribute("data-revision", "2")
+  await expect(panel.getByRole("region", heatRegion)).toHaveCount(0)
+  await expect(panel.getByText("Asset attention trend · Collection failed", { exact: true })).toBeVisible()
+  await expect(panel.getByRole("region", supplyRegion).getByText("Fixture component", { exact: true })).toBeVisible()
+})
+
 test("a paired task opens its local map once and preserves touch zoom through patch, hidden snapshot and rotation", async ({ page }, info) => {
   const htmlRequests: string[] = []
   page.on("request", (request) => { if (request.url().includes("/task-panels/")) htmlRequests.push(request.url()) })

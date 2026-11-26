@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { graphSectionLoading, isEasmResult, sectionLoading } from "./data"
+import { graphSectionLoading, isEasmResult, sectionStatus } from "./data"
 import { projectEasmResult } from "./model"
 import type { EasmResult } from "./types"
 
@@ -30,24 +30,31 @@ describe("EASM snapshot relationships", () => {
   // data"; once nothing more can arrive it must never leave a spinner behind.
   it("keeps a section loading until its step can no longer deliver", () => {
     const running = { status: "running" as const, steps: [{ id: "heat" as const, status: "pending" as const }, { id: "summary" as const, status: "done" as const }] }
-    expect(sectionLoading({ ...fixture, collection: running }, "heat", false, "running")).toBe(true)
-    expect(sectionLoading({ ...fixture, collection: running }, "summary", true, "running")).toBe(false)
+    expect(sectionStatus({ ...fixture, collection: running }, "heat", false, "running")).toBe("loading")
+    expect(sectionStatus({ ...fixture, collection: running }, "summary", true, "running")).toBeUndefined()
     const skipped = { status: "done" as const, steps: [{ id: "heat" as const, status: "skipped" as const, code: "no_query" }] }
-    expect(sectionLoading({ ...fixture, collection: skipped }, "heat", true)).toBe(true)
-    expect(sectionLoading({ ...fixture, collection: skipped }, "heat", false)).toBe(false)
-    expect(sectionLoading({ ...fixture, collection: { status: "idle", steps: [] } }, "components", true)).toBe(true)
-    expect(sectionLoading({ ...fixture, collection: { ...running, status: "interrupted" } }, "heat", false, "interrupted")).toBe(false)
+    expect(sectionStatus({ ...fixture, collection: skipped }, "heat", true)).toBe("loading")
+    expect(sectionStatus({ ...fixture, collection: skipped }, "heat", false)).toBeUndefined()
+    expect(sectionStatus({ ...fixture, collection: { status: "idle", steps: [] } }, "components", true)).toBe("loading")
   })
 
   // A first batch without a query leaves the collection idle: the section must
   // keep waiting while the task can still push data, and stop once it cannot.
   it("keeps an idle collection waiting only while the task can still push data", () => {
-    const idle = { status: "idle" as const, steps: [{ id: "heat" as const, status: "pending" as const }, { id: "components" as const, status: "failed" as const, code: "tool_error" }] }
-    expect(sectionLoading({ ...fixture, collection: idle }, "heat", true)).toBe(true)
-    expect(sectionLoading({ ...fixture, collection: idle }, "heat", false)).toBe(false)
-    expect(sectionLoading({ ...fixture, collection: idle }, "components", false)).toBe(false)
+    const idle = { status: "idle" as const, steps: [{ id: "heat" as const, status: "pending" as const }] }
+    expect(sectionStatus({ ...fixture, collection: idle }, "heat", true)).toBe("loading")
+    expect(sectionStatus({ ...fixture, collection: idle }, "heat", false)).toBeUndefined()
     const done = { status: "done" as const, steps: [{ id: "heat" as const, status: "done" as const }] }
-    expect(sectionLoading({ ...fixture, collection: done }, "heat", true)).toBe(false)
+    expect(sectionStatus({ ...fixture, collection: done }, "heat", true)).toBeUndefined()
+  })
+
+  it("keeps recorded metric failures distinct from an empty result while the other step collects", () => {
+    const failed: EasmResult["collection"] = { status: "running", steps: [{ id: "heat", status: "failed" }, { id: "components", status: "running" }] }
+    expect(sectionStatus({ ...fixture, collection: failed }, "heat", true, "running")).toBe("failed")
+    expect(sectionStatus({ ...fixture, collection: failed }, "components", true, "running")).toBe("loading")
+    const settled: EasmResult["collection"] = { status: "interrupted", steps: [{ id: "heat", status: "unavailable" }, { id: "components", status: "interrupted" }] }
+    expect(sectionStatus({ ...fixture, collection: settled }, "heat", false, "interrupted")).toBe("unavailable")
+    expect(sectionStatus({ ...fixture, collection: settled }, "components", false, "interrupted")).toBe("interrupted")
   })
 
   // The agent pushes the graph itself, so no step owns it: it waits while a
@@ -65,10 +72,10 @@ describe("EASM snapshot relationships", () => {
   // any more, so the sections must not spin on the stale state alone.
   it("stops loading a stale running state once the host reports the source interrupted", () => {
     const stale = { status: "running" as const, steps: [{ id: "heat" as const, status: "running" as const }, { id: "components" as const, status: "pending" as const }] }
-    expect(sectionLoading({ ...fixture, collection: stale }, "heat", false, "running")).toBe(true)
-    expect(sectionLoading({ ...fixture, collection: stale }, "heat", false, "interrupted")).toBe(false)
-    expect(sectionLoading({ ...fixture, collection: stale }, "components", false, "interrupted")).toBe(false)
-    expect(sectionLoading({ ...fixture, collection: stale }, "heat", false)).toBe(false)
+    expect(sectionStatus({ ...fixture, collection: stale }, "heat", false, "running")).toBe("loading")
+    expect(sectionStatus({ ...fixture, collection: stale }, "heat", false, "interrupted")).toBe("interrupted")
+    expect(sectionStatus({ ...fixture, collection: stale }, "components", true, "interrupted")).toBe("interrupted")
+    expect(sectionStatus({ ...fixture, collection: stale }, "heat", false)).toBeUndefined()
     expect(graphSectionLoading(false, "interrupted")).toBe(false)
   })
 

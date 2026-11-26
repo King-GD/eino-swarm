@@ -53,16 +53,19 @@ export function isEasmResult(value: unknown): value is EasmResult {
   return true
 }
 
-/** A section without data waits while its step can still deliver. The host's
- *  source_status is the only proof a producer is collecting right now: the
- *  snapshot's own "running" survives an engine restart that interrupted the
- *  source, and trusting it alone left the panel spinning forever after reload.
- *  While the owning task is active the agent may run the source again, so that
- *  keeps the wait even before the next call starts. */
-export function sectionLoading(result: EasmResult, step: EasmStepId, taskActive: boolean, sourceStatus?: string): boolean {
+export type EasmSectionStatus = "loading" | "failed" | "unavailable" | "interrupted"
+
+/** A saved failure or interruption is meaningful even when the step has no
+ *  data. The host receipt settles stale pending/running steps after a restart
+ *  or Stop. An active task can still supply its first query. */
+export function sectionStatus(result: EasmResult, step: EasmStepId, taskActive: boolean, sourceStatus?: string): EasmSectionStatus | undefined {
   const status = result.collection.steps.find((item) => item.id === step)?.status
-  if (sourceStatus === "running" && (status === "running" || status === "pending")) return true
-  return taskActive && status !== "done"
+  if (status === "failed" || status === "unavailable" || status === "interrupted") return status
+  if (status === "pending" || status === "running") {
+    if (sourceStatus === "interrupted") return "interrupted"
+    if (sourceStatus === "running") return "loading"
+  }
+  if (taskActive && status !== "done") return "loading"
 }
 
 /** The graph is filled by whole batches the agent pushes, so no single step owns

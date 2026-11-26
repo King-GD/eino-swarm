@@ -55,6 +55,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
+- The EASM panel hides empty heat trend and supply-chain cards after collection.
+  A short status takes the place of the empty card when collection fails, is
+  unavailable, or is interrupted.
+
 - The EASM graph search placeholder lists organizations, domains and certificates.
 
 - The engine compresses Responses request bodies of at least 1 KiB when the
