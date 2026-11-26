@@ -49,15 +49,18 @@ func TestUnmappedCloudNamesStayUncategorised(t *testing.T) {
 // The portrait's own limits keep the table and each row bounded.
 func TestEASMCloudLimitsHaveDefaultsAndBounds(t *testing.T) {
 	settings := TaskPanelConfig{}.WithDefaults()
-	if settings.EASM.MaxClouds != 5 || settings.EASM.MaxServices != 3 {
+	if settings.EASM.MaxClouds != 5 || settings.EASM.MaxServices != 5 {
 		t.Fatalf("defaults = %+v", settings.EASM)
 	}
 	if err := settings.Validate(); err != nil {
 		t.Fatal(err)
 	}
+	settings.EASM.MaxClouds = 6
+	if err := settings.WithDefaults().Validate(); err == nil {
+		t.Fatal("an out-of-range provider limit was accepted after applying defaults")
+	}
 	for name, c := range map[string]EASMPanelConfig{
 		"no rows":          {MaxDomains: 20, MaxComponents: 20, MaxServices: 3},
-		"too many rows":    {MaxDomains: 20, MaxComponents: 20, MaxClouds: 21, MaxServices: 3},
 		"no services":      {MaxDomains: 20, MaxComponents: 20, MaxClouds: 5},
 		"too many per row": {MaxDomains: 20, MaxComponents: 20, MaxClouds: 5, MaxServices: 11},
 	} {

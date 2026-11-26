@@ -105,7 +105,7 @@ type Settings struct {
 	MaxDomains int
 	// MaxComponents is the TopN product buckets one aggregation requests.
 	MaxComponents int
-	// MaxClouds is the number of hosting provider rows the cloud table shows.
+	// MaxClouds is the configured number of hosting provider rows.
 	MaxClouds int
 	// MaxServices is the TopN services one cloud row requests.
 	MaxServices int

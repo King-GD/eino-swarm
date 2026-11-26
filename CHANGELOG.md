@@ -55,6 +55,9 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
+- The EASM hosting provider table defaults to showing up to five services per provider.
+  New collections query services for at most five providers.
+
 - The engine compresses Responses request bodies of at least 1 KiB when the
   selected Gateway advertises gzip support and compression saves bytes. Older
   gateways and personal providers receive plain JSON. (`F-171`, `C-040`)
@@ -105,6 +108,9 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - 网关模式下，普通网关和第三方接入会根据可用的识别、朗读模型分别默认开启语音。语音设置仅显示网关允许编辑的参数，录音格式和超时等设置默认折叠。(`F-148`, `C-048`)
 
 ### Fixed
+
+- EASM keeps provider asset and IP counts when the statistics reply omits the
+  product aggregation. Collecting the same query again retries service lookups.
 
 - Paired phones show a View image button for each image sent in a PC
   conversation. Tapping it loads just that image. Reopening the conversation

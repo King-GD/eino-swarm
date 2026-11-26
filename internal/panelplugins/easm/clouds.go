@@ -75,9 +75,7 @@ func (r *run) clouds(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if len(rows) > r.settings.MaxClouds {
-		rows = rows[:r.settings.MaxClouds]
-	}
+	rows = rows[:min(len(rows), r.settings.MaxClouds)]
 	clouds := make([]Cloud, len(rows))
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -204,7 +202,7 @@ func (r *run) cloudServices(ctx context.Context, row cloudRow) ([]CloudService, 
 		return nil, err
 	}
 	if reply.Aggs.Product == nil {
-		return []CloudService{}, nil
+		return nil, fmt.Errorf("reply carries no cloud service product buckets")
 	}
 	services := make([]CloudService, 0, len(*reply.Aggs.Product))
 	seen := map[string]bool{}

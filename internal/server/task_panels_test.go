@@ -80,15 +80,29 @@ func TestTaskPanelHTTPSettingsSaveEASMBindings(t *testing.T) {
 	h := newHarness(t)
 	before := h.json(http.MethodGet, "/api/task-panels/settings", nil, http.StatusOK)
 	easm := before["easm"].(map[string]any)
+	if easm["max_clouds"] != float64(5) || easm["max_services"] != float64(5) {
+		t.Fatalf("EASM defaults=%v", easm)
+	}
+	h.json(http.MethodPut, "/api/task-panels/settings", map[string]any{"easm": map[string]any{"max_clouds": 6}}, http.StatusBadRequest)
 	tools := easm["tools"].(map[string]any)
 	tools["heat"] = ""
 	tools["stats"] = "custom_stats"
 	easm["server_id"] = "fixture-server"
+	easm["max_clouds"] = 4
+	easm["max_services"] = 3
 	after := h.json(http.MethodPut, "/api/task-panels/settings", map[string]any{"easm": easm}, http.StatusOK)
 	saved := after["easm"].(map[string]any)
 	savedTools := saved["tools"].(map[string]any)
 	if saved["server_id"] != "fixture-server" || savedTools["heat"] != "" || savedTools["stats"] != "custom_stats" || savedTools["product_rules"] != tools["product_rules"] || after["concurrency"] != before["concurrency"] {
 		t.Fatalf("saved=%v", after)
+	}
+	// Older clients can change a binding without resetting the chosen table limits.
+	delete(easm, "max_clouds")
+	delete(easm, "max_services")
+	tools["stats"] = "legacy_stats"
+	legacy := h.json(http.MethodPut, "/api/task-panels/settings", map[string]any{"easm": easm}, http.StatusOK)["easm"].(map[string]any)
+	if legacy["max_clouds"] != float64(4) || legacy["max_services"] != float64(3) || legacy["tools"].(map[string]any)["stats"] != "legacy_stats" {
+		t.Fatalf("legacy save=%v", legacy)
 	}
 	for _, bad := range []map[string]any{{"tools": map[string]any{"unknown": "x"}, "max_domains": 20, "max_components": 20}, {"tools": tools, "max_domains": 0, "max_components": 20}} {
 		h.json(http.MethodPut, "/api/task-panels/settings", map[string]any{"easm": bad}, http.StatusBadRequest)

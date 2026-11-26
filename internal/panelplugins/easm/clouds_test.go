@@ -141,13 +141,13 @@ func TestCloudsRequestTheBackendFloorAndTrimServices(t *testing.T) {
 
 // The table shows the largest max_clouds providers. A repeated service bucket
 // is shown once, equal counts order by name so two runs agree, and a reply
-// without service buckets leaves the row's services empty.
+// with an empty product list leaves the row's services empty.
 func TestCloudsKeepTheLargestProvidersAndOrderServicesStably(t *testing.T) {
 	caller := &cloudCaller{
 		distribution: `{"query":"org=\"Subject\"","aggs":{"cloud_name":[{"name":"AWS","count":10,"uniq":{"ip":4}},{"name":"Aliyun","count":5,"uniq":{"ip":2}},{"name":"Fastly","count":1,"uniq":{"ip":1}}]}}`,
 		services: func(query string) (string, error) {
 			if strings.Contains(query, "Aliyun") {
-				return `{"aggs":{}}`, nil
+				return cloudServiceReply(query, `[]`)
 			}
 			return cloudServiceReply(query, `[{"name":"Zeus","count":3},{"name":"Apache","count":3},{"name":"Zeus","count":3}]`)
 		},
@@ -161,6 +161,60 @@ func TestCloudsKeepTheLargestProvidersAndOrderServicesStably(t *testing.T) {
 	}
 	if !reflect.DeepEqual(state.Clouds, want) || len(caller.sent) != 2 {
 		t.Fatalf("clouds = %+v, requests = %v", state.Clouds, caller.sent)
+	}
+}
+
+// A missing product list leaves the counts usable while keeping the service
+// lookup eligible for another collection. An explicit empty list is complete.
+func TestCloudsRetryMissingServiceAggregation(t *testing.T) {
+	settings := onlyRoles(RoleStats)
+	input := Input{Subject: "Subject", Query: metricQuery}
+	distribution := `{"aggs":{"cloud_name":[{"name":"AWS","count":7,"uniq":{"ip":3}}]}}`
+	wantService := []CloudService{{"NGINX", 5}}
+	for _, test := range []struct {
+		name, reply string
+		wantRetry   bool
+	}{
+		{"empty object", `{}`, true},
+		{"null reply", `null`, true},
+		{"null aggregation", `{"aggs":null}`, true},
+		{"query echo only", `{"query":"(org=\"Subject\") && (cloud_name=\"AWS\")"}`, true},
+		{"missing products", `{"aggs":{}}`, true},
+		{"null products", `{"aggs":{"product":null}}`, true},
+		{"empty products", `{"aggs":{"product":[]}}`, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &cloudCaller{distribution: distribution, services: func(string) (string, error) { return test.reply, nil }}
+			first, _, err := push(t, nil, input, settings, caller.caller())
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantStep := StepStatus{ID: StepClouds, Status: statusDone}
+			wantRequests := 1
+			wantServices := []CloudService{}
+			if test.wantRetry {
+				wantStep.Status, wantStep.Code = statusFailed, "malformed_reply"
+				wantRequests, wantServices = 2, wantService
+			}
+			if got := stepStatus(first, StepClouds); got != wantStep {
+				t.Fatalf("first clouds step = %+v, want %+v", got, wantStep)
+			}
+			if len(first.Clouds) != 1 || first.Clouds[0].Assets != 7 || first.Clouds[0].IPs != 3 || len(first.Clouds[0].Services) != 0 {
+				t.Fatalf("initial rows = %+v", first.Clouds)
+			}
+			caller.services = func(query string) (string, error) { return cloudServiceReply(query, `[{"name":"NGINX","count":5}]`) }
+			retried, _, err := push(t, stateJSON(t, first), input, settings, caller.caller())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := stepStatus(retried, StepClouds); got != (StepStatus{ID: StepClouds, Status: statusDone}) || len(caller.sent) != wantRequests {
+				t.Fatalf("retried clouds step = %+v, service requests = %v", got, caller.sent)
+			}
+			first.Clouds[0].Services = wantServices
+			if !reflect.DeepEqual(retried.Clouds, first.Clouds) {
+				t.Fatalf("retried rows = %+v, want %+v", retried.Clouds, first.Clouds)
+			}
+		})
 	}
 }
 
@@ -238,13 +292,12 @@ func TestCloudsShowAnUnfilterableProviderWithoutServices(t *testing.T) {
 	}
 }
 
-// The stats backend is rate limited, so the whole panel shares one request
-// budget: the service lookups and the other aggregations together must not
-// exceed it.
-func TestPanelRequestsStayWithinTheSharedBudget(t *testing.T) {
+// The highest-count providers share the in-flight request budget with the
+// other steps.
+func TestPanelOnlyLooksUpTheFiveLargestCloudsWithinTheSharedBudget(t *testing.T) {
 	var buckets []string
 	for i := range 20 {
-		buckets = append(buckets, fmt.Sprintf(`{"name":"Provider %02d","count":%d,"uniq":{"ip":1}}`, i, 100-i))
+		buckets = append(buckets, fmt.Sprintf(`{"name":"Provider %02d","count":%d,"uniq":{"ip":1}}`, i, i+1))
 	}
 	distribution := `{"query":"org=\"Subject\"","aggs":{"cloud_name":[` + strings.Join(buckets, ",") + `]}}`
 	var mu sync.Mutex
@@ -266,19 +319,19 @@ func TestPanelRequestsStayWithinTheSharedBudget(t *testing.T) {
 		}()
 		return base.Call(ctx, tool, arguments)
 	})
-	settings := testSettings()
-	settings.MaxClouds = 20
-	state := runMetrics(t, nil, settings, tracked)
-	if got := stepStatus(state, StepClouds); got.Status != statusDone || len(state.Clouds) != 20 {
+	state := runMetrics(t, nil, testSettings(), tracked)
+	if got := stepStatus(state, StepClouds); got.Status != statusDone || len(state.Clouds) != 5 {
 		t.Fatalf("clouds step = %+v, rows = %d", got, len(state.Clouds))
 	}
-	if len(caller.sent) != 20 || peak > panelRequestSlots || peak < 2 {
+	if len(caller.sent) != 5 || peak > panelRequestSlots || peak < 2 {
 		t.Fatalf("requests = %d, peak concurrency = %d", len(caller.sent), peak)
 	}
-	// Rows keep the distribution's order regardless of which lookup finished first.
+	// The distribution arrives smallest-first and requests finish concurrently.
 	for i, cloud := range state.Clouds {
-		if cloud.Name != fmt.Sprintf("Provider %02d", i) {
-			t.Fatalf("row %d = %s", i, cloud.Name)
+		wantName := fmt.Sprintf("Provider %02d", 19-i)
+		wantQuery := fmt.Sprintf(`(%s) && (cloud_name="%s")`, metricQuery, wantName)
+		if cloud.Name != wantName || !containsString(caller.sent, wantQuery) {
+			t.Fatalf("row %d = %s, service requests = %v", i, cloud.Name, caller.sent)
 		}
 	}
 }

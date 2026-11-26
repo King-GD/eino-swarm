@@ -21,6 +21,8 @@ type TaskPanelConfig struct {
 	EASM EASMPanelConfig `yaml:"easm" json:"easm"`
 }
 
+const maxEASMCloudRows = 5
+
 // EASMPanelConfig binds the portrait's aggregation roles to MCP tools. An empty
 // server ID selects the one enabled server whose catalog offers each tool; an
 // empty tool name turns off the steps that need that role. The agent pushes the
@@ -30,8 +32,8 @@ type EASMPanelConfig struct {
 	Tools         map[string]string `yaml:"tools" json:"tools"`
 	MaxDomains    int               `yaml:"max_domains" json:"max_domains"`
 	MaxComponents int               `yaml:"max_components" json:"max_components"`
-	// MaxClouds bounds the hosting provider rows; MaxServices the services
-	// listed inside each row.
+	// MaxClouds bounds the hosting provider rows.
+	// MaxServices bounds the services listed inside each row.
 	MaxClouds   int `yaml:"max_clouds" json:"max_clouds"`
 	MaxServices int `yaml:"max_services" json:"max_services"`
 }
@@ -122,10 +124,10 @@ func (c EASMPanelConfig) withDefaults() EASMPanelConfig {
 		c.MaxComponents = 20
 	}
 	if c.MaxClouds == 0 {
-		c.MaxClouds = 5
+		c.MaxClouds = maxEASMCloudRows
 	}
 	if c.MaxServices == 0 {
-		c.MaxServices = 3
+		c.MaxServices = 5
 	}
 	return c
 }
@@ -134,8 +136,8 @@ func (c EASMPanelConfig) validate() error {
 	if c.MaxDomains < 1 || c.MaxDomains > 200 || c.MaxComponents < 5 || c.MaxComponents > 100 {
 		return fmt.Errorf("invalid EASM settings: max_domains must be 1..200 and max_components 5..100")
 	}
-	if c.MaxClouds < 1 || c.MaxClouds > 20 || c.MaxServices < 1 || c.MaxServices > 10 {
-		return fmt.Errorf("invalid EASM settings: max_clouds must be 1..20 and max_services 1..10")
+	if c.MaxClouds < 1 || c.MaxClouds > maxEASMCloudRows || c.MaxServices < 1 || c.MaxServices > 10 {
+		return fmt.Errorf("invalid EASM settings: max_clouds must be 1..%d and max_services 1..10", maxEASMCloudRows)
 	}
 	for role, name := range c.Tools {
 		if retiredEASMToolRoles[role] {
