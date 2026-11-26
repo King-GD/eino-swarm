@@ -109,6 +109,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Fixed
 
+- Saved EASM portraits open after upgrade and can collect hosting providers on the original query. Paired phones can read portraits across host and phone versions. (`F-137`, `C-050`)
+
 - EASM keeps provider asset and IP counts when the statistics reply omits the
   product aggregation. Collecting the same query again retries service lookups.
 

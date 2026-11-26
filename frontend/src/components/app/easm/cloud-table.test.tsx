@@ -65,10 +65,13 @@ it("shows the maintained name only in Chinese and the source name otherwise", ()
   expect(row()).toHaveTextContent("阿卡迈")
 })
 
-// A panel stored before the table existed has no clouds field; it renders as an
-// empty section rather than failing the whole portrait.
-it("renders a panel stored without the table as an empty section", () => {
-  render(table({ clouds: undefined, loading: false }))
-  expect(screen.getByText(zh.cloudEmpty)).toBeInTheDocument()
+// A portrait saved before cloud collection existed can still open.
+it("reports that providers have yet to be collected for a stored portrait", () => {
+  const view = render(table({ clouds: undefined, loading: false }))
+  expect(screen.getByText("尚未采集云服务商")).toBeInTheDocument()
   expect(screen.queryByRole("table")).toBeNull()
+  // A graph-only batch publishes an empty list with the cloud step still pending.
+  view.rerender(table({ clouds: [], pending: true, loading: false }))
+  expect(screen.getByText(zh.cloudUncollected)).toBeInTheDocument()
+  expect(screen.queryByText(zh.cloudEmpty)).not.toBeInTheDocument()
 })

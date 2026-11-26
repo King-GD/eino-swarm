@@ -3,7 +3,7 @@ import { sha256 } from "@noble/hashes/sha2.js"
 import { bytesToHex } from "./bytes"
 import type { RemoteLink } from "./link"
 import { listTaskPanels, maxTaskPanelTransferBytes, readTaskPanel } from "./remote-task-panels"
-import { OpTaskPanelCancel, OpTaskPanelRead, PROTOCOL_V, type RemoteRequest, type RemoteResponse, type TaskPanelTransfer } from "./rpc"
+import { OpTaskPanelCancel, OpTaskPanelRead, OpTaskPanels, PROTOCOL_V, type RemoteRequest, type RemoteResponse, type TaskPanelTransfer } from "./rpc"
 
 const panel = { id: "p", thread_id: "t", plugin_id: "map", plugin_version: "1", revision: 2,
   definition: { id: "map", version: "1", name: "Map", description: "Map", entry: "task-panels/map.html", schema: { type: "object" } }, state: { value: "海🌍".repeat(15_000) } }
@@ -30,7 +30,9 @@ it("assembles a large UTF-8 snapshot before exposing it and releases only its ow
   expect(await readTaskPanel(link, "t", "p")).toEqual({ panel })
   const reads = rpc.mock.calls.filter(([r]) => r.op === OpTaskPanelRead)
   expect(reads.length).toBeGreaterThan(2)
+  expect(reads[0][0].easm_panel_version).toBe("2")
   expect(reads[1][0]).toMatchObject({ transfer_id: "immutable-transfer", thread_id: "t", panel_id: "p", offset: 36 << 10 })
+  for (const [request] of reads.slice(1)) expect(request).not.toHaveProperty("easm_panel_version")
   expect(rpc).toHaveBeenLastCalledWith({ op: OpTaskPanelCancel, thread_id: "t", panel_id: "p", transfer_id: "immutable-transfer" }, { dropOnTimeout: false })
 })
 
@@ -76,6 +78,7 @@ it("keeps an unknown older host separate from an empty manifest", async () => {
     .mockResolvedValueOnce({ ...base, task_panels: [{ id: "p", thread_id: "other", plugin_id: "map", plugin_version: "1", revision: 1 }] })
   const link = { rpc } as unknown as RemoteLink
   expect(await listTaskPanels(link, "t")).toEqual([])
+  expect(rpc).toHaveBeenCalledWith({ op: OpTaskPanels, thread_id: "t", easm_panel_version: "2" }, { dropOnTimeout: false })
   await expect(listTaskPanels(link, "t")).rejects.toMatchObject({ code: "unknown_op" })
   await expect(listTaskPanels(link, "t")).rejects.toThrow("manifest")
 })

@@ -81,6 +81,8 @@ Read endpoints: `GET /api/task-panels/catalog`, `GET /api/threads/:id/panels`, `
 
 Mobile data uses the existing sealed Pairlink connection, never the PC's Gin HTTP origin. It polls a small `task_panels {thread_id}` manifest containing instance identity, plugin version, revision and source status. A changed visible instance uses `task_panel_read {thread_id,panel_id,base_revision?}`. The PC freezes one JSON body: `{panel}` for a full snapshot, or `{change}` for the latest patch when its exact base and instance incarnation match. A missing base or gap produces a snapshot. Newer manifests do not cancel a transfer already in progress.
 
+New phones send `easm_panel_version: "2"` in both manifest and first read requests. A PC serving v2 returns a v1 manifest entry and a complete v1 snapshot to phones that omit this field. That snapshot omits the cloud provider data and collection step introduced in v2. This projection leaves the stored panel intact. A phone that declares v2 can receive the normal v2 snapshot or patch. Older PCs ignore the field and return their v1 definition. The phone requests a fresh snapshot when the manifest's plugin version changes. Continuations and cancellation use the frozen transfer token.
+
 The reply's `panel_transfer` contains `{id,thread_id,panel_id,revision,size,sha256,offset,next_offset,data,more}`. Each `data` is base64 of at most 36KiB, within the 64KiB sealed frame. The complete JSON envelope is limited to 64MiB, including its definition. Continuations use `task_panel_read {thread_id,panel_id,transfer_id,offset}`. All chunks retain the same identity, revision, size and SHA-256. The phone checks ordering and the complete hash/JSON/identity before applying data. It never renders a partial body, changes chat seq, loads HTML from the PC, or invokes a producer.
 
 Each connection owns one frozen transfer. A successful new first read replaces it; failed first reads retain the previous valid transfer. `task_panel_cancel {thread_id,panel_id,transfer_id}` releases only that exact transfer; old cancellation cannot remove a successor. Link close releases the cache. `task_panel_close {thread_id,panel_id}` closes the host instance and invalidates its transfer. A closed instance refuses later publication or reopening. Invalid scope/offset, expired tokens and oversized replies fail explicitly; the manifest is never silently clipped. Continuations verify visibility using a narrow metadata query rather than copying the entire live state again.
@@ -98,6 +100,8 @@ Stop preserves an HTTP observation already returned to the source reducer, but d
 ## EASM portrait
 
 `easm-asset-portrait` is a native panel with a registered source. The agent confirms the subject (asking the user when it is ambiguous), opens the panel, does the discovery lookups with its own MCP tools and pushes what it found. The producer never discovers anything itself.
+
+EASM v2 adds the hosting provider table. Startup and full or project backup import upgrade saved instances with the original v1 definition in a transaction. The panel keeps its ID, query, existing observations and replay history. Reconnecting clients read its full definition at the new revision. A saved portrait without cloud results shows “Cloud providers not yet collected” when idle. Running the same query adds cloud data while retaining completed totals, trend and components.
 
 `run_panel_source` takes one batch of that work:
 

@@ -20,6 +20,7 @@ export function EasmPanel({ result, graphLoading, cloudsLoading, heatLoading, co
   const index = useMemo(() => indexResult(result), [result])
   const [open, setOpen] = useState(false)
   const subject = (index.rootId && index.byId.get(index.rootId)?.label) || result.title
+  const cloudsPending = result.collection.steps.some((step) => step.id === "clouds" && step.status === "pending")
   const expand = sheet === undefined ? () => setOpen(true) : undefined
   return (
     <section aria-label="EASM" className="flex h-full min-h-0 flex-col">
@@ -31,7 +32,7 @@ export function EasmPanel({ result, graphLoading, cloudsLoading, heatLoading, co
         <AssetGraph result={result} index={index} loading={graphLoading} visible={visible && !open} onExpand={expand} mobile={sheet !== undefined} />
         <HeatTrend heat={result.heat} loading={heatLoading} className="flex h-[260px] flex-col rounded-xl border bg-card p-3" />
         <SupplyTable components={result.components} loading={componentsLoading} className="h-[360px]" sheet={sheet} visible={visible && !open} />
-        <CloudTable clouds={result.clouds} loading={cloudsLoading} className="h-[300px]" />
+        <CloudTable clouds={result.clouds} loading={cloudsLoading} pending={cloudsPending} className="h-[300px]" />
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="flex h-[94dvh] w-[96vw] max-w-none flex-col gap-0 overflow-hidden p-0">
@@ -44,7 +45,7 @@ export function EasmPanel({ result, graphLoading, cloudsLoading, heatLoading, co
             <div className="flex min-h-0 flex-col gap-3">
               <HeatTrend heat={result.heat} loading={heatLoading} className="flex h-[260px] flex-col rounded-xl border bg-card p-3 md:h-auto md:min-h-0 md:flex-1" />
               <SupplyTable components={result.components} loading={componentsLoading} className="h-[360px] md:h-auto md:flex-1" />
-              <CloudTable clouds={result.clouds} loading={cloudsLoading} className="h-[300px] md:h-auto md:flex-1" />
+              <CloudTable clouds={result.clouds} loading={cloudsLoading} pending={cloudsPending} className="h-[300px] md:h-auto md:flex-1" />
             </div>
           </div>
         </DialogContent>

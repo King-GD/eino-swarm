@@ -3115,6 +3115,8 @@ The agent confirms the subject and supplies company, domain and certificate evid
 
 The engine captures EASM role bindings with the turn's MCP tool surface. The mount receipt retains role, tool and server identities and a destination digest. When a Worker calls the producer, each binding also requires the corresponding direct tool or that server's call proxy on the calling Worker's executor. The runtime supplies this registration through the tool-call context. Current account and MCP disable checks still apply. Later enablement applies at the next turn. Step status travels in the ordinary panel state revision to desktop and phone. Same-query retries preserve completed steps and their data. A summary step completes when one valid response contains both totals.
 
+EASM panel v2 adds the optional hosting provider data and collection step. Before serving a database at startup or importing a backup, the host upgrades known v1 definitions transactionally, preserving panel identity, collected state and history. The new projection revision makes a reconnect take the full upgraded definition. Retrying a pre-upgrade operation returns its original pinned receipt. Rewind restores the retained observations under the current definition.
+
 The paired phone bundles the same plugin documents and `TaskPanelFrame` host.
 `mobile/src/lib/use-task-panels.ts` polls small manifests over the existing
 sealed link and reads a complete snapshot or exact-base patch through

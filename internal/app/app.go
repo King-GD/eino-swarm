@@ -22,6 +22,7 @@ import (
 	"github.com/LubyRuffy/eino-swarm/frontend"
 	"github.com/LubyRuffy/eino-swarm/internal/config"
 	"github.com/LubyRuffy/eino-swarm/internal/engine"
+	"github.com/LubyRuffy/eino-swarm/internal/panelplugins/easm"
 	"github.com/LubyRuffy/eino-swarm/internal/provider"
 	"github.com/LubyRuffy/eino-swarm/internal/remote"
 	"github.com/LubyRuffy/eino-swarm/internal/search"
@@ -94,6 +95,10 @@ func New(opts Options) (*App, error) {
 	st, err := store.Open(cfg.DBPath())
 	if err != nil {
 		return nil, err
+	}
+	if err := easm.UpgradeStoredPanels(context.Background(), st); err != nil {
+		_ = st.Close()
+		return nil, fmt.Errorf("app: upgrade saved EASM panels: %w", err)
 	}
 	logger.Info("engine startup", "phase", "database_ready", "duration_ms", time.Since(phaseStarted).Milliseconds())
 	phaseStarted = time.Now()
