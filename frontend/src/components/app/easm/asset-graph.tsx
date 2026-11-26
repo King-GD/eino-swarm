@@ -2,7 +2,6 @@ import ForceGraph from "force-graph"
 import { Loader2, Search } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import enlargeIcon from "../../../assets/easm/enlarge.svg"
-import expandIcon from "../../../assets/easm/expand.svg"
 import shrinkIcon from "../../../assets/easm/shrink.svg"
 import fitIcon from "../../../assets/easm/zoomfit.svg"
 import { Input } from "../../ui/input"
@@ -54,14 +53,13 @@ function MaskIcon({ src }: { src: string }) {
 const toolButton = "grid size-7 place-items-center rounded-md border bg-card/95 text-muted-foreground shadow-sm hover:border-primary hover:text-primary"
 const hasImage = (image: HTMLImageElement | null): image is HTMLImageElement => Boolean(image?.complete && image.naturalWidth && image.naturalHeight)
 
-export function AssetGraph({ result, index, loading = false, expanded = false, mobile = false, visible: active = true, onExpand }: {
+export function AssetGraph({ result, index, loading = false, expanded = false, mobile = false, visible: active = true }: {
   result: EasmResult
   index: EasmIndex
   loading?: boolean
   expanded?: boolean
   mobile?: boolean
   visible?: boolean
-  onExpand?: () => void
 }) {
   const text = useEasmText()
   const textRef = useRef(text)
@@ -477,7 +475,6 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
                 <button type="button" className={toolButton} aria-label={text.zoomInGraph} title={text.zoomIn} onClick={() => zoomBy(0.3)}><MaskIcon src={enlargeIcon} /></button>
                 <button type="button" className={toolButton} aria-label={text.zoomOutGraph} title={text.zoomOut} onClick={() => zoomBy(-0.3)}><MaskIcon src={shrinkIcon} /></button>
               </> : null}
-              {onExpand ? <button type="button" className={toolButton} aria-label={text.expandGraph} title={text.expandGraph} onClick={onExpand}><MaskIcon src={expandIcon} /></button> : null}
               <button type="button" className={toolButton} aria-label={text.fit} title={text.fit} onClick={fit}><MaskIcon src={fitIcon} /></button>
             </div>
             {legend.length ? (

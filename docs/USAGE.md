@@ -85,6 +85,9 @@ instance from this conversation, including after restart. A running source
 for that instance is interrupted while the conversation continues. Hiding the
 inspector keeps its panels available.
 
+On desktop and Web, select the expand button beside the EASM panel title to
+open the larger view.
+
 In the EASM side panel and expanded view, heat trend, supply-chain and cloud
 provider cards appear when they have data or are waiting for results. A
 successful empty result or an unrequested metric leaves the card hidden. If a

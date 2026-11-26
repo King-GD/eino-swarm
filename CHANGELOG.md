@@ -71,6 +71,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 - The EASM graph search placeholder lists organizations, domains and certificates.
 
+- The EASM panel has one expand button beside its title.
+
 - The EASM hosting provider table defaults to showing up to five services per provider.
   New collections query services for at most five providers.
 

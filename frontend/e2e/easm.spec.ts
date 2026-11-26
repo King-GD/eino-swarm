@@ -229,6 +229,7 @@ test("EASM renders the producer state, words evidence and follows step status", 
   await expect(panel.getByRole("region", supplyRegion)).toHaveCount(0)
   await expect(panel.getByText("Supply chain / third-party components", { exact: false })).toHaveCount(0)
 
+  await expect(panel.getByRole("button", { name: /^Expand (EASM|asset graph)$/ })).toHaveCount(1)
   await panel.getByRole("button", { name: "Expand EASM", exact: true }).click()
   await expect(dialog.getByTestId("easm-heat")).toBeVisible()
   await expect(dialog.getByRole("region", supplyRegion)).toHaveCount(0)

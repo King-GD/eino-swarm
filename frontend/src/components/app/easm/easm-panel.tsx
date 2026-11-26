@@ -52,7 +52,7 @@ export function EasmPanel({ result, graphLoading, heatStatus, componentsStatus, 
         {expand ? <Button size="icon" variant="ghost" aria-label={text.expand} title={text.expandGraph} onClick={expand}><Maximize2 className="size-4" /></Button> : null}
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2">
-        <AssetGraph result={result} index={index} loading={graphLoading} visible={visible && !open} onExpand={expand} mobile={sheet !== undefined} />
+        <AssetGraph result={result} index={index} loading={graphLoading} visible={visible && !open} mobile={sheet !== undefined} />
         {collectionNotices}
         {showHeat && <HeatTrend heat={result.heat} loading={heatLoading} className="flex h-[260px] flex-col rounded-xl border bg-card p-3" />}
         {showComponents && <SupplyTable components={result.components} loading={componentsLoading} className="h-[360px]" sheet={sheet} visible={visible && !open} />}
