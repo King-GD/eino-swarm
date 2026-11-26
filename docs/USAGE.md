@@ -89,11 +89,10 @@ On desktop and Web, select the expand button beside the EASM panel title to
 open the larger view.
 
 In the EASM side panel and expanded view, heat trend, supply-chain and cloud
-provider cards appear when they have data or are waiting for results. A
-successful empty result or an unrequested metric leaves the card hidden. If a
-metric has no data after a failed, unavailable, or interrupted collection, a
-short status explains why. The expanded graph uses the available width when
-all three cards are hidden.
+provider cards appear when they have data or are waiting for results. An empty
+card is hidden once it stops loading. The expanded graph uses the available
+width when all three cards are hidden. Collection failures can be reviewed in
+the task's tool results.
 
 **Settings → Tools → Task panel plugins** controls the shared enable switch
 and the state and update byte limits. Select **Save panel settings** when

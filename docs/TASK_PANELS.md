@@ -158,11 +158,10 @@ hosting provider table in the side panel and expanded view. Each card displays
 available data, including heat points with a value of zero and cloud provider
 rows confirmed before a service lookup failed. A card without results shows a
 spinner while its step is collecting or the owning task can still supply a
-batch with a query. Successful empty results and unrequested metrics leave
-their cards hidden. A saved portrait without a cloud step keeps its cloud card
-hidden until the producer reports that step or cloud rows. Failed, unavailable
-and interrupted steps with no data show a short status outside the card. The
-host's `source_status` distinguishes live collection from a saved step that
+batch with a query. When a card has no data and is no longer loading, it is
+hidden. A saved portrait without a cloud step keeps its cloud card hidden
+until the producer reports that step or cloud rows. The host's
+`source_status` distinguishes live collection from a saved step that
 still says `running` after engine restart or Stop. The expanded graph uses the
 available width when all three cards are hidden. The renderer keeps its copy
 in `frontend/src/lib/easm/messages.ts`.

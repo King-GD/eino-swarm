@@ -35,16 +35,6 @@ export function EasmPanel({ result, graphLoading, heatStatus, componentsStatus, 
   const showComponents = result.components.length > 0 || componentsLoading
   const showClouds = (result.clouds?.length ?? 0) > 0 || cloudsLoading
   const showMetrics = showHeat || showComponents || showClouds
-  const notices = [
-    { title: text.heatTitle, status: showHeat ? undefined : heatStatus },
-    { title: text.supplyTitle, status: showComponents ? undefined : componentsStatus },
-    { title: text.cloudTitle, status: showClouds ? undefined : cloudsStatus },
-  ].flatMap(({ title, status }) => status ? [`${title} · ${text.collectionStatus[status]}`] : [])
-  const collectionNotices = notices.length > 0 && (
-    <div role="status" className="space-y-1 text-xs text-muted-foreground">
-      {notices.map((notice) => <p className="m-0" key={notice}>{notice}</p>)}
-    </div>
-  )
   return (
     <section aria-label="EASM" className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between border-b px-3 py-2">
@@ -53,17 +43,15 @@ export function EasmPanel({ result, graphLoading, heatStatus, componentsStatus, 
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2">
         <AssetGraph result={result} index={index} loading={graphLoading} visible={visible && !open} mobile={sheet !== undefined} />
-        {collectionNotices}
         {showHeat && <HeatTrend heat={result.heat} loading={heatLoading} className="flex h-[260px] flex-col rounded-xl border bg-card p-3" />}
         {showComponents && <SupplyTable components={result.components} loading={componentsLoading} className="h-[360px]" sheet={sheet} visible={visible && !open} />}
         {showClouds && <CloudTable clouds={result.clouds} loading={cloudsLoading} className="h-[300px]" />}
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="flex h-[94dvh] w-[96vw] max-w-none flex-col gap-0 overflow-hidden p-0">
-          <header className="shrink-0 space-y-1 border-b px-5 py-4 pr-12">
+          <header className="shrink-0 border-b px-5 py-4 pr-12">
             <DialogTitle>{text.graphTitle(subject)}</DialogTitle>
             <DialogDescription className="sr-only">{text.graphDescription}</DialogDescription>
-            {collectionNotices}
           </header>
           <div className={cn("grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-4 md:overflow-hidden", showMetrics && "md:grid-cols-[minmax(0,1.7fr)_minmax(300px,1fr)]")}>
             <AssetGraph result={result} index={index} loading={graphLoading} visible={visible} expanded />

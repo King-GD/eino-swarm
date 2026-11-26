@@ -65,9 +65,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
-- The EASM panel hides empty heat trend and supply-chain cards after collection.
-  A short status takes the place of the empty card when collection fails, is
-  unavailable, or is interrupted.
+- The EASM panel hides empty heat trend, supply-chain and hosting provider cards
+  after collection. Collection failures remain available in the task's tool results.
 
 - The EASM graph search placeholder lists organizations, domains and certificates.
 
@@ -154,10 +153,6 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 ### Fixed
 
 - Saved EASM portraits open after upgrade and can collect hosting providers on the original query. Paired phones can read portraits across host and phone versions. (`F-137`, `C-050`)
-
-- The EASM panel hides an empty cloud provider card when collection has settled
-  or has yet to start. A short status explains failed, unavailable, or
-  interrupted collection when there are no provider rows.
 
 - EASM counts each IP address once across a hosting provider's aliases. If the
   statistics reply omits the product aggregation, EASM keeps the provider's

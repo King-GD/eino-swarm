@@ -691,6 +691,6 @@ This is the current user-facing capability map. The code and tests named below a
 ### F-137 HTML/JS task panels
 
 - 桌面和 Web 通过宿主注册表显示当前会话的 Task panels 标签，多个实例共用一个入口。首次发现新实例时自动打开，数据更新不抢焦点；切换标签保留 iframe。切换会话或移除实例使所选标签不可用时，暂时显示 Agents。插件目录继续只列可由 Agent 打开的 HTML/JS 定义。见 [开发者接入](TASK_PANELS.md#开发者接入)。
-- 已保存的 EASM 企业资产画像升级后可打开并按原查询续采。旧画像缺少云服务商数据时会显示尚未采集。配对手机可连接提供已发布 EASM v1 或 v2 定义的主机。见 [EASM portrait](TASK_PANELS.md#easm-portrait)。
+- 已保存的 EASM 企业资产画像升级后可打开并按原查询续采。热力趋势、供应链和云服务商卡片在采集中或有数据时显示。配对手机可连接提供已发布 EASM v1 或 v2 定义的主机。见 [EASM portrait](TASK_PANELS.md#easm-portrait)。
 
 - 目的：将任务的结构化结果持续呈现在插件自定义界面；入口：会话右侧任务面板、配对手机会话的全屏面板、Settings → Tools、Agent通用面板工具；输入：已安装插件定义、带来源的快照或增量；输出：展示运行中或已有观测的实例、持久状态、地图与本地/触摸交互；三端均可持久关闭实例并中断其数据源；前置条件：插件版本兼容，数据源执行由当前任务拥有，手机通过Pairlink读取PC投影；失败表现：协议/版本/加载错误保留旧状态，取消与重启显示中断，旧PC不展示入口；关联契约：`C-050`。实现证据：`internal/taskpanel`、`internal/store/task_panels.go`、`internal/engine/task_panels.go`、`internal/remote/task_panels.go`、`internal/panelplugins/fofaworld`、`frontend/src/task-panels`、`frontend/src/components/app/task-panel-frame.tsx`、`mobile/src/components/task-panels.tsx`；说明：[Task panels](TASK_PANELS.md)。

@@ -247,12 +247,12 @@ test("EASM renders the producer state, words evidence and follows step status", 
   })
   await expect(panel).toHaveAttribute("data-revision", "4")
   await expect(dialog.getByRole("region", heatRegion)).toHaveCount(0)
-  await expect(dialog.getByText("Asset attention trend · Collection failed", { exact: true })).toBeVisible()
+  await expect(dialog.getByText("Asset attention trend · Collection failed", { exact: true })).toHaveCount(0)
   await expect(dialog.getByRole("region", supplyRegion).getByText("Fixture component", { exact: true })).toBeVisible()
   await page.keyboard.press("Escape")
   await expect(dialog).toBeHidden()
   await expect(panel.getByRole("region", heatRegion)).toHaveCount(0)
-  await expect(panel.getByText("Asset attention trend · Collection failed", { exact: true })).toBeVisible()
+  await expect(panel.getByText("Asset attention trend · Collection failed", { exact: true })).toHaveCount(0)
   await expect(panel.getByRole("region", supplyRegion).getByText("Fixture component", { exact: true })).toBeVisible()
 })
 
@@ -292,7 +292,7 @@ test("EASM lists hosting providers below the supply chain in the source spelling
   await expect.poll(async () => services.evaluate((cell) => cell.scrollWidth <= cell.clientWidth + 1)).toBe(true)
 })
 
-test("EASM hides the cloud card after an empty collection and reports a later failure", async ({ page }) => {
+test("EASM hides an empty cloud card and keeps known providers after a failure", async ({ page }) => {
   const title = `EASM cloud collection ${Date.now()}`
   const response = await page.request.post("/api/threads", { data: { title } })
   await expect(response).toBeOK()
@@ -333,14 +333,13 @@ test("EASM hides the cloud card after an empty collection and reports a later fa
   await expect(panel.getByText(/cloud provider/i)).toHaveCount(0)
 
   await publishCloud("failed")
-  const notice = "Cloud providers · Collection failed"
-  await expect(panel.getByText(notice, { exact: true })).toBeVisible()
+  await expect(panel.getByText(/cloud provider/i)).toHaveCount(0)
   await panel.getByRole("button", { name: "Expand EASM", exact: true }).click()
-  await expect(dialog.getByText(notice, { exact: true })).toBeVisible()
   await expect(dialog.getByRole("heading", cloudHeading)).toHaveCount(0)
+  await expect(dialog.getByText(/cloud provider/i)).toHaveCount(0)
 
   await publishCloud("unavailable")
-  await expect(dialog.getByText("Cloud providers · Source unavailable", { exact: true })).toBeVisible()
+  await expect(dialog.getByText(/cloud provider/i)).toHaveCount(0)
 
   await publishCloud("failed", [{ name: "akamai", category: "cdn", assets: 7, ips: 3, services: [] }])
   await expect(dialog.getByTestId("easm-clouds").getByText("akamai", { exact: true })).toBeVisible()
@@ -349,9 +348,7 @@ test("EASM hides the cloud card after an empty collection and reports a later fa
   await expect(panel.getByTestId("easm-clouds").getByText("akamai", { exact: true })).toBeVisible()
 })
 
-// An interrupted run must explain the missing metrics without reserving room
-// for empty cards or presenting the result as a completed empty collection.
-test("EASM explains an interrupted collection and gives the expanded graph the full width", async ({ page }) => {
+test("EASM hides interrupted empty sections and gives the expanded graph the full width", async ({ page }) => {
   const title = `EASM interrupted ${Date.now()}`
   const created = await (await page.request.post("/api/threads", { data: { title } })).json()
   const thread = created.thread.id as string
@@ -366,17 +363,14 @@ test("EASM explains an interrupted collection and gives the expanded graph the f
   const panel = page.getByTestId("easm-task-panel")
   await expect(panel.getByText("No asset data", { exact: true })).toBeVisible()
   await expect(panel.getByRole("progressbar")).toHaveCount(0)
-  await expect(panel.getByText("Asset attention trend · Collection interrupted", { exact: true })).toBeVisible()
-  await expect(panel.getByText("Supply chain / third-party components · Collection interrupted", { exact: true })).toBeVisible()
+  await expect(panel.getByText(/collection interrupted/i)).toHaveCount(0)
   await expect(panel.getByRole("heading", { name: "Cloud providers", exact: true })).toHaveCount(0)
   await expect(panel.getByRole("region", { name: "Asset attention trend", exact: true })).toHaveCount(0)
   await expect(panel.getByRole("region", { name: "Supply chain / third-party components", exact: true })).toHaveCount(0)
 
   await panel.getByRole("button", { name: "Expand EASM", exact: true }).click()
   const dialog = page.getByRole("dialog")
-  await expect(dialog.getByText("Asset attention trend · Collection interrupted", { exact: true })).toBeVisible()
-  await expect(dialog.getByText("Supply chain / third-party components · Collection interrupted", { exact: true })).toBeVisible()
-  await expect(dialog.getByText("Cloud providers · Collection interrupted", { exact: true })).toBeVisible()
+  await expect(dialog.getByText(/collection interrupted/i)).toHaveCount(0)
   await expect(dialog.getByRole("heading", { name: "Cloud providers", exact: true })).toHaveCount(0)
   await expect(dialog.getByRole("region", { name: "Asset attention trend", exact: true })).toHaveCount(0)
   await expect(dialog.getByRole("region", { name: "Supply chain / third-party components", exact: true })).toHaveCount(0)
@@ -406,9 +400,7 @@ test("EASM stops spinning when the host reports the source interrupted mid-colle
   const panel = page.getByTestId("easm-task-panel")
   await expect(panel.getByText("No asset data", { exact: true })).toBeVisible()
   await expect(panel.getByRole("progressbar")).toHaveCount(0)
-  await expect(panel.getByText("Asset attention trend · Collection interrupted", { exact: true })).toBeVisible()
-  await expect(panel.getByText("Supply chain / third-party components · Source unavailable", { exact: true })).toBeVisible()
-  await expect(panel.getByText("Cloud providers · Collection interrupted", { exact: true })).toBeVisible()
+  await expect(panel.getByText(/collection interrupted|source unavailable/i)).toHaveCount(0)
   await expect(panel.getByRole("region", { name: "Asset attention trend", exact: true })).toHaveCount(0)
   await expect(panel.getByRole("region", { name: "Supply chain / third-party components", exact: true })).toHaveCount(0)
   await expect(panel.getByRole("heading", { name: "Cloud providers", exact: true })).toHaveCount(0)
