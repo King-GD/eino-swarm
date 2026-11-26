@@ -17,7 +17,7 @@
 @layer base {
   :root {
     /* The same type palette colors the bundled glyphs in the canvas, filters and cards. */
-    --easm-root: 201.41 100% 50%;
+    --easm-root: var(--easm-company);
     --easm-company: var(--easm-org);
     --easm-domain: 121.53 55.14% 41.96%;
     --easm-org: 36.63 85.25% 47.84%;

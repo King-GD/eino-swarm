@@ -41,7 +41,7 @@ export interface DrawState {
 export const FONT_SIZE = 12
 const LABEL_WIDTH = FONT_SIZE * 12
 
-export function drawNode(node: GraphNode, ctx: CanvasRenderingContext2D, zoom: number, state: DrawState, palette: Palette, showIcon = true) {
+export function drawNode(node: GraphNode, ctx: CanvasRenderingContext2D, zoom: number, state: DrawState, palette: Palette) {
   const { radius } = node
   const x = node.x ?? 0
   const y = node.y ?? 0
@@ -67,9 +67,9 @@ export function drawNode(node: GraphNode, ctx: CanvasRenderingContext2D, zoom: n
   ctx.fillStyle = color
   ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill()
   const icon = state.icons.get(node.kind)
-  if (showIcon && icon?.complete && icon.naturalWidth) {
+  if (icon?.complete && icon.naturalWidth) {
     const width = radius * 1.25
-    const height = node.id === state.rootId ? width : (width * icon.naturalHeight) / icon.naturalWidth
+    const height = (width * icon.naturalHeight) / icon.naturalWidth
     ctx.drawImage(icon, x - width / 2, y - height / 2, width, height)
   }
   ctx.restore()

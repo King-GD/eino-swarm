@@ -65,6 +65,9 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
+- The EASM graph uses the same yellow icon for the target and related organizations.
+  The target keeps its glow, and its logo appears in the node details.
+
 - The EASM panel hides empty heat trend, supply-chain and hosting provider cards
   after collection. Collection failures remain available in the task's tool results.
 

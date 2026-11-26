@@ -51,7 +51,6 @@ function MaskIcon({ src }: { src: string }) {
 }
 
 const toolButton = "grid size-7 place-items-center rounded-md border bg-card/95 text-muted-foreground shadow-sm hover:border-primary hover:text-primary"
-const hasImage = (image: HTMLImageElement | null): image is HTMLImageElement => Boolean(image?.complete && image.naturalWidth && image.naturalHeight)
 
 export function AssetGraph({ result, index, loading = false, expanded = false, mobile = false, visible: active = true }: {
   result: EasmResult
@@ -76,13 +75,11 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
   const sectionRef = useRef<HTMLElement>(null)
   const stageRef = useRef<GraphElement>(null)
   const canvasMountRef = useRef<HTMLDivElement>(null)
-  const rootLogoRef = useRef<HTMLImageElement>(null)
   const cardRef = useRef<HTMLElement>(null)
   const graphRef = useRef<InstanceType<typeof ForceGraph<GraphNode, GraphLink>> | null>(null)
   const drawState = useRef<DrawState>({ rootId: index.rootId, highlighted: new Set(), labels: new Map(), icons: new Map() })
   const paletteRef = useRef<Palette | null>(null)
   const nodesRef = useRef<GraphNode[]>([])
-  const rootNodeRef = useRef<GraphNode | null>(null)
   const visibleRef = useRef<Set<string>>(new Set())
   const hoveredRef = useRef<string | null>(null)
   const focusRef = useRef({ selected, cardId })
@@ -102,7 +99,6 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
   const stats = summaryStats(result.summary, text)
   const graphKinds = new Set(view.nodes.map(displayKind))
   const legend = index.legend.filter((kind) => kind !== "root" && graphKinds.has(kind))
-  const rootLogo = index.rootId ? index.byId.get(index.rootId)?.detail?.logo : undefined
 
   useEffect(() => {
     setSelected(currentSelection)
@@ -220,30 +216,9 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
       .nodeLabel(() => "")
       .nodeVisibility((n) => visibleRef.current.has(n.id))
       .linkVisibility((l) => visibleRef.current.has(l.source.id) && visibleRef.current.has(l.target.id))
-      .nodeCanvasObject((n, ctx, zoom) => {
-        const hasLogo = n === rootNodeRef.current && hasImage(rootLogoRef.current)
-        drawNode(n, ctx, zoom, drawState.current, palette(), !hasLogo)
-      })
+      .nodeCanvasObject((n, ctx, zoom) => drawNode(n, ctx, zoom, drawState.current, palette()))
       .linkCanvasObject((l, ctx, zoom) => drawLink(l, ctx, zoom, drawState.current, palette()))
-      .onRenderFramePost((ctx, zoom) => {
-        drawLabels(ctx, zoom, drawState.current, palette())
-        const logo = rootLogoRef.current
-        if (!logo) return
-        const node = rootNodeRef.current
-        const currentGraph = graphRef.current
-        if (!node || !currentGraph || !visibleRef.current.has(node.id) || !hasImage(logo)) {
-          logo.hidden = true
-          return
-        }
-        // Position the image on the painted frame without tainting Canvas with a cross-origin image.
-        const { x, y } = currentGraph.graph2ScreenCoords(node.x ?? 0, node.y ?? 0)
-        // Fit-to-view on a large portrait can shrink the root to a few pixels.
-        const scale = Math.max(16, node.radius * 1.65 * zoom) / Math.max(logo.naturalWidth, logo.naturalHeight)
-        logo.style.width = `${logo.naturalWidth * scale}px`
-        logo.style.height = `${logo.naturalHeight * scale}px`
-        logo.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`
-        logo.hidden = false
-      })
+      .onRenderFramePost((ctx, zoom) => drawLabels(ctx, zoom, drawState.current, palette()))
       .linkLabel(() => "")
       .onNodeClick((n) => selectRef.current(n.id, true, false))
       .onBackgroundClick(() => { setCardId(null); setFocus(null) })
@@ -332,7 +307,6 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
       })
     })
     const byId = new Map(nodes.map((n) => [n.id, n]))
-    rootNodeRef.current = index.rootId ? byId.get(index.rootId) ?? null : null
     if (previousNodes.length) {
       const neighbors = new Map<string, string[]>()
       for (const { source, target } of view.edges) {
@@ -460,9 +434,6 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
               the origin. */}
           <div ref={stageRef} data-testid="easm-graph" role="group" aria-label={text.graphNetwork} className="absolute inset-0 overflow-hidden" style={{ opacity: 0 }}>
             <div ref={canvasMountRef} className="absolute inset-0" />
-            {rootLogo ? <img key={rootLogo} ref={rootLogoRef} data-testid="easm-root-logo" src={rootLogo} alt="" hidden
-              referrerPolicy="no-referrer" className="pointer-events-none absolute top-0 left-0 max-w-none rounded-sm bg-white"
-              onLoad={() => graphRef.current?.nodeCanvasObject(graphRef.current.nodeCanvasObject())} /> : null}
           </div>
           {!view.nodes.length ? loading ? (
             <div role="progressbar" aria-label={text.graphLoading} className="pointer-events-none absolute inset-0 flex items-center justify-center text-muted-foreground">

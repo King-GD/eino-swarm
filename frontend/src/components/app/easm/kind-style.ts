@@ -7,12 +7,11 @@ import iconHash from "../../../assets/easm/iconHash.svg"
 import icp from "../../../assets/easm/icp.svg"
 import ipc from "../../../assets/easm/ipc.svg"
 import mx from "../../../assets/easm/mx.svg"
-import root from "../../../assets/easm/root.svg"
 import type { DisplayKind } from "../../../lib/easm/types"
 
 /** FOFA AI type glyphs: white artwork drawn on the type colour. */
 export const KIND_ICONS: Record<DisplayKind, string> = {
-  root, company: certOrg, org: certOrg, domain, cert, icp, asn, fid, icon_hash: iconHash, ipc, mx,
+  root: certOrg, company: certOrg, org: certOrg, domain, cert, icp, asn, fid, icon_hash: iconHash, ipc, mx,
 }
 
 /** Tailwind token per type, so legend, card and canvas share one colour. */

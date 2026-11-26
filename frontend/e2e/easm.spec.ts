@@ -105,6 +105,43 @@ test("FOFA chart tooltips keep the plot visible through the dark glass", async (
   }
 })
 
+test("EASM keeps the enterprise logo in the details card", async ({ page }) => {
+  const title = `EASM enterprise icons ${Date.now()}`
+  const response = await page.request.post("/api/threads", { data: { title } })
+  await expect(response).toBeOK()
+  const created = await response.json()
+  const logo = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="20"><rect width="32" height="20" fill="navy"/></svg>')}`
+  const root = { id: "root", kind: "root", label: "Fixture Enterprise", detail: { logo } } as const
+  const child = { id: "company:child", kind: "company", label: "Fixture subsidiary" } as const
+  await servePanel(page, created.thread.id, {
+    schema_version: 1, title: root.label, collection: { status: "done", steps: [] }, heat: [], components: [],
+    nodes: [root, child], edges: [{ source: root.id, target: child.id, confirmed: true }],
+  }, "finished")
+  await page.goto("/")
+  await page.getByTestId("dest-chats").click()
+  await page.getByRole("button", { name: title, exact: true }).click()
+
+  const panel = page.getByTestId("easm-task-panel")
+  await expect(panel.getByRole("button", { name: "Related organization" }).locator("img")).toBeVisible()
+  const stage = panel.getByTestId("easm-graph")
+  await expect(stage).toHaveAttribute("data-ready", "true")
+  const colors = await stage.evaluate((element) => {
+    const style = getComputedStyle(element)
+    return {
+      root: style.getPropertyValue("--easm-root").trim(),
+      company: style.getPropertyValue("--easm-company").trim(),
+    }
+  })
+  expect(colors.company).not.toBe("")
+  expect(colors.root).toBe(colors.company)
+  await expect(stage.locator("img")).toHaveCount(0)
+  await expect(stage).toHaveAttribute("data-layout-moving", "false", { timeout: 20_000 })
+  await stage.click({ position: await nodePoint(stage, root.id) })
+  const detailLogo = panel.getByRole("dialog", { name: root.label }).getByRole("img", { name: `${root.label} logo` })
+  await expect(detailLogo).toHaveAttribute("src", logo)
+  await expect.poll(() => detailLogo.evaluate((image: HTMLImageElement) => [image.naturalWidth, image.naturalHeight])).toEqual([32, 20])
+})
+
 test("EASM shows the first certificate source and hides detached clues after reopening", async ({ page }) => {
   const title = `EASM saved graph ${Date.now()}`
   const response = await page.request.post("/api/threads", { data: { title } })

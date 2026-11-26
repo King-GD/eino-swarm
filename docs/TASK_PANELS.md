@@ -168,8 +168,10 @@ in `frontend/src/lib/easm/messages.ts`.
 
 The graph receives whole batches and waits while the source is collecting or
 the owning task can still supply a batch. It displays its own empty state when
-no graph data arrives. Component trending days and KEV/CVE tags have no
-configured source yet and stay empty.
+no graph data arrives. The target and related organizations share the same
+yellow graph icon, with a glow around the target. Its logo appears in the node
+details when available. Component trending days and KEV/CVE tags have no configured
+source yet and stay empty.
 
 ## Validation
 
