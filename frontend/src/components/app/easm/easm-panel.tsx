@@ -8,16 +8,18 @@ import { indexResult } from "../../../lib/easm/model"
 import { useEasmText } from "../../../lib/easm/messages"
 import type { EasmResult } from "../../../lib/easm/types"
 import { AssetGraph } from "./asset-graph"
+import { CloudTable } from "./cloud-table"
 import { HeatTrend } from "./heat-trend"
 import { SupplyTable } from "./supply-table"
 
-/** The EASM tab: relationship graph, heat trend and supply chain for one result,
- *  stacked in the side panel and side by side in the enlarged dialog. */
-export function EasmPanel({ result, graphLoading, heatStatus, componentsStatus, visible = true, sheet }: {
+/** The EASM graph and collection results, stacked in the side panel and side
+ *  by side in the enlarged dialog. */
+export function EasmPanel({ result, graphLoading, heatStatus, componentsStatus, cloudsLoading, visible = true, sheet }: {
   result: EasmResult
   graphLoading?: boolean
   heatStatus?: EasmSectionStatus
   componentsStatus?: EasmSectionStatus
+  cloudsLoading?: boolean
   visible?: boolean
   sheet?: HTMLElement | null
 }) {
@@ -25,12 +27,14 @@ export function EasmPanel({ result, graphLoading, heatStatus, componentsStatus, 
   const index = useMemo(() => indexResult(result), [result])
   const [open, setOpen] = useState(false)
   const subject = (index.rootId && index.byId.get(index.rootId)?.label) || result.title
+  const cloudsPending = result.collection.steps.some((step) => step.id === "clouds" && step.status === "pending")
   const expand = sheet === undefined ? () => setOpen(true) : undefined
   const heatLoading = heatStatus === "loading"
   const componentsLoading = componentsStatus === "loading"
   const showHeat = result.heat.length > 0 || heatLoading
   const showComponents = result.components.length > 0 || componentsLoading
-  const showMetrics = showHeat || showComponents
+  const showExpandedClouds = Boolean(result.clouds?.length || cloudsLoading)
+  const showMetrics = showHeat || showComponents || showExpandedClouds
   const notices = [
     { title: text.heatTitle, status: showHeat ? undefined : heatStatus },
     { title: text.supplyTitle, status: showComponents ? undefined : componentsStatus },
@@ -51,6 +55,7 @@ export function EasmPanel({ result, graphLoading, heatStatus, componentsStatus, 
         {collectionNotices}
         {showHeat && <HeatTrend heat={result.heat} loading={heatLoading} className="flex h-[260px] flex-col rounded-xl border bg-card p-3" />}
         {showComponents && <SupplyTable components={result.components} loading={componentsLoading} className="h-[360px]" sheet={sheet} visible={visible && !open} />}
+        <CloudTable clouds={result.clouds} loading={cloudsLoading} pending={cloudsPending} className="h-[300px]" />
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="flex h-[94dvh] w-[96vw] max-w-none flex-col gap-0 overflow-hidden p-0">
@@ -64,6 +69,7 @@ export function EasmPanel({ result, graphLoading, heatStatus, componentsStatus, 
             {showMetrics && <div className="flex min-h-0 flex-col gap-3">
               {showHeat && <HeatTrend heat={result.heat} loading={heatLoading} className="flex h-[260px] flex-col rounded-xl border bg-card p-3 md:h-auto md:min-h-0 md:flex-1" />}
               {showComponents && <SupplyTable components={result.components} loading={componentsLoading} className="h-[360px] md:h-auto md:flex-1" />}
+              {showExpandedClouds && <CloudTable clouds={result.clouds} loading={cloudsLoading} pending={cloudsPending} className="h-[300px] md:h-auto md:flex-1" />}
             </div>}
           </div>
         </DialogContent>

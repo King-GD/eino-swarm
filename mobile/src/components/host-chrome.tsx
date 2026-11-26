@@ -10,6 +10,7 @@ import type { RemoteLink } from "@/lib/link"
 import { VersionCheck } from "@/components/version-check"
 import { cn } from "@/lib/cn"
 import { webShellVersion } from "@/lib/app-update"
+import { scrollBehavior } from "@/lib/motion"
 import { localeSwitchLabel, t } from "@/lib/i18n"
 import { linkLabel, type SavedLink } from "@/lib/store"
 import { phonePCChoices } from "@/lib/phone-pcs"
@@ -65,7 +66,7 @@ export function HostChrome({
   // actually on past its edge names no PC at all.
   useEffect(() => {
     const chip = rail.current?.querySelector('[aria-selected="true"]')
-    chip?.scrollIntoView?.({ behavior: "smooth", block: "nearest", inline: "nearest" })
+    chip?.scrollIntoView?.({ behavior: scrollBehavior(), block: "nearest", inline: "nearest" })
   }, [activeFingerprint, hosts.length, chatSelected, showChat])
 
   return (

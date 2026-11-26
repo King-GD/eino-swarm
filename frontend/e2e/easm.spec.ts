@@ -56,6 +56,55 @@ const portrait: EasmResult = {
   heat: [], components: [],
 }
 
+test("FOFA chart tooltips keep the plot visible through the dark glass", async ({ page, request }, info) => {
+  const settings = await request.get("/api/settings")
+  await expect(settings).toBeOK()
+  const previousPalette = (await settings.json()).settings.ui.palette
+  const title = "Heat tooltip fixture"
+  const response = await request.post("/api/threads", { data: { title } })
+  await expect(response).toBeOK()
+  const { thread } = await response.json()
+  const heat = [8, 20, 9, 12, 5, 63, 9, 53, 35, 68].map((value, index) => ({
+    date: `2026-04-${String(index + 1).padStart(2, "0")}`,
+    value,
+  }))
+  await servePanel(page, thread.id, { ...portrait, heat }, "finished")
+  try {
+    await expect(await request.put("/api/settings", { data: { ui: { palette: "fofa" } } })).toBeOK()
+    await page.emulateMedia({ colorScheme: "dark" })
+    await page.goto("/")
+    await page.getByTestId("dest-chats").click()
+    await page.getByRole("button", { name: title, exact: true }).click()
+    await expect(page.locator("html")).toHaveAttribute("data-palette", "fofa")
+    await expect(page.locator("html")).toHaveClass(/\bdark\b/)
+
+    const chart = page.getByTestId("easm-heat")
+    const gradient = chart.locator("linearGradient")
+    const gradientId = await gradient.getAttribute("id")
+    expect(gradientId).toBeTruthy()
+    await expect(chart.locator(".recharts-area-area")).toHaveAttribute("fill", `url(#${gradientId})`)
+    await expect(gradient.locator('stop[offset="1"]')).toHaveAttribute("stop-opacity", "0")
+    const dot = chart.locator(".recharts-area-dot").nth(4)
+    await dot.hover()
+    const tooltip = chart.locator(".recharts-tooltip-wrapper").getByText(heat[4].date, { exact: true })
+    await expect(tooltip).toBeVisible()
+    const dotBounds = (await dot.boundingBox())!
+    // Wait for the hover transition to place the glass over the curve.
+    await expect.poll(async () => (await tooltip.boundingBox())!.x).toBeGreaterThan(dotBounds.x)
+    await chart.screenshot({ path: info.outputPath("heat-dark-glass.png") })
+    expect(await tooltip.evaluate((el) => getComputedStyle(el).backdropFilter)).toBe("blur(10px)")
+    await expect(tooltip).toHaveCSS("background-color", /, 0\.6\)$/)
+
+    await page.emulateMedia({ colorScheme: "light" })
+    await expect(page.locator("html")).not.toHaveClass(/\bdark\b/)
+    await dot.hover()
+    await expect(tooltip).toHaveCSS("background-color", /, 0\.95\)$/)
+    await chart.screenshot({ path: info.outputPath("heat-light-glass.png") })
+  } finally {
+    await expect(await request.put("/api/settings", { data: { ui: { palette: previousPalette } } })).toBeOK()
+  }
+})
+
 test("EASM shows the first certificate source and hides detached clues after reopening", async ({ page }) => {
   const title = `EASM saved graph ${Date.now()}`
   const response = await page.request.post("/api/threads", { data: { title } })
@@ -203,6 +252,42 @@ test("EASM renders the producer state, words evidence and follows step status", 
   await expect(panel.getByRole("region", heatRegion)).toHaveCount(0)
   await expect(panel.getByText("Asset attention trend · Collection failed", { exact: true })).toBeVisible()
   await expect(panel.getByRole("region", supplyRegion).getByText("Fixture component", { exact: true })).toBeVisible()
+})
+
+// The hosting providers follow the supply chain. Outside Chinese a provider
+// keeps FOFA's spelling, even though the stored row carries the maintained
+// Chinese name.
+test("EASM lists hosting providers below the supply chain in the source spelling", async ({ page }) => {
+  const title = `EASM clouds ${Date.now()}`
+  const created = await (await page.request.post("/api/threads", { data: { title } })).json()
+  const thread = created.thread.id as string
+  await servePanel(page, thread, {
+    ...portrait,
+    collection: { status: "done", steps: [...portrait.collection.steps.map((step) => ({ ...step, status: "done" as const })), { id: "clouds", status: "done" }] },
+    components: [{ name: "Fixture component", count: 3 }],
+    clouds: [{ name: "akamai", display_name: "阿卡迈", category: "cdn", assets: 7, ips: 3, services: [{ name: "NGINX", count: 5 }] }],
+  }, "finished")
+  await page.goto("/")
+  await page.getByTestId("dest-chats").click()
+  await page.getByRole("button", { name: title, exact: true }).click()
+  const panel = page.getByTestId("easm-task-panel")
+  const table = panel.getByTestId("easm-clouds")
+  await expect(table).toBeVisible()
+  const row = table.getByRole("row").nth(1)
+  await expect(row).toContainText("akamai")
+  await expect(row).not.toContainText("阿卡迈")
+  await expect(row).toContainText("CDN")
+  await expect(row).toContainText("NGINX 5")
+  const supply = await panel.getByRole("heading", { name: "Supply chain / third-party components" }).boundingBox()
+  const clouds = await panel.getByRole("heading", { name: "Cloud providers" }).boundingBox()
+  expect(supply && clouds && clouds.y > supply.y).toBe(true)
+
+  // A phone-width panel must not cut the service counts off: the cell wraps,
+  // and a title tooltip cannot be read by tapping.
+  await page.setViewportSize({ width: 390, height: 800 })
+  const services = row.getByRole("cell").last()
+  await expect(services).toContainText("NGINX 5")
+  await expect.poll(async () => services.evaluate((cell) => cell.scrollWidth <= cell.clientWidth + 1)).toBe(true)
 })
 
 // An interrupted run must explain the missing metrics without reserving room

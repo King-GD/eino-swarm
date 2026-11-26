@@ -74,15 +74,16 @@ export function useTaskPanels(link: RemoteLink | undefined, threadId: string, ow
               if (!current()) return
               if (closed.has(item.id)) continue
               const before = panels.find((panel) => panel.id === item.id)
-              if ((before && before.revision >= item.revision) || (!shown.current && panels.length > 0)) continue
-              let payload = await readTaskPanel(link, threadId, item.id, before?.revision, controller.signal)
+              const sameDefinition = before?.plugin_id === item.plugin_id && before.plugin_version === item.plugin_version
+              if ((sameDefinition && before.revision >= item.revision) || (!shown.current && panels.length > 0)) continue
+              let payload = await readTaskPanel(link, threadId, item.id, sameDefinition ? before.revision : undefined, controller.signal)
               if (!current()) return
               let panel: TaskPanel
               if (payload.panel) panel = payload.panel
               else {
                 // A patch failure never mutates the last good projection.
                 try {
-                  if (!before || payload.change.base_revision !== before.revision) throw new Error("Panel patch base changed")
+                  if (!sameDefinition || payload.change.base_revision !== before.revision) throw new Error("Panel patch base changed")
                   panel = { ...before, revision: payload.change.revision, source_status: payload.change.source_status,
                     state: applyJsonPatch(before.state, payload.change.operations!) }
                 } catch {
@@ -93,6 +94,9 @@ export function useTaskPanels(link: RemoteLink | undefined, threadId: string, ow
                 }
               }
               if (closed.has(item.id)) continue
+              if (panel.plugin_id !== item.plugin_id || panel.plugin_version !== item.plugin_version) {
+                throw new TaskPanelReadError("invalid_panel_data", "Panel definition does not match its manifest")
+              }
               if (panel.revision < (before?.revision ?? 0)) throw new TaskPanelReadError("invalid_panel_data", "Panel revision went backwards")
               panels = before ? panels.map((old) => old.id === item.id ? panel : old) : [...panels, panel]
               changes = payload.change ? { ...changes, [item.id]: payload.change } : Object.fromEntries(Object.entries(changes).filter(([id]) => id !== item.id))

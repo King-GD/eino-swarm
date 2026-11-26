@@ -6,10 +6,9 @@ import (
 	"unsafe"
 )
 
-// TitlebarHeight is the HTML header (h-12). Native traffic lights are centred
-// in a container of this height so they share a baseline with the sidebar
-// toggle instead of sitting in AppKit's default strip.
-const TitlebarHeight = 48
+// TitlebarHeight matches the macOS HTML title bar (--macos-titlebar-height)
+// and defines the native drag strip and traffic-light center line.
+const TitlebarHeight = 46
 
 // TrafficLightGap is the space between the zoom button and the first HTML
 // control. Tight like Codex, not a leftover column.

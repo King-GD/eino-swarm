@@ -3,10 +3,9 @@ package desktop
 import "testing"
 
 func TestTrafficButtonYCentresInTheHeader(t *testing.T) {
-	// The HTML toggle is items-center in h-12. If the native lights use a
-	// different vertical origin they look like they belong to a different bar.
-	if got := trafficButtonY(TitlebarHeight, 14); got != 17 {
-		t.Fatalf("trafficButtonY(48, 14) = %v, want 17", got)
+	// The HTML toggle and native lights share the title bar's center line.
+	if got := trafficButtonY(TitlebarHeight, 14); got != 16 {
+		t.Fatalf("trafficButtonY(%d, 14) = %v, want 16", TitlebarHeight, got)
 	}
 }
 

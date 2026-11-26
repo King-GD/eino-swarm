@@ -13,6 +13,23 @@ func definition() Definition {
 func update() Update {
 	return Update{ProtocolVersion: 1, PanelID: "p", OperationID: "op", BaseRevision: 1, Kind: "snapshot", State: json.RawMessage(`{"count":1}`)}
 }
+
+func TestPinnedDefinitionMatchIgnoresFormattingAndCoversTheContract(t *testing.T) {
+	original := definition()
+	other := original
+	other.Schema = json.RawMessage(`{ "properties": {"count": {"type": "integer"}}, "type": "object", "required": ["count"] }`)
+	if !DefinitionsMatch(original, other) {
+		t.Fatal("different formatting changed the definition identity")
+	}
+	other.Version = "2"
+	if DefinitionsMatch(original, other) {
+		t.Fatal("a different definition version matched")
+	}
+	other.Schema = json.RawMessage(`{`)
+	if DefinitionsMatch(other, other) {
+		t.Fatal("an invalid definition matched")
+	}
+}
 func TestDefinitionRefusesUnsafeEntryAndInvalidState(t *testing.T) {
 	good := definition()
 	if err := ValidateDefinition(good); err != nil {

@@ -98,7 +98,8 @@ describe("AskCardView", () => {
   it("paints a pending card as a call to act, not a working pulse", () => {
     render(<AskCardView card={card()} />)
     const el = screen.getByTestId("ask-card")
-    expect(el).toHaveClass("border-ask")
+    // The ask colour rims the card unless a palette keeps it to the heading.
+    expect(el).toHaveClass("border-[var(--ask-card-border,hsl(var(--ask)))]")
     expect(el).not.toHaveClass("animate-ask-ring")
     const mark = screen.getByTestId("ask-mark")
     expect(mark).toBeTruthy()

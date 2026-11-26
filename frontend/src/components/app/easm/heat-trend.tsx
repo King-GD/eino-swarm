@@ -2,6 +2,8 @@ import { Loader2 } from "lucide-react"
 import { useId } from "react"
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import type { TooltipProps } from "recharts"
+import { ChartAreaGradient } from "../../shared/chart-area-gradient"
+import { chartTooltipSurface } from "../../../lib/glass"
 import { useEasmText } from "../../../lib/easm/messages"
 import type { EasmResult } from "../../../lib/easm/types"
 
@@ -12,7 +14,7 @@ const LINE = "hsl(var(--chart-1))"
 function HeatTooltip({ active, payload, label }: TooltipProps<number, string>) {
   if (!active || !payload?.length) return null
   return (
-    <div className="rounded-md border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-md">{label}</div>
+    <div className={`rounded-[var(--radius-surface,var(--radius-lg))] px-3 py-2 text-xs ${chartTooltipSurface}`}>{label}</div>
   )
 }
 
@@ -22,6 +24,7 @@ export function HeatTrend({ heat, loading, className }: {
 }) {
   // The panel and the enlarged dialog can both be mounted; ids must stay unique.
   const titleId = useId()
+  const fillId = `${titleId}-area`
   const text = useEasmText()
   return (
     <section aria-labelledby={titleId} className={className ?? "flex flex-col rounded-xl border bg-card p-3"}>
@@ -30,12 +33,19 @@ export function HeatTrend({ heat, loading, className }: {
         <div role="img" aria-label={text.heatChart} data-testid="easm-heat" className="min-h-[180px] flex-1">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={heat} margin={{ top: 12, right: 12, bottom: 0, left: 12 }}>
+              <defs><ChartAreaGradient id={fillId} color={LINE} values={heat.map(({ value }) => value)} /></defs>
               <CartesianGrid stroke="hsl(var(--border))" vertical={false} />
               <XAxis dataKey="date" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "hsl(var(--border))" }} minTickGap={16} />
               <YAxis hide />
-              <Tooltip content={<HeatTooltip />} />
-              <Area type="monotone" dataKey="value" isAnimationActive={false} stroke={LINE} strokeWidth={2} fill={LINE} fillOpacity={0.12}
-                dot={{ r: 3, stroke: LINE, strokeWidth: 1.5, fill: "hsl(var(--card))" }} activeDot={{ r: 4 }} />
+              {/* Same hover language as every other chart: a hairline
+                  crosshair and a token-ringed point, not Recharts' gray. */}
+              <Tooltip
+                cursor={{ stroke: "hsl(var(--muted-foreground))", strokeOpacity: 0.35, strokeWidth: 1 }}
+                content={<HeatTooltip />}
+              />
+              <Area type="monotone" dataKey="value" isAnimationActive={false} stroke={LINE} strokeWidth={2} fill={`url(#${fillId})`} fillOpacity={1}
+                dot={{ r: 3, stroke: LINE, strokeWidth: 1.5, fill: "hsl(var(--card))" }}
+                activeDot={{ r: 4, fill: LINE, stroke: "hsl(var(--background))", strokeWidth: 2 }} />
             </AreaChart>
           </ResponsiveContainer>
         </div>

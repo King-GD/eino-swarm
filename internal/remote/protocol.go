@@ -159,6 +159,7 @@ type Request struct {
 	FileRoot  string `json:"file_root,omitempty"`
 
 	PanelID             string `json:"panel_id,omitempty"`
+	EASMPanelVersion    string `json:"easm_panel_version,omitempty"`
 	PanelBaseRevision   *int64 `json:"base_revision,omitempty"`
 	PanelTransferID     string `json:"transfer_id,omitempty"`
 	KnowledgePageID     string `json:"knowledge_page_id,omitempty"`

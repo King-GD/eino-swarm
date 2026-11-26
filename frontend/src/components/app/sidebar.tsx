@@ -1,4 +1,4 @@
-import { MessageSquarePlus, Search } from "lucide-react"
+import { MessageSquarePlus } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -10,7 +10,6 @@ import { SidebarThreadGroup } from "@/components/app/sidebar-thread-group"
 import { SidebarThreadRow } from "@/components/app/sidebar-thread-row"
 import { DestRail, useVisibleDest } from "@/components/app/dest-rail"
 import { ScheduleListPane } from "@/components/app/schedule-inbox"
-import { useApp } from "@/store/app"
 import {
   isProjectExpanded,
   readProjectExpanded,
@@ -34,59 +33,6 @@ import type { Project, SkillInfo, Thread } from "@/lib/types"
 import { useT } from "@/lib/use-t"
 import { cn } from "@/lib/utils"
 
-function SidebarVersion() {
-  const t = useT()
-  const version = useApp((s) => s.meta?.version ?? "")
-  if (!version) return null
-  return (
-    <p data-testid="sidebar-version" className="truncate px-2 pb-1 text-xs text-muted-foreground">
-      {t("sidebar.version", { version })}
-    </p>
-  )
-}
-
-function ListToolbar({
-  onNew,
-  onSearch,
-  newLabel,
-  searchLabel,
-}: {
-  onNew?: () => void
-  onSearch: () => void
-  newLabel?: string
-  searchLabel: string
-}) {
-  return (
-    <div className="flex items-center gap-1.5 px-(--sidebar-list-px) pb-2 pt-2">
-      {onNew ? (
-        <Button
-          variant="secondary"
-          size="sm"
-          className={cn(chromeTypeClass, "min-w-0 flex-1 justify-start gap-2 overflow-hidden")}
-          style={{ height: "var(--sidebar-row-height)" }}
-          onClick={onNew}
-        >
-          <MessageSquarePlus className="shrink-0" />
-          <span className="min-w-0 truncate">{newLabel}</span>
-        </Button>
-      ) : null}
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        className={cn("shrink-0", !onNew && "ml-auto")}
-        style={{
-          width: "var(--sidebar-row-height)",
-          height: "var(--sidebar-row-height)",
-        }}
-        onClick={onSearch}
-        title={searchLabel}
-      >
-        <Search />
-      </Button>
-    </div>
-  )
-}
-
 /** The active rail item selects projects, conversations without a project or waits. */
 export function Sidebar({
   threads,
@@ -98,7 +44,6 @@ export function Sidebar({
   onOpen,
   onRename,
   onDelete,
-  onSearch,
   onSettings,
   onToggleTheme,
   onToggleLocale,
@@ -126,7 +71,6 @@ export function Sidebar({
   onOpen: (id: string) => void
   onRename: (id: string, title: string) => void
   onDelete: (id: string) => void
-  onSearch: () => void
   onSettings: () => void
   onToggleTheme: () => void
   onToggleLocale: () => void
@@ -214,11 +158,7 @@ export function Sidebar({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {pane === "projects" ? (
           <>
-            <ListToolbar
-              onSearch={onSearch}
-              searchLabel={t("sidebar.search")}
-            />
-            <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto px-(--sidebar-list-px) pb-3 pt-1">
+            <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto px-(--sidebar-list-px) pb-3 pt-2">
               {buckets.pinned.length > 0 ? (
                 <SidebarSection
                   testId="pinned-list"
@@ -277,13 +217,7 @@ export function Sidebar({
         ) : null}
         {pane === "chats" ? (
           <>
-            <ListToolbar
-              onNew={onNew}
-              onSearch={onSearch}
-              newLabel={t("sidebar.newConversation")}
-              searchLabel={t("sidebar.search")}
-            />
-            <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto px-(--sidebar-list-px) pb-3 pt-1">
+            <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto px-(--sidebar-list-px) pb-3 pt-2">
               {buckets.recents.length > 0 ? (
                 <SidebarSection
                   testId="recents-list"
@@ -325,9 +259,6 @@ export function Sidebar({
         ) : null}
         {pane === "scheduled" ? <ScheduleListPane /> : null}
 
-        <div className="mt-auto px-(--sidebar-list-px) pb-2">
-          <SidebarVersion />
-        </div>
       </div>
       ) : null}
       <ConfirmDeleteDialog

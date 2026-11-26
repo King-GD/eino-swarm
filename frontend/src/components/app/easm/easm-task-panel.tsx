@@ -26,6 +26,7 @@ export function EasmTaskPanel({ panel, visible, locale, sheet, active = false }:
         graphLoading={graphSectionLoading(active, panel.source_status)}
         heatStatus={sectionStatus(result, "heat", active, panel.source_status)}
         componentsStatus={sectionStatus(result, "components", active, panel.source_status)}
+        cloudsLoading={sectionStatus(result, "clouds", active, panel.source_status) === "loading"}
         visible={visible}
         sheet={sheet}
       />

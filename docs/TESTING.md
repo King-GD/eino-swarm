@@ -352,7 +352,9 @@ built-in tools together and starts them open, starts each MCP connection
 folded, filters by name, shows an enabled connection as its own group rather
 than a server switch, leaves a Settings-disabled server out, clears Read file,
 reloads, and restores the original tool settings. Tool settings at the bottom
-of the menu opens Settings → Tools on the Built-in tab.
+of the menu opens Settings → Tools on the Built-in tab. The FOFA theme
+regression checks white switch thumbs in the compact menu and in Settings,
+including checked and unchecked states across dark and light modes.
 
 The SDK HTTP progress regression holds the final response until the client
 observes the matched notification. It also checks that progress cannot cross
@@ -2451,7 +2453,9 @@ isolated guest; a successful JS callback alone never accepts WebView painting.
 `frontend/e2e/render-probe-cover.spec.ts` runs the actual injected script in
 Chromium against a real Radix modal and theme/settings changes, including
 background compositing while body pointer input is disabled and exact restoration
-of that pointer state after synchronous sampling.
+of that pointer state after synchronous sampling. It turns off animations to
+verify next-frame notifications for both sidebar toggles, suppression when
+opening or closing same-colour Settings, and a fresh notification on theme change.
 
 Native macOS acceptance runs in the UTM **ci-macOS** guest. The user's host
 desktop may already be running zwai; do not launch or focus another desktop
@@ -5116,7 +5120,7 @@ otherwise require a model endpoint or API key.
 |---|---|---|
 | Go unit tests | config, store, memory, provider, tools, engine, search, server, CLI, TUI, and the swarm library | `go test -race -cover -timeout 25m ./...` |
 | HTTP tests | every endpoint, SSE replay and resume, the tail log page (`GET /log`, including the live-edge roster sidecar), one worker's log (`GET /agents/:agent/log`), upload path traversal, restart recovery (leftover turns, in-flight sub-agents, and the follow-up queue continue; in-flight tools are closed), PTY terminals (`GET /terminal`, same-origin / loopback Origin, DNS-rebind Host refused, project cwd), phone pairing status/token/offer (`/api/remote/*`, token never echoed), conversation search (`GET /api/search` finds a body the title does not contain; embeddings stay off until a model is pinned), SPA freeze (a Vite rebuild of `dist/` cannot steal hashed JS from a live window; a missing `/assets/*` file is 404 text, not the HTML shell) | `go test ./internal/server/` |
-| Front-end unit tests | the event reducer that turns the stream into blocks, the store's conversation targeting, quoting selected transcript text into the composer (count chip at rest, hover to read/edit/drop; tagged `<selected_text>` / `<user_request>` on send; Copy message without the wire tags; the Add to chat snapshot surviving a live stream), clipboard image paste, copying transcript text when the Clipboard API refuses (copy event plant, not a silent execCommand true), file drop onto the composer, find-in-conversation matching (count vs a paint window so a live turn does not freeze), http(s) links leaving the window, sidebar drag order (title drag after 8px, first click still opens), Scheduled inbox / wake banner / notice Run now and cancel / live waits sort first and show prompt / Swarm schedule caps, chrome i18n (`en`/`zh` key parity, locale persist through settings), appearance tokens (`font` / `ui_font_size` / `font_size` / `content_width` / `transcript_mode` / `palette`, directory density), tail-first history pages (`thread-log` / `thread-history` / `use-history-window` / `use-turn-jump`), dismissible settings toasts, ⌘K palette body search (`thread-search` / `palette.test`, stale hits cleared while the next query is in flight), semantic-search settings (off until a model is named) | `cd frontend && npm test` |
+| Front-end unit tests | the event reducer that turns the stream into blocks, the store's conversation targeting, quoting selected transcript text into the composer (count chip at rest, hover to read/edit/drop; tagged `<selected_text>` / `<user_request>` on send; Copy message without the wire tags; the Add to chat snapshot surviving a live stream), clipboard image paste, copying transcript text when the Clipboard API refuses (copy event plant, not a silent execCommand true), file drop onto the composer, find-in-conversation matching (count vs a paint window so a live turn does not freeze), http(s) links leaving the window, sidebar drag order (title drag after 8px, first click still opens), the search control's screen-reader name and the build number staying out of the list column, Scheduled inbox / wake banner / notice Run now and cancel / live waits sort first and show prompt / Swarm schedule caps, chrome i18n (`en`/`zh` key parity, locale persist through settings), appearance tokens (`font` / `ui_font_size` / `font_size` / `content_width` / `transcript_mode` / `palette`, directory density), tail-first history pages (`thread-log` / `thread-history` / `use-history-window` / `use-turn-jump`), dismissible settings toasts, ⌘K palette body search (`thread-search` / `palette.test`, stale hits cleared while the next query is in flight), semantic-search settings (off until a model is named) | `cd frontend && npm test` |
 | End-to-end | a real browser against a real server: conversation, streaming, sub-agents, files, settings (including the per-note memory cap), theme, chrome language, font and conversation width, directory rows tracking UI size, scheduled inbox / wake banner, Phone settings without a pairing QR (Bound phones paints a reported model) | `cd frontend && npm run e2e` |
 | Phone unit tests | Capacitor iOS/Android apps exist with camera permission and no native override of the configurable Gateway or QR-selected Hub; offer URI parse, Noise session, scan/paste screen, live viewfinder (frame, sweeping beam, chime on a pairlink QR), saved-ticket host chips + connecting skeleton (not the scan form), multiple tickets, computer name from `hello`/`list` `host` (not the hub hostname), slim list, resume picker (live turn / last thread / parked wait), compact transcript / watch session (goal flags + waiting), ticket-socket keepalive and reconnect banner, goal/wait banners, device model line from platform+UA (`hello`), launcher is the zwai mark not Capacitor's default; Android system back pops Add a PC, then the new-conversation screen, then a conversation, and finishes only from the inbox or the unbound scan screen; inbox search filters the roster already on the phone; a project row starts a conversation in that project; Android release Gradle reads version/signing from env (no password in git); `android-release` refuses a store upload without a keystore, skips JDK 17, copies the APK to `bin/` | `cd mobile && npm test` |
 | Phone E2E | scan screen opens a live viewfinder (frame, sweeping beam, fake-camera preview) and paste of the same `pairlink:v1` URI; a saved ticket shows host chips and Connecting, not Scan QR; Add a PC is a menu sheet; New chat and a project row open the start screen, and on a 320px-wide viewport the project row and the message box stay inside it; sub-agent header counts running workers only, finished history stays grouped and opens a separate activity log without painting worker answers as manager answers; Check for updates shows fetching, then current, an install question, or the stubbed feed error | `cd mobile && npm run e2e` |
@@ -5417,7 +5421,10 @@ banner for Stop for the one frame before `open` answers, which no
 Playwright assertion is fast enough to see.
 `mobile/src/components/pull-to-refresh.test.tsx` is why a short tug scrolls
 and a long one reloads, and why a drag that starts mid-list is never a
-reload. Camera on a real device is the product path (`make mobile-ios` /
+reload, and why only the release springs: a finger still dragging gets no
+height transition. `mobile/src/lib/motion.ts` is why a reader whose system
+asks for reduced motion gets an instant jump instead of a smooth scroll; the
+transcript tail and the turn-navigation chip share that decision. Camera on a real device is the product path (`make mobile-ios` /
 `make mobile-android`).
 
 `frontend` is the embed plus the incremental Vite rebuild (`Ensure` /
@@ -7552,7 +7559,10 @@ Several things are tested here, some as pure logic and some in jsdom:
   Chart / Table tabs (plot first; the table is the same rows, not a
   screen-reader-only dump); a live incomplete fence is a
   placeholder; fills and axes use `var(--chart-*)` / muted / border tokens
-  so a theme switch restyles the same plot. Re-rendering with a new but equal
+  so a theme switch restyles the same plot. Line and area fills fade toward
+  the baseline with chart-local SVG IDs. The phone plot shares those stops.
+  The EASM browser hover test checks the area fill and FOFA tooltip styles
+  in dark and light modes. Re-rendering with a new but equal
   spec object keeps the same SVG; the plot only redraws when the spec or the
   measured box size changes.
 - **`src/lib/stream-markdown.ts`**: trailing `**` / `` ` `` / `~~` in the
@@ -7801,7 +7811,8 @@ Several things are tested here, some as pure logic and some in jsdom:
   **`src/components/app/sidebar-slots.tsx`**,
   **`src/components/app/sidebar-thread-row.tsx`**, and
   **`src/components/app/sidebar-thread-group.tsx`**, rendered in jsdom
-  (`sidebar-slots.test.ts` pins chrome-relative density, not rem): a leftmost
+  (`sidebar-slots.test.ts` checks chrome-relative density in the processed
+  `index.css`, including its imports): a leftmost
   rail (`dest-rail`) switches Projects (default), Conversations, Scheduled, and Clients so those lists are
   not stacked in one scroll or drawn over the task. The project list
   does not offer New conversation (that button is on Conversations) and does not show an unread count on the rail; there is no title-bar chrome row and no hide
@@ -7876,8 +7887,9 @@ Several things are tested here, some as pure logic and some in jsdom:
   ends.
 - **`src/components/app/header.tsx`**, rendered in jsdom: the title bar always
   has a Hide/Show conversations control, pads for traffic lights on desktop,
-  sizes the leading cluster from `--zwai-sidebar-width` while the list is
-  open so the title starts with the transcript, is marked as window chrome so
+  keeps the toggle next to the traffic lights when the list closes, sizes the
+  leading cluster from `--zwai-sidebar-width` while the list is open, keeps
+  the named list actions within that cluster, is marked as window chrome so
   a double-click can zoom, and a conversation in a project prefixes the title
   with the project name on the same line — which directory the tools are
   pointed at is otherwise invisible. The model name is not repeated here; it
@@ -7887,6 +7899,10 @@ Several things are tested here, some as pure logic and some in jsdom:
   `awaiting_continue` stays Waiting. Conversation width, developer view, who
   else is connected, theme and language live in the sidebar app menu, not on
   this bar.
+  Shell browser tests check the full-width title bar, title inset, stable
+  toggle positions and panel tabs below the bar. The macOS desktop branch
+  stays at 46px, with the title and controls centered across the full height.
+  The browser and Windows branches follow UI font size.
 - **`src/lib/settings-persist.ts`**: edits coalesce into one `PUT` after
   400ms; `flush` writes immediately; a failed write does not block the next.
   Only changed sections are submitted; a changed `ui` section carries normalized
@@ -7904,9 +7920,13 @@ Several things are tested here, some as pure logic and some in jsdom:
   writes `--chrome-font-size` and the directory density tokens
   (`src/lib/chrome-density.ts`); content size writes `--ui-font-size`
   (`ui` follows chrome) and must not change row height. Code size writes `--code-font-size`.
-  `palette` writes `data-palette` so `index.css` can swap the FOFA token sheet
+  `palette` writes `data-palette` so `styles/palettes.css` can swap the FOFA token sheet
   (DESIGN 7.2 / fofa.info: page matches the list, cyan `--primary`, blue
   `--brand-from`, composer `[data-composer-box]` gets the official search rim).
+  `beginThemeRepaint` holds colour transitions off for the two frames a
+  theme or light/dark switch repaints in, so the sheet never paints half
+  old tokens and half new; a test environment without `requestAnimationFrame`
+  clears the flag immediately instead of leaving transitions off.
 - **`src/components/app/theme-cards.tsx`**, rendered in jsdom: Settings →
   General paints System / Light / Dark preview cards and a Color theme
   menu (ZWAI / FOFA). The cards restyle with the named set.
@@ -8233,8 +8253,9 @@ a client at all is verified in the engine and reducer tests.
   checkout's source and served-asset checks read-only.
   Double-click the title bar: the window should zoom,
   then restore on the next double-click. On macOS the traffic lights and the
-  sidebar toggle must share one baseline in that title bar; New conversation
-  starts on the row below.   Opening Settings, **Back to app** must sit on the
+  sidebar toggle must share one center line in the compact title bar. The
+  toggle stays beside the lights when the list closes, and inspector tabs
+  start below the title bar. Opening Settings, **Back to app** must sit on the
   row under the lights, not in the drag strip. On macOS, the first desktop
   launch may prompt for Local Network access (LAN model endpoints); denying
   it looks like `no route to host` while Terminal curl still works. ⌘Q should return the shell promptly without
@@ -9924,7 +9945,9 @@ appear there. See the [panel model bounds](../models/panels/README.md).
 
 Protocol and source tests use versioned state plus actual Registry/model HTTP, CLI and local HTTP boundaries. `internal/panelplugins/fofaworld` tests the installed compatible CLI only against a loopback fake API, with fictional credentials and no public targets. Two-batch blocking verifies actual overlap; counters and accepted receipts distinguish errors/unknown/cancellation from completion. `frontend/e2e/task-panels.spec.ts` verifies the actual bundled iframe and map without reloading on data updates. See [Task panels](TASK_PANELS.md) for the protocol and remaining native acceptance gate.
 
-EASM producer fixtures feed one published state back into `Run` for the next batch. They cover subject changes, same-name ownership ambiguity, source relationships, detached historical clues and certificate serial deduplication. Aggregation fixtures verify concurrent progress, same-query heat-only retries with zero statistics calls, exact zero counts, partial replies, legacy incomplete summaries and query changes. The catalog tests validate current, previous and resumed snapshots against the bundled schema.
+EASM producer fixtures feed one published state back into `Run` for the next batch. They cover subject changes, same-name ownership ambiguity, source relationships, detached historical clues and certificate serial deduplication. Aggregation fixtures verify concurrent progress, same-query heat-only retries with zero statistics calls, exact zero counts, partial replies, legacy incomplete summaries and query changes. Cloud fixtures cover merged asset counts and a shared IP address across alias buckets. They check the distinct count and services from one filtered request, the IP fallback on the same filter, and retention of confirmed counts when the product aggregation is missing. Missing and null service aggregations leave the step retryable on the same query. An explicit empty product array is a valid service response. Configuration and settings API tests refuse provider limits above 5. Cloud fixtures verify that only the five largest providers are queried, the panel-wide four-request budget shared with the other aggregations, one retry of a rate-limited request, Stop during lookups, the service request floor and a panel stored before the `clouds` step, whose same-query retry runs only that step. The catalog tests validate current, previous and resumed snapshots against the bundled schema.
+
+EASM upgrade regressions start with the released v1 definition and cover app startup, full and project backup restore, transaction rollback, historical operation receipts and rewind. The browser store test verifies that reconnecting replaces the definition on the same instance. The sealed Pairlink tests exercise the original v1 snapshot for an older phone and v2 transfer for a newer phone. The phone tests verify a fresh snapshot read after a manifest version change.
 
 `models/panels/PanelMCPAdmission.tla` and `EASMCollection.tla` add the EASM
 admission and collection refinements to `make model-check`. Both use normal,

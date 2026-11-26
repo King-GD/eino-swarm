@@ -33,7 +33,7 @@ export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
     <div className="content-gutter flex w-full min-h-0 flex-1 flex-col justify-center pt-10 pb-composer">
       <div className="content-column">
         <h1 className="text-center text-3xl font-semibold tracking-tight">
-          {t("empty.title")}
+          <span className="home-title-gradient">{t("empty.title")}</span>
         </h1>
         <p
           className={cn(
@@ -49,7 +49,7 @@ export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
               key={title}
               type="button"
               onClick={() => onPick(text)}
-              className="group flex h-full flex-col items-start gap-3 rounded-xl border border-border bg-card p-4 text-left shadow-xs transition-all hover:border-ring hover:bg-accent/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="group flex h-full flex-col items-start gap-3 rounded-xl border border-border bg-card p-4 text-left shadow-xs transition-[background-color,border-color,box-shadow] hover:border-ring hover:bg-accent/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <span className="flex size-8 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:bg-background group-hover:text-foreground">
                 <Icon className="size-4" />

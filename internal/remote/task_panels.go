@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/LubyRuffy/eino-swarm/internal/engine"
+	"github.com/LubyRuffy/eino-swarm/internal/panelplugins/easm"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 	"github.com/LubyRuffy/eino-swarm/internal/taskpanel"
 )
@@ -44,7 +45,8 @@ type panelTransfer struct {
 }
 
 func panelRequestValid(req Request) bool {
-	return len(req.ID) <= 128 && len(req.ThreadID) > 0 && len(req.ThreadID) <= 128 && len(req.PanelID) <= 128 && len(req.PanelTransferID) <= 128
+	return len(req.ID) <= 128 && len(req.ThreadID) > 0 && len(req.ThreadID) <= 128 && len(req.PanelID) <= 128 && len(req.PanelTransferID) <= 128 &&
+		(req.EASMPanelVersion == "" || req.EASMPanelVersion == easm.LegacyPanelVersion || req.EASMPanelVersion == easm.PanelVersion)
 }
 
 func handleTaskPanels(eng *engine.Engine, req Request, path, sessionID string) Response {
@@ -57,6 +59,11 @@ func handleTaskPanels(eng *engine.Engine, req Request, path, sessionID string) R
 	}
 	if more {
 		return fail(req.ID, path, sessionID, "too_large", "panel manifest exceeds the phone frame limit")
+	}
+	for i := range rows {
+		if rows[i].PluginID == easm.PanelID && rows[i].PluginVersion == easm.PanelVersion && req.EASMPanelVersion != easm.PanelVersion {
+			rows[i].PluginVersion = easm.LegacyPanelVersion
+		}
 	}
 	resp := okBase(req.ID, path, sessionID)
 	resp.TaskPanels = &rows
@@ -144,6 +151,12 @@ func (p *LinkPump) readTaskPanelLocked(req Request) Response {
 		if err != nil {
 			return mapErr(req.ID, p.path, p.sessionID, err)
 		}
+		if panel.PluginID == easm.PanelID {
+			panel, change, err = projectEASMPanel(panel, change, req.EASMPanelVersion)
+			if err != nil {
+				return failRead("read_failed", "EASM panel cannot be represented in the requested format")
+			}
+		}
 		var body []byte
 		if change != nil {
 			body, err = json.Marshal(struct {
@@ -170,7 +183,7 @@ func (p *LinkPump) readTaskPanelLocked(req Request) Response {
 		if transfer == nil || transfer.id != req.PanelTransferID {
 			return failRead("transfer_expired", "panel transfer is unavailable")
 		}
-		if req.ThreadID != transfer.threadID || req.PanelID != transfer.panelID || req.PanelBaseRevision != nil {
+		if req.ThreadID != transfer.threadID || req.PanelID != transfer.panelID || req.PanelBaseRevision != nil || req.EASMPanelVersion != "" {
 			return failRead("bad_request", "panel transfer belongs to another scope")
 		}
 		visible, err := p.eng.Store().TaskPanelVisible(context.Background(), transfer.threadID, transfer.panelID)

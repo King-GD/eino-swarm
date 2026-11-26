@@ -4,8 +4,9 @@ package desktop
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework Cocoa
+#cgo LDFLAGS: -framework Cocoa -framework WebKit
 #import <Cocoa/Cocoa.h>
+#import <WebKit/WebKit.h>
 
 // Centre the traffic lights in a title-bar container that matches the HTML
 // header, and return the zoom button's right edge in points so the front end
@@ -19,15 +20,24 @@ double positionTrafficLights(void* nsWindow, double headerHeight) {
 	NSButton *close = [window standardWindowButton:NSWindowCloseButton];
 	NSButton *mini = [window standardWindowButton:NSWindowMiniaturizeButton];
 	NSButton *zoom = [window standardWindowButton:NSWindowZoomButton];
-	if (close == nil || mini == nil || zoom == nil || close.superview == nil) {
+	NSView *buttonParent = close.superview;
+	if (close == nil || mini == nil || zoom == nil || buttonParent == nil ||
+		mini.superview != buttonParent || zoom.superview != buttonParent) {
 		return 0;
 	}
-	NSView *container = close.superview.superview;
+	NSView *container = buttonParent.superview;
 	if (container == nil) {
-		container = close.superview;
+		container = buttonParent;
 	}
-	if (container == nil) {
+	NSView *content = window.contentView;
+	if (content == nil) {
 		return 0;
+	}
+	for (NSView *child in content.subviews) {
+		if ([child isKindOfClass:[WKWebView class]]) {
+			content = child;
+			break;
+		}
 	}
 
 	CGFloat buttonWidth = NSWidth(close.frame);
@@ -49,7 +59,12 @@ double positionTrafficLights(void* nsWindow, double headerHeight) {
 	bounds.origin.y = NSHeight(window.frame) - headerHeight;
 	[container setFrame:bounds];
 
-	CGFloat y = (headerHeight - buttonHeight) / 2.0;
+	// The WebView and the button parent can have different vertical origins.
+	NSRect viewport = content.bounds;
+	CGFloat halfHeight = headerHeight / 2.0;
+	CGFloat centerY = content.isFlipped ? NSMinY(viewport) + halfHeight : NSMaxY(viewport) - halfHeight;
+	NSPoint center = [buttonParent convertPoint:NSMakePoint(NSMinX(viewport), centerY) fromView:content];
+	CGFloat y = center.y - buttonHeight / 2.0;
 	[close setFrameOrigin:NSMakePoint(start, y)];
 	[mini setFrameOrigin:NSMakePoint(start + buttonWidth + padding, y)];
 	[zoom setFrameOrigin:NSMakePoint(start + 2.0 * (buttonWidth + padding), y)];

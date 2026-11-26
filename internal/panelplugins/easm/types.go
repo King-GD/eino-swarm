@@ -21,6 +21,7 @@ const (
 	StepSummary    Step = "summary"
 	StepHeat       Step = "heat"
 	StepComponents Step = "components"
+	StepClouds     Step = "clouds"
 )
 
 // Tool roles. Several steps can share one role: summary and components both
@@ -34,9 +35,9 @@ const (
 // Roles lists every role a configuration can bind.
 var Roles = []string{RoleStats, RoleHeat, RoleProductRules}
 
-// Steps is the aggregation order. All three are independent, so the producer
-// runs them concurrently and publishes each as it finishes.
-var Steps = []Step{StepSummary, StepHeat, StepComponents}
+// Steps is the aggregation order. They are independent, so the producer runs
+// them concurrently and publishes each as it finishes.
+var Steps = []Step{StepSummary, StepHeat, StepComponents, StepClouds}
 
 // Input is one batch of the agent's own findings. Subject is the confirmed
 // target; every list is merged into the portrait already in the panel.
@@ -104,6 +105,10 @@ type Settings struct {
 	MaxDomains int
 	// MaxComponents is the TopN product buckets one aggregation requests.
 	MaxComponents int
+	// MaxClouds is the configured number of hosting provider rows.
+	MaxClouds int
+	// MaxServices is the TopN services one cloud row requests.
+	MaxServices int
 	// CallTimeout bounds one remote call; zero keeps the server's own timeout.
 	CallTimeout time.Duration
 }
@@ -145,6 +150,7 @@ type State struct {
 	Summary       *Summary    `json:"summary,omitempty"`
 	Heat          []HeatPoint `json:"heat"`
 	Components    []Component `json:"components"`
+	Clouds        []Cloud     `json:"clouds"`
 }
 
 // Collection reports pipeline progress. A step's status is what the renderer
@@ -259,6 +265,24 @@ type Component struct {
 	Count       int64  `json:"count"`
 	HotDays     *int   `json:"hot_days,omitempty"`
 	Tags        []Tag  `json:"tags,omitempty"`
+}
+
+// Cloud is one hosting provider row: the company's assets behind that provider,
+// not the provider's own footprint. Category is a stable key the renderer words
+// in the user's language. Name is FOFA's spelling; DisplayName is the maintained
+// Chinese name, which the renderer shows only in Chinese, as FOFA AI does.
+type Cloud struct {
+	Name        string         `json:"name"`
+	DisplayName string         `json:"display_name,omitempty"`
+	Category    string         `json:"category"`
+	Assets      int64          `json:"assets"`
+	IPs         int64          `json:"ips"`
+	Services    []CloudService `json:"services"`
+}
+
+type CloudService struct {
+	Name  string `json:"name"`
+	Count int64  `json:"count"`
 }
 
 type Tag struct {

@@ -8,6 +8,7 @@ import type { PanelChange, TaskPanel } from "../../../frontend/src/task-panels/t
 // The PC still enforces its configured, potentially smaller state budget.
 export const maxTaskPanelTransferBytes = 64 << 20
 const chunkBytes = 36 << 10
+const easmPanelVersion = "2"
 
 export class TaskPanelReadError extends Error {
   constructor(readonly code: string, message: string) { super(message) }
@@ -32,7 +33,7 @@ export function validatePanelManifest(value: unknown, threadId: string): TaskPan
 }
 
 export async function listTaskPanels(link: RemoteLink, threadId: string, signal?: AbortSignal): Promise<TaskPanelManifest[]> {
-  const result = await link.rpc({ op: OpTaskPanels, thread_id: threadId }, { signal, dropOnTimeout: false })
+  const result = await link.rpc({ op: OpTaskPanels, thread_id: threadId, easm_panel_version: easmPanelVersion }, { signal, dropOnTimeout: false })
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
   if (!result.ok) throw new TaskPanelReadError(result.code ?? "panel_read_failed", result.error ?? "Could not load task panels")
   return validatePanelManifest(result.task_panels, threadId)
@@ -90,7 +91,7 @@ export async function readTaskPanel(link: RemoteLink, threadId: string, panelId:
     for (;;) {
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
       const response = await link.rpc({ op: OpTaskPanelRead, thread_id: threadId, panel_id: panelId,
-        ...(first ? { transfer_id: first.id, offset } : baseRevision === undefined ? {} : { base_revision: baseRevision }),
+        ...(first ? { transfer_id: first.id, offset } : { easm_panel_version: easmPanelVersion, base_revision: baseRevision }),
       }, { signal, dropOnTimeout: false })
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
       if (!response.ok) throw new TaskPanelReadError(response.code ?? "panel_read_failed", response.error ?? "Panel read failed")

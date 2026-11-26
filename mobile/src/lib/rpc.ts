@@ -105,6 +105,7 @@ export type RemoteRequest = {
   file_root?: string
   image_id?: string
   panel_id?: string
+  easm_panel_version?: string
   base_revision?: number
   transfer_id?: string
   /** OpFiles: one workspace directory. Empty or omitted is the root. */

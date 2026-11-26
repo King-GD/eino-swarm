@@ -53,6 +53,14 @@ describe("ResizeHandle", () => {
     expect(handle.className).not.toMatch(/-left-1/)
   })
 
+  it("keeps the drag target wide but paints a hairline", () => {
+    render(<Harness edge="right" />)
+    const handle = screen.getByRole("separator", { name: "Resize" })
+    expect(handle.className).toMatch(/\bw-2\b/)
+    expect(handle.className).toMatch(/before:w-0\.5/)
+    expect(handle.className).not.toMatch(/hover:bg-ring/)
+  })
+
   it("does not let a drag become a text selection", () => {
     render(<Harness edge="right" />)
     const handle = screen.getByRole("separator", { name: "Resize" })

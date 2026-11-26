@@ -114,6 +114,14 @@ describe("PhoneChart", () => {
     expect(screen.getByTestId("phone-chart-plot").querySelector("path")?.getAttribute("d")).toMatch(/^M /)
   })
 
+  it("captions the unit above the axis on the default view", () => {
+    render(<PhoneChart spec={spec({
+      type: "line", x: "k", y: "v", unit: "req/s",
+      data: [{ k: "a", v: 1 }, { k: "b", v: 2 }],
+    })} />)
+    expect(screen.getByTestId("phone-chart-unit")).toHaveTextContent("req/s")
+  })
+
   it("keeps x labels readable when there are more points than fit", () => {
     const data = Array.from({ length: 8 }, (_, i) => ({ k: `p${i}`, v: i + 1 }))
     render(<PhoneChart spec={spec({ type: "line", x: "k", y: "v", data })} />)
@@ -122,5 +130,18 @@ describe("PhoneChart", () => {
     expect(xs).toContain("p0")
     expect(xs).toContain("p7")
     expect(xs.filter((text) => text?.startsWith("p"))).toHaveLength(5)
+  })
+
+  it("fills below the line and fades to the zero baseline for mixed signs", () => {
+    render(<PhoneChart spec={spec({
+      type: "line", x: "k", y: "v",
+      data: [{ k: "a", v: -2 }, { k: "b", v: 2 }],
+    })} />)
+    const plot = screen.getByTestId("phone-chart-plot")
+    const gradient = plot.querySelector("linearGradient")
+    expect(gradient).not.toBeNull()
+    expect(gradient?.querySelector('stop[offset="0.5"]')).toHaveAttribute("stop-opacity", "0")
+    expect(plot.querySelector("path")).toHaveAttribute("fill", `url(#${gradient?.id})`)
+    expect(plot.querySelector("polyline")).toHaveAttribute("stroke", "hsl(var(--chart-1))")
   })
 })

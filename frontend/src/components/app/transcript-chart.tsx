@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type ReactElement } from "react"
+import { memo, useEffect, useId, useRef, useState, type ReactElement } from "react"
 import {
   Area,
   AreaChart,
@@ -7,8 +7,6 @@ import {
   CartesianGrid,
   Cell,
   Legend,
-  Line,
-  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -18,9 +16,12 @@ import {
 } from "recharts"
 import type { TooltipProps } from "recharts"
 
+import { ChartAreaGradient } from "@/components/shared/chart-area-gradient"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { chartSpecsEqual, type ChartSpec } from "@/lib/chart-spec"
+import { chartTooltipSurface } from "@/lib/glass"
 import { useT } from "@/lib/use-t"
+import { cn } from "@/lib/utils"
 
 export const CHART_SERIES_PAINT = [
   "hsl(var(--chart-1))",
@@ -32,6 +33,14 @@ export const CHART_SERIES_PAINT = [
 
 const AXIS = { fill: "hsl(var(--muted-foreground))", fontSize: 12 }
 const GRID = "hsl(var(--border))"
+/* Hover answers "which category is this" without painting a slab over the
+   plot: a token wash for a bar's column, a hairline for a line's crosshair. */
+const CURSOR_BAND = { fill: "hsl(var(--accent))", opacity: 0.7 }
+const CURSOR_LINE = {
+  stroke: "hsl(var(--muted-foreground))",
+  strokeOpacity: 0.35,
+  strokeWidth: 1,
+}
 
 function prefersReducedMotion(): boolean {
   if (typeof window === "undefined" || !window.matchMedia) return false
@@ -85,18 +94,19 @@ function specPropsEqual(
  *  Spec equality is the only reason to paint again; box size is handled
  *  inside ResponsiveContainer, which already ignores unchanged dimensions. */
 const ChartPlot = memo(function ChartPlot({ spec }: { spec: ChartSpec }) {
+  const fillPrefix = useId()
   const animate = useRef(!prefersReducedMotion())
   useEffect(() => {
     animate.current = false
   }, [])
   return (
     <ResponsiveContainer width="100%" height="100%">
-      {renderMark(spec, animate.current)}
+      {renderMark(spec, animate.current, fillPrefix)}
     </ResponsiveContainer>
   )
 }, specPropsEqual)
 
-function renderMark(spec: ChartSpec, animate: boolean): ReactElement {
+function renderMark(spec: ChartSpec, animate: boolean, fillPrefix: string): ReactElement {
   if (spec.type === "pie") {
     return (
       <PieChart>
@@ -126,37 +136,37 @@ function renderMark(spec: ChartSpec, animate: boolean): ReactElement {
     data: spec.data,
     margin: { top: 8, right: 8, bottom: 4, left: 4 },
   }
-  if (spec.type === "line") {
-    return (
-      <LineChart {...shared}>
-        {axes}
-        {spec.y.map((key, i) => (
-          <Line
-            key={key}
-            type="monotone"
-            dataKey={key}
-            stroke={CHART_SERIES_PAINT[i % CHART_SERIES_PAINT.length]}
-            strokeWidth={2}
-            dot={false}
-            isAnimationActive={animate}
-          />
-        ))}
-      </LineChart>
-    )
-  }
-  if (spec.type === "area") {
+  if (spec.type === "line" || spec.type === "area") {
+    const stacked = spec.type === "area" && spec.stacked
+    const series = spec.y.map((key, index) => ({
+      key,
+      id: `${fillPrefix}-area-${index}`,
+      color: CHART_SERIES_PAINT[index % CHART_SERIES_PAINT.length],
+    }))
     return (
       <AreaChart {...shared}>
+        <defs>
+          {series.map(({ key, id, color }) => (
+            <ChartAreaGradient
+              key={key}
+              id={id}
+              color={color}
+              values={stacked ? undefined : spec.data.map((row) => Number(row[key]))}
+            />
+          ))}
+        </defs>
         {axes}
-        {spec.y.map((key, i) => (
+        {series.map(({ key, id, color }) => (
           <Area
             key={key}
             type="monotone"
             dataKey={key}
-            fill={CHART_SERIES_PAINT[i % CHART_SERIES_PAINT.length]}
-            stroke={CHART_SERIES_PAINT[i % CHART_SERIES_PAINT.length]}
-            fillOpacity={0.28}
-            stackId={spec.stacked ? "s" : undefined}
+            fill={`url(#${id})`}
+            stroke={color}
+            fillOpacity={1}
+            strokeWidth={spec.type === "line" ? 2 : undefined}
+            activeDot={spec.type === "line" ? { r: 4, fill: color, stroke: "hsl(var(--background))", strokeWidth: 2 } : { fill: color }}
+            stackId={stacked ? "s" : undefined}
             isAnimationActive={animate}
           />
         ))}
@@ -182,6 +192,7 @@ function renderMark(spec: ChartSpec, animate: boolean): ReactElement {
 }
 
 function cartesianEls(spec: ChartSpec): ReactElement[] {
+  const bar = spec.type === "bar"
   // Recharts matches children by component type. A fragment is one child
   // that is not an Axis, so the plot would render with no scales.
   const els: ReactElement[] = [
@@ -200,9 +211,15 @@ function cartesianEls(spec: ChartSpec): ReactElement[] {
       axisLine={false}
       tickLine={false}
       width={40}
-      tickFormatter={(v: number) => formatTick(v, spec.unit)}
+      // The unit belongs to the tooltip and the table header. Repeating it on
+      // every tick crowded the axis until its own digits were clipped.
+      tickFormatter={(v: number) => compactTick(v)}
     />,
-    <Tooltip key="tip" content={<ChartTooltip unit={spec.unit} />} />,
+    <Tooltip
+      key="tip"
+      cursor={bar ? CURSOR_BAND : CURSOR_LINE}
+      content={<ChartTooltip unit={spec.unit} />}
+    />,
   ]
   if (spec.y.length > 1) {
     els.push(<Legend key="legend" wrapperStyle={{ fontSize: 12 }} />)
@@ -218,7 +235,7 @@ function ChartTooltip({
 }: TooltipProps<number, string> & { unit?: string }) {
   if (!active || !payload?.length) return null
   return (
-    <div className="rounded-md border border-border bg-popover px-2 py-1.5 text-xs text-popover-foreground">
+    <div className={cn("min-w-40 rounded-[var(--radius-surface,var(--radius-lg))] px-3 py-2 text-xs", chartTooltipSurface)}>
       {label != null && label !== "" ? (
         <div className="mb-1 font-medium">{String(label)}</div>
       ) : null}
@@ -229,8 +246,8 @@ function ChartTooltip({
               className="size-2 shrink-0 rounded-sm"
               style={{ background: String(row.color ?? CHART_SERIES_PAINT[0]) }}
             />
-            <span className="text-muted-foreground">{row.name}</span>
-            <span>{formatTick(Number(row.value), unit ?? "")}</span>
+            <span className="text-[var(--chart-tip-series-ink,hsl(var(--muted-foreground)))]">{row.name}</span>
+            <span className="ml-auto tabular-nums">{formatTick(Number(row.value), unit ?? "")}</span>
           </li>
         ))}
       </ul>
@@ -265,6 +282,20 @@ function ChartDataTable({ spec, caption }: { spec: ChartSpec; caption: string })
       </tbody>
     </table>
   )
+}
+
+function compactTick(n: number): string {
+  if (!Number.isFinite(n)) return ""
+  const abs = Math.abs(n)
+  if (abs >= 10_000) {
+    return new Intl.NumberFormat(undefined, {
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(n)
+  }
+  // Small domains still need their fraction: 0.25 / 0.5 / 0.75 must not
+  // collapse to 0 / 1 / 1.
+  return abs >= 100 || Number.isInteger(n) ? String(Math.round(n)) : n.toFixed(1)
 }
 
 function formatTick(n: number, unit: string): string {

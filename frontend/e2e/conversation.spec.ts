@@ -87,7 +87,10 @@ test("runs a swarm turn end to end and keeps it after a reload", async ({ page }
     transcript.getByTestId("transcript-chart").getByRole("table"),
   ).toBeVisible()
   await transcript.getByRole("tab", { name: "Chart" }).click()
-  await expect(transcript.getByTestId("transcript-chart").locator("svg")).toBeVisible()
+  const chart = transcript.getByTestId("transcript-chart")
+  await expect(chart.locator("svg")).toBeVisible()
+  await chart.locator(".recharts-bar-rectangle").first().hover()
+  await expect(chart.locator(".recharts-tooltip-wrapper .chart-tooltip-glass")).toBeVisible()
   await expect(transcript.getByText(/Worked for/)).toBeVisible()
   const fileLink = answer.getByRole("button", { name: "Preview notes/researcher.md" })
   await fileLink.click()

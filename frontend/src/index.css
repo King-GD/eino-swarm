@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import './styles/easm.css';
 @import './styles/scroll-fade.css';
+@import './styles/palettes.css';
 
 @plugin 'tailwindcss-animate';
 
@@ -19,6 +20,13 @@
   --color-ring: hsl(var(--ring));
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
+  --color-content-foreground: hsl(var(--content-foreground));
+  --color-link: hsl(var(--link));
+  --color-accent-text: hsl(var(--accent-text));
+  --color-dropdown: hsl(var(--dropdown));
+  --color-tag: hsl(var(--tag));
+  --color-tips: hsl(var(--tips));
+  --color-tips-foreground: hsl(var(--tips-foreground));
 
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));
@@ -88,13 +96,31 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
 
-  --animate-accordion-down: accordion-down 0.2s ease-out;
-  --animate-accordion-up: accordion-up 0.2s ease-out;
-  --animate-breathe: breathe 1.6s ease-in-out infinite;
+  /* One motion language. A change of the same kind gets the same curve and
+     pace everywhere: arrive decelerating, leave accelerating, move evenly.
+     `--duration-press` is for repeated taps, `fast` for icon and menu swaps,
+     `base` for banners and panels, `slow` for a page-level entrance. */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --duration-press: 90ms;
+  --duration-fast: 140ms;
+  --duration-base: 200ms;
+  --duration-slow: 280ms;
+  --default-transition-duration: var(--duration-fast);
+  --default-transition-timing-function: var(--ease-in-out);
+
+  --animate-accordion-down: accordion-down var(--duration-base) var(--ease-out);
+  --animate-accordion-up: accordion-up var(--duration-fast) var(--ease-in);
+  --animate-breathe: breathe 1.6s var(--ease-in-out) infinite;
   --animate-marquee: marquee 12s linear infinite;
-  --animate-shimmer: shimmer 2.2s ease-in-out infinite;
-  --animate-swap-in: swap-in 0.22s ease-out both;
-  --animate-swap-out: swap-out 0.22s ease-out both;
+  --animate-shimmer: shimmer 2.2s var(--ease-in-out) infinite;
+  --animate-swap-in: swap-in var(--duration-base) var(--ease-out) both;
+  --animate-swap-out: swap-out var(--duration-base) var(--ease-in) both;
+  /* Arrival for a banner, toast or floating control: a short rise, never a
+     slide across the screen. Paired with a fade so the edge never flashes. */
+  --animate-rise-in: rise-in var(--duration-base) var(--ease-out) both;
+  --animate-pop-in: pop-in var(--duration-fast) var(--ease-out) both;
 
   @keyframes accordion-down {
     from {
@@ -157,6 +183,26 @@
     to {
       transform: translateY(-100%);
       opacity: 0;
+    }
+  }
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: none;
     }
   }
 }
@@ -276,6 +322,7 @@
      need. Sizes are rem so Settings → Font size scales the answer too. */
   font-family: var(--font-content, var(--font-sans));
   font-size: var(--ui-font-size);
+  color: hsl(var(--content-foreground));
   @apply min-w-0 leading-6;
   & > * + * {
     @apply mt-3;
@@ -285,26 +332,35 @@
   & h1 {
     @apply font-semibold mt-4;
     font-size: inherit;
+    color: hsl(var(--foreground));
   }
   & h2 {
     @apply font-semibold mt-4;
     font-size: inherit;
+    color: hsl(var(--foreground));
   }
   & h3 {
     @apply font-semibold mt-4;
     font-size: inherit;
+    color: hsl(var(--foreground));
   }
   & h4 {
     @apply font-semibold mt-4;
     font-size: inherit;
+    color: hsl(var(--foreground));
   }
   & h5 {
     @apply font-semibold mt-4;
     font-size: inherit;
+    color: hsl(var(--foreground));
   }
   & h6 {
     @apply font-semibold mt-4;
     font-size: inherit;
+    color: hsl(var(--foreground));
+  }
+  & strong {
+    color: hsl(var(--foreground));
   }
   & ul {
     @apply list-disc pl-5 space-y-1;
@@ -314,6 +370,7 @@
   }
   & a {
     @apply underline underline-offset-2 hover:text-foreground;
+    color: hsl(var(--link));
   }
   & blockquote {
     @apply border-l-2 border-border pl-3 text-muted-foreground;
@@ -371,15 +428,27 @@
   & figure {
     @apply min-w-0;
   }
-  & th {
-    @apply border border-border bg-muted/50 px-3 py-1.5 text-left align-top font-medium;
+  /* Cell rules, the header band and row hover are palette tokens; the
+     default is a boxed grid. */
+  & :is(th, td) {
+    @apply border-border text-left align-top;
+    border-style: solid;
+    border-width: var(--md-cell-rule, 1px);
+    padding: var(--md-cell-pad, calc(var(--spacing) * 1.5) calc(var(--spacing) * 3));
     min-width: 10ch;
     overflow-wrap: anywhere;
   }
-  & td {
-    @apply border border-border px-3 py-1.5 text-left align-top;
-    min-width: 10ch;
-    overflow-wrap: anywhere;
+  & th {
+    background-color: var(--md-head-bg, hsl(var(--muted) / 0.5));
+    color: var(--md-head-ink, hsl(var(--foreground)));
+    font-size: var(--md-head-size, inherit);
+    font-weight: var(--md-head-weight, 500);
+  }
+  & tbody tr:hover td {
+    background-color: var(--md-row-hover, transparent);
+  }
+  & tr:last-child td {
+    border-bottom-width: var(--md-last-rule, 1px);
   }
   & :is(th, td) code {
     overflow-wrap: anywhere;
@@ -557,356 +626,8 @@
   z-index: 60;
 }
 
-/* The whole palette lives here. Components reference tokens only, so light
-   and dark cannot drift apart and a theme change is one file. */
+/* Palette tokens live in styles/palettes.css. */
 @layer base {
-  :root {
-    --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
-      "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-    --font-content: var(--font-sans);
-    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-
-    --background: 0 0% 100%;
-    --foreground: 240 10% 8%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 8%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 8%;
-    --primary: 240 6% 12%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 5% 96%;
-    --secondary-foreground: 240 6% 12%;
-    --muted: 240 5% 96%;
-    --muted-foreground: 240 4% 46%;
-    --accent: 240 5% 94%;
-    --accent-foreground: 240 6% 12%;
-    --destructive: 0 72% 46%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 6% 90%;
-    --input: 240 6% 90%;
-    --ring: 240 5% 65%;
-    --radius: 0.65rem;
-
-    --sidebar: 240 5% 97%;
-    --sidebar-foreground: 240 6% 20%;
-    --sidebar-accent: 240 5% 92%;
-    --sidebar-border: 240 6% 89%;
-
-    --running: 38 92% 50%;
-    --done: 142 62% 38%;
-    --failed: 0 72% 46%;
-    /* ask_user waiting on the human. Distinct from --running: a question
-       is not "still working". */
-    --ask: 252 55% 46%;
-
-    /* In-conversation find. Distinct from --running: a hit is not "working". */
-    --find: 48 96% 72%;
-    --find-foreground: 240 10% 8%;
-    --find-active: 32 98% 58%;
-    --find-active-foreground: 240 10% 8%;
-
-    /* Charts in the transcript. Same family as the file glyphs so a
-       plot is not a second palette. */
-    --chart-1: 211 70% 42%;
-    --chart-2: 152 40% 36%;
-    --chart-3: 38 80% 42%;
-    --chart-4: 252 40% 48%;
-    --chart-5: 28 75% 42%;
-
-    /* Files tree glyphs. Distinct enough to scan, quiet enough that a
-       repository listing does not turn into a sticker sheet. */
-    --file-folder: 38 80% 42%;
-    --file-code: 211 70% 42%;
-    --file-doc: 252 40% 48%;
-    --file-config: 28 75% 42%;
-    --file-image: 152 40% 36%;
-
-    /* Collaboration kinds. A fact and a result used to share one fill, so
-       the panel could not be scanned by kind. These are quiet surfaces,
-       not status colors: a reported result must not look finished. */
-    --nuwa-task-bg: 211 75% 88%;
-    --nuwa-fact-bg: 262 65% 91%;
-    --nuwa-artifact-bg: 168 48% 84%;
-
-    /* Shell highlighting on exec rows. Same hues as the file glyphs so
-       light/dark stay in one family; a hardcoded theme would break one of them. */
-    --syntax-keyword: 252 45% 46%;
-    --syntax-command: 211 72% 38%;
-    --syntax-string: 152 48% 32%;
-    --syntax-comment: 240 4% 50%;
-    --syntax-operator: 28 70% 40%;
-    --syntax-flag: 211 40% 40%;
-    --syntax-variable: 38 80% 38%;
-    --syntax-prompt: 252 40% 52%;
-
-    /* Edit hunks in the transcript. Same hues as --done / --destructive so
-       a light/dark swap cannot leave additions looking like deletions. */
-    --diff-add: 142 62% 32%;
-    --diff-add-bg: 142 40% 94%;
-    --diff-del: 0 72% 42%;
-    --diff-del-bg: 0 70% 96%;
-
-    /* Width of the macOS traffic lights plus a gap. The desktop shell
-       overwrites this from the native button frames; the fallback is only
-       for the first paint and for unit tests. */
-    --traffic-light-inset: 4.75rem;
-
-    /* Visible lines of a live thought. Keep THOUGHT_VISIBLE_LINES in sync. */
-    --thought-lines: 10;
-
-    /* Space the transcript leaves under the last line so it is not hiding
-       behind the composer. The composer overwrites this from its own height;
-       the fallback is only the first paint and jsdom. */
-    --composer-pad: 7.5rem;
-
-    /* Join above the composer slab. Pixels, not rem: conversation size is
-       html rem, and a rem overhang used to wash out the last answer. */
-    --composer-fade-overhang: 96px;
-
-    /* Conversation column. comfortable is max-w-3xl; Settings / the title
-       bar overwrite this when the human picks full width. */
-    --content-max: 48rem;
-    --content-gutter: 2rem;
-    --ui-font-size: 13px;
-    --code-font-size: 13px;
-    /* Sidebar / Settings / title bar / composer controls. Follows UI font size. */
-    --chrome-font-size: 13px;
-
-    /* Directory tracks chrome size. html rem is the transcript; using it
-       here packed titles whenever conversation size was 13px. applyAppearance
-       overwrites these with rounded px so 13px chrome is a 28px row. */
-    --sidebar-row-height: calc(var(--chrome-font-size) * 2.15);
-    --sidebar-row-px: calc(var(--chrome-font-size) * 0.62);
-    --sidebar-row-gap: 2px;
-    --sidebar-folder-gap: calc(var(--chrome-font-size) * 0.46);
-    --sidebar-section-gap: calc(var(--chrome-font-size) * 0.77);
-    --sidebar-section-label-height: calc(var(--chrome-font-size) * 1.7);
-    /* List gutter. Wider than a row's own padding so titles do not sit
-       on the rail divider the way a 10px gutter did. */
-    --sidebar-list-px: calc(var(--chrome-font-size) * 1.23);
-    /* Icon rail. A short pad keeps the column narrow; equal on both sides. */
-    --dest-rail-pad: calc(var(--chrome-font-size) * 0.38);
-    --dest-rail-width: calc(var(--sidebar-row-height) + var(--dest-rail-pad) * 2);
-    --sidebar-kind: calc(var(--chrome-font-size) * 1.23);
-
-    /* Pairing QR plate. A camera needs a white field even in dark chrome. */
-    --qr-plate: 0 0% 100%;
-  }
-
-  .dark {
-    --background: 240 8% 6%;
-    --foreground: 0 0% 95%;
-    --card: 240 7% 9%;
-    --card-foreground: 0 0% 95%;
-    --popover: 240 7% 10%;
-    --popover-foreground: 0 0% 95%;
-    --primary: 0 0% 96%;
-    --primary-foreground: 240 8% 10%;
-    --secondary: 240 5% 15%;
-    --secondary-foreground: 0 0% 95%;
-    --muted: 240 5% 15%;
-    --muted-foreground: 240 5% 62%;
-    --accent: 240 5% 18%;
-    --accent-foreground: 0 0% 95%;
-    --destructive: 0 70% 56%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5% 18%;
-    --input: 240 5% 20%;
-    --ring: 240 5% 40%;
-
-    --sidebar: 240 8% 8%;
-    --sidebar-foreground: 240 5% 78%;
-    --sidebar-accent: 240 5% 15%;
-    --sidebar-border: 240 5% 16%;
-
-    --running: 38 92% 56%;
-    --done: 142 58% 48%;
-    --failed: 0 70% 58%;
-    --ask: 252 58% 72%;
-
-    --find: 48 70% 38%;
-    --find-foreground: 0 0% 98%;
-    --find-active: 32 90% 52%;
-    --find-active-foreground: 240 10% 8%;
-
-    --chart-1: 210 70% 68%;
-    --chart-2: 152 40% 56%;
-    --chart-3: 40 75% 62%;
-    --chart-4: 250 45% 72%;
-    --chart-5: 32 70% 62%;
-
-    --file-folder: 40 75% 62%;
-    --file-code: 210 70% 68%;
-    --file-doc: 250 45% 72%;
-    --file-config: 32 70% 62%;
-    --file-image: 152 40% 56%;
-
-    --nuwa-task-bg: 211 45% 24%;
-    --nuwa-fact-bg: 262 38% 28%;
-    --nuwa-artifact-bg: 168 36% 22%;
-
-    --syntax-keyword: 252 55% 78%;
-    --syntax-command: 211 75% 72%;
-    --syntax-string: 152 45% 62%;
-    --syntax-comment: 240 5% 55%;
-    --syntax-operator: 32 70% 62%;
-    --syntax-flag: 211 50% 70%;
-    --syntax-variable: 40 75% 62%;
-    --syntax-prompt: 252 50% 75%;
-
-    --diff-add: 142 50% 58%;
-    --diff-add-bg: 142 35% 12%;
-    --diff-del: 0 70% 62%;
-    --diff-del-bg: 0 40% 14%;
-
-    --qr-plate: 0 0% 100%;
-  }
-
-  /* FOFA palette. Values are the DESIGN.html 7.2 tokens (and fofa.info's
-     live --color-* sheet, which matches those hexes). shadcn names stay;
-     --brand-from / --brand-to are the official cyan↔blue gradient. */
-  html[data-palette="fofa"] {
-    --background: 210 20% 98%;
-    --foreground: 234 30% 18%;
-    --card: 0 0% 100%;
-    --card-foreground: 234 30% 18%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 234 30% 18%;
-    --primary: 180 95% 37%;
-    --primary-foreground: 222 77% 7%;
-    --secondary: 204 20% 95%;
-    --secondary-foreground: 234 30% 18%;
-    --muted: 204 20% 95%;
-    --muted-foreground: 202 12% 41%;
-    --accent: 204 20% 95%;
-    --accent-foreground: 234 30% 18%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 224 15% 86%;
-    --input: 224 15% 86%;
-    --ring: 180 95% 37%;
-    --radius: 0.375rem;
-    --brand-from: 213 99% 57%;
-    --brand-to: 180 96% 48%;
-    --brand-mark: 180 95% 37%;
-
-    --sidebar: 210 20% 98%;
-    --sidebar-foreground: 202 12% 41%;
-    --sidebar-accent: 204 20% 95%;
-    --sidebar-border: 223 18% 92%;
-
-    --running: 32 95% 44%;
-    --done: 142 76% 36%;
-    --failed: 0 72% 51%;
-    --ask: 180 95% 37%;
-
-    --find: 180 60% 82%;
-    --find-foreground: 222 77% 7%;
-    --find-active: 180 95% 37%;
-    --find-active-foreground: 222 77% 7%;
-
-    --chart-1: 180 95% 37%;
-    --chart-2: 213 99% 57%;
-    --chart-3: 180 93% 27%;
-    --chart-4: 221 43% 40%;
-    --chart-5: 32 95% 44%;
-
-    --file-folder: 213 99% 45%;
-    --file-code: 180 95% 32%;
-    --file-doc: 221 43% 40%;
-    --file-config: 32 95% 44%;
-    --file-image: 180 93% 27%;
-
-    --nuwa-task-bg: 213 80% 88%;
-    --nuwa-fact-bg: 262 60% 91%;
-    --nuwa-artifact-bg: 168 48% 84%;
-
-    --syntax-keyword: 214 90% 42%;
-    --syntax-command: 180 95% 32%;
-    --syntax-string: 181 70% 28%;
-    --syntax-comment: 202 12% 48%;
-    --syntax-operator: 32 95% 40%;
-    --syntax-flag: 214 50% 38%;
-    --syntax-variable: 180 80% 30%;
-    --syntax-prompt: 213 99% 45%;
-
-    --diff-add: 142 76% 32%;
-    --diff-add-bg: 142 40% 94%;
-    --diff-del: 0 72% 46%;
-    --diff-del-bg: 0 70% 96%;
-  }
-
-  html[data-palette="fofa"].dark {
-    --background: 222 77% 7%;
-    --foreground: 0 0% 100%;
-    --card: 222 50% 10%;
-    --card-foreground: 0 0% 100%;
-    --popover: 222 50% 10%;
-    --popover-foreground: 0 0% 100%;
-    --primary: 180 96% 48%;
-    --primary-foreground: 222 77% 7%;
-    --secondary: 221 42% 14%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 221 42% 14%;
-    --muted-foreground: 210 31% 74%;
-    --accent: 221 33% 20%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 220 18% 23%;
-    --input: 221 42% 14%;
-    --ring: 180 96% 48%;
-    --radius: 0.375rem;
-    --brand-from: 213 99% 57%;
-    --brand-to: 180 96% 48%;
-    --brand-mark: 214 100% 63%;
-
-    --sidebar: 222 77% 7%;
-    --sidebar-foreground: 210 31% 74%;
-    --sidebar-accent: 221 42% 14%;
-    --sidebar-border: 220 18% 23%;
-
-    --running: 38 92% 50%;
-    --done: 142 71% 45%;
-    --failed: 0 84% 60%;
-    --ask: 180 96% 48%;
-
-    --find: 180 50% 22%;
-    --find-foreground: 0 0% 100%;
-    --find-active: 180 96% 48%;
-    --find-active-foreground: 222 77% 7%;
-
-    --chart-1: 180 96% 48%;
-    --chart-2: 214 100% 63%;
-    --chart-3: 210 31% 74%;
-    --chart-4: 180 93% 40%;
-    --chart-5: 38 92% 50%;
-
-    --file-folder: 214 100% 63%;
-    --file-code: 180 96% 48%;
-    --file-doc: 210 31% 74%;
-    --file-config: 38 92% 50%;
-    --file-image: 180 93% 40%;
-
-    --nuwa-task-bg: 213 50% 24%;
-    --nuwa-fact-bg: 262 38% 28%;
-    --nuwa-artifact-bg: 168 36% 22%;
-
-    --syntax-keyword: 214 90% 72%;
-    --syntax-command: 180 96% 48%;
-    --syntax-string: 181 55% 58%;
-    --syntax-comment: 210 14% 56%;
-    --syntax-operator: 38 92% 50%;
-    --syntax-flag: 214 50% 70%;
-    --syntax-variable: 180 70% 62%;
-    --syntax-prompt: 213 99% 70%;
-
-    --diff-add: 142 71% 45%;
-    --diff-add-bg: 142 40% 10%;
-    --diff-del: 0 84% 60%;
-    --diff-del-bg: 0 40% 12%;
-  }
-
   * {
     @apply border-border;
   }
@@ -929,9 +650,9 @@
     overscroll-behavior: none;
   }
 
-  /* The desktop window hides its title bar. Dragging the top 48px is native
-     (InvisibleTitleBarHeight); a double-click zoom is JS, and it looks at
-     this variable so buttons in the chrome do not zoom the window. */
+  /* macOS hides its title bar and uses InvisibleTitleBarHeight for the native
+     drag strip. The JS double-click handler also checks this variable so
+     chrome buttons cannot zoom the window. */
   [data-drag-region] {
     --wails-draggable: drag;
   }
@@ -1000,24 +721,37 @@
   .animate-marquee,
   .animate-shimmer,
   .animate-ping,
+  .animate-breathe,
+  .animate-pulse,
   .animate-swap-in,
-  .animate-swap-out {
+  .animate-swap-out,
+  .animate-rise-in,
+  .animate-pop-in {
     animation: none !important;
+  }
+  /* Presence layers (tooltips, menus, dialogs) animate with the plugin's
+     `enter` / `exit` keyframes, which include a scale. Every use is
+     variant-prefixed (`data-[state=closed]:animate-out`), so a bare
+     `.animate-out` never matches; match the class text instead. A zero
+     duration lands on the final frame and still fires `animationend`, which
+     Radix waits for before it unmounts a closing layer. */
+  [class*="animate-in"],
+  [class*="animate-out"] {
+    animation-duration: 0s !important;
   }
 }
 
-/* Official FOFA search rim: cyan→blue gradient, 15px, no drop shadow.
-   Utilities on the composer card would otherwise keep the ZWAI hairline. */
-html[data-palette="fofa"] [data-composer-box] {
-  border-color: transparent;
-  border-radius: 15px;
-  box-shadow: none;
-  background-color: hsl(var(--card));
-  background-image: linear-gradient(hsl(var(--card)), hsl(var(--card))),
-    linear-gradient(96deg, hsl(var(--brand-to)) 0%, hsl(var(--brand-from)) 99%);
-  background-origin: border-box;
-  background-clip: padding-box, border-box;
-}
-html[data-palette="fofa"] [data-composer-box]:focus-within {
-  border-color: transparent;
+/* Radix presence layers (menus, dialogs, tooltips) get their pace from
+   `--default-transition-duration` (the plugin's animation duration default)
+   and their curve from the `ease-out` / `ease-in` animation utilities, which
+   are applied per `data-state` in the primitives. A bare `.animate-in` rule
+   would never match: every use is variant-prefixed. */
+
+/* A theme switch repaints every token at once. Elements whose transition uses
+   a colour would otherwise fade from the old palette while the rest snaps,
+   showing both palettes in one frame; the store adds this for two frames. */
+html[data-theme-switching] *,
+html[data-theme-switching] *::before,
+html[data-theme-switching] *::after {
+  transition: none !important;
 }

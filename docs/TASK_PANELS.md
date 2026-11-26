@@ -81,6 +81,8 @@ Read endpoints: `GET /api/task-panels/catalog`, `GET /api/threads/:id/panels`, `
 
 Mobile data uses the existing sealed Pairlink connection, never the PC's Gin HTTP origin. It polls a small `task_panels {thread_id}` manifest containing instance identity, plugin version, revision and source status. A changed visible instance uses `task_panel_read {thread_id,panel_id,base_revision?}`. The PC freezes one JSON body: `{panel}` for a full snapshot, or `{change}` for the latest patch when its exact base and instance incarnation match. A missing base or gap produces a snapshot. Newer manifests do not cancel a transfer already in progress.
 
+New phones send `easm_panel_version: "2"` in both manifest and first read requests. A PC serving v2 returns a v1 manifest entry and a complete v1 snapshot to phones that omit this field. That snapshot omits the cloud provider data and collection step introduced in v2. This projection leaves the stored panel intact. A phone that declares v2 can receive the normal v2 snapshot or patch. Older PCs ignore the field and return their v1 definition. The phone requests a fresh snapshot when the manifest's plugin version changes. Continuations and cancellation use the frozen transfer token.
+
 The reply's `panel_transfer` contains `{id,thread_id,panel_id,revision,size,sha256,offset,next_offset,data,more}`. Each `data` is base64 of at most 36KiB, within the 64KiB sealed frame. The complete JSON envelope is limited to 64MiB, including its definition. Continuations use `task_panel_read {thread_id,panel_id,transfer_id,offset}`. All chunks retain the same identity, revision, size and SHA-256. The phone checks ordering and the complete hash/JSON/identity before applying data. It never renders a partial body, changes chat seq, loads HTML from the PC, or invokes a producer.
 
 Each connection owns one frozen transfer. A successful new first read replaces it; failed first reads retain the previous valid transfer. `task_panel_cancel {thread_id,panel_id,transfer_id}` releases only that exact transfer; old cancellation cannot remove a successor. Link close releases the cache. `task_panel_close {thread_id,panel_id}` closes the host instance and invalidates its transfer. A closed instance refuses later publication or reopening. Invalid scope/offset, expired tokens and oversized replies fail explicitly; the manifest is never silently clipped. Continuations verify visibility using a narrow metadata query rather than copying the entire live state again.
@@ -99,6 +101,8 @@ Stop preserves an HTTP observation already returned to the source reducer, but d
 
 `easm-asset-portrait` is a native panel with a registered source. The agent confirms the subject (asking the user when it is ambiguous), opens the panel, does the discovery lookups with its own MCP tools and pushes what it found. The producer never discovers anything itself.
 
+EASM v2 adds the hosting provider table. Startup and full or project backup import upgrade saved instances with the original v1 definition in a transaction. The panel keeps its ID, query, existing observations and replay history. Reconnecting clients read its full definition at the new revision. A saved portrait without cloud results shows “Cloud providers not yet collected” when idle. Running the same query adds cloud data while retaining completed totals, trend and components.
+
 `run_panel_source` takes one batch of that work:
 
 ```text
@@ -110,7 +114,7 @@ Stop preserves an HTTP observation already returned to the source reducer, but d
  query?}
 ```
 
-`subject` is required, and `source` is required on every company, domain and certificate: it is the tool that reported the entry, stored as that node's evidence. `parent` names the upper company; omitting it hangs the entry under the subject. `query` is the final FOFA asset query; only a batch that carries it starts the totals, attention trend and components. The catalog's `input_schema` bounds every list and every field length, and refuses unknown fields.
+`subject` is required, and `source` is required on every company, domain and certificate: it is the tool that reported the entry, stored as that node's evidence. `parent` names the upper company; omitting it hangs the entry under the subject. `query` is the final FOFA asset query; only a batch that carries it starts the totals, attention trend, components and hosting providers. The catalog's `input_schema` bounds every list and every field length, and refuses unknown fields.
 
 Batches are cumulative for the confirmed subject. Use its full name for every batch. A unique confirmed company row for that subject can bind its registry ID to the root. The same registry identity can continue a portrait, while a conflicting registry ID or different unverified subject starts a new portrait. A company row that matches the subject's identity enriches the root. Name-only ownership requires a unique eligible candidate. Unresolved or ambiguous parent names are counted in `unresolved_parents` and kept as unconfirmed clues. Domains are bounded by `max_domains` across the whole portrait; entries over it are counted in `refused_domains`.
 
@@ -130,7 +134,7 @@ sources.
 - Domains hang under their company, or under the subject when none is named or the named one is not on the graph.
 - Certificates are deduplicated by serial within the portrait. Each appears under its first discovery domain, including on that domain's card. An explicitly reported discovery domain can enter as a pending clue under the subject. Covered names stay as certificate evidence. A valid, matching, unexpired observation confirms the domain → certificate relationship.
 
-With `query` set, the producer runs unfinished `summary`, `heat` and `components` steps concurrently and publishes each completion. Retrying the same query retains completed results. Changing the query clears the old range's results and runs every step. A batch without `query` only merges observations. `collection.steps[]` reports status and a stable code, for example `tool_error`, `missing_ip_total` or `not_configured`. Stop marks unfinished steps `interrupted`. The producer uses the tool bindings in the turn's MCP mount receipt. Enabling a service or changing a role takes effect at the next turn. Account restrictions, disabled servers and immediate tool switches can still prevent calls. A restored legacy turn without recorded EASM bindings reports those steps unavailable. See [Configuration](CONFIG.md#task-panels).
+With `query` set, the producer runs unfinished `summary`, `heat`, `components` and `clouds` steps concurrently and publishes each completion. Retrying the same query retains completed results. Changing the query clears the old range's results and runs every step. A batch without `query` only merges observations. `collection.steps[]` reports status and a stable code, for example `tool_error`, `missing_ip_total` or `not_configured`. Stop marks unfinished steps `interrupted`. The producer uses the tool bindings in the turn's MCP mount receipt. Enabling a service or changing a role takes effect at the next turn. Account restrictions, disabled servers and immediate tool switches can still prevent calls. A restored legacy turn without recorded EASM bindings reports those steps unavailable. See [Configuration](CONFIG.md#task-panels).
 
 For a Worker call, each aggregation also requires its direct MCP tool or the
 matching server's call proxy in the calling Worker's registered tools. The
@@ -141,19 +145,27 @@ the bindings admitted for their turn.
 - `summary` finishes when a single valid response contains the exact asset and distinct-IP totals. Zero is valid. Partial responses retain any exact count they carry and name the missing total in the receipt. Legacy summaries marked complete with only one total remain eligible for retry. `clues` counts saved observations beyond the root.
 - `heat` requires strictly ascending `YYYY-MM-DD` points.
 - `components` aggregates only hardware (`product1`) and applications (`product5`) for the supply chain, excluding the operating-system, service and support layers. FOFA merges the two requested layers into one `product` list. When the product-rule role is configured, the producer resolves numeric rule IDs to names; a failed name lookup keeps the IDs. These fields are selected by the Go producer; changing an agent Skill does not change its MCP requests.
+- `clouds` aggregates the query's assets by `cloud_name` with `uniq_count=ip`. It merges alias buckets into one provider row, sums their asset counts and keeps the top `max_clouds` rows. A single-bucket provider uses that bucket's distinct-IP count. When several buckets merge, the provider's filtered `product3` request also supplies the top-level `distinct.ip`, which counts each address once across the aliases. The filter combines spellings with OR and collapses case-only variants into one term. A provider made from several case-variant buckets still uses the combined distinct count. If this count is missing or invalid, the collector makes one `fields=ip` lookup with the same filter. The panel's shared four-request concurrency budget and existing rate-limit retry apply to all lookups.
+
+  The service request asks for at least five buckets and retains up to `max_services` services. An empty `aggs.product` array records that the provider has no reported services. When the counts are confirmed but the array is missing or null, the collector keeps the row and marks the step `malformed_reply`. If both lookups lack a valid combined IP count, the collector omits that row and keeps the confirmed rows. The next collection of the same query retries the failed cloud step. A malformed distribution fails the step before publishing any rows.
+
+  Display names and categories come from `internal/config`. Unmapped names keep their reported spelling and the `unknown` category. The renderer uses the maintained names in Chinese and the reported spellings in other languages, so saved rows follow a language switch.
 
 The receipt returns counts, step outcomes and what could not be placed (`nodes`, `edges`, `components`, `steps`, `unresolved_parents`, `refused_domains`). Bulk data stays in the panel. Collection receipts carry `next`, asking the agent to summarize the panel and end the turn. If a step failed or was unavailable, the receipt identifies it. A refused direct update leaves the last committed revision available.
 
-The renderer shows the graph, attention trend and component table and keeps all
-copy in `frontend/src/lib/easm/messages.ts`. Each metric card shows available
+The renderer shows the graph, attention trend, component table and hosting
+provider table. It keeps all copy in `frontend/src/lib/easm/messages.ts`. The
+attention trend and component cards show available
 data, including heat points with a value of zero. An empty card shows a spinner
 while its step is collecting or the owning task can still supply a batch with a
 query. Successful empty results and unrequested metrics leave their respective
 cards hidden. Failed, unavailable and interrupted steps with no data show a
 short status outside the card. The host's `source_status` distinguishes live
 collection from a saved step that still says `running` after engine restart or
-Stop. The side panel and expanded view share these rules. The expanded graph
-uses the available width when neither card is shown.
+Stop. The side panel's hosting provider table distinguishes uncollected and
+empty results. In the expanded view it appears while loading or when results
+are available. The expanded graph uses the available width when all three
+cards are hidden.
 
 The graph receives whole batches and waits while the source is collecting or
 the owning task can still supply a batch. It displays its own empty state when
@@ -162,7 +174,7 @@ configured source yet and stay empty.
 
 ## Validation
 
-`go test -race ./internal/taskpanel ./internal/store ./internal/panelplugins/fofaworld ./internal/panelplugins/easm ./internal/engine ./internal/server` covers protocol, storage, producer and real model/HTTP boundaries. Producer fixtures include the real installed CLI against a loopback fake FOFA API and local HTTP/HTTPS targets: no real account or public asset is needed. `make model-check` includes task-panel ownership, commit-before-delivery, idempotency, cleanup identity and orphan-recovery counterexamples. EASM producer tests use a fake tool caller per aggregation plus merge fixtures (incremental batches, confirmation, unknown parents, subject reset, domain budget, certificates) and one engine test through the real model → two `run_panel_source` calls → MCP streamable HTTP boundary; every published state is validated against the catalog schema, and an already stored panel of the previous pipeline still validates. `frontend/e2e/easm.spec.ts` drives the native renderer with served panel state and real SSE patches, including a restart whose stored steps still say running while the host reports the source interrupted. Frontend unit tests and the task-panel Playwright case exercise the packaged iframe, incremental map, zoom retention, full snapshots, version refusal and failed-plugin handling. Native desktop acceptance remains a separate ci-macOS gate.
+`go test -race ./internal/taskpanel ./internal/store ./internal/panelplugins/fofaworld ./internal/panelplugins/easm ./internal/engine ./internal/server` covers protocol, storage, producer and real model/HTTP boundaries. Producer fixtures include the real installed CLI against a loopback fake FOFA API and local HTTP/HTTPS targets: no real account or public asset is needed. `make model-check` includes task-panel ownership, commit-before-delivery, idempotency, cleanup identity and orphan-recovery counterexamples. EASM producer tests use a fake tool caller per aggregation plus merge fixtures (incremental batches, confirmation, unknown parents, subject reset, domain budget, certificates) and one engine test through the real model → two `run_panel_source` calls → MCP streamable HTTP boundary; every published state is validated against the catalog schema, and an already stored panel of the previous pipeline still validates (`clouds` is optional there, so panels written before the table keep validating; the producer always publishes a list). Cloud fixtures cover spelling merges, malformed distributions, a service lookup that fails the step while keeping the counts, the panel-wide request budget, one retry of a rate-limited request, Stop during lookups and query continuation; the provider table's own test covers its spinner, empty state and fallback copy. `frontend/e2e/easm.spec.ts` drives the native renderer with served panel state and real SSE patches, including a restart whose stored steps still say running while the host reports the source interrupted. Frontend unit tests and the task-panel Playwright case exercise the packaged iframe, incremental map, zoom retention, full snapshots, version refusal and failed-plugin handling. Native desktop acceptance remains a separate ci-macOS gate.
 
 The [instance close audit](../models/panels/README.md#instance-close-audit)
 checks the commit, scoped cancellation, acknowledgement and asynchronous

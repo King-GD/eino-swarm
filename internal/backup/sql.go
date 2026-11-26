@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/LubyRuffy/eino-swarm/internal/panelplugins/easm"
 	"github.com/LubyRuffy/eino-swarm/internal/store"
 )
 
@@ -408,6 +409,10 @@ func checkpoint(ctx context.Context, conn *sql.Conn) error {
 }
 
 func prepareExportDB(path string) error {
+	return prepareBackupDB(context.Background(), path, false)
+}
+
+func prepareBackupDB(ctx context.Context, path string, importing bool) (err error) {
 	if err := failNext(); err != nil {
 		return err
 	}
@@ -415,18 +420,30 @@ func prepareExportDB(path string) error {
 	if err != nil {
 		return err
 	}
+	defer func() { err = errors.Join(err, st.Close()) }()
+	if importing {
+		if err := easm.UpgradeStoredPanels(ctx, st); err != nil {
+			return fmt.Errorf("backup: upgrade saved EASM panels: %w", err)
+		}
+	}
 	sqlDB, err := st.DB().DB()
 	if err != nil {
-		_ = st.Close()
 		return err
 	}
-	_, _ = sqlDB.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
-	_, _ = sqlDB.Exec(`PRAGMA journal_mode = DELETE`)
-	if err := st.Close(); err != nil {
+	var busy, frames, written int
+	if err := sqlDB.QueryRowContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &frames, &written); err != nil {
 		return err
 	}
-	_ = os.Remove(path + "-wal")
-	_ = os.Remove(path + "-shm")
+	if busy != 0 {
+		return fmt.Errorf("backup: SQLite checkpoint is busy")
+	}
+	var mode string
+	if err := sqlDB.QueryRowContext(ctx, `PRAGMA journal_mode = DELETE`).Scan(&mode); err != nil {
+		return err
+	}
+	if mode != "delete" {
+		return fmt.Errorf("backup: SQLite journal mode is %q", mode)
+	}
 	return nil
 }
 
@@ -503,7 +520,7 @@ func replaceAllRows(ctx context.Context, conn *sql.Conn, incomingPath string, ro
 	if err := failNext(); err != nil {
 		return err
 	}
-	if err := prepareExportDB(incomingPath); err != nil {
+	if err := prepareBackupDB(ctx, incomingPath, !rollbackSnapshot); err != nil {
 		return err
 	}
 	if err := attach(ctx, conn, "incoming", incomingPath); err != nil {
@@ -544,7 +561,7 @@ func applyProject(ctx context.Context, conn *sql.Conn, incomingPath, projectID s
 	if err := failNext(); err != nil {
 		return err
 	}
-	if err := prepareExportDB(incomingPath); err != nil {
+	if err := prepareBackupDB(ctx, incomingPath, true); err != nil {
 		return err
 	}
 	if err := attach(ctx, conn, "incoming", incomingPath); err != nil {

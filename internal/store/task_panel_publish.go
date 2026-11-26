@@ -117,6 +117,10 @@ func replayTaskPanel(tx *gorm.DB, row TaskPanelRow, through int64) (taskpanel.Pa
 	if err := tx.Where("panel_id = ? AND revision <= ?", row.ID, through).Order("revision").Find(&mutations).Error; err != nil {
 		return taskpanel.Panel{}, err
 	}
+	// A retry of a pre-upgrade operation returns the original pinned contract.
+	if through < row.DefinitionRevision {
+		row.DefinitionJSON = row.PreviousDefinitionJSON
+	}
 	panel, err := panelValue(row)
 	if err != nil {
 		return panel, err
