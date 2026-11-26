@@ -382,3 +382,34 @@ describe("EASM node details", () => {
     expect(JSON.stringify(graph)).toBe(before)
   })
 })
+
+// The card is the keyboard and phone entry point for the same fold the canvas
+// badge offers; a leaf has nothing to fold.
+describe("EASM node card fold", () => {
+  it("folds and unfolds a branching node with a counted button", () => {
+    const onToggle = vi.fn()
+    const index = indexResult(result([company, domain], [{ source: company.id, target: domain.id }]))
+    const renderCard = (collapsed: boolean) => (
+      <EasmTextContext value={zhText}>
+        <NodeCard node={company} index={index} onSelect={vi.fn()} onClose={vi.fn()}
+          collapse={{ collapsed, count: 1, onToggle }} />
+      </EasmTextContext>
+    )
+    const { rerender } = render(renderCard(false))
+    const collapse = screen.getByRole("button", { name: "收起（1）" })
+    expect(collapse).toHaveAttribute("aria-expanded", "true")
+    fireEvent.click(collapse)
+    expect(onToggle).toHaveBeenCalledTimes(1)
+
+    rerender(renderCard(true))
+    const expand = screen.getByRole("button", { name: "展开（1）" })
+    expect(expand).toHaveAttribute("aria-expanded", "false")
+    fireEvent.click(expand)
+    expect(onToggle).toHaveBeenCalledTimes(2)
+  })
+
+  it("offers no fold for a node without descendants", () => {
+    render(<Card graph={result([domain])} start={domain.id} />)
+    expect(screen.queryByRole("button", { name: /收起|展开/ })).toBeNull()
+  })
+})

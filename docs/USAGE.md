@@ -88,6 +88,12 @@ inspector keeps its panels available.
 On desktop and Web, select the expand button beside the EASM panel title to
 open the larger view.
 
+In the EASM graph, a node with children shows `−` on hover or
+selection; select it to collapse the branch, which then shows `+N`. The node
+card offers the same Collapse (N) / Expand (N) button, which is how the phone
+collapses a branch. Collapsing keeps the layout and zoom, carries over to the
+expanded view, and a search hit inside a collapsed branch opens it.
+
 In the EASM side panel and expanded view, heat trend, supply-chain and cloud
 provider cards appear when they have data or are waiting for results. An empty
 card is hidden once it stops loading. The expanded graph uses the available

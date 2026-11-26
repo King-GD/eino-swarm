@@ -173,6 +173,16 @@ yellow graph icon, with a glow around the target. Its logo appears in the node
 details when available. Component trending days and KEV/CVE tags have no configured
 source yet and stay empty.
 
+The canvas treats the first edge that reached each node as its parent when it
+collapses a branch. Collapsing is a renderer-only view state and never changes
+saved clues. A
+node with children shows `+N` while collapsed and `−` on hover or selection
+(hidden while its card is open, which carries the same Collapse/Expand button).
+Collapsed nodes keep their layout positions, the side panel and expanded dialog
+share the state, a new subject clears it, and a search hit inside a collapsed
+branch expands its ancestors. The stage exposes `data-collapsed-nodes` and
+`data-visible-nodes` for end-to-end checks.
+
 ## Validation
 
 `go test -race ./internal/taskpanel ./internal/store ./internal/panelplugins/fofaworld ./internal/panelplugins/easm ./internal/engine ./internal/server` covers protocol, storage, producer and real model/HTTP boundaries. Producer fixtures include the real installed CLI against a loopback fake FOFA API and local HTTP/HTTPS targets: no real account or public asset is needed. `make model-check` includes task-panel ownership, commit-before-delivery, idempotency, cleanup identity and orphan-recovery counterexamples. EASM producer tests use a fake tool caller per aggregation plus merge fixtures (incremental batches, confirmation, unknown parents, subject reset, domain budget, certificates) and one engine test through the real model → two `run_panel_source` calls → MCP streamable HTTP boundary; every published state is validated against the catalog schema, and an already stored panel of the previous pipeline still validates (`clouds` is optional there, so panels written before the table keep validating; the producer always publishes a list). Cloud fixtures cover spelling merges, malformed distributions, a service lookup that fails the step while keeping the counts, the panel-wide request budget, one retry of a rate-limited request, Stop during lookups and query continuation; the provider table's own test covers its spinner, empty state and fallback copy. `frontend/e2e/easm.spec.ts` drives the native renderer with served panel state and real SSE patches, including a restart whose stored steps still say running while the host reports the source interrupted. Frontend unit tests and the task-panel Playwright case exercise the packaged iframe, incremental map, zoom retention, full snapshots, version refusal and failed-plugin handling. Native desktop acceptance remains a separate ci-macOS gate.

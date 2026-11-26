@@ -142,6 +142,63 @@ test("EASM keeps the enterprise logo in the details card", async ({ page }) => {
   await expect.poll(() => detailLogo.evaluate((image: HTMLImageElement) => [image.naturalWidth, image.naturalHeight])).toEqual([32, 20])
 })
 
+// Folding is the user's way to tame a large portrait. It must hide the whole
+// branch, keep their zoom, and never make a search hit unreachable.
+test("EASM collapses a branch from the node card and a search reopens it", async ({ page }) => {
+  const title = `EASM collapse ${Date.now()}`
+  const response = await page.request.post("/api/threads", { data: { title } })
+  await expect(response).toBeOK()
+  const created = await response.json()
+  const nodes: EasmResult["nodes"] = [
+    { id: "root", kind: "root", label: "Fold Enterprise" },
+    { id: "company:fold", kind: "company", label: "Fold subsidiary" },
+    { id: "domain:fold.test", kind: "domain", label: "fold.test" },
+    { id: "domain:leaf-a.test", kind: "domain", label: "leaf-a.test" },
+    { id: "domain:leaf-b.test", kind: "domain", label: "leaf-b.test" },
+  ]
+  await servePanel(page, created.thread.id, {
+    schema_version: 1, title: nodes[0].label, collection: { status: "done", steps: [] }, heat: [], components: [],
+    nodes,
+    edges: [
+      { source: "root", target: "company:fold", confirmed: true },
+      { source: "company:fold", target: "domain:fold.test", confirmed: true },
+      { source: "domain:fold.test", target: "domain:leaf-a.test" },
+      { source: "domain:fold.test", target: "domain:leaf-b.test" },
+    ],
+  }, "finished")
+  await page.goto("/")
+  await page.getByTestId("dest-chats").click()
+  await page.getByRole("button", { name: title, exact: true }).click()
+
+  const panel = page.getByTestId("easm-task-panel")
+  const stage = panel.getByTestId("easm-graph")
+  await expect(stage).toHaveAttribute("data-ready", "true")
+  await expect(stage).toHaveAttribute("data-layout-moving", "false", { timeout: 20_000 })
+  await expect(stage).toHaveAttribute("data-visible-nodes", "5")
+  const zoom = await stage.getAttribute("data-zoom")
+
+  await stage.click({ position: await nodePoint(stage, "company:fold") })
+  const card = panel.getByRole("dialog", { name: "Fold subsidiary" })
+  await card.getByRole("button", { name: "Collapse (3)" }).click()
+  await expect(stage).toHaveAttribute("data-collapsed-nodes", "1")
+  await expect(stage).toHaveAttribute("data-visible-nodes", "2")
+  await expect(card.getByRole("button", { name: "Expand (3)" })).toHaveAttribute("aria-expanded", "false")
+  await expect(stage).toHaveAttribute("data-zoom", zoom!)
+
+  await card.getByRole("button", { name: "Expand (3)" }).click()
+  await expect(stage).toHaveAttribute("data-collapsed-nodes", "0")
+  await expect(stage).toHaveAttribute("data-visible-nodes", "5")
+
+  await card.getByRole("button", { name: "Collapse (3)" }).click()
+  await expect(stage).toHaveAttribute("data-visible-nodes", "2")
+  const search = panel.getByRole("searchbox", { name: "Search assets or features" })
+  await search.fill("leaf-b")
+  await search.press("Enter")
+  await expect(stage).toHaveAttribute("data-collapsed-nodes", "0")
+  await expect(stage).toHaveAttribute("data-visible-nodes", "5")
+  await expect(stage).toHaveAttribute("data-selected-id", "domain:leaf-b.test")
+})
+
 test("EASM shows the first certificate source and hides detached clues after reopening", async ({ page }) => {
   const title = `EASM saved graph ${Date.now()}`
   const response = await page.request.post("/api/threads", { data: { title } })

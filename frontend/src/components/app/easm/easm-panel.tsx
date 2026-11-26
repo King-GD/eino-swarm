@@ -1,5 +1,5 @@
 import { Maximize2 } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { cn } from "../../../lib/cn"
 import type { EasmSectionStatus } from "../../../lib/easm/data"
 import { Button } from "../../ui/button"
@@ -26,6 +26,20 @@ export function EasmPanel({ result, graphLoading, heatStatus, componentsStatus, 
   const text = useEasmText()
   const index = useMemo(() => indexResult(result), [result])
   const [open, setOpen] = useState(false)
+  // One collapse state for the side panel and the dialog: enlarging the graph
+  // must not unfold what the user folded. A new subject is a new tree.
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set())
+  useEffect(() => { setCollapsed(new Set()) }, [index.rootId])
+  const activeCollapsed = useMemo(() => {
+    let pruned: Set<string> | null = null
+    for (const id of collapsed) {
+      if ((index.descendants.get(id) ?? 0) > 0) continue
+      pruned ??= new Set(collapsed)
+      pruned.delete(id)
+    }
+    return pruned ?? collapsed
+  }, [collapsed, index.descendants])
+  const changeCollapsed = useCallback((next: Set<string>) => setCollapsed(next), [])
   const subject = (index.rootId && index.byId.get(index.rootId)?.label) || result.title
   const expand = sheet === undefined ? () => setOpen(true) : undefined
   const heatLoading = heatStatus === "loading"
@@ -42,7 +56,7 @@ export function EasmPanel({ result, graphLoading, heatStatus, componentsStatus, 
         {expand ? <Button size="icon" variant="ghost" aria-label={text.expand} title={text.expandGraph} onClick={expand}><Maximize2 className="size-4" /></Button> : null}
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2">
-        <AssetGraph result={result} index={index} loading={graphLoading} visible={visible && !open} mobile={sheet !== undefined} />
+        <AssetGraph result={result} index={index} loading={graphLoading} visible={visible && !open} mobile={sheet !== undefined} collapsed={activeCollapsed} onCollapseChange={changeCollapsed} />
         {showHeat && <HeatTrend heat={result.heat} loading={heatLoading} className="flex h-[260px] flex-col rounded-xl border bg-card p-3" />}
         {showComponents && <SupplyTable components={result.components} loading={componentsLoading} className="h-[360px]" sheet={sheet} visible={visible && !open} />}
         {showClouds && <CloudTable clouds={result.clouds} loading={cloudsLoading} className="h-[300px]" />}
@@ -54,7 +68,7 @@ export function EasmPanel({ result, graphLoading, heatStatus, componentsStatus, 
             <DialogDescription className="sr-only">{text.graphDescription}</DialogDescription>
           </header>
           <div className={cn("grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-4 md:overflow-hidden", showMetrics && "md:grid-cols-[minmax(0,1.7fr)_minmax(300px,1fr)]")}>
-            <AssetGraph result={result} index={index} loading={graphLoading} visible={visible} expanded />
+            <AssetGraph result={result} index={index} loading={graphLoading} visible={visible} expanded collapsed={activeCollapsed} onCollapseChange={changeCollapsed} />
             {showMetrics && <div className="flex min-h-0 flex-col gap-3">
               {showHeat && <HeatTrend heat={result.heat} loading={heatLoading} className="flex h-[260px] flex-col rounded-xl border bg-card p-3 md:h-auto md:min-h-0 md:flex-1" />}
               {showComponents && <SupplyTable components={result.components} loading={componentsLoading} className="h-[360px] md:h-auto md:flex-1" />}

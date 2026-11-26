@@ -7,13 +7,16 @@ import fitIcon from "../../../assets/easm/zoomfit.svg"
 import { Input } from "../../ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip"
 import {
-  displayKind, graphLabel, highlightIds, kindLabel, layoutOrder, nodeRadius, searchNodes, summaryStats, visibleIds, wrapLabel,
-  type EasmIndex,
+  collapsedHidden, displayKind, graphLabel, highlightIds, kindLabel, layoutOrder, nodeRadius, searchNodes, summaryStats, visibleIds, wrapLabel,
+  type EasmIndex, type EasmTree,
 } from "../../../lib/easm/model"
 import { useEasmText } from "../../../lib/easm/messages"
 import type { DisplayKind, EasmResult } from "../../../lib/easm/types"
 import { cn } from "@/lib/cn"
-import { chooseLabels, drawLabels, drawLink, drawNode, FONT_SIZE, MAX_LABEL_WIDTH, type DrawState, type GraphLink, type GraphNode, type Palette } from "./graph-canvas"
+import {
+  badgeCenter, BADGE_RADIUS, chooseLabels, drawLabels, drawLink, drawNode, FONT_SIZE, MAX_LABEL_WIDTH,
+  type DrawState, type GraphLink, type GraphNode, type Palette,
+} from "./graph-canvas"
 import { KIND_ICONS, KIND_TOKENS, tokenColor } from "./kind-style"
 import { KindIcon, NodeCard } from "./node-card"
 
@@ -52,13 +55,46 @@ function MaskIcon({ src }: { src: string }) {
 
 const toolButton = "grid size-7 place-items-center rounded-md border bg-card/95 text-muted-foreground shadow-sm hover:border-primary hover:text-primary"
 
-export function AssetGraph({ result, index, loading = false, expanded = false, mobile = false, visible: active = true }: {
+const NO_COLLAPSED: ReadonlySet<string> = new Set()
+
+/** The nearest ancestor still drawn. A collapsed branch must not strand the
+ *  selection or its card on a node the canvas no longer paints. */
+function visibleAncestor(tree: EasmTree, id: string, drawn: ReadonlySet<string>): string | null {
+  const seen = new Set<string>()
+  let current: string | null = id
+  while (current && !seen.has(current)) {
+    if (drawn.has(current)) return current
+    seen.add(current)
+    current = tree.parent.get(current) ?? null
+  }
+  return null
+}
+
+/** The path from the root down to the node's parent, so a search hit can open
+ *  every collapsed branch above it. */
+function ancestorsOf(tree: EasmTree, id: string): string[] {
+  const seen = new Set<string>()
+  const path: string[] = []
+  let current = tree.parent.get(id)
+  while (current && !seen.has(current)) {
+    seen.add(current)
+    path.push(current)
+    current = tree.parent.get(current)
+  }
+  return path
+}
+
+export function AssetGraph({ result, index, loading = false, expanded = false, mobile = false, visible: active = true, collapsed = NO_COLLAPSED, onCollapseChange }: {
   result: EasmResult
   index: EasmIndex
   loading?: boolean
   expanded?: boolean
   mobile?: boolean
   visible?: boolean
+  /** Collapsed branches. The panel owns them so the side panel and the dialog
+   *  show the same tree. */
+  collapsed?: ReadonlySet<string>
+  onCollapseChange?: (next: Set<string>) => void
 }) {
   const text = useEasmText()
   const textRef = useRef(text)
@@ -69,8 +105,17 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
   const [cardId, setCardId] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const view = useMemo(() => layoutOrder(result.nodes, result.edges, index.rootId), [result, index.rootId])
-  const visible = useMemo(() => visibleIds(view.nodes, view.edges, hidden), [view, hidden])
-  const currentSelection = selected && visible.has(selected) ? selected : index.rootId
+  // Collapsing hides a branch without touching the layout: hidden nodes keep
+  // their settled positions, so expanding returns the branch where it was.
+  const hiddenByCollapse = useMemo(() => collapsed.size ? collapsedHidden(index.tree, collapsed) : null, [collapsed, index.tree])
+  const visible = useMemo(() => {
+    const base = visibleIds(view.nodes, view.edges, hidden)
+    if (!hiddenByCollapse) return base
+    const next = new Set(base)
+    for (const id of hiddenByCollapse) next.delete(id)
+    return next
+  }, [view, hidden, hiddenByCollapse])
+  const currentSelection = (selected && visibleAncestor(index.tree, selected, visible)) ?? index.rootId
 
   const sectionRef = useRef<HTMLElement>(null)
   const stageRef = useRef<GraphElement>(null)
@@ -103,10 +148,15 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
   useEffect(() => {
     setSelected(currentSelection)
     setFocus((current) => current && visible.has(current.id) ? current : null)
-    setCardId((current) => current && index.byId.has(current) ? current : null)
+    setCardId((current) => {
+      if (!current || visible.has(current)) return current
+      // A collapsed branch moves the card up to the node that hides it. A node
+      // filtered out by its kind keeps the old behaviour: the card stays put.
+      return hiddenByCollapse?.has(current) ? visibleAncestor(index.tree, current, visible) : current
+    })
     drawState.current.rootId = index.rootId
     if (stageRef.current) stageRef.current.dataset.selectedId = currentSelection ?? ""
-  }, [currentSelection, index.byId, index.rootId, visible])
+  }, [currentSelection, index.byId, index.rootId, visible, hiddenByCollapse, index.tree])
 
   const repositionCard = useCallback(() => {
     const graph = graphRef.current
@@ -193,6 +243,25 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
   const selectRef = useRef(select)
   selectRef.current = select
 
+  const collapsedRef = useRef(collapsed)
+  collapsedRef.current = collapsed
+  const onCollapseRef = useRef(onCollapseChange)
+  onCollapseRef.current = onCollapseChange
+
+  const toggleCollapse = useCallback((id: string) => {
+    const next = new Set(collapsedRef.current)
+    if (next.has(id)) next.delete(id)
+    else if ((index.descendants.get(id) ?? 0) > 0) next.add(id)
+    else return
+    onCollapseRef.current?.(next)
+  }, [index.descendants])
+  const toggleCollapseRef = useRef(toggleCollapse)
+  toggleCollapseRef.current = toggleCollapse
+
+  // A search hit inside a collapsed branch opens its path first; the selection
+  // waits here until the next render draws that node.
+  const pendingSelect = useRef<string | null>(null)
+
   // One graph instance per mount; view changes swap its data.
   useEffect(() => {
     const stage = stageRef.current
@@ -217,12 +286,44 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
       .nodeVisibility((n) => visibleRef.current.has(n.id))
       .linkVisibility((l) => visibleRef.current.has(l.source.id) && visibleRef.current.has(l.target.id))
       .nodeCanvasObject((n, ctx, zoom) => drawNode(n, ctx, zoom, drawState.current, palette()))
+      // The hit area covers the badge too: a pointer that reaches the lower-right
+      // corner must reveal "−" there rather than fall through the background.
+      .nodePointerAreaPaint((n, color, ctx, zoom) => {
+        ctx.fillStyle = color
+        ctx.beginPath(); ctx.arc(n.x ?? 0, n.y ?? 0, n.radius * 1.25, 0, Math.PI * 2); ctx.fill()
+        if ((drawState.current.descendants?.get(n.id) ?? 0) > 0) {
+          const center = badgeCenter(n, zoom || 1)
+          ctx.beginPath(); ctx.arc(center.x, center.y, BADGE_RADIUS / (zoom || 1), 0, Math.PI * 2); ctx.fill()
+        }
+      })
       .linkCanvasObject((l, ctx, zoom) => drawLink(l, ctx, zoom, drawState.current, palette()))
       .onRenderFramePost((ctx, zoom) => drawLabels(ctx, zoom, drawState.current, palette()))
       .linkLabel(() => "")
-      .onNodeClick((n) => selectRef.current(n.id, true, false))
+      .onNodeClick((n, event) => {
+        // The badge sits outside the node circle, so the click has to be
+        // judged in screen pixels against the same geometry that paints it.
+        const current = graphRef.current
+        const count = drawState.current.descendants?.get(n.id) ?? 0
+        if (current && count) {
+          const origin = current.graph2ScreenCoords(n.x ?? 0, n.y ?? 0)
+          const zoom = current.zoom()
+          const center = badgeCenter(n, zoom)
+          const x = origin.x + (center.x - (n.x ?? 0)) * zoom
+          const y = origin.y + (center.y - (n.y ?? 0)) * zoom
+          if (Math.hypot((event.offsetX ?? 0) - x, (event.offsetY ?? 0) - y) <= BADGE_RADIUS * 1.15) {
+            toggleCollapseRef.current(n.id)
+            return
+          }
+        }
+        selectRef.current(n.id, true, false)
+      })
       .onBackgroundClick(() => { setCardId(null); setFocus(null) })
-      .onNodeHover((n) => { hoveredRef.current = n?.id ?? null; stage.style.cursor = n ? "pointer" : "grab"; queueLabels() })
+      .onNodeHover((n) => {
+        hoveredRef.current = n?.id ?? null
+        drawState.current.hoveredId = hoveredRef.current
+        stage.style.cursor = n ? "pointer" : "grab"
+        queueLabels()
+      })
       .onZoom(({ k }) => {
         // ForceGraph auto-scales some graphData updates before painting.
         const retained = retainedViewport.current
@@ -380,6 +481,22 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
   }, [visible, queueLabels])
 
   useEffect(() => {
+    drawState.current.collapsed = collapsed
+    drawState.current.descendants = index.descendants
+    if (stageRef.current) {
+      stageRef.current.dataset.collapsedNodes = String(collapsed.size)
+      stageRef.current.dataset.visibleNodes = String(visible.size)
+    }
+    queueLabels()
+  }, [collapsed, index.descendants, visible, queueLabels])
+
+  useEffect(() => {
+    drawState.current.selectedId = currentSelection
+    drawState.current.cardId = cardId
+    queueLabels()
+  }, [currentSelection, cardId, queueLabels])
+
+  useEffect(() => {
     drawState.current.highlighted = focus?.mode === "node" ? new Set([focus.id]) : highlightIds(result.edges, focus?.id ?? null)
     if (stageRef.current) stageRef.current.dataset.highlightedNodes = String(drawState.current.highlighted.size)
     queueLabels()
@@ -397,9 +514,27 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
   }
 
   const search = () => {
-    const first = searchNodes(result.nodes, query, visible)[0]
-    if (first) select(first.id, false, true, "node")
+    // Search reads every node, not just the drawn ones: a hit inside a
+    // collapsed branch must still be reachable from the search box.
+    const first = searchNodes(result.nodes, query, new Set(result.nodes.map((node) => node.id)))[0]
+    if (!first) return
+    const blocked = ancestorsOf(index.tree, first.id).filter((id) => collapsedRef.current.has(id))
+    if (blocked.length) {
+      const next = new Set(collapsedRef.current)
+      for (const id of blocked) next.delete(id)
+      pendingSelect.current = first.id
+      onCollapseRef.current?.(next)
+      return
+    }
+    select(first.id, false, true, "node")
   }
+
+  useEffect(() => {
+    const id = pendingSelect.current
+    if (!id || !visible.has(id)) return
+    pendingSelect.current = null
+    select(id, false, true, "node")
+  }, [visible, select])
 
   const zoomBy = (step: number) => {
     const graph = graphRef.current
@@ -474,6 +609,11 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
           <NodeCard key={cardNode.id} ref={mobile ? undefined : cardRef}
             className={mobile ? "bottom-3 left-3 max-h-[400px]" : undefined}
             node={cardNode} index={index}
+            collapse={(index.descendants.get(cardNode.id) ?? 0) > 0 ? {
+              collapsed: collapsed.has(cardNode.id),
+              count: index.descendants.get(cardNode.id) ?? 0,
+              onToggle: () => toggleCollapse(cardNode.id),
+            } : undefined}
             onSelect={(id) => select(id, true, true)} onClose={() => { setCardId(null); setFocus(null) }} />
         ) : null}
       </section>

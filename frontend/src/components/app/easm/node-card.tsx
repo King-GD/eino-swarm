@@ -177,13 +177,15 @@ function EffectiveFeatures({ node, index, onSelect }: { node: EasmNode; index: E
 }
 
 /** Details for the node the user clicked. */
-export function NodeCard({ ref, className, node, index, onSelect, onClose }: {
+export function NodeCard({ ref, className, node, index, onSelect, onClose, collapse }: {
   ref?: Ref<HTMLElement>
   className?: string
   node: EasmNode
   index: EasmIndex
   onSelect: (id: string) => void
   onClose: () => void
+  /** Present only for a node whose branch can be folded away. */
+  collapse?: { collapsed: boolean; count: number; onToggle: () => void }
 }) {
   const kind = displayKind(node)
   const titleId = useId()
@@ -196,7 +198,14 @@ export function NodeCard({ ref, className, node, index, onSelect, onClose }: {
         <NodeIcon node={node} />
         <div className="min-w-0 flex-1">
           <h2 id={titleId} className="m-0 text-base leading-snug font-semibold break-all">{node.label}</h2>
-          <Badge className="mt-1">{kindLabel(kind, text)}</Badge>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <Badge>{kindLabel(kind, text)}</Badge>
+            {collapse ? (
+              <Button size="sm" variant="ghost" aria-expanded={!collapse.collapsed} onClick={collapse.onToggle}>
+                {collapse.collapsed ? text.expandNode(collapse.count) : text.collapseNode(collapse.count)}
+              </Button>
+            ) : null}
+          </div>
         </div>
         <Button size="icon" variant="ghost" aria-label={text.closeCard} className="self-start" onClick={onClose} autoFocus><X className="size-4" /></Button>
       </header>

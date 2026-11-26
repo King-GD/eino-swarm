@@ -36,10 +36,72 @@ export interface DrawState {
   highlighted: Set<string>
   labels: Map<string, GraphNode>
   icons: Map<DisplayKind, HTMLImageElement>
+  /** Nodes whose branch the user collapsed, and the counts their badges quote. */
+  collapsed?: ReadonlySet<string>
+  descendants?: Map<string, number>
+  hoveredId?: string | null
+  selectedId?: string | null
+  /** The node whose details are open: the card carries the same action. */
+  cardId?: string | null
 }
 
 export const FONT_SIZE = 12
 const LABEL_WIDTH = FONT_SIZE * 12
+
+/** Collapse badge: a screen-constant circle just outside the lower-right edge,
+ *  so it never covers the type glyph and stays clickable at any zoom. */
+export const BADGE_RADIUS = 9
+
+export function badgeCenter(node: GraphNode, zoom: number) {
+  const scale = zoom || 1
+  const reach = (node.radius * scale + BADGE_RADIUS * 0.7) / scale / Math.SQRT2
+  return { x: (node.x ?? 0) + reach, y: (node.y ?? 0) + reach }
+}
+
+/** What the badge says, or null when this node shows none. A collapsed node
+ *  always quotes its hidden branch; an expanded one only reveals "−" while the
+ *  pointer or the selection is on it, and never behind an open card. */
+export function badgeLabel(node: GraphNode, state: DrawState): string | null {
+  const count = state.descendants?.get(node.id) ?? 0
+  if (count < 1 || state.cardId === node.id) return null
+  if (state.collapsed?.has(node.id)) return count > 99 ? "99+" : `+${count}`
+  return state.hoveredId === node.id || state.selectedId === node.id ? "−" : null
+}
+
+export function drawCollapseBadge(node: GraphNode, ctx: CanvasRenderingContext2D, zoom: number, state: DrawState, palette: Palette) {
+  const label = badgeLabel(node, state)
+  if (!label) return
+  const scale = zoom || 1
+  const { x, y } = badgeCenter(node, scale)
+  const radius = BADGE_RADIUS / scale
+  const collapsed = state.collapsed?.has(node.id) === true
+  ctx.save()
+  ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2)
+  if (collapsed) {
+    ctx.fillStyle = palette.kind(node.kind)
+    ctx.fill()
+    ctx.fillStyle = palette.background
+  } else {
+    ctx.fillStyle = palette.background
+    ctx.fill()
+    ctx.strokeStyle = palette.kind(node.kind)
+    ctx.lineWidth = Math.max(1, 1.4 / scale)
+    ctx.stroke()
+    ctx.fillStyle = palette.kind(node.kind)
+  }
+  const max = radius * 1.7
+  let size = 11 / scale
+  ctx.font = `600 ${size}px sans-serif`
+  const width = ctx.measureText(label).width
+  if (width > max) {
+    size *= max / width
+    ctx.font = `600 ${size}px sans-serif`
+  }
+  ctx.textAlign = "center"
+  ctx.textBaseline = "middle"
+  ctx.fillText(label, x, y)
+  ctx.restore()
+}
 
 export function drawNode(node: GraphNode, ctx: CanvasRenderingContext2D, zoom: number, state: DrawState, palette: Palette) {
   const { radius } = node
@@ -72,6 +134,7 @@ export function drawNode(node: GraphNode, ctx: CanvasRenderingContext2D, zoom: n
     const height = (width * icon.naturalHeight) / icon.naturalWidth
     ctx.drawImage(icon, x - width / 2, y - height / 2, width, height)
   }
+  drawCollapseBadge(node, ctx, zoom, state, palette)
   ctx.restore()
 }
 

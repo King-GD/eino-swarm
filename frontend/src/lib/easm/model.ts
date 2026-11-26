@@ -51,6 +51,50 @@ export function projectEasmResult(result: EasmResult): EasmResult {
   }
 }
 
+/** The tree the canvas shrinks with: every node hangs under the first clue that
+ *  introduced it. Later observations stay as evidence, not as a second parent. */
+export interface EasmTree {
+  parent: Map<string, string>
+  children: Map<string, string[]>
+}
+
+export function primaryTree(edges: EasmEdge[]): EasmTree {
+  const parent = new Map<string, string>()
+  const children = new Map<string, string[]>()
+  for (const { source, target } of edges) {
+    if (source === target || parent.has(target)) continue
+    parent.set(target, source)
+    const list = children.get(source) ?? []
+    list.push(target)
+    children.set(source, list)
+  }
+  return { parent, children }
+}
+
+/** Everything a collapsed node stands for. Hidden nodes keep their settled
+ *  positions, so expanding again returns the branch where the user left it. */
+export function collapsedHidden(tree: EasmTree, collapsed: ReadonlySet<string>): Set<string> {
+  const hidden = new Set<string>()
+  for (const id of collapsed) {
+    const pending = [...(tree.children.get(id) ?? [])]
+    while (pending.length) {
+      const child = pending.pop()!
+      // A collapsed id inside the walk would hide its ancestor too.
+      if (hidden.has(child) || collapsed.has(child)) continue
+      hidden.add(child)
+      pending.push(...(tree.children.get(child) ?? []))
+    }
+  }
+  return hidden
+}
+
+/** Node id → how many nodes its badge quotes. Cycles cannot inflate a count. */
+export function descendantCounts(tree: EasmTree): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const id of tree.children.keys()) counts.set(id, collapsedHidden(tree, new Set([id])).size)
+  return counts
+}
+
 /** Precomputed lookups the graph, card and search share. */
 export interface EasmIndex {
   byId: Map<string, EasmNode>
@@ -62,6 +106,9 @@ export interface EasmIndex {
   filingDomains: Map<string, Set<string>>
   confirmedLinks: Map<string, Set<string>>
   children: Map<string, EasmNode[]>
+  tree: EasmTree
+  /** Node id → descendants behind its collapse badge. */
+  descendants: Map<string, number>
   /** Root first, then each kind in first-appearance order. */
   legend: DisplayKind[]
 }
@@ -109,7 +156,11 @@ export function indexResult(result: EasmResult): EasmIndex {
   }
   const kinds = [...new Set(result.nodes.map(displayKind))]
   const legend = kinds.includes("root") ? ["root" as DisplayKind, ...kinds.filter((k) => k !== "root")] : kinds
-  return { byId, rootId: result.nodes.find((node) => node.kind === "root")?.id ?? null, degree, members, related, filingDomains, confirmedLinks, children, legend }
+  const tree = primaryTree(result.edges)
+  return {
+    byId, rootId: result.nodes.find((node) => node.kind === "root")?.id ?? null, degree, members, related,
+    filingDomains, confirmedLinks, children, tree, descendants: descendantCounts(tree), legend,
+  }
 }
 
 /** Show the target while results arrive. Other nodes need a visible neighbour. */

@@ -1,8 +1,8 @@
 import { easmText } from "./messages"
 import { describe, expect, it } from "vitest"
 import {
-  basisText, displayKind, graphLabel, highlightIds, hotDays, indexResult, isSafeLink, kindLabel, layoutOrder,
-  nodeRadius, projectEasmResult, searchNodes, sortComponents, summaryStats, validity, visibleIds, wrapLabel,
+  basisText, collapsedHidden, descendantCounts, displayKind, graphLabel, highlightIds, hotDays, indexResult, isSafeLink, kindLabel,
+  layoutOrder, nodeRadius, primaryTree, projectEasmResult, searchNodes, sortComponents, summaryStats, validity, visibleIds, wrapLabel,
 } from "./model"
 import type { EasmNode, EasmResult } from "./types"
 
@@ -145,5 +145,55 @@ describe("EASM copy", () => {
     expect(easmText("zh-CN")).toBe(zh)
     expect(basisText({ source: "filings", via: "R-1", date: "2026-01-02T00:00:00Z" }, en)).toContain("R-1")
     expect(basisText({ source: "unknown_source" }, en)).toContain("unknown_source")
+  })
+})
+
+// Folding is a view concern: the saved clues never change, so the tree the
+// user folds must come from the same edges the canvas draws.
+describe("EASM collapse tree", () => {
+  const branch: EasmResult = {
+    schema_version: 1, title: "EASM", collection: { status: "done", steps: [] },
+    nodes: [
+      node("r", "root"), node("c", "company"), node("d", "domain"),
+      node("cert", "feature", { featureKind: "cert", label: "*.example.test" }),
+      node("n1", "domain"), node("n2", "domain"), node("n3", "domain"),
+    ],
+    edges: [
+      { source: "r", target: "c" }, { source: "c", target: "d" }, { source: "d", target: "cert" },
+      { source: "cert", target: "n1" }, { source: "cert", target: "n2" }, { source: "cert", target: "n3" },
+    ],
+    heat: [], components: [],
+  }
+
+  it("folds every clue under a certificate and quotes how many it hides", () => {
+    const index = indexResult(branch)
+    expect(index.tree.parent.get("cert")).toBe("d")
+    expect(collapsedHidden(index.tree, new Set(["cert"]))).toEqual(new Set(["n1", "n2", "n3"]))
+    expect(index.descendants.get("cert")).toBe(3)
+    expect(index.descendants.get("d")).toBe(4)
+    expect(index.descendants.has("n1")).toBe(false)
+    expect(descendantCounts(primaryTree(branch.edges))).toEqual(index.descendants)
+  })
+
+  it("keeps a nested branch folded while its parent opens", () => {
+    const index = indexResult(branch)
+    const outerOnly = collapsedHidden(index.tree, new Set(["d"]))
+    expect(outerOnly.has("cert")).toBe(true)
+    expect(outerOnly.has("n1")).toBe(true)
+    // Opening the certificate alone leaves the domain's fold in place.
+    const innerOnly = collapsedHidden(index.tree, new Set(["cert"]))
+    expect(innerOnly.has("d")).toBe(false)
+  })
+
+  it("keeps the first clue that introduced a node as its only parent", () => {
+    const tree = primaryTree([{ source: "a", target: "x" }, { source: "b", target: "x" }])
+    expect(tree.parent.get("x")).toBe("a")
+    expect(tree.children.get("b")).toBeUndefined()
+  })
+
+  it("never hides a collapsed node behind its own descendant", () => {
+    const tree = primaryTree([{ source: "a", target: "b" }, { source: "b", target: "a" }])
+    expect(collapsedHidden(tree, new Set(["a"]))).toEqual(new Set(["b"]))
+    expect(descendantCounts(tree).get("a")).toBe(1)
   })
 })
