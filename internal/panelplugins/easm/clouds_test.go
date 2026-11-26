@@ -55,11 +55,9 @@ func cloudServiceReply(query, products string) (string, error) {
 	return fmt.Sprintf(`{"query":%s,"aggs":{"product":%s}}`, echoed, products), nil
 }
 
-// Each row's asset and IP counts come from its cloud_name buckets, so the
-// numbers describe the company's assets behind that provider. Spellings of one
-// provider become one row with summed counts, while Tencent and Tencent Mail
-// stay apart because one is compute and the other is mail. Services are shown
-// as the source reported them.
+// Spellings of one provider become one row with their summed asset counts and
+// the filtered query's distinct IP count. Tencent and Tencent Mail stay apart
+// because one is compute and the other is mail. Services are shown as reported.
 func TestCloudsMergeSpellingsIntoOneRowPerProvider(t *testing.T) {
 	distribution := `{"query":"org=\"Subject\"","aggs":{"cloud_name":[
 		{"name":"BaiShanCloud","count":1131,"uniq":{"ip":130}},
@@ -72,7 +70,7 @@ func TestCloudsMergeSpellingsIntoOneRowPerProvider(t *testing.T) {
 	caller := &cloudCaller{distribution: distribution, services: func(query string) (string, error) {
 		switch {
 		case strings.Contains(query, "BaiShanCloud"):
-			return cloudServiceReply(query, `[{"name":"NGINX","count":980},{"name":"白山云科技-白山云","count":36},{"name":"OpenResty","count":54}]`)
+			return fmt.Sprintf(`{"query":%q,"distinct":{"ip":130},"aggs":{"product":[{"name":"NGINX","count":980},{"name":"白山云科技-白山云","count":36},{"name":"OpenResty","count":54}]}}`, query), nil
 		case strings.Contains(query, "Tencent Mail"):
 			return cloudServiceReply(query, `[{"name":"Exchange","count":30}]`)
 		case strings.Contains(query, `"Tencent"`):
@@ -80,7 +78,7 @@ func TestCloudsMergeSpellingsIntoOneRowPerProvider(t *testing.T) {
 		case strings.Contains(query, "Aliyun"):
 			return cloudServiceReply(query, `[{"name":"Tengine","count":9}]`)
 		default:
-			return cloudServiceReply(query, `[{"name":"NGINX","count":12}]`)
+			return fmt.Sprintf(`{"query":%q,"distinct":{"ip":20},"aggs":{"product":[{"name":"NGINX","count":12}]}}`, query), nil
 		}
 	}}
 	state := runMetrics(t, nil, onlyRoles(RoleStats), caller.caller())
@@ -90,10 +88,10 @@ func TestCloudsMergeSpellingsIntoOneRowPerProvider(t *testing.T) {
 	// Equal totals break on the merge key, so two runs over one reply order the
 	// same way.
 	want := []Cloud{
-		{Name: "BaiShanCloud", DisplayName: "白山云", Category: "cdn", Assets: 1135, IPs: 131, Services: []CloudService{{"NGINX", 980}, {"OpenResty", 54}, {"白山云科技-白山云", 36}}},
+		{Name: "BaiShanCloud", DisplayName: "白山云", Category: "cdn", Assets: 1135, IPs: 130, Services: []CloudService{{"NGINX", 980}, {"OpenResty", 54}, {"白山云科技-白山云", 36}}},
 		{Name: "Tencent", DisplayName: "腾讯云", Category: "cloud", Assets: 278, IPs: 90, Services: []CloudService{{"OpenResty", 200}}},
 		{Name: "Tencent Mail", DisplayName: "腾讯企业邮箱", Category: "mail", Assets: 56, IPs: 40, Services: []CloudService{{"Exchange", 30}}},
-		{Name: "Cloudfront", DisplayName: "CloudFront", Category: "cdn", Assets: 26, IPs: 21, Services: []CloudService{{"NGINX", 12}}},
+		{Name: "Cloudfront", DisplayName: "CloudFront", Category: "cdn", Assets: 26, IPs: 20, Services: []CloudService{{"NGINX", 12}}},
 		{Name: "Aliyun", DisplayName: "阿里云", Category: "cloud", Assets: 26, IPs: 20, Services: []CloudService{{"Tengine", 9}}},
 	}
 	if !reflect.DeepEqual(state.Clouds, want) {
@@ -276,19 +274,32 @@ func TestCloudsRefuseBucketsThatCannotBeShown(t *testing.T) {
 	}
 }
 
-// A name the filter cannot quote still has its counts. Its services cannot be
-// requested, so the step fails and the next collection repeats them.
-func TestCloudsShowAnUnfilterableProviderWithoutServices(t *testing.T) {
-	caller := &cloudCaller{
-		distribution: `{"query":"org=\"Subject\"","aggs":{"cloud_name":[{"name":"a\"b","count":2,"uniq":{"ip":1}}]}}`,
-		services:     func(query string) (string, error) { return cloudServiceReply(query, `[{"name":"NGINX","count":2}]`) },
-	}
-	state := runMetrics(t, nil, onlyRoles(RoleStats), caller.caller())
-	if got := stepStatus(state, StepClouds); got.Status != statusFailed {
-		t.Fatalf("clouds step = %+v", got)
-	}
-	if len(caller.sent) != 0 || len(state.Clouds) != 1 || state.Clouds[0].Assets != 2 || len(state.Clouds[0].Services) != 0 {
-		t.Fatalf("requests = %v, clouds = %+v", caller.sent, state.Clouds)
+// An unfilterable provider can keep a single bucket's confirmed count. The
+// same name across two buckets cannot publish a count without the filter.
+func TestCloudsShowOnlyConfirmedCountsForUnfilterableProviders(t *testing.T) {
+	for _, test := range []struct {
+		name, additionalBucket string
+		wantRows               int
+	}{
+		{"single bucket", "", 1},
+		{"merged buckets", `,{"name":"A\"B","count":1,"uniq":{"ip":1}}`, 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &cloudCaller{
+				distribution: `{"aggs":{"cloud_name":[{"name":"a\"b","count":2,"uniq":{"ip":1}}` + test.additionalBucket + `]}}`,
+				services:     func(query string) (string, error) { return cloudServiceReply(query, `[{"name":"NGINX","count":2}]`) },
+			}
+			state := runMetrics(t, nil, onlyRoles(RoleStats), caller.caller())
+			if got := stepStatus(state, StepClouds); got.Status != statusFailed {
+				t.Fatalf("clouds step = %+v", got)
+			}
+			if len(caller.sent) != 0 || len(state.Clouds) != test.wantRows {
+				t.Fatalf("requests = %v, clouds = %+v", caller.sent, state.Clouds)
+			}
+			if test.wantRows == 1 && (state.Clouds[0].Assets != 2 || state.Clouds[0].IPs != 1 || len(state.Clouds[0].Services) != 0) {
+				t.Fatalf("clouds = %+v", state.Clouds)
+			}
+		})
 	}
 }
 
@@ -342,15 +353,23 @@ func TestStopDuringServiceLookupsInterruptsTheStep(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	started := make(chan struct{})
+	fallback := make(chan struct{}, 1)
 	var once sync.Once
 	caller := CallerFunc(func(callCtx context.Context, _ string, arguments map[string]any) (json.RawMessage, error) {
 		switch arguments["fields"] {
 		case "cloud_name":
-			return json.RawMessage(`{"query":"org=\"Subject\"","aggs":{"cloud_name":[{"name":"AWS","count":10,"uniq":{"ip":4}}]}}`), nil
+			return json.RawMessage(`{"aggs":{"cloud_name":[{"name":"Microsoft Azure","count":1,"uniq":{"ip":1}},{"name":"azure","count":1,"uniq":{"ip":1}}]}}`), nil
 		case "product3":
 			once.Do(func() { close(started) })
 			<-callCtx.Done()
 			return nil, callCtx.Err()
+		case "ip":
+			if arguments["query"] != metricQuery {
+				select {
+				case fallback <- struct{}{}:
+				default:
+				}
+			}
 		}
 		return nil, ErrUnavailable
 	})
@@ -380,6 +399,9 @@ func TestStopDuringServiceLookupsInterruptsTheStep(t *testing.T) {
 	}
 	if len(last.Clouds) != 0 {
 		t.Fatalf("an interrupted table was published: %+v", last.Clouds)
+	}
+	if len(fallback) != 0 {
+		t.Fatal("Stop still sent a filtered IP lookup")
 	}
 }
 

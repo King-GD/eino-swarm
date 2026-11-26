@@ -44,13 +44,17 @@ type cloudRow struct {
 	names  []string
 	assets int64
 	ips    int64
+	merged bool
 }
 
-// clouds aggregates the query's assets by hosting provider. One request gives
-// every row its asset and distinct-IP counts; each shown provider then gets one
-// filtered request for its services. The counts are published either way: a
-// failed service lookup fails the step so the next collection repeats it,
-// while a finished lookup publishes the step as done.
+type cloudStatsReply struct {
+	Query    json.RawMessage `json:"query"`
+	Distinct json.RawMessage `json:"distinct"`
+	Aggs     json.RawMessage `json:"aggs"`
+}
+
+// clouds ranks providers by the distribution's assets, then fills their
+// services and any IP totals that need to span multiple buckets.
 func (r *run) clouds(ctx context.Context) error {
 	var reply struct {
 		Query json.RawMessage `json:"query"`
@@ -76,45 +80,36 @@ func (r *run) clouds(ctx context.Context) error {
 		return err
 	}
 	rows = rows[:min(len(rows), r.settings.MaxClouds)]
-	clouds := make([]Cloud, len(rows))
+	results := make([]struct {
+		cloud *Cloud
+		err   error
+	}, len(rows))
 	var wg sync.WaitGroup
-	var mu sync.Mutex
-	var failed error
 	for i, row := range rows {
-		clouds[i] = Cloud{
-			Name:        row.names[0],
-			DisplayName: row.label.Display,
-			Category:    row.label.Category,
-			Assets:      row.assets,
-			IPs:         row.ips,
-			Services:    []CloudService{},
-		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			services, err := r.cloudServices(ctx, row)
-			mu.Lock()
-			defer mu.Unlock()
-			if err != nil {
-				failed = err
-				return
-			}
-			clouds[i].Services = services
-		}()
+		wg.Go(func() { results[i].cloud, results[i].err = r.cloudDetails(ctx, row) })
 	}
 	wg.Wait()
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	clouds := make([]Cloud, 0, len(rows))
+	var failed error
+	for _, result := range results {
+		if result.cloud != nil {
+			clouds = append(clouds, *result.cloud)
+		}
+		if failed == nil {
+			failed = result.err
+		}
 	}
 	r.apply(func(state *State) { state.Clouds = clouds })
 	return failed
 }
 
 // mergeCloudRows folds the source's spellings into one row per provider and
-// orders them by asset count. Merged IP counts are summed: an address reported
-// under two spellings of one provider is counted twice, which the documentation
-// states. Ties break on the merge key so two runs over the same reply publish
-// the same order.
+// orders them by asset count. Bucket-local IP counts can overlap. Record every
+// merge, including case variants that use the same filter term. Ties break on
+// the merge key.
 func mergeCloudRows(buckets []cloudBucket) ([]cloudRow, error) {
 	byKey := map[string]*cloudRow{}
 	var rows []*cloudRow
@@ -140,12 +135,13 @@ func mergeCloudRows(buckets []cloudBucket) ([]cloudRow, error) {
 		}
 		row, seen := byKey[key]
 		if !seen {
-			row = &cloudRow{label: label, key: key}
+			row = &cloudRow{label: label, key: key, ips: ips}
 			byKey[key] = row
 			rows = append(rows, row)
+		} else {
+			row.merged = true
 		}
 		row.assets += count
-		row.ips += ips
 		// Case-only spellings fold into one: measured against the live stats
 		// API, cloud_name="CLOUDFRONT" returns the same buckets as
 		// cloud_name="cloudfront", so the filter matches either spelling.
@@ -175,38 +171,95 @@ func containsFold(values []string, value string) bool {
 	return false
 }
 
-// cloudServices asks for one provider's most common services inside the run's
-// query and keeps the first max_services. The buckets are shown as reported.
-func (r *run) cloudServices(ctx context.Context, row cloudRow) ([]CloudService, error) {
+// cloudDetails shares the filtered service reply with the IP lookup. The
+// schema requires an exact IP count, so an unresolved merged row is omitted.
+func (r *run) cloudDetails(ctx context.Context, row cloudRow) (*Cloud, error) {
 	query, err := cloudFilterQuery(r.input.Query, row.names)
+	cloud := &Cloud{
+		Name:        row.names[0],
+		DisplayName: row.label.Display,
+		Category:    row.label.Category,
+		Assets:      row.assets,
+		IPs:         row.ips,
+		Services:    []CloudService{},
+	}
 	if err != nil {
-		return nil, err
+		if row.merged {
+			return nil, err
+		}
+		return cloud, err
 	}
-	var reply struct {
-		Query json.RawMessage `json:"query"`
-		Aggs  struct {
-			Product *[]struct {
-				Name  json.RawMessage `json:"name"`
-				Count json.RawMessage `json:"count"`
-			} `json:"product"`
-		} `json:"aggs"`
-	}
+	var reply cloudStatsReply
 	arguments := map[string]any{
 		"query": query, "fields": "product3", "tool": fofaSource,
 		"size": max(r.settings.MaxServices, cloudServiceFloor),
 	}
+	serviceErr := r.call(ctx, RoleStats, arguments, &reply)
+	if serviceErr == nil {
+		serviceErr = queryMatches(reply.Query, query)
+	}
+	hasIPs := !row.merged
+	if serviceErr == nil {
+		if row.merged {
+			cloud.IPs, hasIPs = cloudReplyIPs(reply.Distinct)
+		}
+		var services []CloudService
+		services, serviceErr = r.cloudServices(reply.Aggs)
+		if serviceErr == nil {
+			cloud.Services = services
+		}
+	}
+	if !hasIPs {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		cloud.IPs, err = r.cloudDistinctIPs(ctx, query)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return cloud, serviceErr
+}
+
+func cloudReplyIPs(raw json.RawMessage) (int64, bool) {
+	var distinct map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &distinct); err != nil {
+		return 0, false
+	}
+	ips, ok, err := exactCount(distinct["ip"])
+	return ips, ok && err == nil
+}
+
+func (r *run) cloudDistinctIPs(ctx context.Context, query string) (int64, error) {
+	var reply cloudStatsReply
+	arguments := map[string]any{"query": query, "fields": "ip", "uniq_count": "ip", "tool": fofaSource}
 	if err := r.call(ctx, RoleStats, arguments, &reply); err != nil {
-		return nil, err
+		return 0, err
 	}
 	if err := queryMatches(reply.Query, query); err != nil {
-		return nil, err
+		return 0, err
 	}
-	if reply.Aggs.Product == nil {
-		return nil, fmt.Errorf("reply carries no cloud service product buckets")
+	ips, ok := cloudReplyIPs(reply.Distinct)
+	if !ok {
+		return 0, fmt.Errorf("reply carries no exact cloud distinct ip count")
 	}
-	services := make([]CloudService, 0, len(*reply.Aggs.Product))
+	return ips, nil
+}
+
+// cloudServices interprets the service aggregation independently of the IP count.
+func (r *run) cloudServices(raw json.RawMessage) ([]CloudService, error) {
+	var aggs struct {
+		Product []struct {
+			Name  json.RawMessage `json:"name"`
+			Count json.RawMessage `json:"count"`
+		} `json:"product"`
+	}
+	if err := json.Unmarshal(raw, &aggs); err != nil || aggs.Product == nil {
+		return nil, fmt.Errorf("reply carries no valid cloud service product buckets")
+	}
+	services := make([]CloudService, 0, len(aggs.Product))
 	seen := map[string]bool{}
-	for _, bucket := range *reply.Aggs.Product {
+	for _, bucket := range aggs.Product {
 		name, _ := productName(bucket.Name)
 		count, ok, err := exactCount(bucket.Count)
 		if name == "" || err != nil || !ok {
