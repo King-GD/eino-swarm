@@ -86,7 +86,7 @@ func generatedPortrait(shape []byte) State {
 		SchemaVersion: 1, Title: "Subject",
 		Collection: Collection{Status: statusIdle, Steps: []StepStatus{}},
 		Nodes:      []Node{{ID: RootID, Kind: "root", Label: "Subject", Detail: &Detail{RegistryID: "subject-registry", RegistryName: "Subject"}}},
-		Edges:      []Edge{}, Heat: []HeatPoint{}, Components: []Component{},
+		Edges:      []Edge{}, Heat: []HeatPoint{}, Components: []Component{}, Clouds: []Cloud{},
 	}
 	for i := 0; i < 1+len(shape)%8; i++ {
 		parent := 0

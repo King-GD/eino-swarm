@@ -1,6 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest"
 import { useTaskPanels } from "./task-panels"
 import { publishTaskPanelEvent } from "@/lib/task-panel-events"
+import catalog from "@/task-panels/catalog.json"
+import easmV1 from "@/task-panels/easm-v1.json"
 import type { PanelChange, TaskPanel } from "@/task-panels/types"
 
 function panel(thread: string, revision = 1): TaskPanel {
@@ -38,4 +40,26 @@ it("rejects late loads and events from a previously selected conversation", asyn
   await vi.waitFor(() => expect(useTaskPanels.getState().panels[0]?.thread_id).toBe("new"))
   oldStop(); expect(useTaskPanels.getState().threadId).toBe("new")
   stop(); expect(streamConstructor).not.toHaveBeenCalled()
+})
+
+it("reconnects with the upgraded EASM definition and keeps the saved instance", async () => {
+  const thread = "easm-upgrade"
+  const current = catalog.find(({ id }) => id === easmV1.id)!
+  const saved = {
+    ...panel(thread, 6), plugin_id: easmV1.id, plugin_version: easmV1.version,
+    definition: easmV1, state: easmV1.initial_state,
+  }
+  vi.stubGlobal("fetch", vi.fn().mockImplementation(async () =>
+    new Response(JSON.stringify({ panels: [saved], cursor: 9 }))))
+  const stop = useTaskPanels.getState().connect(thread)
+  try {
+    await vi.waitFor(() => expect(useTaskPanels.getState().panels[0]?.plugin_version).toBe(easmV1.version))
+    publishTaskPanelEvent(thread, { kind: "ready", cursor: 9, panels: [
+      { ...saved, revision: 7, plugin_version: current.version, definition: current },
+    ] })
+    await useTaskPanels.getState().refresh()
+    expect(useTaskPanels.getState().panels[0]).toMatchObject({
+      id: saved.id, revision: 7, plugin_version: current.version, definition: current, state: saved.state,
+    })
+  } finally { stop() }
 })

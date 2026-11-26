@@ -44,6 +44,26 @@ it("applies a valid patch and repairs an invalid one with one complete snapshot"
   expect(first.state).toEqual({ count: 1 })
 })
 
+it("refreshes a changed panel format at the same revision and waits for a matching snapshot", async () => {
+  const pc = link(), first = panel()
+  const updated = { ...first, plugin_version: "2", definition: { ...first.definition, version: "2" } }
+  calls.list.mockResolvedValue([manifest(first)])
+  calls.read.mockResolvedValueOnce({ panel: first })
+  const view = renderHook(() => useTaskPanels(pc, "t", "pc", true))
+  await waitFor(() => expect(view.result.current.panels).toEqual([first]))
+
+  calls.list.mockResolvedValue([manifest(updated)])
+  calls.read.mockResolvedValueOnce({ panel: first }).mockResolvedValueOnce({ panel: updated })
+  await act(async () => { await view.result.current.refresh() })
+  expect(calls.read).toHaveBeenLastCalledWith(pc, "t", updated.id, undefined, expect.any(AbortSignal))
+  expect(view.result.current.panels).toEqual([first])
+  expect(view.result.current.error).toBe("Panel definition does not match its manifest")
+
+  await act(async () => { await view.result.current.refresh() })
+  expect(view.result.current.panels).toEqual([updated])
+  expect(view.result.current.changes[updated.id]).toBeUndefined()
+})
+
 it("rejects late replies across PC and A to B to A conversation visits", async () => {
   const a = link(), b = link()
   let oldReply: ((value: unknown) => void) | undefined

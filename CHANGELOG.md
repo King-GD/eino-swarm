@@ -43,7 +43,7 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
   with their existing identity. Existing shared records stay visible.
   (`F-139`, `C-055`)
 
-- Task panels can show an enterprise asset portrait (EASM). The agent confirms the subject, performs the discovery lookups itself, and pushes each finished batch of companies, domains and certificates into the panel, which merges the batches into one graph; on the batch that carries the final asset query the panel collects the asset totals, attention trend and components itself. Each aggregation shows its own progress and a failure never stops the others. The panel follows the app language on PC, Web and paired phones.
+- Task panels can show an enterprise asset portrait (EASM). The agent confirms the subject, performs the discovery lookups itself, and pushes each finished batch of companies, domains and certificates into the panel, which merges the batches into one graph; on the batch that carries the final asset query the panel collects the asset totals, attention trend and components itself. A hosting provider table lists each provider's category, the asset and distinct IP counts within the confirmed query, and the most common services. Each aggregation shows its own progress and a failure never stops the others. The panel follows the app language on PC, Web and paired phones.
 
 - PC and Web projects can keep a Markdown knowledge base with linked pages,
   sources, relationship views and a pending queue. (`F-138`, `C-053`, #185)
@@ -64,6 +64,9 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - PC and Web voice settings can choose a preferred microphone or follow the operating-system input. Phones use their own microphone. (`F-148`, `C-048`)
 
 ### Changed
+
+- The EASM hosting provider table defaults to showing up to five services per provider.
+  New collections query services for at most five providers.
 
 - The engine compresses Responses request bodies of at least 1 KiB when the
   selected Gateway advertises gzip support and compression saves bytes. Older
@@ -141,6 +144,12 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - 网关模式下，普通网关和第三方接入会根据可用的识别、朗读模型分别默认开启语音。语音设置仅显示网关允许编辑的参数，录音格式和超时等设置默认折叠。(`F-148`, `C-048`)
 
 ### Fixed
+
+- Saved EASM portraits open after upgrade and can collect hosting providers on the original query. Paired phones can read portraits across host and phone versions. (`F-137`, `C-050`)
+
+- EASM counts each IP address once across a hosting provider's aliases. If the
+  statistics reply omits the product aggregation, EASM keeps the provider's
+  confirmed counts and retries service lookups on the next collection.
 
 - Paired phones show a View image button for each image sent in a PC
   conversation. Tapping it loads just that image. Reopening the conversation

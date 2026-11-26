@@ -92,7 +92,7 @@ func TestRetiredEASMRolesAreDroppedOnLoad(t *testing.T) {
 	}
 	// A settings client that still sends a retired role is not locked out
 	// either, while a role nobody ever defined stays an error.
-	direct := EASMPanelConfig{Tools: map[string]string{"organizations": "x", "stats": "s"}, MaxDomains: 20, MaxComponents: 20}
+	direct := EASMPanelConfig{Tools: map[string]string{"organizations": "x", "stats": "s"}, MaxDomains: 20, MaxComponents: 20, MaxClouds: 5, MaxServices: 3}
 	if err := direct.validate(); err != nil {
 		t.Fatalf("a retired role was refused: %v", err)
 	}

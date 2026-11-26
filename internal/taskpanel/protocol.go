@@ -113,6 +113,13 @@ type Change struct {
 	Operations   json.RawMessage `json:"operations,omitempty"`
 }
 
+// DefinitionsMatch compares pinned contracts independently of JSON key order.
+func DefinitionsMatch(a, b Definition) bool {
+	aDigest, aErr := Digest(a)
+	bDigest, bErr := Digest(b)
+	return aErr == nil && bErr == nil && aDigest == bDigest
+}
+
 // ValidateDefinition refuses invalid state contracts and executable path ambiguity.
 func ValidateDefinition(d Definition) error {
 	if d.Renderer != "" && d.Renderer != RendererNative || d.Renderer == RendererNative && d.Entry != "" {

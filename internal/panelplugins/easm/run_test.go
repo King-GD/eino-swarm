@@ -62,7 +62,7 @@ func testSettings() Settings {
 	for _, role := range Roles {
 		tools[role] = role
 	}
-	return Settings{Tools: tools, MaxDomains: 5, MaxComponents: 20}
+	return Settings{Tools: tools, MaxDomains: 5, MaxComponents: 20, MaxClouds: 5, MaxServices: 3}
 }
 
 func onlyRoles(roles ...string) Settings {
@@ -178,7 +178,7 @@ func TestFirstBatchWithoutAQueryStaysIdle(t *testing.T) {
 	if result.Nodes != 2 || result.Edges != 1 || result.UnresolvedParents != 0 || result.RefusedDomains != 0 {
 		t.Fatalf("result = %+v", result)
 	}
-	if len(stepStatuses(state)) != 3 {
+	if len(stepStatuses(state)) != len(Steps) {
 		t.Fatalf("steps = %+v", state.Collection.Steps)
 	}
 }
@@ -635,16 +635,20 @@ func (g *gatedCaller) Call(ctx context.Context, tool string, arguments map[strin
 func TestQueryStepsRunConcurrentlyAndPublishEachCompletion(t *testing.T) {
 	inner := &fakeCaller{replies: map[string]func(map[string]any) (string, error){
 		RoleStats: func(arguments map[string]any) (string, error) {
-			if arguments["fields"] == "ip" {
+			switch arguments["fields"] {
+			case "ip":
 				return `{"query":"org=\"Subject\"","size":7,"distinct":{"ip":"3"}}`, nil
+			case "cloud_name":
+				return `{"aggs":{"cloud_name":[]}}`, nil
+			default:
+				return `{"aggs":{"product":[{"name":"nginx","count":4}]}}`, nil
 			}
-			return `{"aggs":{"product":[{"name":"nginx","count":4}]}}`, nil
 		},
 		RoleHeat: fixed(`{"hot_trend":[{"date":"2026-01-02","value":1}]}`),
 	}}
 	// The gate only needs the metric steps, and the caller is called once per
 	// step here because product rules are not configured.
-	caller := newGatedCaller(inner, 3)
+	caller := newGatedCaller(inner, len(Steps))
 	var out published
 	if _, err := Run(t.Context(), Input{Subject: "Subject", Query: `org="Subject"`}, onlyRoles(RoleStats, RoleHeat), nil, caller, out.publish); err != nil {
 		t.Fatal(err)
@@ -653,7 +657,8 @@ func TestQueryStepsRunConcurrentlyAndPublishEachCompletion(t *testing.T) {
 		t.Fatal("the aggregations ran one after another instead of concurrently")
 	}
 	states := out.snapshot()
-	if len(states) != 5 {
+	// The merge publication, one publication per finished step, then the final one.
+	if len(states) != len(Steps)+2 {
 		t.Fatalf("publications = %d", len(states))
 	}
 	done := make([]int, len(states))
@@ -664,13 +669,22 @@ func TestQueryStepsRunConcurrentlyAndPublishEachCompletion(t *testing.T) {
 			}
 		}
 	}
-	// The merge publication, one publication per finished step, then the final one.
-	if got := done; len(got) != 5 || got[1]-got[0] != 1 || got[2]-got[1] != 1 || got[3]-got[2] != 1 || got[4] != 3 {
+	for i := 1; i <= len(Steps); i++ {
+		if done[i]-done[i-1] != 1 {
+			t.Fatalf("finished steps per publication = %v", done)
+		}
+	}
+	if done[len(done)-1] != len(Steps) {
 		t.Fatalf("finished steps per publication = %v", done)
 	}
 	last := out.last()
-	if last.Collection.Status != statusDone || stepStatus(last, StepSummary).Status != statusDone || stepStatus(last, StepHeat).Status != statusDone || stepStatus(last, StepComponents).Status != statusDone {
+	if last.Collection.Status != statusDone {
 		t.Fatalf("final collection = %+v", last.Collection)
+	}
+	for _, step := range Steps {
+		if got := stepStatus(last, step); got.Status != statusDone {
+			t.Fatalf("%s = %+v", step, got)
+		}
 	}
 	if last.Summary == nil || *last.Summary.FOFAAssets != 7 || *last.Summary.FOFAIPs != 3 || *last.Summary.Clues != 0 {
 		t.Fatalf("summary = %+v", last.Summary)
@@ -720,10 +734,14 @@ func TestQueryChangesClearAndRerunTheMetrics(t *testing.T) {
 	portraitCaller := func(query string) *fakeCaller {
 		return &fakeCaller{replies: map[string]func(map[string]any) (string, error){
 			RoleStats: func(arguments map[string]any) (string, error) {
-				if arguments["fields"] == "ip" {
+				switch arguments["fields"] {
+				case "ip":
 					return reply(map[string]any{"query": query, "size": 4, "distinct": map[string]int{"ip": 1}})
+				case "cloud_name":
+					return reply(map[string]any{"query": query, "aggs": map[string]any{"cloud_name": []any{}}})
+				default:
+					return reply(map[string]any{"query": query, "aggs": map[string]any{"product": []any{}}})
 				}
-				return reply(map[string]any{"query": query, "aggs": map[string]any{"product": []any{}}})
 			},
 			RoleHeat: func(map[string]any) (string, error) {
 				return reply(map[string]any{"query": query, "hot_trend": []any{map[string]any{"date": "2026-01-02", "value": 1}}})

@@ -8,13 +8,29 @@ import (
 func aggregationReplies(summary, heat string) *fakeCaller {
 	return &fakeCaller{replies: metricReplies{
 		RoleStats: func(arguments map[string]any) (string, error) {
-			if arguments["fields"] == "ip" {
+			switch arguments["fields"] {
+			case "ip":
 				return summary, nil
+			case "cloud_name":
+				return `{"aggs":{"cloud_name":[]}}`, nil
+			default:
+				return `{"aggs":{"product":[{"name":"Component A","count":4}]}}`, nil
 			}
-			return `{"aggs":{"product":[{"name":"Component A","count":4}]}}`, nil
 		},
 		RoleHeat: fixed(heat),
 	}}
+}
+
+// requestsFor counts one tool's requests for a fields value: the aggregations
+// share the stats tool, so a bare call count would mix them.
+func requestsFor(caller *fakeCaller, tool, fields string) int {
+	count := 0
+	for _, request := range caller.requests(tool) {
+		if request["fields"] == fields {
+			count++
+		}
+	}
+	return count
 }
 
 // A trend outage must not make the user lose totals from the same query.
@@ -79,8 +95,8 @@ func TestSummaryNeedsBothTotalsInOneResponse(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := caller.requests(RoleStats); len(got) != 1 || got[0]["fields"] != "ip" || len(caller.requests(RoleHeat)) != 0 {
-			t.Fatalf("%s: stats requests = %v, heat requests = %v", attempt.reply, got, caller.requests(RoleHeat))
+		if summary := requestsFor(caller, RoleStats, "ip"); summary != 1 || len(caller.requests(RoleHeat)) != 0 {
+			t.Fatalf("%s: summary requests = %d, heat requests = %v", attempt.reply, summary, caller.requests(RoleHeat))
 		}
 		if g := state.Summary; g == nil || g.FOFAAssets == nil || *g.FOFAAssets != attempt.assets || g.FOFAIPs == nil || *g.FOFAIPs != attempt.ips {
 			t.Fatalf("%s: summary = %+v", attempt.reply, g)
@@ -106,8 +122,8 @@ func TestRepeatingQueryRepairsLegacyPartialSummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := caller.requests(RoleStats); len(got) != 1 || got[0]["fields"] != "ip" || len(caller.requests(RoleHeat)) != 0 {
-		t.Errorf("stats requests = %v, heat requests = %v", got, caller.requests(RoleHeat))
+	if summary := requestsFor(caller, RoleStats, "ip"); summary != 1 || len(caller.requests(RoleHeat)) != 0 {
+		t.Errorf("summary requests = %d, heat requests = %v", summary, caller.requests(RoleHeat))
 	}
 	if state.Summary == nil || state.Summary.FOFAIPs == nil || *state.Summary.FOFAIPs != 4 || result.Next != finishedNext {
 		t.Fatalf("repaired summary = %+v, receipt = %+v", state.Summary, result)

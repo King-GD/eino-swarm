@@ -84,7 +84,9 @@ func TestUnknownProductModeIsRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(raw), "cloud") {
+	// The rejected value itself must not reach the file; other settings may
+	// legitimately contain the word.
+	if strings.Contains(string(raw), "mode: cloud") {
 		t.Fatalf("rejected mode was written:\n%s", raw)
 	}
 	path := filepath.Join(dir, FileName)
