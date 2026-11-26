@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { easmText } from "../../../frontend/src/lib/easm/messages"
 import catalog from "../../../frontend/src/task-panels/catalog.json"
+import easmV1 from "../../../frontend/src/task-panels/easm-v1.json"
 import type { TaskPanel } from "../../../frontend/src/task-panels/types"
 import type { RemoteLink } from "@/lib/link"
 import { PhoneTaskPanelButton, PhoneTaskPanelSheet, usePhoneTaskPanelView } from "./task-panels"
@@ -28,6 +29,17 @@ beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} })
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+
+it("opens an upstream EASM v1 snapshot on a new phone", async () => {
+  const component = "Recorded component"
+  const legacy: TaskPanel = { ...panel(), plugin_id: easmV1.id, plugin_version: easmV1.version, definition: easmV1,
+    state: { ...easmV1.initial_state, components: [{ name: component, count: 3 }] } }
+  read.mockReturnValue(data([legacy]))
+  render(<Harness />)
+  await screen.findByRole("dialog", { name: "Task panels" })
+  await act(async () => { await vi.dynamicImportSettled() })
+  expect(await screen.findByRole("button", { name: easmText("en").tagEvidence(component) })).toBeVisible()
+})
 
 it("only offers panels for a paired PC with an available panel", () => {
   const view = render(<Harness />)

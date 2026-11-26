@@ -1,0 +1,671 @@
+{
+  "id": "easm-asset-portrait",
+  "version": "1",
+  "name": "EASM",
+  "description": "Show an enterprise asset portrait: the confirmed organization, its related companies, domains and certificates as a graph, with asset totals, attention trend and component distribution. Confirm the task subject first and ask the user when it is ambiguous. Open this panel and use the same full subject for every batch unless the task explicitly changes subject. Run the source per finished batch of the agent's own lookups. Include the subject's exact registry row as a confirmed company when available. Pass the findings with their first source and confirm ownership only when the evidence identifies the parent. Include the final asset query on the last batch. The panel collects the totals, trend and components for that query.",
+  "entry": "",
+  "renderer": "native",
+  "schema": {
+    "type": "object",
+    "required": [
+      "schema_version",
+      "title",
+      "collection",
+      "nodes",
+      "edges",
+      "heat",
+      "components"
+    ],
+    "properties": {
+      "schema_version": {
+        "type": "integer",
+        "const": 1
+      },
+      "title": {
+        "$ref": "#/$defs/nonempty"
+      },
+      "query": {
+        "type": "string"
+      },
+      "collection": {
+        "type": "object",
+        "required": [
+          "status",
+          "steps"
+        ],
+        "properties": {
+          "status": {
+            "enum": [
+              "idle",
+              "running",
+              "done",
+              "interrupted"
+            ]
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "status"
+              ],
+              "properties": {
+                "id": {
+                  "enum": [
+                    "organizations",
+                    "relations",
+                    "branches",
+                    "filings",
+                    "asset_rules",
+                    "certificates",
+                    "summary",
+                    "heat",
+                    "components"
+                  ]
+                },
+                "status": {
+                  "enum": [
+                    "pending",
+                    "running",
+                    "done",
+                    "failed",
+                    "skipped",
+                    "unavailable",
+                    "interrupted"
+                  ]
+                },
+                "code": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "nodes": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/node"
+        }
+      },
+      "edges": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "source",
+            "target"
+          ],
+          "properties": {
+            "source": {
+              "$ref": "#/$defs/nonempty"
+            },
+            "target": {
+              "$ref": "#/$defs/nonempty"
+            },
+            "confirmed": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "summary": {
+        "type": "object",
+        "properties": {
+          "clues": {
+            "$ref": "#/$defs/nonnegative"
+          },
+          "fofa_assets": {
+            "$ref": "#/$defs/nonnegative"
+          },
+          "fofa_ips": {
+            "$ref": "#/$defs/nonnegative"
+          }
+        },
+        "additionalProperties": false
+      },
+      "heat": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "date",
+            "value"
+          ],
+          "properties": {
+            "date": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "value": {
+              "$ref": "#/$defs/nonnegative"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "components": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "name",
+            "count"
+          ],
+          "properties": {
+            "name": {
+              "$ref": "#/$defs/nonempty"
+            },
+            "display_name": {
+              "type": "string"
+            },
+            "count": {
+              "$ref": "#/$defs/nonnegative"
+            },
+            "hot_days": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "enum": [
+                      "hot",
+                      "kev",
+                      "cve"
+                    ]
+                  },
+                  "summary": {
+                    "type": "string"
+                  },
+                  "evidence": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "title"
+                      ],
+                      "properties": {
+                        "title": {
+                          "$ref": "#/$defs/nonempty"
+                        },
+                        "date": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": "string",
+                          "pattern": "^https://"
+                        },
+                        "detail": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "additionalProperties": false,
+    "$defs": {
+      "nonempty": {
+        "type": "string",
+        "minLength": 1
+      },
+      "nonnegative": {
+        "type": "number",
+        "minimum": 0
+      },
+      "node": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "label"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/nonempty"
+          },
+          "kind": {
+            "enum": [
+              "root",
+              "company",
+              "domain",
+              "feature"
+            ]
+          },
+          "featureKind": {
+            "enum": [
+              "org",
+              "cert",
+              "mx",
+              "asn",
+              "icp",
+              "icon_hash",
+              "ipc",
+              "fid"
+            ]
+          },
+          "label": {
+            "$ref": "#/$defs/nonempty"
+          },
+          "ip_count": {
+            "$ref": "#/$defs/nonnegative"
+          },
+          "detail": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "logo": {
+                "type": "string",
+                "pattern": "^(data:image/|https://)"
+              },
+              "website": {
+                "type": "string",
+                "pattern": "^https?://"
+              },
+              "region": {
+                "type": "string"
+              },
+              "industry": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "organizations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "name"
+                  ],
+                  "properties": {
+                    "name": {
+                      "$ref": "#/$defs/nonempty"
+                    },
+                    "count": {
+                      "$ref": "#/$defs/nonnegative"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "basis": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "source"
+                  ],
+                  "properties": {
+                    "source": {
+                      "$ref": "#/$defs/nonempty"
+                    },
+                    "via": {
+                      "type": "string"
+                    },
+                    "date": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "registry_id": {
+                "$ref": "#/$defs/nonempty"
+              },
+              "registry_name": {
+                "$ref": "#/$defs/nonempty"
+              },
+              "organization_id": {
+                "$ref": "#/$defs/nonempty"
+              },
+              "status": {
+                "type": "string"
+              },
+              "relation": {
+                "type": "string"
+              },
+              "share": {
+                "type": "string"
+              },
+              "features": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "value"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "org",
+                        "cert",
+                        "mx",
+                        "asn",
+                        "icp",
+                        "icon_hash",
+                        "ipc",
+                        "fid",
+                        "domain"
+                      ]
+                    },
+                    "value": {
+                      "$ref": "#/$defs/nonempty"
+                    },
+                    "node_id": {
+                      "$ref": "#/$defs/nonempty"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "serial": {
+                "type": "string"
+              },
+              "issuer": {
+                "type": "string"
+              },
+              "not_before": {
+                "type": "string"
+              },
+              "not_after": {
+                "type": "string"
+              },
+              "is_valid": {
+                "type": "boolean"
+              },
+              "is_match": {
+                "type": "boolean"
+              },
+              "observations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "host"
+                  ],
+                  "properties": {
+                    "host": {
+                      "$ref": "#/$defs/nonempty"
+                    },
+                    "domain": {
+                      "$ref": "#/$defs/nonempty"
+                    },
+                    "source": {
+                      "$ref": "#/$defs/nonempty"
+                    },
+                    "is_valid": {
+                      "type": "boolean"
+                    },
+                    "is_match": {
+                      "type": "boolean"
+                    },
+                    "is_expired": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "names": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "subject_name": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "if": {
+          "properties": {
+            "kind": {
+              "const": "feature"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        "then": {
+          "required": [
+            "featureKind"
+          ]
+        },
+        "else": {
+          "not": {
+            "required": [
+              "featureKind"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "initial_state": {
+    "schema_version": 1,
+    "title": "EASM",
+    "collection": {
+      "status": "idle",
+      "steps": []
+    },
+    "nodes": [],
+    "edges": [],
+    "heat": [],
+    "components": []
+  },
+  "source": {
+    "id": "easm-asset-portrait",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "subject"
+      ],
+      "properties": {
+        "subject": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "logo": {
+          "type": "string",
+          "pattern": "^(data:image/|https://)",
+          "maxLength": 200000
+        },
+        "website": {
+          "type": "string",
+          "pattern": "^https?://",
+          "maxLength": 2000
+        },
+        "companies": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "source"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "parent": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "relation": {
+                "type": "string",
+                "maxLength": 32
+              },
+              "share": {
+                "type": "string",
+                "maxLength": 32
+              },
+              "registry_id": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "confirmed": {
+                "type": "boolean"
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "via": {
+                "type": "string",
+                "maxLength": 200
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "domains": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "required": [
+              "domain",
+              "source"
+            ],
+            "properties": {
+              "domain": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 253
+              },
+              "parent": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "confirmed": {
+                "type": "boolean"
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "via": {
+                "type": "string",
+                "maxLength": 200
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "certificates": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "required": [
+              "serial",
+              "domain",
+              "source"
+            ],
+            "properties": {
+              "serial": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "domain": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 253
+              },
+              "issuer": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "subject_cn": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "subject_org": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "names": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "type": "string",
+                  "maxLength": 253
+                }
+              },
+              "not_before": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "not_after": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "valid": {
+                "type": "boolean"
+              },
+              "match": {
+                "type": "boolean"
+              },
+              "expired": {
+                "type": "boolean"
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "via": {
+                "type": "string",
+                "maxLength": 200
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "query": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

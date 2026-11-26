@@ -15,3 +15,11 @@ func TestTaskPanelCatalogCannotBeChangedByCaller(t *testing.T) {
 		t.Fatal("a caller changed the embedded plugin catalog")
 	}
 }
+
+func TestEASMV1DefinitionCannotBeChangedByCaller(t *testing.T) {
+	first := EASMV1Definition()
+	first[0] = '!'
+	if !json.Valid(EASMV1Definition()) {
+		t.Fatal("a caller changed the published EASM definition")
+	}
+}

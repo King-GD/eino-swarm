@@ -13,7 +13,7 @@ type metricReplies = map[string]func(map[string]any) (string, error)
 
 // runMetrics collects the aggregations for one portrait. current carries a graph
 // the agent pushed earlier; nil starts from an empty panel.
-func runMetrics(t *testing.T, current json.RawMessage, settings Settings, caller *fakeCaller) State {
+func runMetrics(t *testing.T, current json.RawMessage, settings Settings, caller Caller) State {
 	t.Helper()
 	var out published
 	if _, err := Run(t.Context(), Input{Subject: "Subject", Query: metricQuery}, settings, current, caller, out.publish); err != nil {
@@ -171,10 +171,14 @@ func TestHeatRefusesPointsTheChartCannotPlot(t *testing.T) {
 func componentCaller(products string, rules func(map[string]any) (string, error)) *fakeCaller {
 	return &fakeCaller{replies: metricReplies{
 		RoleStats: func(arguments map[string]any) (string, error) {
-			if arguments["fields"] == "ip" {
+			switch arguments["fields"] {
+			case "ip":
 				return `{"size":1,"distinct":{"ip":1}}`, nil
+			case "cloud_name":
+				return `{"aggs":{"cloud_name":[]}}`, nil
+			default:
+				return products, nil
 			}
-			return products, nil
 		},
 		RoleProductRules: rules,
 	}}

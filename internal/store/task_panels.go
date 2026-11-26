@@ -14,18 +14,20 @@ import (
 
 // TaskPanelRow stores the latest projection; mutation rows preserve replay input.
 type TaskPanelRow struct {
-	SourceStatus   string
-	ID             string `gorm:"primaryKey;size:64"`
-	ThreadID       string `gorm:"uniqueIndex:idx_panel_binding,priority:1;index;size:64"`
-	PluginID       string `gorm:"uniqueIndex:idx_panel_binding,priority:2;size:128"`
-	Revision       int64
-	DefinitionJSON []byte
-	State          []byte
-	SourceJSON     []byte
-	Hidden         bool
-	Closed         bool `gorm:"not null;default:false"`
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	SourceStatus           string
+	ID                     string `gorm:"primaryKey;size:64"`
+	ThreadID               string `gorm:"uniqueIndex:idx_panel_binding,priority:1;index;size:64"`
+	PluginID               string `gorm:"uniqueIndex:idx_panel_binding,priority:2;size:128"`
+	Revision               int64
+	DefinitionJSON         []byte
+	PreviousDefinitionJSON []byte
+	DefinitionRevision     int64
+	State                  []byte
+	SourceJSON             []byte
+	Hidden                 bool
+	Closed                 bool `gorm:"not null;default:false"`
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
 }
 
 // TaskPanelMutation is a durable accepted operation, scoped by runtime ownership.
@@ -124,6 +126,8 @@ func (s *Store) OpenTaskPanel(ctx context.Context, d taskpanel.Definition, src t
 		}
 		row.ThreadID, row.PluginID = src.ThreadID, d.ID
 		row.DefinitionJSON, _ = json.Marshal(d)
+		row.PreviousDefinitionJSON = nil
+		row.DefinitionRevision = 0
 		row.SourceJSON, _ = json.Marshal(src)
 		row.State = bytes.Clone(d.InitialState)
 		if len(row.State) == 0 {

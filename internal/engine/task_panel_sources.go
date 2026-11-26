@@ -69,7 +69,14 @@ func (e *Engine) runEASMSource(ctx context.Context, raw json.RawMessage, current
 		servers[binding.Name] = binding.Server
 	}
 	caller := &easmCaller{manager: e.mcp, servers: servers, workspace: set.WorkspaceDir}
-	return easm.Run(ctx, input, easm.Settings{Tools: names, MaxDomains: settings.EASM.MaxDomains, MaxComponents: settings.EASM.MaxComponents}, current, caller, publish)
+	limits := easm.Settings{
+		Tools:         names,
+		MaxDomains:    settings.EASM.MaxDomains,
+		MaxComponents: settings.EASM.MaxComponents,
+		MaxClouds:     settings.EASM.MaxClouds,
+		MaxServices:   settings.EASM.MaxServices,
+	}
+	return easm.Run(ctx, input, limits, current, caller, publish)
 }
 
 // panelMCPBinding stores only identities alongside the turn's mount receipt.

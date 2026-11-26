@@ -172,6 +172,41 @@ test("EASM renders the producer state, words evidence and follows step status", 
   await expect(panel.getByText("No component data")).toBeVisible()
 })
 
+// The hosting providers follow the supply chain. Outside Chinese a provider
+// keeps FOFA's spelling, even though the stored row carries the maintained
+// Chinese name.
+test("EASM lists hosting providers below the supply chain in the source spelling", async ({ page }) => {
+  const title = `EASM clouds ${Date.now()}`
+  const created = await (await page.request.post("/api/threads", { data: { title } })).json()
+  const thread = created.thread.id as string
+  await servePanel(page, thread, {
+    ...portrait,
+    collection: { status: "done", steps: [...portrait.collection.steps.map((step) => ({ ...step, status: "done" as const })), { id: "clouds", status: "done" }] },
+    clouds: [{ name: "akamai", display_name: "阿卡迈", category: "cdn", assets: 7, ips: 3, services: [{ name: "NGINX", count: 5 }] }],
+  }, "finished")
+  await page.goto("/")
+  await page.getByTestId("dest-chats").click()
+  await page.getByRole("button", { name: title, exact: true }).click()
+  const panel = page.getByTestId("easm-task-panel")
+  const table = panel.getByTestId("easm-clouds")
+  await expect(table).toBeVisible()
+  const row = table.getByRole("row").nth(1)
+  await expect(row).toContainText("akamai")
+  await expect(row).not.toContainText("阿卡迈")
+  await expect(row).toContainText("CDN")
+  await expect(row).toContainText("NGINX 5")
+  const supply = await panel.getByRole("heading", { name: "Supply chain / third-party components" }).boundingBox()
+  const clouds = await panel.getByRole("heading", { name: "Cloud providers" }).boundingBox()
+  expect(supply && clouds && clouds.y > supply.y).toBe(true)
+
+  // A phone-width panel must not cut the service counts off: the cell wraps,
+  // and a title tooltip cannot be read by tapping.
+  await page.setViewportSize({ width: 390, height: 800 })
+  const services = row.getByRole("cell").last()
+  await expect(services).toContainText("NGINX 5")
+  await expect.poll(async () => services.evaluate((cell) => cell.scrollWidth <= cell.clientWidth + 1)).toBe(true)
+})
+
 // An interrupted run (Stop, restart) must not leave a spinner after reload.
 test("EASM shows no loading spinners for an interrupted empty collection", async ({ page }) => {
   const title = `EASM interrupted ${Date.now()}`

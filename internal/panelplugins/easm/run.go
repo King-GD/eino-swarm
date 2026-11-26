@@ -25,6 +25,18 @@ var stepFuncs = map[Step]stepDef{}
 
 const interruptRecordTimeout = 2 * time.Second
 
+// panelRequestSlots is how many remote requests one panel may have in flight.
+// The stats backend allows five requests a second; four leaves it a request of
+// headroom, the same bound FOFA AI uses for its chart requests.
+const panelRequestSlots = 4
+
+// rateLimitedCode is the code the MCP layer reports for a refused request.
+const rateLimitedCode = "rate_limited"
+
+// rateLimitRetryWait is the pause before the one repeat of a refused request.
+// It outlasts the backend's one-second window.
+const rateLimitRetryWait = 1100 * time.Millisecond
+
 type run struct {
 	input    Input
 	settings Settings
@@ -40,6 +52,10 @@ type run struct {
 	previousQuery     string
 	unresolvedParents int
 	refusedDomains    int
+	// slots is the panel's shared request budget. Every remote call of the run
+	// takes one, so the panel never has more requests in flight than the stats
+	// backend's rate limit allows.
+	slots chan struct{}
 }
 
 // Run merges this call's batch into the portrait in current and publishes the
@@ -55,10 +71,10 @@ func Run(ctx context.Context, input Input, settings Settings, current json.RawMe
 	if caller == nil || publish == nil {
 		return Result{}, fmt.Errorf("easm source is not wired")
 	}
-	if settings.MaxDomains < 1 || settings.MaxComponents < 1 {
-		return Result{}, fmt.Errorf("max domains and components must be positive")
+	if settings.MaxDomains < 1 || settings.MaxComponents < 1 || settings.MaxClouds < 1 || settings.MaxServices < 1 {
+		return Result{}, fmt.Errorf("max domains, components, clouds and services must be positive")
 	}
-	r := &run{input: input, settings: settings, caller: caller, publish: publish}
+	r := &run{input: input, settings: settings, caller: caller, publish: publish, slots: make(chan struct{}, panelRequestSlots)}
 	if err := r.begin(current); err != nil {
 		return r.result(), err
 	}
@@ -87,7 +103,7 @@ func Run(ctx context.Context, input Input, settings Settings, current json.RawMe
 // finishedNext is the receipt's instruction once the panel holds every
 // aggregation for the query. Without it the agent keeps researching after the
 // portrait is complete, and the conversation outlives the panel by minutes.
-const finishedNext = "The panel now holds the totals, trend and components for this query. Reply with a short summary of the panel and end the turn without calling more tools."
+const finishedNext = "The panel now holds the totals, trend, components and hosting providers for this query. Reply with a short summary of the panel and end the turn without calling more tools."
 
 // next words the receipt from what the steps actually produced. A missing
 // aggregation is named instead of being implied by a completion claim, so the
@@ -129,7 +145,7 @@ func (r *run) begin(current json.RawMessage) error {
 		detail = mergeDetail(detail, &Detail{RegistryID: registry, RegistryName: r.input.Subject})
 	}
 	r.graph = NewGraph(r.input.Subject, detail)
-	r.state = State{SchemaVersion: 1, Title: r.input.Subject, Collection: Collection{Status: statusIdle}, Heat: []HeatPoint{}, Components: []Component{}}
+	r.state = State{SchemaVersion: 1, Title: r.input.Subject, Collection: Collection{Status: statusIdle}, Heat: []HeatPoint{}, Components: []Component{}, Clouds: []Cloud{}}
 	for _, step := range Steps {
 		r.state.Collection.Steps = append(r.state.Collection.Steps, StepStatus{ID: step, Status: statusPending})
 	}
@@ -149,6 +165,7 @@ func (r *run) begin(current json.RawMessage) error {
 	r.state.Summary = previous.Summary
 	r.state.Heat = orEmptyHeat(previous.Heat)
 	r.state.Components = orEmptyComponents(previous.Components)
+	r.state.Clouds = orEmptyClouds(previous.Clouds)
 	// Steps are rebuilt from the current pipeline, so a panel stored before a
 	// step retired keeps only the statuses this producer still reports.
 	for i, step := range Steps {
@@ -173,6 +190,7 @@ func (r *run) planMetrics() bool {
 		r.state.Summary = nil
 		r.state.Heat = []HeatPoint{}
 		r.state.Components = []Component{}
+		r.state.Clouds = []Cloud{}
 	}
 	summary := r.state.Summary
 	if summary != nil {
@@ -350,22 +368,58 @@ func (s Settings) configured(roles []string) bool {
 	return true
 }
 
-// call runs the tool configured for role and decodes its reply into out.
+// call runs the tool configured for role and decodes its reply into out. Every
+// aggregation of the panel shares one request slot, so the panel never sends
+// more requests at once than the stats backend's rate limit allows, and a
+// request the backend refuses as rate limited waits and tries once more.
 func (r *run) call(ctx context.Context, role string, arguments map[string]any, out any) error {
 	tool := r.settings.Tools[role]
 	if tool == "" {
 		return ErrUnavailable
 	}
+	body, err := r.callOnce(ctx, tool, arguments)
+	var toolErr *ToolError
+	if errors.As(err, &toolErr) && toolErr.Code == rateLimitedCode {
+		if err := r.waitForRetry(ctx); err != nil {
+			return err
+		}
+		body, err = r.callOnce(ctx, tool, arguments)
+	}
+	if err != nil {
+		return err
+	}
+	return decodeReply(body, out)
+}
+
+// callOnce takes one shared request slot and makes one remote call. The slot is
+// held for the whole call, so a slow reply keeps its slot and a burst cannot
+// form behind it.
+func (r *run) callOnce(ctx context.Context, tool string, arguments map[string]any) (json.RawMessage, error) {
+	select {
+	case r.slots <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	defer func() { <-r.slots }()
 	if r.settings.CallTimeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, r.settings.CallTimeout)
 		defer cancel()
 	}
-	body, err := r.caller.Call(ctx, tool, arguments)
-	if err != nil {
-		return err
+	return r.caller.Call(ctx, tool, arguments)
+}
+
+// waitForRetry pauses before the one repeat of a rate-limited request. The
+// pause is long enough for the backend's one-second window to pass.
+func (r *run) waitForRetry(ctx context.Context) error {
+	timer := time.NewTimer(rateLimitRetryWait)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-	return decodeReply(body, out)
 }
 
 // decodeReply rejects the error envelopes FOFA-style servers return with a
@@ -447,6 +501,13 @@ func orEmptyComponents(components []Component) []Component {
 		return []Component{}
 	}
 	return components
+}
+
+func orEmptyClouds(clouds []Cloud) []Cloud {
+	if clouds == nil {
+		return []Cloud{}
+	}
+	return clouds
 }
 
 func safeLogo(value string) string {
