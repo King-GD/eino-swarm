@@ -3,13 +3,11 @@
 Pull-request verification for this repository. It runs on every pull request
 whose target branch is `ci/verify` (opened, synchronize, reopened, drafts
 included). The token is read-only (`contents: read`), no job uses a secret, and
-the checkout writes no credentials into `.git/config`. A newer push to the same
-pull request on the same base revision cancels the older run; when the base SHA
-changes, the earlier run keeps running so its cloud results survive a separate
-CI-only revision. Every job checks out `github.event.pull_request.head.sha`, so
-a failure names the contributor's own tree rather than the synthetic merge
-commit. The Go suite runs as one static job plus four race lanes: the lanes are
-independent, and `fail-fast: false` keeps one red lane from cancelling the rest.
+the checkout writes no credentials into `.git/config`. Runs are grouped by pull
+request number. A new run cancels any older active run for the same pull request,
+including after the base advances. Each job checks out the contributor's tree at
+`github.event.pull_request.head.sha`. The Go suite runs as one static job plus
+four race lanes. A red lane leaves its siblings running (`fail-fast: false`).
 
 | job | what it runs |
 |---|---|

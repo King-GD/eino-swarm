@@ -10,11 +10,9 @@ on:
 permissions:
   contents: read
 
-# Within one base revision a newer push supersedes the older run. A separate
-# CI-only revision moves the base SHA, so the earlier long suite keeps its
-# results instead of being cancelled.
+# A new run supersedes the previous run for the same pull request.
 concurrency:
-  group: pr-verify-${{ github.event.pull_request.number }}-${{ github.event.pull_request.base.sha }}
+  group: pr-verify-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
