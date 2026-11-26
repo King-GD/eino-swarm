@@ -7809,7 +7809,8 @@ Several things are tested here, some as pure logic and some in jsdom:
   **`src/components/app/sidebar-slots.tsx`**,
   **`src/components/app/sidebar-thread-row.tsx`**, and
   **`src/components/app/sidebar-thread-group.tsx`**, rendered in jsdom
-  (`sidebar-slots.test.ts` pins chrome-relative density, not rem): a leftmost
+  (`sidebar-slots.test.ts` checks chrome-relative density in the processed
+  `index.css`, including its imports): a leftmost
   rail (`dest-rail`) switches Projects (default), Conversations, Scheduled, and Clients so those lists are
   not stacked in one scroll or drawn over the task. The project list
   does not offer New conversation (that button is on Conversations) and does not show an unread count on the rail; there is no title-bar chrome row and no hide
