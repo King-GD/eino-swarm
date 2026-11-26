@@ -130,12 +130,16 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  go:
-    name: Go checks
-    # The suite asserts the project's own desktop command set, its macOS update
-    # and lockfile behavior, and a package-budgeted race run, so it uses the
-    # untagged macOS build rather than the Linux server variant. Node supplies
-    # the frontend entry's toolchain; the macOS image supplies the native libs.
+  # Formatting, vet and a plain compile are their own short job so a style or
+  # build regression reports in minutes instead of queueing behind the race
+  # lanes. It publishes its own result and gates nothing: every job below keeps
+  # running whatever this one says.
+  go-static:
+    name: Go static and build checks
+    # The suite asserts the project's own desktop command set and its macOS
+    # update and lockfile behavior, so it uses the untagged macOS build rather
+    # than the Linux server variant. Node supplies the frontend entry's
+    # toolchain; the macOS image supplies the native libs.
     runs-on: macos-15-intel
     timeout-minutes: 60
     steps:
@@ -153,13 +157,140 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Formatting
-        run: make fmt-check
+        run: |
+          start=$SECONDS
+          make fmt-check
+          echo "go-static: phase=fmt status=ok duration_s=$((SECONDS-start))"
       - name: Vet
-        run: make vet
+        run: |
+          start=$SECONDS
+          make vet
+          echo "go-static: phase=vet status=ok duration_s=$((SECONDS-start))"
       - name: Compile every package
-        run: go build ./...
-      - name: Race tests
-        run: make test-go
+        run: |
+          start=$SECONDS
+          go build ./...
+          echo "go-static: phase=build status=ok duration_s=$((SECONDS-start))"
+
+  # The race suite is the same untagged macOS build as before, split into four
+  # lanes so no lane carries the whole tree: internal/engine alone outgrew one
+  # job's budget. `fail-fast: false` keeps a red lane from cancelling the rest,
+  # and every lane keeps the original 25-minute package timeout and 60-minute
+  # job timeout. pr-verify.md states what each lane owns and how it proves it.
+  go-race:
+    name: Go race tests (${{ matrix.lane }})
+    runs-on: macos-15-intel
+    timeout-minutes: 60
+    # Both checkouts are siblings under the workspace: the product tree keeps its
+    # own root, so the lane driver's checkout can never make the candidate Git
+    # tree dirty or change what its build metadata and native tests see.
+    defaults:
+      run:
+        working-directory: candidate
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [engine-a, engine-b, cli, rest]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The pull request head, not the synthetic merge commit, so a failure
+          # names the contributor's own tree.
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: candidate/frontend/package-lock.json
+      # The cli lane restores GOCACHE and GOMODCACHE through the explicit
+      # restore/save pair below, so setup-go must not manage them too.
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: candidate/go.mod
+          cache: ${{ matrix.lane != 'cli' }}
+          cache-dependency-path: candidate/go.sum
+      # The lane driver is read-only CI code, not candidate content: it comes
+      # from the revision that owns this workflow file, in its own checkout.
+      - name: Obtain the lane driver from the workflow revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: ci-control
+          sparse-checkout: .github
+          persist-credentials: false
+      - name: Resolve the cmd/zwai cache key and paths
+        if: matrix.lane == 'cli'
+        id: go-cache
+        run: |
+          {
+            echo "primary=go-race-cli-${{ runner.os }}-${{ runner.arch }}-$(go env GOVERSION)-${{ hashFiles('candidate/go.sum') }}-v1"
+            echo "gocache=$(go env GOCACHE)"
+            echo "gomodcache=$(go env GOMODCACHE)"
+          } >> "$GITHUB_OUTPUT"
+      # A repeat run of the same pull request reuses the toolchain and
+      # dependency cache its first run saved; the cache service scopes entries
+      # to the run's own ref, so another pull request cannot consume it.
+      - name: Restore the cmd/zwai race build cache
+        if: matrix.lane == 'cli'
+        id: cache-restore
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ${{ steps.go-cache.outputs.gocache }}
+            ${{ steps.go-cache.outputs.gomodcache }}
+          key: ${{ steps.go-cache.outputs.primary }}
+          restore-keys: |
+            go-race-cli-${{ runner.os }}-${{ runner.arch }}-
+      # Compiles the binary the cli lane's own wrappers and subprocesses build
+      # again, so they start from a warm cache. A failure here is reported and
+      # warns, but lets the race run below report its own status.
+      - name: Prewarm the cmd/zwai race build
+        if: matrix.lane == 'cli'
+        id: prewarm
+        continue-on-error: true
+        working-directory: candidate/cmd/zwai
+        run: |
+          start=$SECONDS
+          status=0
+          go build -race -trimpath -o "$RUNNER_TEMP/zwai-race" . || status=$?
+          if [ "$status" -eq 0 ]; then
+            echo "go-race: lane=cli phase=prewarm status=ok duration_s=$((SECONDS-start))"
+          else
+            echo "go-race: lane=cli phase=prewarm status=failed duration_s=$((SECONDS-start))"
+            echo "::warning title=race prewarm failed::go build -race ./cmd/zwai failed; the race lane still runs and reports its own result"
+          fi
+          exit "$status"
+      # Saved before the tests so a lane that later fails still leaves the next
+      # run a warm cache. Only a key miss and an actually successful prewarm may
+      # write it: a failed prewarm must never become a cache entry. Best effort,
+      # because a run that already owns this key must not turn a green lane red.
+      - name: Save the cmd/zwai race build cache
+        if: matrix.lane == 'cli' && steps.prewarm.outcome == 'success' && steps.cache-restore.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ${{ steps.go-cache.outputs.gocache }}
+            ${{ steps.go-cache.outputs.gomodcache }}
+          key: ${{ steps.go-cache.outputs.primary }}
+      - name: Race tests (${{ matrix.lane }})
+        run: |
+          out="$RUNNER_TEMP/go-race-${{ matrix.lane }}"
+          start=$SECONDS
+          status=0
+          python3 "$GITHUB_WORKSPACE/ci-control/.github/ci/go-race.py" "${{ matrix.lane }}" "$out" || status=$?
+          echo "go-race: lane=${{ matrix.lane }} phase=job status=$([ "$status" -eq 0 ] && echo ok || echo failed) wall_s=$((SECONDS-start))"
+          exit "$status"
+      - name: Keep the race evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: go-race-${{ matrix.lane }}-pr-${{ github.event.pull_request.number }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/go-race-${{ matrix.lane }}/
+          if-no-files-found: warn
+          retention-days: 7
 
   model-check:
     name: Model checks (TLC)
