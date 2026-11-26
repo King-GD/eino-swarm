@@ -180,7 +180,9 @@ type SwarmConfig struct {
 	// Overflow waits for the next tick. Zero or negative is repaired to
 	// the default so a hand-edit cannot refuse every fire or unbounded
 	// fan-out.
-	ScheduleMaxActive int `yaml:"schedule_max_active" json:"schedule_max_active"`
+	ScheduleMaxActive   int    `yaml:"schedule_max_active" json:"schedule_max_active"`
+	ScheduleAnswerCheck bool   `yaml:"schedule_answer_check" json:"schedule_answer_check"`
+	ScheduleAnswerModel string `yaml:"schedule_answer_model" json:"schedule_answer_model"`
 	// PolicyReasoningEffort is the schedule-claim and wake-permission
 	// classifiers' thinking level: blank (DefaultAuxiliaryReasoning),
 	// inherit, none, low, medium or high. Unknown values are repaired to blank.
@@ -495,6 +497,8 @@ func Default() *Config {
 			ScheduleMinIntervalSeconds: DefaultScheduleMinIntervalSeconds,
 			ScheduleTickMS:             DefaultScheduleTickMS,
 			ScheduleMaxActive:          DefaultScheduleMaxActive,
+			ScheduleAnswerCheck:        true,
+			ScheduleAnswerModel:        DefaultScheduleAnswerModel,
 		},
 		MCP: MCPConfig{DirectLoadPercent: DefaultMCPDirectLoadPercent},
 		Tools: ToolsConfig{
@@ -733,6 +737,7 @@ func (c *Config) normalize() {
 	}
 	c.Swarm.DefaultReasoningEffort = NormalizeReasoning(c.Swarm.DefaultReasoningEffort)
 	c.Swarm.PolicyReasoningEffort = NormalizeAuxiliaryReasoning(c.Swarm.PolicyReasoningEffort)
+	c.Swarm.ScheduleAnswerModel = NormalizeScheduleAnswerModel(c.Swarm.ScheduleAnswerModel)
 	c.Swarm.ReasoningOutputRecoveryEffort = NormalizeReasoning(c.Swarm.ReasoningOutputRecoveryEffort)
 	if c.Tools.WebSearchMaxResults <= 0 {
 		c.Tools.WebSearchMaxResults = d.Tools.WebSearchMaxResults

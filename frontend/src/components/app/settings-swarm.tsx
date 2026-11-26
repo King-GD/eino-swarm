@@ -283,6 +283,30 @@ export function SwarmTab({
             }
           />
         </Field>
+        <Field
+          query={query}
+          label={t("settings.swarm.scheduleAnswerCheck")}
+          hint={t("settings.swarm.scheduleAnswerCheckHint")}
+        >
+          <Switch
+            checked={settings.swarm.schedule_answer_check !== false}
+            onCheckedChange={(schedule_answer_check) => update({ schedule_answer_check })}
+          />
+        </Field>
+        <SettingsChoice
+          query={query}
+          label={t("settings.swarm.scheduleAnswerModel")}
+          hint={t("settings.swarm.scheduleAnswerModelHint")}
+          value={settings.swarm.schedule_answer_model ?? "chat"}
+          disabled={settings.swarm.schedule_answer_check === false}
+          onValueChange={(value) => {
+            if (value === "auto" || value === "decision" || value === "chat") update({ schedule_answer_model: value })
+          }}
+        >
+          <SelectItem value="auto">{t("settings.swarm.scheduleAnswerAuto")}</SelectItem>
+          <SelectItem value="decision">{t("settings.swarm.scheduleAnswerDecision")}</SelectItem>
+          <SelectItem value="chat">{t("settings.swarm.scheduleAnswerChat")}</SelectItem>
+        </SettingsChoice>
         <SettingsChoice
           query={query}
           label={t("settings.swarm.policyThinking")}

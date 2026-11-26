@@ -168,6 +168,7 @@ export function t(locale: Locale, key: MessageKey, vars?: Vars): string {
  *  unknown notices pass through so a translation table cannot swallow them. */
 export function localizeNotice(text: string, locale: Locale): string {
   const scheduleFailure = /^schedule_claim_unverified: the claimed future check could not be verified; no unverified answer was published \(([a-z_]+)\)$/.exec(text)
+  if (scheduleFailure?.[1] === "decision_model_unavailable") return t(locale, "notice.scheduleAnswerDecisionUnavailable")
   if (scheduleFailure) return t(locale, "notice.scheduleClaimFailed", { code: scheduleFailure[1] })
   const backoff = /^Waiting (\d+)s before retrying the model request\.$/.exec(text)
   if (backoff) return t(locale, "notice.modelBackoff", { seconds: backoff[1] })

@@ -332,6 +332,7 @@ export const en = {
   "backoff.classification_invalid.schedule_id": "A claimed schedule ID is absent from its quote.",
   "backoff.classification_invalid.quote_not_in_candidate": "A claim quote is not exact text from the candidate answer.",
   "backoff.classification_invalid.next_run_at": "A claimed next run time is not in RFC3339 format.",
+  "backoff.classification_invalid.decision_response": "The Gateway decision model returned an invalid or missing probability.",
   "backoff.classification_deferred.unavailable": "Consecutive verification request failures reached the limit. Verification was deferred.",
   "backoff.classification_deferred.invalid": "Consecutive invalid verification responses reached the limit. Verification was deferred.",
   "backoff.classification_deferred.attempts": "This candidate reached the total verification attempt limit. Verification was deferred.",

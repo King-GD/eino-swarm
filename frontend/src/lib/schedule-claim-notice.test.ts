@@ -22,6 +22,12 @@ it("distinguishes the consecutive schedule refusal limit from an external blocke
   expect(localizeNotice(notice, "zh")).toBe("已停止自动续跑：连续多次调度声明无法核对。点「开始目标」继续。")
 })
 
+it("explains how to recover when the explicit decision model is unavailable", () => {
+  const error = "schedule_claim_unverified: the claimed future check could not be verified; no unverified answer was published (decision_model_unavailable)"
+  expect(localizeNotice(error, "en")).toContain("Choose Automatic or Follow chat model")
+  expect(localizeNotice(error, "zh")).toContain("选择「自动」或「跟随聊天模型」")
+})
+
 it("explains collecting existing workers without calling it a model failure", () => {
   const notice = modelRetryNotice('{"attempt":1,"cap":1,"reason":"workers_uncollected","worker_ids":["verifier-1"]}')
   expect(notice).toBe("Collecting delegated work before completing this turn.")

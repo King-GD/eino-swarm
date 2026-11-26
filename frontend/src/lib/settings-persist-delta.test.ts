@@ -62,6 +62,16 @@ describe("desktop saves preserve separately changed PC timeouts", () => {
     expect(patch.swarm?.max_concurrent).toBe(2)
     expect(patch.swarm).not.toHaveProperty("agent_timeout_seconds")
   })
+  it("saves only the edited answer-check choice", () => {
+    const before = copy()
+    before.swarm.schedule_answer_check = true
+    before.swarm.schedule_answer_model = "auto"
+    const draft = structuredClone(before)
+    draft.swarm.schedule_answer_check = false
+    const patch = persistPayload(draft, undefined, before)
+    expect(patch.swarm?.schedule_answer_check).toBe(false)
+    expect(patch.swarm).not.toHaveProperty("schedule_answer_model")
+  })
   it("compares provider duration by ID while labels and order change", () => {
     const before = copy(); before.models.providers[0].first_byte_timeout_seconds = 30
     before.models.providers.push({ ...before.models.providers[0], id: "second", timeout_seconds: 90, first_byte_timeout_seconds: 12 })

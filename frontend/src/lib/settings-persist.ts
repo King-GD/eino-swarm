@@ -28,7 +28,7 @@ export function persistPayload(
   }
   if (!same(next.ui, normalizeUISettings(baseline.ui))) patch.ui = next.ui
   if (!same(next.swarm, baseline.swarm)) {
-    const { agent_timeout_seconds, work_ledger, knowledge, ...rest } = next.swarm
+    const { agent_timeout_seconds, work_ledger, knowledge, schedule_answer_check, schedule_answer_model, ...rest } = next.swarm
     patch.swarm = { ...rest }
     if (agent_timeout_seconds !== baseline.swarm.agent_timeout_seconds) {
       patch.swarm.agent_timeout_seconds = agent_timeout_seconds
@@ -38,6 +38,12 @@ export function persistPayload(
     }
     if (knowledge !== undefined && knowledge !== baseline.swarm.knowledge) {
       patch.swarm.knowledge = knowledge
+    }
+    if (schedule_answer_check !== undefined && schedule_answer_check !== baseline.swarm.schedule_answer_check) {
+      patch.swarm.schedule_answer_check = schedule_answer_check
+    }
+    if (schedule_answer_model !== undefined && schedule_answer_model !== baseline.swarm.schedule_answer_model) {
+      patch.swarm.schedule_answer_model = schedule_answer_model
     }
   }
   if (!same(next.models, baseline.models)) {

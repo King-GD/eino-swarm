@@ -622,6 +622,8 @@ export interface SwarmLimits {
   schedule_tick_ms?: number
   /** Schedule runs that may execute at once. */
   schedule_max_active?: number
+  schedule_answer_check?: boolean
+  schedule_answer_model?: "auto" | "decision" | "chat"
   /** Classifier thinking: blank uses the background default (low). Other values are inherit, none, low, medium and high. */
   policy_reasoning_effort?: string
 }

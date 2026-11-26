@@ -1,6 +1,7 @@
 import { imageGenerationEn } from "./messages-image-generation"
 import { modelSettingsEn } from "./messages-model-settings"
 import { backoffEn } from "./messages-backoff"
+import { scheduleAnswerSettingsEn } from "./messages-schedule-answer-settings"
 import { modelPolicyEn } from "./messages-model-policy"
 import { remoteLoginEn } from "./messages-remote-login"
 import { desktopAccountEn } from "./messages-desktop-account"
@@ -27,6 +28,7 @@ export const en = {
   ...knowledgeEn,
   ...mcpEN,
   ...backoffEn,
+  ...scheduleAnswerSettingsEn,
   ...desktopAccountEn,
   ...remoteLoginEn,
   ...draftEN,
