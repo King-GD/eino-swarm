@@ -6,13 +6,13 @@ import { cn } from "@/lib/cn"
 
 /** Hosting providers with the company's assets behind each, so a row answers
  *  "how much of us is there" rather than "how big is the provider". */
-export function CloudTable({ clouds, loading = false, pending = false, className }: {
-  clouds?: EasmCloud[]; loading?: boolean; pending?: boolean; className?: string
+export function CloudTable({ clouds, loading = false, className }: {
+  clouds?: EasmCloud[]; loading?: boolean; className?: string
 }) {
   const text = useEasmText()
   const titleId = useId()
   const rows = clouds ?? []
-  const emptyText = clouds === undefined || pending ? text.cloudUncollected : text.cloudEmpty
+  if (!rows.length && !loading) return null
   const categories = text.cloudCategories as Record<string, string>
   return (
     <section aria-labelledby={titleId} className={cn("flex min-h-0 flex-col rounded-xl border bg-card p-3", className)}>
@@ -21,11 +21,9 @@ export function CloudTable({ clouds, loading = false, pending = false, className
         {rows.length ? <span className="text-[11px] text-muted-foreground">{text.cloudCount(formatCount(rows.length, text))}</span> : null}
       </div>
       {!rows.length ? (
-        loading ? (
-          <div role="progressbar" aria-label={text.cloudLoading} className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground">
-            <Loader2 className="size-5 motion-safe:animate-spin" aria-hidden />
-          </div>
-        ) : <p className="m-0 flex min-h-0 flex-1 items-center justify-center text-xs text-muted-foreground">{emptyText}</p>
+        <div role="progressbar" aria-label={text.cloudLoading} className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground">
+          <Loader2 className="size-5 motion-safe:animate-spin" aria-hidden />
+        </div>
       ) : <div tabIndex={0} role="region" aria-label={text.cloudRegion} className="min-h-0 flex-1 overflow-auto overscroll-contain">
         {/* Widths are shares, not pixels: in the narrow side panel the fixed
             columns used to eat the whole row and the provider name collapsed to

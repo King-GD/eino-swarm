@@ -101,7 +101,7 @@ Stop preserves an HTTP observation already returned to the source reducer, but d
 
 `easm-asset-portrait` is a native panel with a registered source. The agent confirms the subject (asking the user when it is ambiguous), opens the panel, does the discovery lookups with its own MCP tools and pushes what it found. The producer never discovers anything itself.
 
-EASM v2 adds the hosting provider table. Startup and full or project backup import upgrade saved instances with the original v1 definition in a transaction. The panel keeps its ID, query, existing observations and replay history. Reconnecting clients read its full definition at the new revision. A saved portrait without cloud results shows “Cloud providers not yet collected” when idle. Running the same query adds cloud data while retaining completed totals, trend and components.
+EASM v2 adds the hosting provider table. Startup and full or project backup import upgrade saved instances with the original v1 definition in a transaction. The panel keeps its ID, query, existing observations and replay history. Reconnecting clients read its full definition at the new revision. When cloud data has yet to be collected, an idle portrait hides the cloud card. Running the same query adds cloud data while retaining completed totals, trend and components. Clients displaying a v1 portrait hide the cloud card.
 
 `run_panel_source` takes one batch of that work:
 
@@ -153,19 +153,19 @@ the bindings admitted for their turn.
 
 The receipt returns counts, step outcomes and what could not be placed (`nodes`, `edges`, `components`, `steps`, `unresolved_parents`, `refused_domains`). Bulk data stays in the panel. Collection receipts carry `next`, asking the agent to summarize the panel and end the turn. If a step failed or was unavailable, the receipt identifies it. A refused direct update leaves the last committed revision available.
 
-The renderer shows the graph, attention trend, component table and hosting
-provider table. It keeps all copy in `frontend/src/lib/easm/messages.ts`. The
-attention trend and component cards show available
-data, including heat points with a value of zero. An empty card shows a spinner
-while its step is collecting or the owning task can still supply a batch with a
-query. Successful empty results and unrequested metrics leave their respective
-cards hidden. Failed, unavailable and interrupted steps with no data show a
-short status outside the card. The host's `source_status` distinguishes live
-collection from a saved step that still says `running` after engine restart or
-Stop. The side panel's hosting provider table distinguishes uncollected and
-empty results. In the expanded view it appears while loading or when results
-are available. The expanded graph uses the available width when all three
-cards are hidden.
+The renderer uses the same rules for the attention trend, component table and
+hosting provider table in the side panel and expanded view. Each card displays
+available data, including heat points with a value of zero and cloud provider
+rows confirmed before a service lookup failed. A card without results shows a
+spinner while its step is collecting or the owning task can still supply a
+batch with a query. Successful empty results and unrequested metrics leave
+their cards hidden. A saved portrait without a cloud step keeps its cloud card
+hidden until the producer reports that step or cloud rows. Failed, unavailable
+and interrupted steps with no data show a short status outside the card. The
+host's `source_status` distinguishes live collection from a saved step that
+still says `running` after engine restart or Stop. The expanded graph uses the
+available width when all three cards are hidden. The renderer keeps its copy
+in `frontend/src/lib/easm/messages.ts`.
 
 The graph receives whole batches and waits while the source is collecting or
 the owning task can still supply a batch. It displays its own empty state when

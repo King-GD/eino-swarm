@@ -78,16 +78,20 @@ test("paired EASM hides successful empty metrics and explains failed collection"
   await expect(panel).toHaveAttribute("data-revision", "1")
   await expect(panel.getByText("Asset attention trend", { exact: false })).toHaveCount(0)
   await expect(panel.getByText("Supply chain / third-party components", { exact: false })).toHaveCount(0)
+  await expect(panel.getByText(/cloud provider/i)).toHaveCount(0)
 
   await control(page, "snapshot", "mobile-easm", {
     ...savedEasmGraph,
-    collection: { status: "done", steps: [{ id: "heat", status: "failed" }, { id: "components", status: "done" }] },
+    collection: { status: "done", steps: [{ id: "heat", status: "failed" }, { id: "components", status: "done" }, { id: "clouds", status: "unavailable" }] },
     components: [{ name: "Fixture component", count: 3 }],
+    clouds: [],
   })
   await expect(panel).toHaveAttribute("data-revision", "2")
   await expect(panel.getByRole("region", heatRegion)).toHaveCount(0)
   await expect(panel.getByText("Asset attention trend · Collection failed", { exact: true })).toBeVisible()
   await expect(panel.getByRole("region", supplyRegion).getByText("Fixture component", { exact: true })).toBeVisible()
+  await expect(panel.getByRole("heading", { name: "Cloud providers", exact: true })).toHaveCount(0)
+  await expect(panel.getByText("Cloud providers · Source unavailable", { exact: true })).toBeVisible()
 })
 
 test("a paired task opens its local map once and preserves touch zoom through patch, hidden snapshot and rotation", async ({ page }, info) => {

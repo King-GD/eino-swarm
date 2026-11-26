@@ -6,15 +6,13 @@ import { CloudTable } from "./cloud-table"
 const zh = easmText("zh")
 const table = (props: Parameters<typeof CloudTable>[0]) => <EasmTextContext value={zh}><CloudTable {...props} /></EasmTextContext>
 
-// An empty table while providers may still arrive reads as "none found"; the
-// user should see progress, then either rows or an explicit empty state.
-it("shows a spinner while providers can arrive, then rows or an empty state", () => {
+it("shows progress only while providers can arrive and hides the empty card afterwards", () => {
   const view = render(table({ clouds: [], loading: true }))
   expect(screen.getByRole("progressbar", { name: zh.cloudLoading })).toBeInTheDocument()
   expect(screen.queryByRole("table")).toBeNull()
   view.rerender(table({ clouds: [], loading: false }))
   expect(screen.queryByRole("progressbar")).toBeNull()
-  expect(screen.getByText(zh.cloudEmpty)).toBeInTheDocument()
+  expect(screen.queryByRole("region", { name: zh.cloudTitle })).toBeNull()
   view.rerender(table({ clouds: [{ name: "aws", category: "cloud", assets: 3, ips: 2, services: [] }], loading: true }))
   expect(screen.queryByRole("progressbar")).toBeNull()
   expect(screen.getByRole("table")).toHaveTextContent("aws")
@@ -66,12 +64,8 @@ it("shows the maintained name only in Chinese and the source name otherwise", ()
 })
 
 // A portrait saved before cloud collection existed can still open.
-it("reports that providers have yet to be collected for a stored portrait", () => {
-  const view = render(table({ clouds: undefined, loading: false }))
-  expect(screen.getByText("尚未采集云服务商")).toBeInTheDocument()
+it("hides the cloud card for a stored portrait with no cloud data", () => {
+  render(table({}))
+  expect(screen.queryByRole("region", { name: zh.cloudTitle })).toBeNull()
   expect(screen.queryByRole("table")).toBeNull()
-  // A graph-only batch publishes an empty list with the cloud step still pending.
-  view.rerender(table({ clouds: [], pending: true, loading: false }))
-  expect(screen.getByText(zh.cloudUncollected)).toBeInTheDocument()
-  expect(screen.queryByText(zh.cloudEmpty)).not.toBeInTheDocument()
 })

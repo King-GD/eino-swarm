@@ -19,6 +19,9 @@ export function EasmTaskPanel({ panel, visible, locale, sheet, active = false }:
   const result = useMemo(() => isEasmResult(panel.state) ? projectEasmResult(panel.state) : undefined, [panel.state])
   if (!compatible) return <p role="alert" className="p-3 text-sm">{panelText(locale, "incompatible")} {panelText(locale, "regenerateEasm")}</p>
   if (!result) return <p role="alert" className="p-3 text-sm">{panelText(locale, "invalidEasm")} {panelText(locale, "regenerateEasm")}</p>
+  const cloudsStatus = result.collection.steps.some((step) => step.id === "clouds")
+    ? sectionStatus(result, "clouds", active, panel.source_status)
+    : undefined
   return <div className="min-h-0 flex-1" data-testid="easm-task-panel" data-revision={panel.revision}>
     <EasmTextContext value={easmText(locale)}>
       <EasmPanel
@@ -26,7 +29,7 @@ export function EasmTaskPanel({ panel, visible, locale, sheet, active = false }:
         graphLoading={graphSectionLoading(active, panel.source_status)}
         heatStatus={sectionStatus(result, "heat", active, panel.source_status)}
         componentsStatus={sectionStatus(result, "components", active, panel.source_status)}
-        cloudsLoading={sectionStatus(result, "clouds", active, panel.source_status) === "loading"}
+        cloudsStatus={cloudsStatus}
         visible={visible}
         sheet={sheet}
       />

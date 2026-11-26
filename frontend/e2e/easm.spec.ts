@@ -132,6 +132,7 @@ test("EASM shows the first certificate source and hides detached clues after reo
   await expectRootedGraph(false)
   await expect(panel.getByText("Asset attention trend", { exact: false })).toHaveCount(0)
   await expect(panel.getByText("Supply chain / third-party components", { exact: false })).toHaveCount(0)
+  await expect(panel.getByText(/cloud provider/i)).toHaveCount(0)
   await expect(stage).toHaveAttribute("data-layout-moving", "false", { timeout: 20_000 })
   const card = panel.getByTestId("easm-node-card")
   await stage.click({ position: await nodePoint(stage, laterDomain.id) })
@@ -290,6 +291,63 @@ test("EASM lists hosting providers below the supply chain in the source spelling
   await expect.poll(async () => services.evaluate((cell) => cell.scrollWidth <= cell.clientWidth + 1)).toBe(true)
 })
 
+test("EASM hides the cloud card after an empty collection and reports a later failure", async ({ page }) => {
+  const title = `EASM cloud collection ${Date.now()}`
+  const response = await page.request.post("/api/threads", { data: { title } })
+  await expect(response).toBeOK()
+  const { thread } = await response.json()
+  const saved = await servePanel(page, thread.id, {
+    ...portrait,
+    collection: { status: "running", steps: [{ id: "clouds", status: "running" }] },
+    clouds: [],
+  })
+  await page.goto("/")
+  await page.getByTestId("dest-chats").click()
+  await page.getByRole("button", { name: title, exact: true }).click()
+  const panel = page.getByTestId("easm-task-panel")
+  const cloudLoading = { name: "Loading cloud providers", exact: true }
+  const cloudHeading = { name: "Cloud providers", exact: true }
+  await expect(panel.getByRole("progressbar", cloudLoading)).toBeVisible()
+
+  const dialog = page.getByRole("dialog", { name: /asset graph/i })
+  await panel.getByRole("button", { name: "Expand EASM", exact: true }).click()
+  await expect(dialog.getByRole("progressbar", cloudLoading)).toBeVisible()
+
+  async function publishCloud(status: "done" | "failed" | "unavailable", clouds: EasmResult["clouds"] = []) {
+    saved.state = { ...saved.state, collection: { status: "done", steps: [{ id: "clouds", status }] }, clouds }
+    const base = saved.revision++
+    saved.source_status = "finished"
+    await emit(page, {
+      cursor: saved.revision, thread_id: saved.thread_id, panel_id: saved.id, revision: saved.revision, base_revision: base,
+      kind: "snapshot", state: saved.state, source_status: saved.source_status,
+    })
+    await expect(panel).toHaveAttribute("data-revision", String(saved.revision))
+  }
+
+  await publishCloud("done")
+  await expect(dialog.getByRole("heading", cloudHeading)).toHaveCount(0)
+  await page.keyboard.press("Escape")
+  await expect(dialog).toBeHidden()
+  await expect(panel.getByRole("heading", cloudHeading)).toHaveCount(0)
+  await expect(panel.getByText(/cloud provider/i)).toHaveCount(0)
+
+  await publishCloud("failed")
+  const notice = "Cloud providers · Collection failed"
+  await expect(panel.getByText(notice, { exact: true })).toBeVisible()
+  await panel.getByRole("button", { name: "Expand EASM", exact: true }).click()
+  await expect(dialog.getByText(notice, { exact: true })).toBeVisible()
+  await expect(dialog.getByRole("heading", cloudHeading)).toHaveCount(0)
+
+  await publishCloud("unavailable")
+  await expect(dialog.getByText("Cloud providers · Source unavailable", { exact: true })).toBeVisible()
+
+  await publishCloud("failed", [{ name: "akamai", category: "cdn", assets: 7, ips: 3, services: [] }])
+  await expect(dialog.getByTestId("easm-clouds").getByText("akamai", { exact: true })).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(dialog).toBeHidden()
+  await expect(panel.getByTestId("easm-clouds").getByText("akamai", { exact: true })).toBeVisible()
+})
+
 // An interrupted run must explain the missing metrics without reserving room
 // for empty cards or presenting the result as a completed empty collection.
 test("EASM explains an interrupted collection and gives the expanded graph the full width", async ({ page }) => {
@@ -298,7 +356,8 @@ test("EASM explains an interrupted collection and gives the expanded graph the f
   const thread = created.thread.id as string
   await servePanel(page, thread, {
     ...portrait, nodes: [], edges: [], summary: undefined,
-    collection: { status: "interrupted", steps: portrait.collection.steps.map((step) => ({ ...step, status: "interrupted" })) },
+    collection: { status: "interrupted", steps: [{ id: "heat", status: "interrupted" }, { id: "components", status: "interrupted" }, { id: "clouds", status: "interrupted" }] },
+    clouds: [],
   }, "interrupted")
   await page.goto("/")
   await page.getByTestId("dest-chats").click()
@@ -308,6 +367,7 @@ test("EASM explains an interrupted collection and gives the expanded graph the f
   await expect(panel.getByRole("progressbar")).toHaveCount(0)
   await expect(panel.getByText("Asset attention trend · Collection interrupted", { exact: true })).toBeVisible()
   await expect(panel.getByText("Supply chain / third-party components · Collection interrupted", { exact: true })).toBeVisible()
+  await expect(panel.getByRole("heading", { name: "Cloud providers", exact: true })).toHaveCount(0)
   await expect(panel.getByRole("region", { name: "Asset attention trend", exact: true })).toHaveCount(0)
   await expect(panel.getByRole("region", { name: "Supply chain / third-party components", exact: true })).toHaveCount(0)
 
@@ -315,6 +375,8 @@ test("EASM explains an interrupted collection and gives the expanded graph the f
   const dialog = page.getByRole("dialog")
   await expect(dialog.getByText("Asset attention trend · Collection interrupted", { exact: true })).toBeVisible()
   await expect(dialog.getByText("Supply chain / third-party components · Collection interrupted", { exact: true })).toBeVisible()
+  await expect(dialog.getByText("Cloud providers · Collection interrupted", { exact: true })).toBeVisible()
+  await expect(dialog.getByRole("heading", { name: "Cloud providers", exact: true })).toHaveCount(0)
   await expect(dialog.getByRole("region", { name: "Asset attention trend", exact: true })).toHaveCount(0)
   await expect(dialog.getByRole("region", { name: "Supply chain / third-party components", exact: true })).toHaveCount(0)
   const graph = dialog.getByRole("region", { name: "Asset relationship graph", exact: true })
@@ -334,7 +396,8 @@ test("EASM stops spinning when the host reports the source interrupted mid-colle
   const thread = created.thread.id as string
   await servePanel(page, thread, {
     ...portrait, nodes: [], edges: [], summary: undefined,
-    collection: { status: "running", steps: [{ id: "heat", status: "running" }, { id: "components", status: "unavailable" }] },
+    collection: { status: "running", steps: [{ id: "heat", status: "running" }, { id: "components", status: "unavailable" }, { id: "clouds", status: "running" }] },
+    clouds: [],
   }, "interrupted")
   await page.goto("/")
   await page.getByTestId("dest-chats").click()
@@ -344,6 +407,8 @@ test("EASM stops spinning when the host reports the source interrupted mid-colle
   await expect(panel.getByRole("progressbar")).toHaveCount(0)
   await expect(panel.getByText("Asset attention trend · Collection interrupted", { exact: true })).toBeVisible()
   await expect(panel.getByText("Supply chain / third-party components · Source unavailable", { exact: true })).toBeVisible()
+  await expect(panel.getByText("Cloud providers · Collection interrupted", { exact: true })).toBeVisible()
   await expect(panel.getByRole("region", { name: "Asset attention trend", exact: true })).toHaveCount(0)
   await expect(panel.getByRole("region", { name: "Supply chain / third-party components", exact: true })).toHaveCount(0)
+  await expect(panel.getByRole("heading", { name: "Cloud providers", exact: true })).toHaveCount(0)
 })
