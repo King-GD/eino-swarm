@@ -55,6 +55,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
+- The EASM graph search placeholder lists organizations, domains and certificates.
+
 - The engine compresses Responses request bodies of at least 1 KiB when the
   selected Gateway advertises gzip support and compression saves bytes. Older
   gateways and personal providers receive plain JSON. (`F-171`, `C-040`)

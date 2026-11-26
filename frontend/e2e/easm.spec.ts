@@ -127,6 +127,7 @@ test("EASM renders the producer state, words evidence and follows step status", 
   await page.getByRole("button", { name: title, exact: true }).click()
   const panel = page.getByTestId("easm-task-panel")
   await expect(panel).toHaveAttribute("data-revision", "1")
+  await expect(panel.getByRole("searchbox", { name: "Search assets or features" })).toHaveAttribute("placeholder", "Organization, domain or certificate")
   await expect(panel.getByRole("progressbar", { name: "Loading asset data", exact: true })).toBeVisible()
   await expect(panel.getByRole("progressbar", { name: "Loading asset attention trend" })).toBeVisible()
   await expect(panel.getByRole("progressbar", { name: "Loading supply chain components" })).toBeVisible()
