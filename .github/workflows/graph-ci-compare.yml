@@ -1,0 +1,119 @@
+name: Knowledge graph A/B
+
+on:
+  push:
+    branches: [codex/graph-ci-compare-2a7a60f9]
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: macos-15-intel
+    timeout-minutes: 70
+    env:
+      GOFLAGS: -tags=server
+      BASELINE_SHA: dc0730c3b7193d3521fe9c05fa15960c3ed54e39
+      CANDIDATE_SHA: 2a7a60f9070a363631907e65b922a21523f6e221
+      TEST_TITLE: The project graph connects titled pages, opens aliases and moves generated workflow labels to Pending
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.BASELINE_SHA }}
+          path: baseline
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+          path: candidate
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: baseline/go.mod
+          cache: false
+      - name: Build both exact revisions and record the shared runner
+        run: |
+          out="$RUNNER_TEMP/graph-ab"
+          mkdir -p "$out"
+          {
+            printf 'image=%s version=%s\n' "$ImageOS" "$ImageVersion"
+            sw_vers
+            uname -m
+            node --version
+            go version
+            printf 'baseline=%s\ncandidate=%s\n' "$(git -C baseline rev-parse HEAD)" "$(git -C candidate rev-parse HEAD)"
+          } | tee "$out/provenance.txt"
+          test "$(git -C baseline rev-parse HEAD)" = "$BASELINE_SHA"
+          test "$(git -C candidate rev-parse HEAD)" = "$CANDIDATE_SHA"
+          for file in go.mod go.sum frontend/package-lock.json frontend/playwright.config.ts frontend/e2e/project-knowledge.spec.ts; do
+            cmp "baseline/$file" "candidate/$file"
+          done
+          for side in baseline candidate; do
+            (
+              cd "$side"
+              npm --prefix frontend ci
+              make frontend
+              go build -o "$RUNNER_TEMP/zwai-$side" ./cmd/zwai
+              test -z "$(git status --porcelain)"
+              cd frontend
+              node -p "require('@playwright/test').chromium.executablePath()" > "$out/$side-chromium.txt"
+            )
+          done
+          cmp "$out/baseline-chromium.txt" "$out/candidate-chromium.txt"
+          (cd baseline/frontend && ./node_modules/.bin/playwright install chromium)
+          cat "$out/baseline-chromium.txt"
+      - name: Run 24 first-attempt trials per revision
+        run: |
+          root="$RUNNER_TEMP/graph-ab"
+          trial=0
+          run_trial() {
+            local side="$1"
+            trial=$((trial + 1))
+            local output
+            output="$root/$(printf '%02d' "$trial")-$side"
+            mkdir -p "$output"
+            local status=0
+            (
+              cd "$side/frontend"
+              export ZWAI_E2E_PORT=$((19700 + trial))
+              export ZWAI_E2E_DATA_DIR="$RUNNER_TEMP/graph-ab-data-$trial"
+              ./node_modules/.bin/playwright test e2e/project-knowledge.spec.ts:504 \
+                --workers=1 --retries=0 --reporter=json --output="$output/artifacts"
+            ) > "$output/report.json" 2> "$output/stderr.log" || status=$?
+            printf '%s\n' "$status" > "$output/exit-code"
+            node - "$output/report.json" "$status" "$side" "$trial" <<'JS'
+          const [file, exit, side, trial] = process.argv.slice(2)
+          const report = JSON.parse(require('node:fs').readFileSync(file, 'utf8'))
+          const specs = (suites) => suites.flatMap(suite => [...suite.specs, ...specs(suite.suites || [])])
+          const cases = specs(report.suites)
+          const test = cases[0]?.tests[0]
+          const result = test?.results[0]
+          if (report.errors.length || cases.length !== 1 || cases[0].title !== process.env.TEST_TITLE ||
+              cases[0].tests.length !== 1 || test.results.length !== 1 || result?.retry !== 0 ||
+              !['passed', 'failed', 'timedOut'].includes(result?.status) ||
+              Number(exit) !== (result.status === 'passed' ? 0 : 1)) {
+            throw new Error('Incomplete trial. Inspect its JSON report and stderr.')
+          }
+          console.log(`trial=${trial} side=${side} result=${result.status} duration_ms=${result.duration}`)
+          JS
+          }
+
+          # Alternate which revision runs first in each adjacent pair.
+          for pair in {1..24}; do
+            if (( pair % 2 == 1 )); then
+              run_trial baseline
+              run_trial candidate
+            else
+              run_trial candidate
+              run_trial baseline
+            fi
+          done
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: graph-ab-evidence-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/graph-ab/
+          retention-days: 7
