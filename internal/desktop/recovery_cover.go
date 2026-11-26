@@ -53,6 +53,7 @@ let owner=window.__zwaiRecoveryCover;if(owner){owner.last=key;return colour;}
 owner={last:key,pending:false};window.__zwaiRecoveryCover=owner;
 const schedule=()=>{if(owner.pending)return;owner.pending=true;requestAnimationFrame(()=>{owner.pending=false;const next=read(),value=JSON.stringify(next);if(!next||value===owner.last)return;owner.last=value;send(JSON.stringify({type:"zwai:render-cover",colour:next}));});};
 const observer=new MutationObserver(schedule);document.addEventListener("animationend",schedule,true);document.addEventListener("transitionend",schedule,true);
+document.addEventListener("zwai:render-cover-change",schedule,true);
 owner.observer=observer;observer.observe(root,{attributes:true,attributeFilter:["class","data-palette"]});observer.observe(document.body,{childList:true});
 return colour;
 })()`

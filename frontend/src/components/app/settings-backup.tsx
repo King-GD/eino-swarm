@@ -267,8 +267,8 @@ export function BackupTab({ query }: { query: string }) {
               aria-valuenow={backupPercent(progress)}
             >
               <div
-                className={backupPercent(progress) === undefined ? "h-full animate-pulse bg-primary" : "h-full bg-primary transition-[width] duration-300"}
-                style={backupPercent(progress) === undefined ? undefined : { width: `${backupPercent(progress)}%` }}
+                className={backupPercent(progress) === undefined ? "h-full w-1/3 animate-pulse bg-primary" : "h-full w-full origin-left bg-primary transition-transform duration-(--duration-slow)"}
+                style={backupPercent(progress) === undefined ? undefined : { transform: `scaleX(${backupPercent(progress)! / 100})` }}
               />
             </div>
             <p className="text-(length:--chrome-font-size)" role="status">{backupProgressText(progress, t)}</p>

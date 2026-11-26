@@ -373,6 +373,24 @@ test("a turn plays into the transcript and folds its work behind the answer", as
   await expect(page.getByRole("button", { name: "发送" })).toBeVisible()
 })
 
+test("a phone conversation renders a gradient under its line chart", async ({ page }, info) => {
+  await page.goto(WALKTHROUGH)
+  await page.getByRole("button", { name: "返回", exact: true }).click()
+  await page.getByRole("button", { name: "打开 Sweep the unused exports", exact: true }).click()
+  const line = { type: "line", title: "Trend fixture", points: [{ label: "a", value: 4 }, { label: "b", value: 11 }, { label: "c", value: 8 }] }
+  await page.getByLabel("消息", { exact: true }).fill("```chart\n" + JSON.stringify(line) + "\n```")
+  await page.locator("form").getByRole("button", { name: "发送", exact: true }).click()
+  const chart = page.getByRole("figure", { name: line.title })
+  await expect(chart).toBeVisible()
+  const plot = chart.getByTestId("phone-chart-plot")
+  const gradient = plot.locator("linearGradient")
+  const id = await gradient.getAttribute("id")
+  expect(id).toBeTruthy()
+  await expect(plot.locator("path")).toHaveAttribute("fill", `url(#${id})`)
+  await expect(gradient.locator('stop[offset="1"]')).toHaveAttribute("stop-opacity", "0")
+  await chart.screenshot({ path: info.outputPath("phone-line-gradient.png") })
+})
+
 test("a short conversation sits on the composer instead of under a blank screen", async ({
   page,
 }) => {

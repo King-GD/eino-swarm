@@ -21,6 +21,9 @@ export function PullToRefresh({
 }) {
   const [pull, setPull] = useState(0)
   const [busy, setBusy] = useState(false)
+  // While the finger is down the sheet must track it exactly; easing only
+  // belongs to the snap back. A live transition lags the finger by ~150 ms.
+  const [dragging, setDragging] = useState(false)
   const scroller = useRef<HTMLDivElement>(null)
   const from = useRef<number | null>(null)
 
@@ -28,6 +31,7 @@ export function PullToRefresh({
 
   const release = async () => {
     from.current = null
+    setDragging(false)
     if (!armed || !onRefresh || busy) {
       setPull(0)
       return
@@ -47,7 +51,10 @@ export function PullToRefresh({
       <div
         aria-hidden={!busy}
         role={busy ? "status" : undefined}
-        className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center overflow-hidden transition-[height] duration-150"
+        className={cn(
+          "pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center overflow-hidden",
+          !dragging && "transition-[height] duration-(--duration-fast) ease-out motion-reduce:transition-none",
+        )}
         style={{ height: pull }}
       >
         <RefreshCw
@@ -62,11 +69,15 @@ export function PullToRefresh({
       <div
         ref={scroller}
         data-testid="inbox-scroller"
-        className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain transition-transform duration-150 [-webkit-overflow-scrolling:touch]"
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]",
+          !dragging && "transition-transform duration-(--duration-fast) ease-out motion-reduce:transition-none",
+        )}
         style={pull ? { transform: `translateY(${pull}px)` } : undefined}
         onTouchStart={(e) => {
           if (!onRefresh || busy) return
           from.current = (scroller.current?.scrollTop ?? 0) <= 0 ? e.touches[0].clientY : null
+          setDragging(from.current != null)
         }}
         onTouchMove={(e) => {
           const start = from.current

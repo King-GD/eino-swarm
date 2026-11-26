@@ -12,6 +12,7 @@ import { applyPinnedOrder } from "@/lib/reorder"
 import {
   applyAppearance,
   appearanceToUI,
+  beginThemeRepaint,
   normalizeAppearance,
   readAppearance,
   writeAppearance,
@@ -982,5 +983,9 @@ export function applyTheme(theme: Theme) {
     theme === "dark" ||
     (theme === "system" &&
       window.matchMedia?.("(prefers-color-scheme: dark)").matches)
-  document.documentElement.classList.toggle("dark", Boolean(dark))
+  const next = Boolean(dark)
+  const root = document.documentElement
+  if (root.classList.contains("dark") === next) return
+  beginThemeRepaint(root)
+  root.classList.toggle("dark", next)
 }

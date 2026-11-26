@@ -182,14 +182,24 @@ check("invalid mutation colour sends no forged completion or health receipt",()=
   const r=receiver(); r.run(); r.root.colour="rgba(0, 0, 0, 0)"; r.notify(); r.frame(); assert.equal(r.messages.length,0);
   r.root.colour="rgb(1, 2, 3)"; r.notify(); r.frame(); same(r.messages,[{type:"zwai:render-cover",colour:[1,2,3]}]);
 });
+check("sidebar changes publish the new corner without a health probe",()=>{
+  const r=receiver(); r.run();
+  r.point.colour="rgb(20, 21, 22)"; r.dispatch("zwai:render-cover-change"); r.dispatch("zwai:render-cover-change");
+  assert.equal(r.frames.length,1); r.frame();
+  same(r.messages,[{type:"zwai:render-cover",colour:[20,21,22]}]);
+  r.dispatch("zwai:render-cover-change"); r.frame();
+  assert.equal(r.messages.length,1,"the same corner colour does not need a bridge message");
+  r.point.colour="rgba(0, 0, 0, 0)"; r.dispatch("zwai:render-cover-change"); r.frame();
+  same(r.messages[1],{type:"zwai:render-cover",colour:[248,249,250]});
+});
 check("settings enter and exit settle before the next five second probe",()=>{
-  const r=receiver(); r.run(); same([...r.listeners.keys()].sort(),["animationend","transitionend"]);
+  const r=receiver(); r.run(); same([...r.listeners.keys()].sort(),["animationend","transitionend","zwai:render-cover-change"]);
   r.point.colour="rgb(20, 21, 22)"; r.body.opacity="0.5"; r.notify(); r.frame(); same(r.messages[0],{type:"zwai:render-cover",colour:[134,135,136]});
   r.body.opacity="1"; r.dispatch("animationend"); r.frame(); same(r.messages[1],{type:"zwai:render-cover",colour:[20,21,22]});
   r.point.colour="rgba(0, 0, 0, 0)"; r.body.opacity="0.5"; r.notify(); r.frame(); assert.equal(r.messages.length,3);
   r.body.opacity="1"; r.dispatch("transitionend"); r.frame(); same(r.messages[2],{type:"zwai:render-cover",colour:[248,249,250]});
-  r.run(); assert.equal(r.listeners.size,2); assert.equal(r.observations.length,2);
-  const fresh=receiver(); fresh.run(); assert.equal(fresh.listeners.size,2); assert.equal(fresh.observations.length,2);
+  r.run(); assert.equal(r.listeners.size,3); assert.equal(r.observations.length,2);
+  const fresh=receiver(); fresh.run(); assert.equal(fresh.listeners.size,3); assert.equal(fresh.observations.length,2);
 });
 check("modal black overlay composites over white and current FOFA background",()=>{
   const r=receiver(); r.point.colour="rgb(255,255,255)";

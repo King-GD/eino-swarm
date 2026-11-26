@@ -128,14 +128,15 @@ export const SETTINGS_HOME_SECTION: SettingsSectionId = "general"
  *  column so the sidebar colour runs under the traffic lights. */
 const RAIL_WIDTH = "w-56"
 
-/** Empty strip matching native InvisibleTitleBarHeight (h-12). Settings
- *  covers the app header, so without this the lights sit on Back to app. */
+/** Empty strip matching native InvisibleTitleBarHeight.
+ *  Settings covers the app header, so without this the lights sit on Back to
+ *  app. */
 function SettingsTitlebar() {
   return (
     <div
       data-drag-region
       data-testid="settings-titlebar"
-      className="flex h-12 shrink-0"
+      className="flex h-(--macos-titlebar-height) shrink-0"
     >
       <div
         className={cn(
@@ -431,7 +432,7 @@ export function SettingsDialog({
         hideClose
         aria-describedby={undefined}
         onPointerDownOutside={(e) => e.preventDefault()}
-        className="inset-0 left-0 top-0 flex h-dvh max-h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none sm:rounded-none data-[state=open]:zoom-in-100"
+        className="inset-0 left-0 top-0 flex h-dvh max-h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none sm:rounded-none data-[state=open]:zoom-in-100 data-[state=closed]:zoom-out-100"
       >
         {trafficInset ? <SettingsTitlebar /> : null}
         {/* A form, so the API key field belongs to one and browsers stop

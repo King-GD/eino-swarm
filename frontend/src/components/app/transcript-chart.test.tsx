@@ -81,6 +81,22 @@ describe("TranscriptChart", () => {
     expect(screen.queryByRole("table")).not.toBeInTheDocument()
   })
 
+  it("fades each line's own color toward the baseline without sharing SVG IDs between charts", () => {
+    const line = spec({
+      type: "line", y: ["up", "down"],
+      data: [{ item: "a", up: 1, down: -2 }, { item: "b", up: 3, down: -1 }],
+    })
+    const { container } = render(<><TranscriptChart spec={line} /><TranscriptChart spec={line} /></>)
+    const fills = [...container.querySelectorAll(".recharts-area-area")]
+    const gradients = [...container.querySelectorAll("linearGradient")]
+    expect(fills).toHaveLength(4)
+    expect(new Set(gradients.map((gradient) => gradient.id)).size).toBe(4)
+    for (const [index, gradient] of gradients.entries()) {
+      expect(fills[index]).toHaveAttribute("fill", `url(#${gradient.id})`)
+      expect(gradient.querySelector('stop[stop-opacity="0"]')).toHaveAttribute("offset", index % 2 === 0 ? "1" : "0")
+    }
+  })
+
   it("paints with theme tokens so a light/dark switch restyles the same figure", () => {
     expect(CHART_SERIES_PAINT).toEqual([
       "hsl(var(--chart-1))",

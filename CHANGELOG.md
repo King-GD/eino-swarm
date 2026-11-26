@@ -6,6 +6,16 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ## Unreleased
 
+### Changed
+
+- The FOFA palette now restyles components through tokens the components read, instead of global overrides outside the cascade layers. A class passed by a caller (for example a round voice button) keeps working under FOFA. Palette tokens moved to `frontend/src/styles/palettes.css`. zwai keeps its colors; its tooltips take the translucent glass described below.
+
+- Under FOFA, the context-usage hover card uses the ordinary dark tooltip instead of a bordered solid panel, its ring icon has no hover slab, and a card waiting on your answer keeps a neutral border with the orange heading.
+
+### Fixed
+
+- The native window-corner cover test expects the colour actually painted at the sampled corner, which is the title bar rail when the sidebar is open.
+
 ### Removed
 
 - PC and Web no longer scan or show local Claude, Codex or Cursor tasks, even with old enabled settings. Paired phones receive no local task data and hide the entry when connected to older hosts. This retires `F-223`, `C-014` and `C-018`. (`F-220`, `C-006`)
@@ -68,6 +78,32 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
   batches for notes, Skills and Knowledge. Both panels show processed and
   remaining records, and interrupted runs can resume after an app restart.
   (`F-138`, `F-420`, `C-054`)
+
+- Desktop, Web and phone share one set of motion tokens (90 ms press, 140 ms fast, 200 ms base, 280 ms slow; one set of easing curves). Popovers, banners, docked notices, progress bars, copy feedback and chart hovers animate only `transform` and `opacity` at that shared pace, and switching theme or color scheme no longer fades half the screen. With "reduce motion" on, those animations and smooth scrolling stop, and the final state stays fully visible.
+
+- Desktop and Web use a full-width title bar. New conversation and search collapse to icons, the conversation title starts after the sidebar divider, window controls sit at the far right, and tabs such as Agents and Files move into the right-hand panel. The macOS title bar matches the native drag region at 46px, with the traffic lights centered on the webview title bar. The Web and Windows title bar height follows the interface font size.
+
+- Chart and control tooltips use FOFA's translucent glass: the `--popover` tint at reduced opacity over a blurred backdrop with a hairline border, instead of a solid chip. Chart tooltips also get more padding and a larger radius.
+
+- FOFA chart tooltips blur the backdrop by 10px, at 60% opacity on dark and 95% on light. Line and area charts on desktop, Web and phone fill with the series color, fading from the line toward the baseline.
+
+- The FOFA home prompt uses FOFA VIP's cyan-to-blue text gradient in both light and dark.
+
+- FOFA switches use a white thumb in both light and dark, with a blue-gray track while off.
+
+- Chart hovers use the theme-colored crosshair and an outlined highlight dot, with tooltip values right-aligned. Axis ticks use compact numbers without the unit, so a narrow chart is no longer cut short by it. On the phone, which has no hover tooltip, the unit is captioned once above the axis.
+
+- The sidebar no longer shows the version permanently; version and run mode stay on the About page in Settings. The sidebar search button has a readable name.
+
+- Sidebar and panel resize handles keep an 8px drag area but draw only a 2px line on hover or keyboard focus, instead of a solid bar.
+
+- Folder icons in the file tree use the body blue-gray (`--content-foreground`) instead of a saturated bright blue. Other file-type colors stay as they are.
+
+- A select shows its focus ring only on keyboard focus, so choosing with the mouse no longer leaves a cyan border on the trigger.
+
+- The "full permission" badge returns to the same font size and weight as the other toolbar controls, and its shield icon grows with it, so it no longer reads as a secondary caption.
+
+- The FOFA theme now carries FOFA's console structure. Colors: answers use the blue-gray body color under white headings, links get a dedicated color, the rail sits a step away from the canvas, and running / waiting-on-you / done keep separate colors. Form: your request keeps its bubble, each tool line gets a monospace clock on a dashed rail, tables keep horizontal rules only, the selected conversation uses the rail's solid accent block (no cyan wash, which turned muddy on the dark rail), controls sit at 4px with 8px panels and 20px dialogs, and the composer card carries the brand gradient on its rim. The zwai theme is unchanged and stays the default.
 
 - Local verification starts with the affected tests. Full suites run when the
   impact cannot be bounded or the integration or release workflow requires them.
