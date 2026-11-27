@@ -2,7 +2,7 @@
  *  box's height here so the transcript can pad its last lines out from under it. */
 export const COMPOSER_STAGE_ATTR = "data-composer-stage"
 
-/** Inner draft card. The composer reads --composer-rim to paint the rim. */
+/** Inner draft card. The composer paints the theme gradient on its border. */
 export const COMPOSER_BOX_ATTR = "data-composer-box"
 
 export const COMPOSER_PAD_VAR = "--composer-pad"

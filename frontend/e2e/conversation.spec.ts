@@ -13,6 +13,16 @@ test("shows response activity as soon as a turn starts", async ({ page }) => {
   const response = page.getByTestId("transcript").getByTestId("heartbeat")
   await expect(response).toBeVisible()
   await expect(response.locator(".animate-spin")).toBeVisible()
+  const transcriptColumn = page.getByTestId("transcript").locator(":scope > .content-column")
+  const composerBox = page.getByTestId("composer").locator("[data-composer-box]")
+  for (const width of [1440, 887]) {
+    await page.setViewportSize({ width, height: 900 })
+    await expect.poll(async () => {
+      const [text, box] = await Promise.all([transcriptColumn.boundingBox(), composerBox.boundingBox()])
+      if (!text || !box) return Infinity
+      return Math.max(Math.abs(text.x - box.x), Math.abs(text.x + text.width - box.x - box.width))
+    }).toBeLessThanOrEqual(1)
+  }
   await waitForIdle(page)
   await expect(response).toBeHidden()
 })
@@ -57,7 +67,9 @@ test("runs a swarm turn end to end and keeps it after a reload", async ({ page }
     hasText: "Two sub-agents ran in parallel",
   })
   const answerMeta = answer.getByTestId("message-meta")
-  await expect(answerMeta).toHaveCSS("opacity", "0")
+  await expect(answer).toHaveAttribute("data-final-answer", "true")
+  await expect(answerMeta.getByTestId("turn-boundary")).toHaveAttribute("data-outcome", "done")
+  await expect(answerMeta).toHaveCSS("opacity", "1")
   const idle = await answerMeta.boundingBox()
   expect(idle?.height ?? 0).toBeGreaterThan(8)
   await answer.hover()
@@ -92,7 +104,9 @@ test("runs a swarm turn end to end and keeps it after a reload", async ({ page }
   await chart.locator(".recharts-bar-rectangle").first().hover()
   await expect(chart.locator(".recharts-tooltip-wrapper .chart-tooltip-glass")).toBeVisible()
   await expect(transcript.getByText(/Worked for/)).toBeVisible()
-  const fileLink = answer.getByRole("button", { name: "Preview notes/researcher.md" })
+  const indexed = answer.locator(".wb-answer-files")
+  await expect(indexed.getByRole("button")).toHaveCount(2)
+  const fileLink = indexed.getByRole("button", { name: "Preview notes/researcher.md" })
   await fileLink.click()
   const preview = page.getByTestId("file-preview")
   await expect(preview.getByRole("heading", { name: "researcher notes" })).toBeVisible()
@@ -601,88 +615,6 @@ test("shows the turn id for troubleshooting", async ({ page }) => {
   // The timeline must still show the researcher's actual numbered identity.
   await page.getByTestId("trace-log-toggle").click()
   await expect(page.getByTestId("trace-log").getByText(/^researcher-\d+$/, { exact: true }).first()).toBeVisible()
-})
-
-test("switches the thinking level and keeps it after a reload", async ({ page }) => {
-  await freshConversation(page)
-  const level = page.getByLabel("Thinking level")
-  // a fresh conversation starts on the model's own default
-  await expect(level).toContainText("Default")
-
-  await level.click()
-  await page.getByRole("option", { name: "High thinking" }).click()
-  await expect(level).toContainText("High")
-
-  // the choice is stored on the conversation; reload goes home, then the row brings it back
-  await reloadOpenConversation(page)
-  await expect(page.getByLabel("Thinking level")).toContainText("High")
-
-  await level.click()
-  await page.getByRole("option", { name: "Thinking off", exact: true }).click()
-  await expect(level).toHaveText("Thinking off")
-  await reloadOpenConversation(page)
-  await expect(level).toHaveText("Thinking off")
-  await level.click()
-  await page.getByRole("option", { name: "Default thinking", exact: true }).click()
-  await expect(level).toHaveText("Default thinking")
-})
-
-test("sets Thinking off before the first message from the home composer", async ({ page }) => {
-  await page.goto("/")
-  await expect(page.getByRole("heading", { name: "What should we work on?" })).toBeVisible()
-  const level = page.getByLabel("Thinking level")
-  await level.click()
-  await page.getByRole("option", { name: "Thinking off", exact: true }).click()
-  await expect(level).toHaveText("Thinking off")
-  await reloadOpenConversation(page)
-  await expect(level).toHaveText("Thinking off")
-})
-
-test("switches the model in the composer and keeps it after a reload", async ({
-  page,
-  request,
-}) => {
-  const { settings } = await (await request.get("/api/settings")).json()
-  const provider = settings.models.providers[0]
-  await request.put("/api/settings", {
-    data: {
-      models: {
-        default: settings.models.default,
-        providers: [
-          { ...provider, model: "alpha", catalog: ["alpha", "beta"] },
-        ],
-      },
-    },
-  })
-  try {
-    await freshConversation(page)
-    const picker = page.getByLabel("Model")
-    await expect(picker).toContainText("alpha")
-    await picker.click()
-    await expect(page.getByLabel("Search models")).toBeVisible()
-    await expect(page.getByRole("button", { name: "Refresh models" })).toBeVisible()
-    await expect(page.getByRole("button", { name: "Edit providers" })).toBeVisible()
-    await page.getByLabel("Search models").fill("beta")
-    await page.getByRole("option", { name: /beta/ }).click()
-    await expect(picker).toContainText("beta")
-    await picker.click()
-    await page.getByRole("button", { name: "Edit providers" }).click()
-    const dialog = page.getByRole("dialog")
-    await expect(dialog.getByRole("heading", { name: "Models", exact: true })).toBeVisible()
-    const heading = (provider.label || provider.id).trim()
-    await expect(
-      dialog.getByRole("button", { name: `${heading} details` }),
-    ).toBeVisible()
-    await expect(dialog.getByRole("button", { name: "Add a provider" })).toBeVisible()
-    await expect(dialog.getByRole("textbox", { name: "Provider" })).toHaveCount(0)
-    await dialog.getByRole("button", { name: "Back to app" }).click()
-    await reloadOpenConversation(page)
-    await expect(page.getByLabel("Model")).toContainText("beta")
-  } finally {
-    await request.put("/api/settings", {
-      data: { models: settings.models },
-    })
-  }
 })
 
 test("Enter that confirmed the IME does not send the draft", async ({ page }) => {

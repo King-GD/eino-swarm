@@ -551,7 +551,7 @@ test("switches color palette and remembers it", async ({ page, request }, info) 
   await request.put("/api/settings", { data: { ui: { palette: "zwai" } } })
   await page.emulateMedia({ colorScheme: "light" })
   await page.goto("/")
-  const homeHeading = page.getByRole("heading", { name: "What should we work on?" })
+  const homeHeading = page.locator("#welcome-title")
   const homeTitle = homeHeading.locator("span")
   await expect(homeTitle).toHaveCSS("background-image", "none")
   // Control radius before the switch, for the component-form comparison below.
@@ -767,4 +767,25 @@ test("directory rows track UI size, not conversation size", async ({
       },
     })
   }
+})
+
+test("settings categories stay accessible when the window narrows", async ({ page }) => {
+  await page.goto("/")
+  await page.getByRole("button", { name: "Settings", exact: true }).click()
+  const dialog = page.getByRole("dialog", { name: "Settings", exact: true })
+  const general = dialog.getByRole("tab", { name: "General", exact: true })
+  await general.focus()
+  await page.keyboard.press("ArrowDown")
+  const personality = dialog.getByRole("tab", { name: "Personality", exact: true })
+  await expect(personality).toBeFocused()
+  await expect(dialog.getByRole("tabpanel", { name: "Personality" })).toBeVisible()
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  const category = dialog.getByRole("combobox", { name: "Settings", exact: true })
+  await expect(category).toHaveText("Personality")
+  await category.click()
+  await page.getByRole("option", { name: "General", exact: true }).click()
+  await expect(dialog.getByRole("heading", { name: "General", exact: true })).toBeVisible()
+  const panel = dialog.getByRole("tabpanel", { name: "General" })
+  expect(await panel.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
 })

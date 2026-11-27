@@ -40,7 +40,7 @@ test("FOFA switches keep a white thumb in the tools menu and settings", async ({
   }
 })
 
-test("the composer tool menu clears the input and lists MCP tools rather than servers", async ({ page, request }, info) => {
+test("the composer tool menu overlaps the draft and lists individual MCP tools", async ({ page, request }, info) => {
   const id = `e2e-tools-${Date.now()}`
   const hidden = `e2e-off-${Date.now()}`
   const original = await (await request.get("/api/settings")).json()
@@ -61,15 +61,15 @@ test("the composer tool menu clears the input and lists MCP tools rather than se
     expect(parked.ok()).toBe(true)
 
     await freshConversation(page)
-    await page.getByTestId("composer-input").fill("keep this request visible")
+    await page.getByTestId("composer-input").fill("keep this draft")
     await page.getByRole("button", { name: "Tools", exact: true }).click()
     const menu = page.getByTestId("composer-tools-menu")
     const read = page.getByRole("menuitemcheckbox", { name: "Read file (read)" })
     await expect(read).toHaveAttribute("aria-checked", "true")
     await expect(read.locator("[role=switch]")).toHaveAttribute("data-state", "checked")
-    await page.locator("[aria-label='Thinking level']").click({ force: true })
+    await page.getByLabel("Thinking level").click()
     await expect(menu).toHaveCount(0)
-    await expect(page.getByRole("option", { name: "High thinking" })).toBeVisible()
+    await expect(page.getByRole("menuitemradio", { name: "High thinking" })).toBeVisible()
     await page.keyboard.press("Escape")
     await page.getByRole("button", { name: "Tools", exact: true }).click()
     await expect(menu.getByRole("button", { name: "Built-in" })).toHaveAttribute("aria-expanded", "true")
@@ -87,7 +87,11 @@ test("the composer tool menu clears the input and lists MCP tools rather than se
     const composerBox = await page.locator("[data-composer-box]").boundingBox()
     expect(menuBox).toBeTruthy()
     expect(composerBox).toBeTruthy()
-    expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(composerBox!.y + 1)
+    const toolsButton = await page.getByTestId("composer-tools").boundingBox()
+    const bottom = menuBox!.y + menuBox!.height
+    expect(bottom).toBeGreaterThan(composerBox!.y)
+    expect(bottom).toBeLessThanOrEqual(toolsButton!.y)
+    await expect(page.getByTestId("composer-input")).toHaveValue("keep this draft")
     const fit = await read.locator("[role=switch]").evaluate((node) => {
       const sw = node.getBoundingClientRect()
       const list = node.closest("[data-testid=composer-tools-list]") as HTMLElement

@@ -1,10 +1,9 @@
-import { Folder, MessageSquare, MessageSquarePlus, PanelLeft, PanelRight, Search, SquareTerminal, WifiOff } from "lucide-react"
+import { Folder, MessageSquare, PanelLeft, PanelRight, SquareTerminal, WifiOff } from "lucide-react"
 import { useEffect, useLayoutEffect, useState, type RefObject } from "react"
 
 import { CopyButton } from "@/components/app/copy-button"
 import { AskMark } from "@/components/app/ask-mark"
 import { WaitMark } from "@/components/app/wait-mark"
-import { useVisibleDest } from "@/components/app/dest-rail"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -45,8 +44,6 @@ export function Header({
   onTogglePanel,
   onToggleSidebar,
   onOpenTerminal,
-  onNew,
-  onSearch,
   terminalOpen,
   terminalEnabled,
   sideChat,
@@ -67,15 +64,12 @@ export function Header({
   onTogglePanel: () => void
   onToggleSidebar: () => void
   onOpenTerminal: () => void
-  onNew: () => void
-  onSearch: () => void
   terminalOpen: boolean
   terminalEnabled: boolean
   sideChat?: SideChatToggle
 }) {
   const t = useT()
   const scheduled = useApp((s) => s.scheduleInboxOpen)
-  const pane = useVisibleDest()
   useLayoutEffect(() => {
     // Sample after the title bar has committed the new corner background.
     if (trafficInset) document.dispatchEvent(new Event("zwai:render-cover-change"))
@@ -92,6 +86,7 @@ export function Header({
     status.running && status.started_at
       ? Math.max(0, now - new Date(status.started_at).getTime())
       : 0
+  const title = scheduled ? t("schedule.inboxTitle") : thread?.title.trim()
   const listLabel = sidebarOpen
     ? t("header.hideConversations")
     : t("header.showConversations")
@@ -99,19 +94,16 @@ export function Header({
     <header
       data-drag-region
       className={cn(
-        "flex shrink-0 items-center bg-background",
-        // Paint the rule outside flex layout so the controls centre in the whole native strip.
-        trafficInset
-          ? "relative h-(--macos-titlebar-height) after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-border"
-          : "h-(--titlebar-height) border-b border-border",
+        "wb-titlebar flex shrink-0 items-center bg-background",
+        trafficInset ? "h-(--macos-titlebar-height)" : "h-(--titlebar-height)",
       )}
     >
       <div
         data-testid="titlebar-leading"
+        data-expanded={sidebarOpen}
         className={cn(
           "flex h-full min-w-(--dest-rail-width) shrink-0 items-center pr-2 text-muted-foreground",
           trafficInset ? "pl-traffic" : "pl-3",
-          sidebarOpen && "border-r border-sidebar-border bg-sidebar",
         )}
         style={{ width: sidebarOpen ? `var(${SIDEBAR_WIDTH_VAR}, ${SIDEBAR_WIDTH_DEFAULT}px)` : undefined }}
       >
@@ -119,6 +111,8 @@ export function Header({
           variant="ghost"
           size="icon-sm"
           className={actionClass}
+          data-sidebar-toggle=""
+          aria-controls="workspace-sidebar"
           onClick={onToggleSidebar}
           aria-label={listLabel}
           aria-expanded={sidebarOpen}
@@ -126,32 +120,6 @@ export function Header({
         >
           <PanelLeft />
         </Button>
-        {sidebarOpen && (pane === "projects" || pane === "chats") ? (
-          <div className="ml-auto flex items-center gap-1">
-            {pane === "chats" ? (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className={actionClass}
-                onClick={onNew}
-                aria-label={t("sidebar.newConversation")}
-                title={t("sidebar.newConversation")}
-              >
-                <MessageSquarePlus />
-              </Button>
-            ) : null}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className={actionClass}
-              onClick={onSearch}
-              aria-label={t("sidebar.search")}
-              title={t("sidebar.search")}
-            >
-              <Search />
-            </Button>
-          </div>
-        ) : null}
       </div>
       <div className="flex min-w-0 flex-1 items-center gap-2 px-3">
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -174,15 +142,15 @@ export function Header({
                   {project.workdir ? t("header.projectFolder", { path: project.workdir }) : t("header.managedProjectFolder")}
                 </TooltipContent>
               </Tooltip>
-              <span className={cn(chromeTypeClass, "shrink-0 text-muted-foreground")}>·</span>
+              {title ? <span className={cn(chromeTypeClass, "shrink-0 text-muted-foreground")}>·</span> : null}
             </>
           ) : null}
-          <p
+          {title ? <p
             className={cn(chromeTypeClass, "min-w-0 truncate font-medium")}
             data-testid="thread-title"
           >
-            {scheduled ? t("schedule.inboxTitle") : thread?.title || t("header.newConversation")}
-          </p>
+            {title}
+          </p> : null}
         </div>
 
         {scheduled ? null : status.running ? (

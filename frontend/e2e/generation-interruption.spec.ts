@@ -174,7 +174,7 @@ test("a middle-turn manager cap preserves one real tool effect across recovery a
       let viewed = page
       if (replay === "reload") {
         await page.reload()
-        await expect(page.getByRole("heading", { name: "What should we work on?" })).toBeVisible()
+        await expect(page.locator("#welcome-title")).toBeVisible()
         await openProjectThread(page)
       }
       if (replay === "fresh-client-paged") {

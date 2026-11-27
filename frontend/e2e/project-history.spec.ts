@@ -165,7 +165,7 @@ test(`a project ${menu ? "uses its history menu and an unfiltered query for" : r
     expect(trace.llm_calls.filter((call) => call.agent_id === "manager")).toHaveLength(queryCount + 1)
     await page.unroute(history)
     await page.reload()
-    await expect(page.getByRole("heading", { name: "What should we work on?" })).toBeVisible()
+    await expect(page.locator("#welcome-title")).toBeVisible()
     const project = page.getByRole("button", { name: projectName, exact: true })
     await expect(project).toBeVisible()
     if (await project.getAttribute("aria-expanded") !== "true") await project.click()

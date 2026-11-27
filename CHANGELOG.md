@@ -68,6 +68,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - The EASM hosting provider table defaults to showing up to five services per provider.
   New collections query services for at most five providers.
 
+- Moved New conversation to the top of the sidebar and unified composer menu switching, placement and focus.
+
+- Refreshed the PC/Web conversation workspace with an inline home composer, a compact default conversation list, a live activity indicator and a finished-turn marker.
+
 - The engine compresses Responses request bodies of at least 1 KiB when the
   selected Gateway advertises gzip support and compression saves bytes. Older
   gateways and personal providers receive plain JSON. (`F-171`, `C-040`)
@@ -84,7 +88,7 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 - Desktop, Web and phone share one set of motion tokens (90 ms press, 140 ms fast, 200 ms base, 280 ms slow; one set of easing curves). Popovers, banners, docked notices, progress bars, copy feedback and chart hovers animate only `transform` and `opacity` at that shared pace, and switching theme or color scheme no longer fades half the screen. With "reduce motion" on, those animations and smooth scrolling stop, and the final state stays fully visible.
 
-- Desktop and Web use a full-width title bar. New conversation and search collapse to icons, the conversation title starts after the sidebar divider, window controls sit at the far right, and tabs such as Agents and Files move into the right-hand panel. The macOS title bar matches the native drag region at 46px, with the traffic lights centered on the webview title bar. The Web and Windows title bar height follows the interface font size.
+- Desktop and Web use a full-width title bar. New conversation and search sit beneath the sidebar brand, the conversation title starts after the sidebar divider, window controls sit at the far right, and tabs such as Agents and Files move into the right-hand panel. The macOS title bar matches the native drag region at 46px, with the traffic lights centered on the webview title bar. The Web and Windows title bar height follows the interface font size.
 
 - Chart and control tooltips use FOFA's translucent glass: the `--popover` tint at reduced opacity over a blurred backdrop with a hairline border, instead of a solid chip. Chart tooltips also get more padding and a larger radius.
 

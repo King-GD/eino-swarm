@@ -107,11 +107,12 @@ export function SettingsRow({
         anchor && "rounded-md focus-within:ring-2 focus-within:ring-ring",
       )}
       data-settings-row=""
+      data-settings-field=""
       data-settings-key={anchor || undefined}
     >
       <SettingsCopy label={label} hint={hint} badge={badge} htmlFor={htmlFor} />
       {children ? (
-        <div
+        <div data-settings-control=""
           className={cn(
             "flex shrink-0 items-center justify-end pt-0.5",
             controlClassName,
@@ -272,7 +273,7 @@ export function SettingsSection({
   const visible = Children.toArray(children).filter(Boolean)
   if (visible.length === 0) return null
   return (
-    <section className="flex flex-col gap-2.5 [&:not(:has([data-settings-row]))]:hidden">
+    <section data-settings-section="" className="flex flex-col gap-2.5 [&:not(:has([data-settings-row]))]:hidden">
       {title || action ? (
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -290,7 +291,7 @@ export function SettingsSection({
           {action}
         </div>
       ) : null}
-      <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+      <div data-settings-group="" className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
         {visible}
       </div>
     </section>
@@ -309,7 +310,7 @@ export function SettingsPage({
   children: ReactNode
 }) {
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-12 py-8">
+    <div data-settings-page="" className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-12 py-8">
       <div className="flex flex-col gap-1">
         <h2 className="text-2xl font-semibold tracking-tight text-foreground">
           {title}

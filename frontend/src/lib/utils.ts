@@ -54,7 +54,8 @@ const SIDEBAR_KEY = "zwai.sidebar"
  *  hiding the list on first launch would look like the app forgot its chrome. */
 export function readSidebarOpen(): boolean {
   try {
-    return localStorage.getItem(SIDEBAR_KEY) !== "0"
+    const saved = localStorage.getItem(SIDEBAR_KEY)
+    return saved === null ? window.innerWidth > 660 : saved !== "0"
   } catch {
     return true
   }

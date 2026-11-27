@@ -1,7 +1,8 @@
 import { refreshCapabilities } from "@/lib/refresh-capabilities"
 import { policyConfigurable } from "@/lib/model-policy"
 import { FocusScope } from "@radix-ui/react-focus-scope"
-import { Check, ChevronDown, Loader2, Pencil, RefreshCw } from "lucide-react"
+import { useComposerPopup } from "@/lib/use-composer-popup"
+import { Box, Check, ChevronDown, Loader2, Pencil, RefreshCw } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 
@@ -32,6 +33,8 @@ export function ModelPicker({
   label: accessibleName,
   defaultLabel,
   disabled,
+  open: controlledOpen,
+  onOpenChange,
 }: {
   models: ModelInfo[]
   providerId?: string
@@ -44,6 +47,8 @@ export function ModelPicker({
   label?: string
   /** If present, an empty selection represents the caller's own default. */
   defaultLabel?: string
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   disabled?: boolean
 }) {
   const t = useT()
@@ -53,12 +58,16 @@ export function ModelPicker({
   // Locking the whole menu from that row's capabilities traps the composer
   // on the first choice. Gateway policy and an official profile still hide it.
   const locked = officialModelLock(account, policy) || (policy?.mode === "gateway" && !policyConfigurable(policy, "conversation"))
-  const [open, setOpen] = useState(false)
+  const [localOpen, setLocalOpen] = useState(false)
+  const open = controlledOpen ?? localOpen
+  const setOpen = onOpenChange ?? setLocalOpen
   const [dialogMenu, setDialogMenu] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [pos, setPos] = useState({ left: 0, bottom: 0 })
+  const inputRef = useRef<HTMLInputElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const place = useComposerPopup(open, wrapRef)
+  const restoreTrigger = () => wrapRef.current?.querySelector("button")?.focus({ preventScroll: true })
   const ready = models.filter((m) => m.ready && m.model)
   const groups = groupModels(ready)
   // An empty id follows the default row, including one the catalog no longer
@@ -71,36 +80,38 @@ export function ModelPicker({
     : followsDefault ? defaultLabel : selected?.label || selected?.model || model?.trim() || t("model.fallback")
 
   useLayoutEffect(() => {
-    if (!open || disabled || !wrapRef.current || !menuRef.current) return
-    const r = wrapRef.current.getBoundingClientRect()
-    setPos({
-      left: Math.max(0, Math.min(r.left, window.innerWidth - menuRef.current.offsetWidth - 8)),
-      bottom: window.innerHeight - r.top + 4,
-    })
-  }, [open, disabled])
+    if (open && !disabled && !dialogMenu) inputRef.current?.focus({ preventScroll: true })
+  }, [open, disabled, dialogMenu])
 
   useEffect(() => {
-    if (disabled) setOpen(false)
-  }, [disabled])
+    if (open && (disabled || locked)) setOpen(false)
+  }, [open, disabled, locked, setOpen])
+
+  useEffect(() => { if (open) void refreshCapabilities().catch(() => undefined) }, [open])
 
   useEffect(() => {
     if (!open) return
-    void refreshCapabilities().catch(() => undefined)
     const onDown = (event: PointerEvent) => {
       const t = event.target as Node
       if (wrapRef.current?.contains(t) || menuRef.current?.contains(t)) return
       setOpen(false)
     }
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false)
+      if (event.key === "Escape") { setOpen(false); restoreTrigger() }
     }
+    const onFocus = (event: FocusEvent) => {
+      const target = event.target as Node
+      if (!menuRef.current?.contains(target) && !wrapRef.current?.contains(target)) setOpen(false)
+    }
+    document.addEventListener("focusin", onFocus)
     document.addEventListener("pointerdown", onDown)
     document.addEventListener("keydown", onKey)
     return () => {
+      document.removeEventListener("focusin", onFocus)
       document.removeEventListener("pointerdown", onDown)
       document.removeEventListener("keydown", onKey)
     }
-  }, [open])
+  }, [open, setOpen])
 
   const command = (
     <>
@@ -109,6 +120,7 @@ export function ModelPicker({
         className="h-auto **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1.5 **:[[cmdk-group-heading]]:text-[11px] **:[[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:uppercase **:[[cmdk-group-heading]]:tracking-wide **:[[cmdk-group-heading]]:text-muted-foreground"
       >
         <CommandInput
+          ref={inputRef}
           placeholder={t("model.search")}
           aria-label={t("model.search")}
           className="h-8 py-2 text-xs"
@@ -120,7 +132,7 @@ export function ModelPicker({
               : t("model.emptyFilter")}
           </CommandEmpty>
           {defaultLabel ? (
-            <CommandItem onSelect={() => { onChange("", ""); setOpen(false) }}>
+            <CommandItem onSelect={() => { onChange("", ""); setOpen(false); restoreTrigger() }}>
               <Check className={cn("size-3.5", !followsDefault && "opacity-0")} />
               {defaultLabel}
             </CommandItem>
@@ -139,6 +151,7 @@ export function ModelPicker({
                     onSelect={() => {
                       onChange(m.provider_id, m.model)
                       setOpen(false)
+                      restoreTrigger()
                     }}
                   >
                     <Check
@@ -160,7 +173,7 @@ export function ModelPicker({
           {onRefresh ? (
             <button
               type="button"
-              className="flex h-8 items-center gap-2 px-3 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+              className="wb-menu-action flex h-8 items-center gap-2 px-3 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
               disabled={busy}
               onClick={() => {
                 setBusy(true)
@@ -180,7 +193,7 @@ export function ModelPicker({
           {onEdit ? (
             <button
               type="button"
-              className="flex h-8 items-center gap-2 px-3 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="wb-menu-action flex h-8 items-center gap-2 px-3 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
               onClick={() => {
                 setOpen(false)
                 onEdit()
@@ -202,8 +215,10 @@ export function ModelPicker({
       ? createPortal(
           <div
             ref={menuRef}
+            data-composer-popup={controlledOpen === undefined ? undefined : "model"}
             className="pointer-events-auto fixed toast-layer w-72 max-w-[calc(100vw-1rem)] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
-            style={{ left: pos.left, bottom: pos.bottom }}
+            style={{ left: `clamp(8px, ${place.left}px, calc(100vw - min(18rem, 100vw - 1rem) - 8px))`,
+              [place.side === "top" ? "bottom" : "top"]: place.edge, maxHeight: place.maxHeight, overflowY: "auto" }}
             onPointerDown={(event) => event.stopPropagation()}
           >
             {dialogMenu ? (
@@ -228,6 +243,7 @@ export function ModelPicker({
       <button
         type="button"
         disabled={disabled}
+        aria-disabled={locked || undefined}
         id={id}
         aria-label={accessibleName ?? t("composer.model")}
         aria-expanded={locked ? undefined : open && !disabled}
@@ -235,17 +251,20 @@ export function ModelPicker({
         title={locked ? undefined : unavailable ? t("model.unavailable") : undefined}
         data-unavailable={!locked && unavailable ? "true" : undefined}
         className={cn(
-          "inline-flex h-7 max-w-[min(100%,14rem)] items-center gap-1.5 rounded-md px-2 hover:bg-accent disabled:opacity-50",
+          "inline-flex h-7 max-w-[min(100%,14rem)] items-center gap-1.5 rounded-md px-2 disabled:opacity-50",
+          !locked && "hover:bg-accent",
           chromeTypeClass,
+          controlledOpen !== undefined && "composer-picker",
           unavailable && "text-muted-foreground",
           open && "bg-accent",
         )}
         onClick={() => {
           if (locked) return
           setDialogMenu(Boolean(wrapRef.current?.closest("[role='dialog']")))
-          setOpen((v) => !v)
+          setOpen(!open)
         }}
       >
+        {controlledOpen !== undefined ? <Box aria-hidden="true" /> : null}
         <span className="truncate">{label}</span>
         {locked ? null : <ChevronDown className="size-3.5 text-muted-foreground" />}
       </button>

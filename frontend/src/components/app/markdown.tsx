@@ -1,4 +1,5 @@
 import {
+  Children,
   createContext,
   lazy,
   memo,
@@ -8,10 +9,12 @@ import {
   type ComponentPropsWithoutRef,
   type ReactNode,
 } from "react"
+import { ChevronRight, Files } from "lucide-react"
 import Markdown from "react-markdown"
 import type { Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
+import { useT } from "@/lib/use-t"
 
 import { ChartPending } from "@/components/app/chart-pending"
 import { KnowledgeWikiLink, useKnowledgeLinks } from "@/components/app/knowledge-link-open"
@@ -19,7 +22,7 @@ import { MarkdownCodeBlock, readFence } from "@/components/app/markdown-code"
 import { useWorkspaceFileOpen, WorkspaceFileLink } from "@/components/app/workspace-file-open"
 import { classifyHref } from "@/lib/external-links"
 import { knowledgePageFromHref, remarkKnowledgeLinks } from "@/lib/knowledge-link-ref"
-import { remarkWorkspaceFiles, workspaceFileFromHref } from "@/lib/workspace-file-ref"
+import { remarkAnswerFiles, remarkWorkspaceFiles, workspaceFileFromHref } from "@/lib/workspace-file-ref"
 import { isMathFence } from "@/lib/math-fence"
 import { chartSpecsEqual, parseChartSpec, type ChartSpec } from "@/lib/chart-spec"
 import { closeIncompleteMarkdown } from "@/lib/stream-markdown"
@@ -45,6 +48,9 @@ const MarkdownMermaid = lazy(async () => {
 const PLUGINS = [remarkGfm, remarkMath, remarkWorkspaceFiles]
 const KNOWLEDGE_PLUGINS = [remarkGfm, remarkMath, remarkKnowledgeLinks, remarkWorkspaceFiles]
 
+const RESULT_PLUGINS = [...PLUGINS, remarkAnswerFiles]
+const KNOWLEDGE_RESULT_PLUGINS = [...KNOWLEDGE_PLUGINS, remarkAnswerFiles]
+
 const MarkdownStreaming = createContext(false)
 const MarkdownSource = createContext("")
 
@@ -55,16 +61,21 @@ const MarkdownSource = createContext("")
 export const MemoMarkdown = memo(function MemoMarkdown({
   text,
   streaming = false,
+  indexFiles = false,
 }: {
   text: string
   streaming?: boolean
+  indexFiles?: boolean
 }) {
   const knowledge = useKnowledgeLinks()
+  const plugins = indexFiles && !streaming
+    ? (knowledge ? KNOWLEDGE_RESULT_PLUGINS : RESULT_PLUGINS)
+    : (knowledge ? KNOWLEDGE_PLUGINS : PLUGINS)
   const source = streaming ? closeIncompleteMarkdown(text) : text
   return (
     <MarkdownStreaming.Provider value={streaming}>
       <MarkdownSource.Provider value={source}>
-        <Markdown remarkPlugins={knowledge ? KNOWLEDGE_PLUGINS : PLUGINS} components={COMPONENTS}>
+        <Markdown remarkPlugins={plugins} components={COMPONENTS}>
           {source}
         </Markdown>
         {streaming ? (
@@ -222,7 +233,21 @@ function MarkdownLink({
 /** react-markdown does createElement(components.pre). A new function here
  *  is a new component type, so every later token unmounted a finished
  *  chart and Recharts painted from an empty box again. */
+function AnswerFiles({ children }: { children?: ReactNode }) {
+  const open = useWorkspaceFileOpen()
+  const t = useT()
+  if (!open) return null
+  const count = Children.count(children)
+  return (
+    <details className="wb-answer-files" open={count <= 4} data-find-ignore="">
+      <summary><Files aria-hidden size={15} />{t("transcript.answerFiles")}<span>{count}</span><ChevronRight aria-hidden size={14} /></summary>
+      <div>{children}</div>
+    </details>
+  )
+}
+
 const COMPONENTS: Components = {
+  aside: AnswerFiles,
   a: MarkdownLink,
   pre: MarkdownPre,
   code: MarkdownInlineCode,

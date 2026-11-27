@@ -1,4 +1,4 @@
-import { ChevronRight, Info, Wrench } from "lucide-react"
+import { ChevronDown, ChevronRight, Info, Wrench } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -13,7 +13,8 @@ import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { api } from "@/lib/api"
 import { openSettings } from "@/store/settings-sheet"
-import { composerToolsMenuPlacement, filterRemoteTools, toolHoverText, toolMenuMatches, toolMenuQuery } from "@/lib/composer-menu"
+import { switchingComposerPopup, useComposerPopup } from "@/lib/use-composer-popup"
+import { filterRemoteTools, toolHoverText, toolMenuMatches, toolMenuQuery } from "@/lib/composer-menu"
 import { chromeTypeClass } from "@/lib/chrome-type"
 import { cn } from "@/lib/utils"
 import type { MCPServerView } from "@/lib/mcp-settings"
@@ -85,7 +86,7 @@ export function ComposerTools({
   const openRef = useRef(open)
   const [query, setQuery] = useState("")
   const [folded, setFolded] = useState<Record<string, boolean>>({})
-  const [placement, setPlacement] = useState({ sideOffset: 8, maxHeight: 320 })
+  const placement = useComposerPopup(open, triggerRef)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [catalog, setCatalog] = useState<ToolDescriptor[]>([])
@@ -105,13 +106,6 @@ export function ComposerTools({
 
   useEffect(() => stopInspects, [])
 
-  const measure = () => {
-    const button = triggerRef.current
-    const box = button?.closest("[data-composer-box]")
-    if (!button || !(box instanceof HTMLElement)) return
-    setPlacement(composerToolsMenuPlacement(button.getBoundingClientRect(), box.getBoundingClientRect()))
-  }
-
   useEffect(() => {
     if (openRef.current && !open) {
       stopInspects()
@@ -122,17 +116,9 @@ export function ComposerTools({
 
   useEffect(() => {
     if (!open) return
-    filterRef.current?.focus()
-    measure()
-    const box = triggerRef.current?.closest("[data-composer-box]")
-    if (!box) return
-    const observer = new ResizeObserver(measure)
-    observer.observe(box)
-    window.addEventListener("resize", measure)
-    return () => {
-      observer.disconnect()
-      window.removeEventListener("resize", measure)
-    }
+    // Radix mounts and focuses the menu content after the portal commits.
+    const frame = requestAnimationFrame(() => filterRef.current?.focus({ preventScroll: true }))
+    return () => cancelAnimationFrame(frame)
   }, [open])
 
   const enqueue = (job: () => Promise<void>) => {
@@ -258,7 +244,6 @@ export function ComposerTools({
   const showNoMatch = toolMenuQuery(query) !== "" && builtin.length === 0 && remoteGroups.length === 0 && !waiting && !loading
 
   const changeOpen = (next: boolean) => {
-    if (next) measure()
     onOpenChange?.(next)
     if (controlledOpen === undefined) setUncontrolledOpen(next)
     if (next) load()
@@ -269,7 +254,7 @@ export function ComposerTools({
   }
 
   return (
-    <DropdownMenu open={open} onOpenChange={changeOpen}>
+    <DropdownMenu modal={false} open={open} onOpenChange={changeOpen}>
       <DropdownMenuTrigger asChild>
         <Button
           ref={triggerRef}
@@ -278,22 +263,22 @@ export function ComposerTools({
           disabled={disabled}
           data-testid="composer-tools"
           aria-label={t("composer.tools")}
-          title={t("composer.toolsHint")}
-          className={cn(chromeTypeClass, "h-7 gap-1.5 px-2")}
+          className={cn(chromeTypeClass, "composer-picker")}
         >
           <Wrench />
-          {t("composer.tools")}
+          {t("composer.tools")}<ChevronDown />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        side="top"
+        side={placement.side}
+        data-composer-popup="tools"
         align="start"
-        avoidCollisions={false}
+        collisionPadding={8}
         sideOffset={placement.sideOffset}
-        style={{ maxHeight: placement.maxHeight }}
+        style={{ height: placement.maxHeight, maxHeight: "var(--radix-dropdown-menu-content-available-height)" }}
         data-testid="composer-tools-menu"
         onCloseAutoFocus={(event) => {
-          if (!openingSettings.current) return
+          if (!openingSettings.current && !switchingComposerPopup(triggerRef.current, "tools")) return
           openingSettings.current = false
           event.preventDefault()
         }}
@@ -305,6 +290,11 @@ export function ComposerTools({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
+              if (event.key === "ArrowDown") {
+                const menu = filterRef.current?.closest("[role=menu]")
+                menu?.querySelector<HTMLElement>("[role=menuitemcheckbox]")?.focus()
+                event.preventDefault()
+              }
               if (event.key !== "Escape") event.stopPropagation()
             }}
             placeholder={t("composer.toolsSearch")}

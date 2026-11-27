@@ -100,7 +100,7 @@ test("a signed-in account with ready models needs no welcome even before any pro
   // The server counts a ready account as configured, which is what keeps the welcome away.
   const saved = await firstRun(page, { configured: true, models: { state: "ready", label: "Team", models: 2 } })
   await page.goto("/")
-  await expect(page.getByRole("heading", { name: "What should we work on?" })).toBeVisible()
+  await expect(page.locator("#welcome-title")).toBeVisible()
   await expect(page.getByTestId("welcome-gate")).toHaveCount(0)
   expect(saved).toEqual([])
 })

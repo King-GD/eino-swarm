@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MemorySettings } from "@/components/app/memory-settings"
 import { ModelsTab } from "@/components/app/model-settings"
 import { SpeechSettings as SpeechTab, speechSettingsSearch } from "@/components/app/settings-speech"
@@ -430,6 +431,7 @@ export function SettingsDialog({
     >
       <DialogContent
         hideClose
+        data-settings-workbench=""
         aria-describedby={undefined}
         onPointerDownOutside={(e) => e.preventDefault()}
         className="inset-0 left-0 top-0 flex h-dvh max-h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none sm:rounded-none data-[state=open]:zoom-in-100 data-[state=closed]:zoom-out-100"
@@ -445,17 +447,14 @@ export function SettingsDialog({
           onSubmit={(e) => e.preventDefault()}
         >
           <fieldset disabled={accountUpdating} className="contents">
-          <div className="flex min-h-0 flex-1">
-            <aside
+          <div className="settings-layout flex min-h-0 flex-1">
+            <aside data-settings-rail=""
               className={cn(
                 RAIL_WIDTH,
                 "flex shrink-0 flex-col gap-2 border-r border-sidebar-border bg-sidebar py-3 text-sidebar-foreground",
               )}
             >
-              <DialogTitle className="sr-only">
-                {t("settings.title")}
-              </DialogTitle>
-              <div className="flex flex-col gap-2 px-3">
+              <div className="settings-navigation-head flex flex-col gap-2 px-3">
                 <Button
                   type="button"
                   variant="ghost"
@@ -467,9 +466,10 @@ export function SettingsDialog({
                   onClick={() => void leave()}
                 >
                   <ArrowLeft />
-                  {t("settings.back")}
+                  <span>{t("settings.back")}</span>
                 </Button>
-                <div className="relative">
+                <DialogTitle className="settings-heading">{t("settings.title")}</DialogTitle>
+                <div className="settings-search relative">
                   <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     value={query}
@@ -488,9 +488,27 @@ export function SettingsDialog({
                 </div>
               </div>
 
+              {visibleNav.length > 0 && <div className="settings-category-select">
+                <Select value={page} onValueChange={id => setSection(id as SettingsSectionId)}>
+                  <SelectTrigger aria-label={t("settings.title")}><SelectValue /></SelectTrigger>
+                  <SelectContent>{visibleNav.map(s => <SelectItem value={s.id} key={s.id}>{s.label}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>}
               <div
                 role="tablist"
                 aria-orientation="vertical"
+                aria-label={t("settings.title")}
+                onKeyDown={event => {
+                  const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+                  const i = tabs.indexOf(event.target as HTMLButtonElement)
+                  if (i < 0) return
+                  const next = { ArrowDown: (i + 1) % tabs.length, ArrowUp: (i + tabs.length - 1) % tabs.length,
+                    Home: 0, End: tabs.length - 1 }[event.key]
+                  if (next === undefined) return
+                  event.preventDefault()
+                  tabs[next].focus()
+                  tabs[next].click()
+                }}
                 className="flex h-auto w-full flex-col items-stretch gap-0.5 px-2"
               >
                 {visibleNav.map((s) => {
@@ -501,6 +519,8 @@ export function SettingsDialog({
                       type="button"
                       role="tab"
                       aria-selected={on}
+                      tabIndex={on ? 0 : -1}
+                      aria-controls="workbench-settings-panel"
                       data-state={on ? "active" : "inactive"}
                       className={cn(
                         chromeTypeClass,
@@ -522,7 +542,7 @@ export function SettingsDialog({
               </div>
             </aside>
 
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+            <div className="settings-main flex min-h-0 min-w-0 flex-1 flex-col bg-background">
               {!settings ? (
                 <div className="flex flex-1 items-center justify-center text-muted-foreground">
                   <Loader2 className="size-5 animate-spin" />
@@ -533,6 +553,9 @@ export function SettingsDialog({
                 </p>
               ) : (
                 <div
+                  key={page}
+                  id="workbench-settings-panel"
+                  aria-label={nav.find(s => s.id === page)?.label}
                   role="tabpanel"
                   data-state="active"
                   className={settingsScrollTab}

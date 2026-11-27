@@ -51,20 +51,14 @@ describe("Sidebar chrome", () => {
     document.documentElement.style.removeProperty(SIDEBAR_WIDTH_VAR)
   })
 
-  // The window title bar owns the traffic lights, the hide toggle and the
-  // list's new/search controls. The list column itself starts with content.
-  it("keeps title-bar chrome out of the list column", () => {
+  // The window title bar owns the traffic lights and the hide toggle.
+  it("puts the global new conversation action before project navigation", () => {
     render(<Sidebar threads={[]} {...noop} />)
     expect(screen.queryByTestId("sidebar-chrome")).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole("button", { name: "Hide conversations" }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole("button", { name: /^New conversation$/ }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole("button", { name: "Search conversations (⌘K)" }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Hide conversations" })).not.toBeInTheDocument()
+    const start = screen.getByRole("button", { name: "New conversation" })
+    expect(start.compareDocumentPosition(screen.getByTestId("dest-projects")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Search conversations (⌘K)" })).toBeInTheDocument()
   })
 
   it("keeps the build number out of the always-on list column", () => {
@@ -86,6 +80,14 @@ describe("Sidebar chrome", () => {
     expect(trigger).not.toHaveClass("sidebar-section-label")
     expect(screen.getByTestId("schedule-inbox")).toBeInTheDocument()
     expect(screen.queryByTestId("clients-list")).not.toBeInTheDocument()
+  })
+
+  it("opens a new conversation from the Conversations list", () => {
+    render(<Sidebar threads={[]} {...noop} />)
+    act(() => setDeskDest("chats"))
+    const button = screen.getByRole("button", { name: /^New conversation$/ })
+    fireEvent.click(button)
+    expect(noop.onNew).toHaveBeenCalled()
   })
 
   it("keeps Settings and the app menu at the bottom of the icon rail", () => {
@@ -579,7 +581,7 @@ describe("Sidebar list column", () => {
     render(<Sidebar threads={[]} {...noop} listOpen={false} />)
     expect(screen.getByTestId("dest-rail")).toBeInTheDocument()
     expect(screen.getByTestId("dest-projects")).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: /^New conversation$/ })).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^New conversation$/ })).toBeVisible()
     expect(screen.queryByTestId("project-list")).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "App menu" })).toBeInTheDocument()

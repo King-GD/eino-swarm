@@ -101,6 +101,7 @@ export interface AppState extends ScheduleSlice {
   models: ModelInfo[]
   threads: Thread[]
   activeId?: string
+  freshThreadId?: string
   creatingThread: boolean
   transcript: TranscriptState
   status: ThreadStatus
@@ -146,7 +147,7 @@ export interface AppState extends ScheduleSlice {
   /** Re-lists every endpoint and writes the catalogs. Does not reboot the
    *  conversation — boot() would yank the open thread. */
   refreshCatalogs: () => Promise<void>
-  openThread: (id: string, opts?: { keepList?: boolean }) => Promise<void>
+  openThread: (id: string, opts?: { keepList?: boolean; freshlyCreated?: boolean }) => Promise<void>
   /** Fetch an older page of the event log. Sized from the scroller height. */
   loadOlder: (clientHeight?: number) => Promise<void>
   /** Keep paging until this turn's user row is in the transcript. */
@@ -416,6 +417,7 @@ export const useApp = create<AppState>((set, get) => ({
     resetWorkspaceFileLoads()
     set((s) => ({
       activeId: id,
+      freshThreadId: opts?.freshlyCreated ? id : undefined,
       error: undefined,
       transcript: emptyTranscript(),
       turns: [],
@@ -484,7 +486,7 @@ export const useApp = create<AppState>((set, get) => ({
             ],
           }
         })
-        await get().openThread(thread.id)
+        await get().openThread(thread.id, { freshlyCreated: true })
         return thread.id
       } catch (e) {
         set({ error: message(e) })

@@ -113,7 +113,7 @@ function ShellColumns({ children }: { children: ReactNode }) {
   const scheduled = useApp((s) => s.scheduleInboxOpen)
   return (
     <div
-      className="flex min-h-0 min-w-0 flex-1 overflow-hidden"
+      className="wb-columns relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
       data-testid={scheduled ? "schedule-page" : undefined}
       aria-labelledby={scheduled ? "schedule-page-title" : undefined}
     >
@@ -135,7 +135,7 @@ function TaskBody({ chat }: { chat: ReactNode }) {
 function AppShell() {
   const t = useT()
   const loginWall = useApp((s) => showLoginGate(s.meta))
-  const [panelOpen, setPanelOpen] = useState(true)
+  const [panelChoice, setPanelOpen] = useState<boolean | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(readSidebarOpen)
   const [panelTab, setPanelTab] = useState<PanelTab>("agents")
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -195,6 +195,20 @@ function AppShell() {
   const setAppearance = useApp((s) => s.setAppearance)
   const selectAgent = useApp((s) => s.selectAgent)
   const activeId = useApp((s) => s.activeId)
+  const scheduledPane = useApp((s) => s.scheduleInboxOpen)
+  const [wideWorkspace, setWideWorkspace] = useState(() => window.innerWidth >= 1120)
+  useEffect(() => {
+    if (!window.matchMedia) return
+    const query = window.matchMedia("(min-width: 1120px)")
+    const resized = () => setWideWorkspace(query.matches)
+    query.addEventListener("change", resized)
+    return () => query.removeEventListener("change", resized)
+  }, [])
+  const showThreadInspector = useApp((s) => Boolean(s.activeId && (
+    s.activeId !== s.freshThreadId || s.status.running || s.transcript.running ||
+    visibleManagerBlockCount(s.transcript) > 0 || s.historyHasMore || liveWorkers(s.transcript) > 0
+  )))
+  const panelOpen = panelChoice ?? (wideWorkspace && (showThreadInspector || scheduledPane))
   const showInspector = useCallback((tab: PanelTab) => {
     useSideChat.getState().close()
     setPanelOpen(true)
@@ -219,8 +233,8 @@ function AppShell() {
   const togglePanel = useCallback(() => {
     const chat = useSideChat.getState()
     if (chat.session) chat.close()
-    setPanelOpen((open) => Boolean(chat.session) || !open)
-  }, [])
+    setPanelOpen(Boolean(chat.session) || !panelOpen)
+  }, [panelOpen])
 
   const toggleSidebar = useCallback(() => {
     setSidebarOpen((open) => {
@@ -417,13 +431,12 @@ function AppShell() {
         onTogglePanel={togglePanel}
         onToggleSidebar={toggleSidebar}
         onOpenTerminal={spawnTerminal}
-        onNew={() => void startThread()}
-        onSearch={() => setPaletteOpen(true)}
         sideChat={side.toggle}
       />
       <ShellColumns>
         <AppSidebar
             listOpen={sidebarOpen}
+            onSearch={() => setPaletteOpen(true)}
             onNew={() => void startThread()}
             onSettings={openSettings}
             onToggleTheme={toggleTheme}
@@ -456,7 +469,7 @@ function AppShell() {
           />
 
         <div className="flex min-w-0 flex-1">
-        <main className="relative flex min-w-0 flex-1 flex-col">
+        <main className="wb-conversation-surface relative flex min-w-0 flex-1 flex-col">
           <EngineStartupBanner />
           <DesktopUpdateBanner />
           <ConfiguredBanner onConfigure={() => openSettings("models")} />
@@ -634,6 +647,7 @@ function AppProjectDialog({
 function AppSidebar({
   listOpen,
   onNew,
+  onSearch,
   onSettings,
   onToggleTheme,
   onToggleLocale,
@@ -647,6 +661,7 @@ function AppSidebar({
 }: {
   listOpen: boolean
   onNew: () => void
+  onSearch: () => void
   onSettings: () => void
   onToggleTheme: () => void
   onToggleLocale: () => void
@@ -690,6 +705,7 @@ function AppSidebar({
       waitingIds={waitingIds}
       askingIds={askingIds}
       onNew={onNew}
+      onSearch={onSearch}
       onOpen={(id) => {
         void openThread(id)
       }}
@@ -732,6 +748,7 @@ function TranscriptPane({
 }) {
   const activeId = useApp((s) => s.activeId)
   const loaded = useApp((s) => s.loaded)
+  const fresh = useApp((s) => Boolean(s.activeId && s.activeId === s.freshThreadId))
   const transcript = useCoveredTranscript()
   const running = useApp((s) => s.status.running || s.transcript.running)
   const historyHasMore = useApp((s) => s.historyHasMore)
@@ -745,7 +762,7 @@ function TranscriptPane({
   )
   const showEmptyState = isWelcomePane({
     activeId,
-    loaded,
+    loaded: loaded || fresh,
     visibleManagerBlocks: visibleManagerBlockCount(transcript),
     running,
     workerCount: liveWorkers(transcript),
@@ -880,7 +897,7 @@ function AppComposer({
       onOpenSideChat={onOpenSideChat}
       restoring={meta?.startup === "restoring"}
       canStopWhileRestoring={Boolean(activeId)}
-      disabled={creatingThread}
+      creatingThread={creatingThread}
       prefill={prefill}
       prefillToken={prefillToken}
       focusSignal={focusSignal}

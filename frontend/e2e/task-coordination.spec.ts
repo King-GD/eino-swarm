@@ -22,7 +22,7 @@ test("independent conversations show peer provenance after live delivery and rel
   expect(trace.events.some((ev: { kind: string; text: string }) => ev.kind === "tool_call" && ev.text.startsWith("send_task_message("))).toBe(true)
   expect(trace.events.some((ev: { kind: string; text: string }) => ev.kind === "tool_result" && ev.text.includes('"acknowledged":false'))).toBe(true)
   await page.reload()
-  await expect(page.getByRole("heading", { name: "What should we work on?" })).toBeVisible()
+  await expect(page.locator("#welcome-title")).toBeVisible()
   const projectRow = page.getByRole("button", { name: "Peer coordination", exact: true })
   await expect(projectRow).toBeVisible()
   const receiverRow = page.locator(`[data-testid="thread-row"][data-id="${b.id}"]`)

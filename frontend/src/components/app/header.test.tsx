@@ -1,9 +1,8 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react"
+import { fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { Header } from "./header"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { setDeskDest } from "@/lib/desk-nav"
 import {
   SIDEBAR_WIDTH_DEFAULT,
   SIDEBAR_WIDTH_VAR,
@@ -24,8 +23,6 @@ function renderHeader(props: Partial<Parameters<typeof Header>[0]> = {}) {
         onTogglePanel={vi.fn()}
         onToggleSidebar={vi.fn()}
         onOpenTerminal={vi.fn()}
-        onNew={vi.fn()}
-        onSearch={vi.fn()}
         terminalOpen={false}
         terminalEnabled
         {...props}
@@ -88,53 +85,6 @@ describe("Header sidebar toggle", () => {
   })
 })
 
-describe("Header list controls", () => {
-  afterEach(() => {
-    act(() => setDeskDest("projects"))
-    localStorage.clear()
-  })
-
-  it("offers named new and search actions within the sidebar's width", () => {
-    act(() => setDeskDest("chats"))
-    const onNew = vi.fn()
-    const onSearch = vi.fn()
-    renderHeader({ onNew, onSearch })
-    const leading = screen.getByTestId("titlebar-leading")
-    const newButton = within(leading).getByRole("button", {
-      name: /^New conversation$/,
-    })
-    fireEvent.click(newButton)
-    expect(onNew).toHaveBeenCalled()
-    const search = within(leading).getByRole("button", {
-      name: "Search conversations (⌘K)",
-    })
-    fireEvent.click(search)
-    expect(onSearch).toHaveBeenCalled()
-  })
-
-  it("keeps a loose new conversation off the project list", () => {
-    act(() => setDeskDest("projects"))
-    renderHeader()
-    expect(
-      screen.getByRole("button", { name: "Search conversations (⌘K)" }),
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByRole("button", { name: /^New conversation$/ }),
-    ).not.toBeInTheDocument()
-  })
-
-  it("hides both controls with the list", () => {
-    act(() => setDeskDest("chats"))
-    renderHeader({ sidebarOpen: false })
-    expect(
-      screen.queryByRole("button", { name: /^New conversation$/ }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole("button", { name: "Search conversations (⌘K)" }),
-    ).not.toBeInTheDocument()
-  })
-})
-
 describe("Header project chip", () => {
   // Which directory the tools are pointed at is otherwise invisible, and it
   // is the difference between editing a scratch folder and editing a repo.
@@ -153,11 +103,11 @@ describe("Header project chip", () => {
   }
 
   it("prefixes the title with the project name on one line", () => {
-    renderHeader({ project })
+    renderHeader({ project, thread: { id: "th_1", title: "Saved chat", project_id: project.id, provider_id: "", reasoning_effort: "", archived: false, created_at: "", last_active_at: "", running: false } })
     const name = screen.getByTestId("thread-project")
     const title = screen.getByTestId("thread-title")
     expect(name).toHaveTextContent("Anchored")
-    expect(title).toHaveTextContent("New conversation")
+    expect(title).toHaveTextContent("Saved chat")
     expect(name.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(title.parentElement).toContainElement(name)
     expect(title).toHaveClass("truncate")
@@ -168,7 +118,7 @@ describe("Header project chip", () => {
   it("shows nothing for a conversation with no project", () => {
     renderHeader()
     expect(screen.queryByTestId("thread-project")).not.toBeInTheDocument()
-    expect(screen.getByTestId("thread-title")).toHaveTextContent("New conversation")
+    expect(screen.queryByTestId("thread-title")).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Toggle side panel" })).toBeInTheDocument()
   })
 

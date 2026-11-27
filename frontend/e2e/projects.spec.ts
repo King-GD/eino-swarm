@@ -88,6 +88,14 @@ test("a project carries what one conversation learned into the next", async ({
   // says so: which directory the tools are pointed at is otherwise invisible.
   await startInProject(page, project)
   await expect(page.getByTestId("thread-project")).toHaveText(project)
+  await expect(page.getByTestId("thread-title")).toHaveCount(0)
+
+  const first = `Trace the ${Date.now()} material and summarise it`
+  const threadID = await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id")
+  expect(threadID).toBeTruthy()
+  const accepted = page.waitForResponse((response) => response.request().method() === "POST"
+    && new URL(response.url()).pathname === `/api/threads/${threadID}/deliver`)
+  await send(page, first)
   // Project name prefixes the title on one line. Stacking them in the 48px
   // bar made the chrome look cramped; a second copy of the model name used to
   // sit on the right of the same row.
@@ -98,12 +106,6 @@ test("a project carries what one conversation learned into the next", async ({
   expect(projectBox!.x).toBeLessThan(titleBox!.x)
   expect(Math.abs(projectBox!.y - titleBox!.y)).toBeLessThan(4)
 
-  const first = `Trace the ${Date.now()} material and summarise it`
-  const threadID = await page.locator('[data-testid="thread-row"][aria-current="true"]').getAttribute("data-id")
-  expect(threadID).toBeTruthy()
-  const accepted = page.waitForResponse((response) => response.request().method() === "POST"
-    && new URL(response.url()).pathname === `/api/threads/${threadID}/deliver`)
-  await send(page, first)
   const started = await accepted
   expect(started.status()).toBe(202)
   const { turn } = await started.json() as { turn: { id: string } }

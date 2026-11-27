@@ -24,7 +24,7 @@ export async function readEarlierTranscript(page: Page, target: Locator) {
 }
 
 export async function reloadOpenConversation(page: Page) {
-  const title = (await page.getByTestId("thread-title").innerText()).trim()
+  const title = (await page.getByTestId("thread-title").allTextContents()).join("").trim()
   const project = page.getByTestId("thread-project")
   const projectName = (await project.count()) > 0 ? (await project.innerText()).trim() : ""
   const id = await page
@@ -32,7 +32,7 @@ export async function reloadOpenConversation(page: Page) {
     .getAttribute("data-id")
   if (!id) throw new Error("reloadOpenConversation: no conversation selected")
   await page.reload()
-  await expect(page.getByRole("heading", { name: "What should we work on?" })).toBeVisible()
+  await expect(page.locator("#welcome-title")).toBeVisible()
   await expect(page.locator('[data-testid="thread-row"][aria-current="true"]')).toHaveCount(0)
   if (projectName) {
     await page.getByRole("button", { name: projectName, exact: true }).click()
@@ -44,7 +44,8 @@ export async function reloadOpenConversation(page: Page) {
   }
   await expect(row).toBeVisible()
   await row.getByTestId("row-label").click()
-  await expect(page.getByTestId("thread-title")).toHaveText(title)
+  if (title) await expect(page.getByTestId("thread-title")).toHaveText(title)
+  else await expect(page.getByTestId("thread-title")).toHaveCount(0)
 }
 
 export const composer = (page: Page) => page.getByTestId("composer-input")

@@ -73,7 +73,7 @@ export function ChromeMenu({
           />
           <div
             role="menu"
-            className="absolute bottom-full left-0 z-30 mb-1 w-max min-w-44 max-w-72 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+            className="wb-menu absolute bottom-full left-0 z-30 mb-1 w-max min-w-44 max-w-72 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
           >
             <button
               type="button"

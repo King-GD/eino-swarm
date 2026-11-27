@@ -1,8 +1,8 @@
 import { CapabilityNotice } from "./capability-notice"
-import { ComposerContextMeter, ComposerSlashMenu, thinkingLabel } from "./composer-widgets"
+import { ComposerContextMeter, ComposerSlashMenu } from "./composer-widgets"
 import { VoiceInputControl } from "./voice-input-control"
 import { useComposerSpeech } from "@/lib/use-composer-speech"
-import { ArrowUp, Brain, Paperclip, ShieldCheck, Square } from "lucide-react"
+import { Paperclip, ShieldCheck, Square } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type SetStateAction } from "react"
 import { ComposerDraftStatus } from "@/components/app/composer-draft-status"
 import { useComposerDraft } from "@/lib/use-composer-draft"
@@ -21,13 +21,7 @@ import { ScheduleBanner } from "@/components/app/schedule-banner"
 import { QueueTray } from "@/components/app/queue-tray"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { ThinkingPicker } from "./thinking-picker"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Tooltip,
@@ -103,6 +97,7 @@ export function Composer({
   onRefreshModels,
   onEditProviders,
   disabled: readOnly,
+  creatingThread,
   restoring,
   canStopWhileRestoring,
   prefill,
@@ -162,6 +157,7 @@ export function Composer({
   onRefreshModels?: () => Promise<void>
   onEditProviders?: () => void
   disabled?: boolean
+  creatingThread?: boolean
   restoring?: boolean
   canStopWhileRestoring?: boolean
   /** Bumped by the empty state (or a shortcut) to drop text into the box
@@ -236,12 +232,12 @@ export function Composer({
   const [slashRejected, setSlashRejected] = useState<"attachments" | "side">()
   const submittingRef = useRef(false)
   const draftNeedsAttention = Boolean(durable.snapshot && (durable.snapshot.error || durable.snapshot.conflict || durable.snapshot.draft.state === "uncertain"))
-  const disabled = readOnly || restoring || submitting || Boolean(durable.snapshot && (!durable.snapshot.loaded || durable.snapshot.busy || durable.snapshot.conflict || durable.snapshot.draft.state !== "editing"))
+  const disabled = readOnly || creatingThread || restoring || submitting || Boolean(durable.snapshot && (!durable.snapshot.loaded || durable.snapshot.busy || durable.snapshot.conflict || durable.snapshot.draft.state !== "editing"))
   const [uploading, setUploading] = useState(false)
   const [armed, setArmed] = useState(false)
   const [adding, setAdding] = useState(false)
-  const [composerMenu, setComposerMenu] = useState<null | "tools" | "thinking">(null)
-  const showComposerMenu = (which: "tools" | "thinking", next: boolean) => {
+  const [composerMenu, setComposerMenu] = useState<null | "model" | "tools" | "thinking">(null)
+  const showComposerMenu = (which: "model" | "tools" | "thinking", next: boolean) => {
     setComposerMenu((current) => (next ? which : current === which ? null : current))
   }
   const [slashIndex, setSlashIndex] = useState(0)
@@ -363,7 +359,8 @@ export function Composer({
     slashReady: sendReady,
     awaitingArgument,
   })
-  const sendDisabled = Boolean(disabled) || speechInput.busy || uploading || !submittable
+  const sendUnavailable = Boolean(disabled) || speechInput.busy || uploading
+  const sendDisabled = sendUnavailable || !submittable
   const restoreStop = Boolean(restoring && canStopWhileRestoring)
   const corner = restoreStop ? { stop: true, send: true } : composerCornerActions({
     running,
@@ -643,15 +640,14 @@ export function Composer({
             ) : null}
           <div
             data-composer-box=""
+            data-menu-open={composerMenu ?? undefined}
             className={
-              // A palette may swap the hairline for a gradient rim painted
-              // under the padding box; the card fill stays on top of it.
-              "relative rounded-[var(--composer-radius,1rem)] border border-[var(--composer-border,hsl(var(--border)))] bg-card bg-[image:var(--composer-rim,none)] [background-clip:var(--composer-clip,border-box)] [background-origin:border-box] shadow-sm transition-shadow [--tw-shadow-color:var(--composer-shadow)] focus-within:border-[var(--composer-border,hsl(var(--ring)))] focus-within:shadow-md" +
+              "relative rounded-2xl border border-border bg-card" +
               (armed || adding ? " min-h-36" : "")
             }
           >
           {armed || adding ? <ComposerDropOverlay busy={adding} /> : null}
-          {durable.session && durable.snapshot ? <ComposerDraftStatus session={durable.session} snapshot={durable.snapshot} disabled={readOnly} /> : null}
+          {durable.session && durable.snapshot ? <ComposerDraftStatus session={durable.session} snapshot={durable.snapshot} disabled={readOnly || creatingThread} /> : null}
           {slashRejected ? (
             <p role="alert" className="pointer-events-auto px-4 py-1 text-(length:--chrome-font-size) text-destructive">
               {t(slashRejected === "side" ? "sideChat.openUnavailable" : "draft.slashTextOnly")}
@@ -687,7 +683,7 @@ export function Composer({
             aria-expanded={slashOpen}
             aria-controls={slashOpen ? "slash-menu" : undefined}
             placeholder={
-              disabled
+              readOnly
                 ? t("sidebar.clientReadOnly")
                 : awaitingAnswer
                   ? t("composer.placeholderAsk")
@@ -697,7 +693,7 @@ export function Composer({
             }
             className={cn(
               contentTypeClass,
-              "max-h-[200px] min-h-[44px] overflow-y-auto rounded-none border-0 bg-transparent px-4 py-3 shadow-none focus-visible:ring-0",
+              "disabled:opacity-100 max-h-[200px] min-h-[44px] overflow-y-auto rounded-none border-0 bg-transparent px-4 py-3 shadow-none focus-visible:ring-0",
               draftOverflows ? "thin-scrollbar" : "composer-scroll-fit",
             )}
             onChange={(e) => {
@@ -812,7 +808,7 @@ export function Composer({
             }}
           />
 
-          <div className="flex items-center gap-1.5 px-2 pb-2">
+          <div className="composer-toolbar flex flex-wrap items-center gap-1 px-2 pb-2">
             <input
               ref={fileRef}
               type="file"
@@ -840,49 +836,15 @@ export function Composer({
               <TooltipContent>{t("composer.attachHint")}</TooltipContent>
             </Tooltip>
 
-            {hideModels ? null : (
-              <ModelPicker
-                models={models}
-                providerId={provider}
-                model={model}
-                onChange={onModelChange}
-                onRefresh={onRefreshModels}
-                onEdit={onEditProviders}
-              />
-            )}
-
             <ComposerTools
-              disabled={readOnly}
+              disabled={readOnly || creatingThread}
               open={composerMenu === "tools"}
               onOpenChange={(next) => showComposerMenu("tools", next)}
             />
 
             {reasoningLevels.length > 0 ? (
-              <Select
-                open={composerMenu === "thinking"}
-                onOpenChange={(next) => showComposerMenu("thinking", next)}
-                value={reasoning ? reasoning : "default"}
-                onValueChange={(v) => onReasoningChange(v === "default" ? "" : v)}
-              >
-                <SelectTrigger
-                  aria-label={t("composer.thinking")}
-                  className={cn(
-                    chromeTypeClass,
-                    "h-7 w-auto gap-1.5 border-none bg-transparent px-2 shadow-none hover:bg-accent",
-                  )}
-                >
-                  <Brain className="size-3.5 text-muted-foreground" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="default">{t("composer.thinkingDefault")}</SelectItem>
-                  {reasoningLevels.map((l) => (
-                    <SelectItem key={l} value={l}>
-                      {thinkingLabel(l, t)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <ThinkingPicker levels={reasoningLevels} value={reasoning ?? ""} onChange={onReasoningChange}
+                open={composerMenu === "thinking"} onOpenChange={(next) => showComposerMenu("thinking", next)} />
             ) : null}
 
             <Tooltip>
@@ -903,7 +865,19 @@ export function Composer({
               </TooltipContent>
             </Tooltip>
 
-            <div className="ml-auto flex items-center gap-1">
+            <div className="wb-composer-actions ml-auto flex items-center gap-1">
+            {hideModels ? null : (
+              <ModelPicker
+                open={composerMenu === "model"}
+                onOpenChange={(next) => showComposerMenu("model", next)}
+                models={models}
+                providerId={provider}
+                model={model}
+                onChange={onModelChange}
+                onRefresh={onRefreshModels}
+                onEdit={onEditProviders}
+              />
+            )}
               <ComposerContextMeter
                 usage={usage}
                 window={meterWindow}
@@ -928,13 +902,15 @@ export function Composer({
               {corner.send ? (
                 <Button
                   size="icon"
-                  className="size-8 rounded-[var(--send-radius,9999px)] motion-safe:animate-pop-in"
+                  variant="ghost"
+                  className="wb-submit"
+                  data-empty-draft={(!sendUnavailable && !text.trim() && !submittable) || undefined}
                   disabled={sendDisabled}
                   onClick={() => void submit()}
                   aria-label={t("composer.send")}
                   title={t("composer.sendHint")}
                 >
-                  <ArrowUp />
+                  <span className="wb-submit-icon" aria-hidden="true" />
                 </Button>
               ) : null}
             </div>

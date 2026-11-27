@@ -371,9 +371,7 @@
     /* Official search rim: cyan-to-blue gradient under a card fill. */
     --composer-radius: 15px;
     --composer-border: transparent;
-    --composer-shadow: transparent;
-    --composer-rim: linear-gradient(hsl(var(--card)), hsl(var(--card))),
-      linear-gradient(96deg, hsl(var(--brand-to)) 0%, hsl(var(--brand-from)) 99%);
+    --composer-shadow: none;
     --composer-clip: padding-box, border-box;
     --send-radius: 4px;
     /* Execution log: dashed rail plus a monospace clock on each row. */

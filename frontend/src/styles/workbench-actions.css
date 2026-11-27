@@ -1,0 +1,64 @@
+/* These surfaces share action typography, including menus portaled to body.
+   Content, code, status labels and controls with their own checked state keep their styles. */
+:is(.wb-welcome, .wb-titlebar, .wb-new-row, .wb-rail, .composer-toolbar, .wb-menu,
+    .wb-account-panel, [data-composer-popup], [data-settings-workbench]) {
+  --action-hover-bg: var(--wb-wash);
+  --action-pressed-bg: color-mix(in srgb, var(--wb-ink) 15%, var(--wb-paper));
+  --action-ink: var(--wb-ink);
+
+  [data-tone=danger] {
+    --action-ink: hsl(var(--destructive));
+    --action-hover-bg: hsl(var(--destructive) / .08);
+    --action-pressed-bg: hsl(var(--destructive) / .15);
+  }
+
+  :is([data-button-variant], .wb-idea, .composer-picker, .wb-menu-action, [role^=menuitem], [cmdk-item], [role=tab], [data-dialog-close]) {
+    font-family: var(--font-sans);
+    font-size: var(--chrome-font-size);
+    line-height: 1.375;
+    font-weight: 500;
+    &:not(:disabled, [aria-disabled=true], [data-disabled=""], [data-disabled=true]) { cursor: pointer; }
+    &:focus-visible { outline: 2px solid var(--wb-ink); outline-offset: 1px; box-shadow: none; }
+  }
+
+  :is(.wb-idea, .composer-picker, .wb-menu-action, [data-button-variant=ghost], [data-button-variant=outline],
+      [role^=menuitem], [cmdk-item], [role=tab], [data-dialog-close])
+    :where(svg) { pointer-events: none; }
+
+  :is(.wb-idea, .composer-picker, .wb-menu-action, [data-button-variant=ghost], [data-button-variant=outline],
+      [role^=menuitem], [cmdk-item], [role=tab], [data-dialog-close]):not(:disabled,
+        [aria-disabled=true], [data-disabled=""], [data-disabled=true], .wb-submit) {
+    @media (hover: hover) {
+      &:hover { color: var(--action-ink); background-color: var(--action-hover-bg); }
+    }
+    &:is([data-highlighted], [cmdk-item][data-selected=true], [aria-expanded=true]) {
+      color: var(--action-ink); background-color: var(--action-hover-bg);
+    }
+    &[data-button-variant=outline]:is(:hover,:active) { border-color: color-mix(in srgb, var(--action-ink) 45%, var(--wb-seam)); }
+    &:active {
+      color: var(--action-ink); background-color: var(--action-pressed-bg); scale: none;
+    }
+    @media (prefers-reduced-motion: reduce) { transition: none; }
+    @media (prefers-reduced-motion: no-preference) {
+      &:not(.wb-search) {
+        transition: color var(--duration-press) var(--ease-out), background-color var(--duration-press) var(--ease-out),
+          border-color var(--duration-press) var(--ease-out);
+      }
+    }
+  }
+}
+.wb-menu, [data-composer-popup] {
+  border: 1px solid var(--wb-seam); border-radius: var(--wb-menu-radius);
+  background: hsl(var(--popover)); box-shadow: var(--wb-overlay-shadow);
+}
+.wb-menu [role^=menuitem] { min-height: var(--wb-control); border-radius: var(--wb-control-radius); }
+.wb-account-panel {
+  width: min(32rem, calc(100vw - 24px)); border-color: var(--wb-seam); border-radius: var(--wb-menu-radius);
+  box-shadow: var(--wb-overlay-shadow);
+}
+.wb-account-panel [data-button-variant] { min-height: var(--wb-control); border-radius: var(--wb-control-radius); }
+.wb-account-panel [data-dialog-close] {
+  display: grid; place-items: center; width: var(--wb-control); height: var(--wb-control);
+  top: 10px; right: 10px; border-radius: var(--wb-control-radius); opacity: 1; color: hsl(var(--muted-foreground));
+}
+.wb-account-panel [data-settings-row] { padding-inline: 0; }
