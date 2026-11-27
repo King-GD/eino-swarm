@@ -60,7 +60,7 @@ test("FOFA chart tooltips keep the plot visible through the dark glass", async (
   const settings = await request.get("/api/settings")
   await expect(settings).toBeOK()
   const previousPalette = (await settings.json()).settings.ui.palette
-  const title = "Heat tooltip fixture"
+  const title = `Heat tooltip fixture ${Date.now()}`
   const response = await request.post("/api/threads", { data: { title } })
   await expect(response).toBeOK()
   const { thread } = await response.json()
@@ -97,7 +97,12 @@ test("FOFA chart tooltips keep the plot visible through the dark glass", async (
 
     await page.emulateMedia({ colorScheme: "light" })
     await expect(page.locator("html")).not.toHaveClass(/\bdark\b/)
+    // The enlarged active dot sits on top of the hovered dot and intercepts
+    // the pointer, so leave the plot before hovering the same point again.
+    await page.mouse.move(0, 0)
+    await expect(chart.locator(".recharts-active-dot")).toHaveCount(0)
     await dot.hover()
+    await expect(tooltip).toBeVisible()
     await expect(tooltip).toHaveCSS("background-color", /, 0\.95\)$/)
     await chart.screenshot({ path: info.outputPath("heat-light-glass.png") })
   } finally {
