@@ -43,7 +43,7 @@ test("HTML map plugin applies patches without replacing its frame, zoom or exist
   await page.goto("/")
   await page.getByTestId("dest-chats").click()
   await page.getByRole("button", { name: title, exact: true }).click()
-  const taskPanelTab = page.getByRole("tab", { name: "Task panels", exact: true })
+  const taskPanelTab = page.getByRole("tab", { name: "Knowledge graph", exact: true })
   await expect(taskPanelTab).toHaveAttribute("data-scope", "thread")
   await expect(taskPanelTab).toHaveAttribute("aria-selected", "true")
   const iframe = page.getByTestId("task-panel-frame")
@@ -85,7 +85,7 @@ test("HTML map plugin applies patches without replacing its frame, zoom or exist
   await page.getByRole("tab", { name: "Agents", exact: true }).click()
   await page.evaluate((update) => (window as unknown as { emitPanelUpdate: (data: unknown) => void }).emitPanelUpdate(update), { cursor: 3, thread_id: thread, panel_id: saved.id, revision: 3, kind: "snapshot", state: saved.state })
   await expect(page.getByRole("tab", { name: "Agents", exact: true })).toHaveAttribute("aria-selected", "true")
-  await page.getByRole("tab", { name: "Task panels", exact: true }).click()
+  await page.getByRole("tab", { name: "Knowledge graph", exact: true }).click()
   await expect(map.locator("body")).toHaveAttribute("data-revision", "3")
   await expect(map.locator(".points circle")).toHaveCount(1)
   expect(await map.locator("#map").getAttribute("data-zoom")).toBe(zoomBefore)
@@ -100,12 +100,13 @@ test("HTML map plugin applies patches without replacing its frame, zoom or exist
 
   saved = { ...saved, revision: 4, state: stopped }
   await page.getByRole("button", { name: emptyTitle, exact: true }).click()
-  await expect(page.getByRole("tab", { name: "Agents", exact: true })).toHaveAttribute("aria-selected", "true")
-  await expect(page.getByRole("tab", { name: "Task panels", exact: true })).toHaveCount(0)
+  // The knowledge graph tab stays for a conversation without panels.
+  await expect(page.getByRole("tab", { name: "Knowledge graph", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(page.getByText("No knowledge graph data yet", { exact: true })).toBeVisible()
   await expect(iframe).toHaveCount(0)
 
   await page.getByRole("button", { name: title, exact: true }).click()
-  await expect(page.getByRole("tab", { name: "Task panels", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(page.getByRole("tab", { name: "Knowledge graph", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect(map.locator("body")).toHaveAttribute("data-revision", "4")
 })
 
@@ -121,7 +122,7 @@ test("two map windows leave HTTP connections available for durable draft saves",
       await target.goto("/")
       await target.getByTestId("dest-chats").click()
       await target.getByRole("button", { name: title, exact: true }).click()
-      await expect(target.getByRole("tab", { name: "Task panels", exact: true })).toBeVisible()
+      await expect(target.getByRole("tab", { name: "Knowledge graph", exact: true })).toBeVisible()
     }
     // Both tabs hold their presence and chat SSE while the writes below reach
     // real HTTP and SQLite; no request route fulfills or bypasses draft saves.
@@ -138,7 +139,7 @@ test("two map windows leave HTTP connections available for durable draft saves",
   } finally { await other.close() }
 })
 
-test("closing a panel instance removes its tab and preserves the conversation on reload", async ({ page }) => {
+test("closing a panel instance empties the knowledge graph and preserves the conversation on reload", async ({ page }) => {
   const title = `Close panel ${Date.now()}`
   const { thread } = await (await page.request.post("/api/threads", { data: { title } })).json()
   const panel = { id: "close-map", thread_id: thread.id, plugin_id: definition.id, plugin_version: definition.version,
@@ -156,13 +157,17 @@ test("closing a panel instance removes its tab and preserves the conversation on
   }
   await page.goto("/")
   await selectThread()
-  const tab = page.getByRole("tab", { name: "Task panels", exact: true })
+  const tab = page.getByRole("tab", { name: "Knowledge graph", exact: true })
+  const frame = page.getByTestId("task-panel-frame")
   await expect(tab).toHaveAttribute("aria-selected", "true")
   await page.getByRole("button", { name: "Close panel instance" }).click()
-  await expect(tab).toHaveCount(0)
+  await expect(frame).toHaveCount(0)
+  await expect(tab).toBeVisible()
+  await expect(page.getByText("No knowledge graph data yet", { exact: true })).toBeVisible()
   await expect(composer(page)).toBeEditable()
   await page.reload()
   await selectThread()
-  await expect(tab).toHaveCount(0)
+  await expect(tab).toBeVisible()
+  await expect(frame).toHaveCount(0)
   await expect(composer(page)).toBeEditable()
 })

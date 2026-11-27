@@ -338,7 +338,7 @@ test("EASM renders the producer state, words evidence and follows step status", 
   await expect(panel.getByRole("region", supplyRegion)).toHaveCount(0)
   await expect(panel.getByText("Supply chain / third-party components", { exact: false })).toHaveCount(0)
 
-  await expect(panel.getByRole("button", { name: /^Expand (EASM|asset graph)$/ })).toHaveCount(1)
+  await expect(panel.getByRole("button", { name: /^Expand (EASM|knowledge graph)$/ })).toHaveCount(1)
   await panel.getByRole("button", { name: "Expand EASM", exact: true }).click()
   await expect(dialog.getByTestId("easm-heat")).toBeVisible()
   await expect(dialog.getByRole("region", supplyRegion)).toHaveCount(0)
@@ -419,7 +419,7 @@ test("EASM hides an empty cloud card and keeps known providers after a failure",
   const cloudHeading = { name: "Cloud providers", exact: true }
   await expect(panel.getByRole("progressbar", cloudLoading)).toBeVisible()
 
-  const dialog = page.getByRole("dialog", { name: /asset graph/i })
+  const dialog = page.getByRole("dialog", { name: /knowledge graph/i })
   await panel.getByRole("button", { name: "Expand EASM", exact: true }).click()
   await expect(dialog.getByRole("progressbar", cloudLoading)).toBeVisible()
 
@@ -483,7 +483,7 @@ test("EASM hides interrupted empty sections and gives the expanded graph the ful
   await expect(dialog.getByRole("heading", { name: "Cloud providers", exact: true })).toHaveCount(0)
   await expect(dialog.getByRole("region", { name: "Asset attention trend", exact: true })).toHaveCount(0)
   await expect(dialog.getByRole("region", { name: "Supply chain / third-party components", exact: true })).toHaveCount(0)
-  const graph = dialog.getByRole("region", { name: "Asset relationship graph", exact: true })
+  const graph = dialog.getByRole("region", { name: "Knowledge graph", exact: true })
   await expect(graph).toBeVisible()
   await expect.poll(async () => {
     const [graphBox, dialogBox] = await Promise.all([graph.boundingBox(), dialog.boundingBox()])

@@ -8,6 +8,8 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
+- The inspector's Task panels tab is now **Knowledge graph** on PC, Web and paired phones. It is always there for an open conversation and shows an empty state until a panel arrives; an EASM run fills it with the graph and its heat trend, supply-chain and cloud provider cards. The expanded EASM view is titled "· Knowledge graph".
+
 - The FOFA palette now restyles components through tokens the components read, instead of global overrides outside the cascade layers. A class passed by a caller (for example a round voice button) keeps working under FOFA. Palette tokens moved to `frontend/src/styles/palettes.css`. zwai keeps its colors; its tooltips take the translucent glass described below.
 
 - Under FOFA, the context-usage hover card uses the ordinary dark tooltip instead of a bordered solid panel, its ring icon has no hover slab, and a card waiting on your answer keeps a neutral border with the orange heading.

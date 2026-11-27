@@ -44,6 +44,8 @@ describe("Project collaboration mode", () => {
     expect(screen.queryByRole("tab", { name: "Work records" })).toBeNull()
     expect(screen.queryByRole("tab", { name: "Knowledge" })).toBeNull()
     expect(screen.getByRole("tab", { name: "Agents" })).toHaveAttribute("data-state", "active")
+    // Without a conversation there is nothing for the knowledge graph to show.
+    expect(screen.queryByRole("tab", { name: "Knowledge graph" })).toBeNull()
   })
 
   it("keeps recorded collaboration reachable after the mode is turned off", () => {
@@ -59,7 +61,7 @@ describe("Project collaboration mode", () => {
     const enabled = { ...project, nuwa_enabled: true }
     const view = render(<RightPanel {...props} onTabChange={onTabChange} tab="task-panels" threadId="first" nuwaProject={enabled} />)
     const taskTabs = within(screen.getByRole("tablist"))
-    expect(taskTabs.getByRole("tab", { name: "Task panels" })).toHaveAttribute("aria-selected", "true")
+    expect(taskTabs.getByRole("tab", { name: "Knowledge graph" })).toHaveAttribute("aria-selected", "true")
     expect(taskTabs.getByRole("tab", { name: "Work records" })).toHaveAttribute("aria-selected", "false")
     const frame = screen.getByTestId("registered-frame")
     expect(frame).toHaveTextContent(progress.id)
@@ -73,13 +75,15 @@ describe("Project collaboration mode", () => {
     expect(screen.getByText("Recorded project work: p")).toBeVisible()
 
     view.rerender(<RightPanel {...props} onTabChange={onTabChange} tab="task-panels" threadId="second" nuwaProject={{ ...enabled, id: "other" }} />)
-    expect(screen.queryByRole("tab", { name: "Task panels" })).toBeNull()
+    // The knowledge graph tab is fixed: a conversation without panels keeps it
+    // and shows the empty state instead of falling back to Agents.
+    expect(screen.getByRole("tab", { name: "Knowledge graph" })).toHaveAttribute("aria-selected", "true")
     expect(screen.queryByTestId("registered-frame")).toBeNull()
-    expect(screen.getByRole("tab", { name: "Agents" })).toHaveAttribute("aria-selected", "true")
+    expect(screen.getByText("No knowledge graph data yet")).toBeInTheDocument()
     expect(onTabChange).not.toHaveBeenCalled()
 
     act(() => useTaskPanels.setState({ threadId: "second", panels: [{ ...progress, id: "progress-second", thread_id: "second" }] }))
-    expect(screen.getByRole("tab", { name: "Task panels" })).toHaveAttribute("aria-selected", "true")
+    expect(screen.getByRole("tab", { name: "Knowledge graph" })).toHaveAttribute("aria-selected", "true")
     expect(screen.getByTestId("registered-frame")).toHaveTextContent("progress-second")
   })
 

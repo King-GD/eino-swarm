@@ -79,8 +79,10 @@ and projects sort by last update; drag a row to pin a custom order. On the
 desktop window, drag the title bar to move it; double-click to zoom or
 restore, like Finder.
 
-**Task panels** appears in the inspector when a panel is collecting or has
-published results. Choose **Close panel instance** to remove the selected
+**Knowledge graph** is always in the inspector for an open conversation. It
+shows "No knowledge graph data yet" until a panel is collecting or has
+published results; an EASM run fills it with the graph and its heat trend,
+supply-chain and cloud provider cards. Choose **Close panel instance** to remove the selected
 instance from this conversation, including after restart. A running source
 for that instance is interrupted while the conversation continues. Hiding the
 inspector keeps its panels available.

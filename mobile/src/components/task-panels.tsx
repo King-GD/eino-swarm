@@ -25,12 +25,15 @@ export function usePhoneTaskPanelView(link: RemoteLink | undefined, threadId: st
     if (panels.length && !opened.has(scope)) {
       opened.add(scope)
       setView({ scope, open: true, selected: panels[0].id })
-    } else if (view.scope !== scope || (!panels.length && !data.available && !data.loading)) {
-      setView((value) => value.scope !== scope || value.open ? { scope, open: false, selected: "" } : value)
+    } else if (view.scope !== scope) {
+      // The knowledge graph entry is fixed, so an empty conversation keeps the
+      // sheet open; only a new conversation or PC closes it.
+      setView({ scope, open: false, selected: "" })
     }
-  }, [scope, panels, data.available, data.loading, view.scope])
+  }, [scope, panels, view.scope])
   return {
     ...data, available: Boolean(ownerKey && link && data.available), panels, current, scope, open, close, active,
+    entry: Boolean(ownerKey && link && data.supported),
     show: () => setView({ scope, open: true, selected: current?.id ?? "" }),
     select: (id: string) => setView({ scope, open: true, selected: id }),
   }
@@ -39,7 +42,7 @@ export function usePhoneTaskPanelView(link: RemoteLink | undefined, threadId: st
 type PanelView = ReturnType<typeof usePhoneTaskPanelView>
 
 export function PhoneTaskPanelButton({ view }: { view: PanelView }) {
-  if (!view.available && !view.panels.length) return null
+  if (!view.entry && !view.panels.length) return null
   const caption = panelText(getLocale(), "tab")
   return <Button type="button" variant="ghost" className="size-10 shrink-0 px-0" onClick={view.show} aria-label={caption} title={caption}>
     <PanelsTopLeft className="size-5" aria-hidden />
@@ -74,7 +77,7 @@ export function PhoneTaskPanelSheet({ view }: { view: PanelView }) {
     document.addEventListener("focusin", focus)
     return () => { back(); window.removeEventListener("keydown", escape); document.removeEventListener("focusin", focus); if (previous?.isConnected) previous.focus({ preventScroll: true }) }
   }, [view.open, dialog])
-  if (!view.available && !view.panels.length) return null
+  if (!view.entry && !view.panels.length) return null
   const locale = getLocale(), caption = panelText(locale, "tab")
   return createPortal(<section ref={setDialog} role={view.open ? "dialog" : undefined} aria-modal={view.open || undefined} aria-label={caption}
     aria-hidden={!view.open} inert={!view.open} data-testid="phone-task-panels"
@@ -91,7 +94,7 @@ export function PhoneTaskPanelSheet({ view }: { view: PanelView }) {
     {view.loading ? <p role="status" className="px-3 py-1 text-xs text-muted-foreground">{panelText(locale, "loading")}</p> : null}
     {view.closeError ? <p role="alert" className="px-3 py-2 text-xs text-destructive">{panelText(locale, "closeFailed")}</p> : null}
     {view.error ? <p role="alert" className="px-3 py-2 text-xs text-destructive">{view.error}</p> : null}
-    {!view.panels.length && !view.loading && !view.error ? <p role="status" className="p-3 text-sm text-muted-foreground">{panelText(locale, "loading")}</p> : null}
+    {!view.panels.length && !view.loading && !view.error ? <p role="status" className="p-3 text-sm text-muted-foreground">{panelText(locale, view.available ? "loading" : "empty")}</p> : null}
     {view.panels.length > 1 ? <label className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1 text-xs">
       <span className="shrink-0">{panelText(locale, "choose")}</span>
       <select className="h-11 min-w-0 flex-1 rounded border border-border bg-background px-2 text-sm" value={view.current?.id ?? ""} onChange={(event) => view.select(event.target.value)}>

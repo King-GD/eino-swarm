@@ -36,30 +36,36 @@ it("opens an upstream EASM v1 snapshot on a new phone", async () => {
     state: { ...easmV1.initial_state, components: [{ name: component, count: 3 }] } }
   read.mockReturnValue(data([legacy]))
   render(<Harness />)
-  await screen.findByRole("dialog", { name: "Task panels" })
+  await screen.findByRole("dialog", { name: "Knowledge graph" })
   await act(async () => { await vi.dynamicImportSettled() })
   expect(await screen.findByRole("button", { name: easmText("en").tagEvidence(component) })).toBeVisible()
 })
 
-it("only offers panels for a paired PC with an available panel", () => {
+it("offers the knowledge graph for a paired PC before any panel exists", () => {
   const view = render(<Harness />)
-  expect(screen.queryByRole("button", { name: "Task panels" })).toBeNull()
+  expect(screen.queryByRole("dialog")).toBeNull()
+  fireEvent.click(screen.getByRole("button", { name: "Knowledge graph" }))
+  expect(screen.getByRole("dialog", { name: "Knowledge graph" })).toBeVisible()
+  expect(screen.getByText("No knowledge graph data yet")).toBeVisible()
+  read.mockReturnValue({ ...data(), supported: false })
+  view.rerender(<Harness />)
+  expect(screen.queryByRole("button", { name: "Knowledge graph" })).toBeNull()
   read.mockReturnValue(data([panel()]))
   view.rerender(<Harness authority="" />)
-  expect(screen.queryByRole("button", { name: "Task panels" })).toBeNull()
+  expect(screen.queryByRole("button", { name: "Knowledge graph" })).toBeNull()
 })
 
 it("opens once and preserves its iframe when closed and reopened after updates", async () => {
   read.mockReturnValue(data([panel()]))
   const view = render(<Harness />)
-  expect(await screen.findByRole("dialog", { name: "Task panels" })).toBeVisible()
+  expect(await screen.findByRole("dialog", { name: "Knowledge graph" })).toBeVisible()
   const frame = await screen.findByTestId("task-panel-frame")
   fireEvent.click(screen.getByRole("button", { name: "Close" }))
   expect(screen.queryByRole("dialog")).toBeNull()
   read.mockReturnValue(data([panel("p", 2)]))
   view.rerender(<Harness />)
   expect(screen.queryByRole("dialog")).toBeNull()
-  fireEvent.click(screen.getByRole("button", { name: "Task panels" }))
+  fireEvent.click(screen.getByRole("button", { name: "Knowledge graph" }))
   expect(screen.getByTestId("task-panel-frame")).toBe(frame)
   expect(fetch).toHaveBeenCalledOnce()
 })
@@ -76,7 +82,7 @@ it("keeps multiple iframe instances across selection and Android Back only close
   expect(handled).toBe(true)
   expect(screen.queryByRole("dialog")).toBeNull()
   expect(link.rpc).not.toHaveBeenCalled()
-  fireEvent.click(screen.getByRole("button", { name: "Task panels" }))
+  fireEvent.click(screen.getByRole("button", { name: "Knowledge graph" }))
   expect(screen.getByRole("combobox")).toHaveValue("second")
 })
 
@@ -84,7 +90,7 @@ it("keeps a retry entry for transfer errors before a safe panel body has arrived
   read.mockReturnValue({ ...data(), available: true, connected: false, error: "Panel transfer failed" })
   render(<Harness />)
   expect(screen.queryByRole("dialog")).toBeNull()
-  fireEvent.click(screen.getByRole("button", { name: "Task panels" }))
+  fireEvent.click(screen.getByRole("button", { name: "Knowledge graph" }))
   expect(screen.getByRole("alert")).toHaveTextContent("Panel transfer failed")
   expect(screen.getByRole("status")).toHaveTextContent("Reconnecting")
   fireEvent.click(screen.getByRole("button", { name: "Retry" }))
@@ -141,10 +147,10 @@ it.each(["automatic open", "manual reopen", "an update over Outputs"])("closes s
     read.mockReturnValue(data([native]))
     view.rerender(conversation())
   }
-  await screen.findByRole("dialog", { name: "Task panels" })
+  await screen.findByRole("dialog", { name: "Knowledge graph" })
   if (opening === "manual reopen") {
     fireEvent.click(screen.getByRole("button", { name: "Close" }))
-    fireEvent.click(screen.getByRole("button", { name: "Task panels" }))
+    fireEvent.click(screen.getByRole("button", { name: "Knowledge graph" }))
   }
   // The sheet can appear before its lazy renderer; cold imports can exceed findBy's timeout.
   await act(async () => { await vi.dynamicImportSettled() })
@@ -164,7 +170,7 @@ it.each(["automatic open", "manual reopen", "an update over Outputs"])("closes s
   expect(sheet).toHaveAttribute("aria-hidden", "false")
   act(() => { handled = window.__zwaiAndroidBack?.() ?? false })
   expect(handled).toBe(true)
-  expect(screen.queryByRole("dialog", { name: "Task panels" })).toBeNull()
+  expect(screen.queryByRole("dialog", { name: "Knowledge graph" })).toBeNull()
   expect(screen.getByRole("heading", { name: aboveOutputs ? "Outputs" : "Conversation" })).toBeVisible()
   if (aboveOutputs) {
     act(() => { handled = window.__zwaiAndroidBack?.() ?? false })

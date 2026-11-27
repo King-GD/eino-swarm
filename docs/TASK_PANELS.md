@@ -2,7 +2,7 @@
 
 Task panels are bundled HTML/JS applications. Each panel owns its layout and may use D3, Canvas or another bundled library. The host supplies conversation identity, versioned data and appearance; it does not interpret business fields. Desktop and Web use the same implementation. This is the local Task Panel Protocol v1, not a claim of MCP Apps compatibility.
 
-The paired mobile app bundles the same plugin HTML/JS and iframe host. A PC conversation with a visible instance gains a Task panels button and opens the first available panel once. The phone uses a full-screen sheet with touch interaction and multiple-panel selection. Returning to the conversation preserves the frame and zoom. **Close panel instance** removes the selected instance persistently on every client and interrupts its own running source while the PC task continues. A replacement connection to the same PC/thread/database generation retains the last validated projection data while fencing old RPC replies; the source is not restarted. A conversation without a panel has no panel entry. PC selection, conversation selection and database-generation changes invalidate old reads. A phone-only direct-model chat does not run the PC's registered sources.
+The paired mobile app bundles the same plugin HTML/JS and iframe host. Every conversation on a PC that supports panels has a Knowledge graph button; it shows an empty state until a panel exists and opens the first available panel once. The phone uses a full-screen sheet with touch interaction and multiple-panel selection. Returning to the conversation preserves the frame and zoom. **Close panel instance** removes the selected instance persistently on every client and interrupts its own running source while the PC task continues. A replacement connection to the same PC/thread/database generation retains the last validated projection data while fencing old RPC replies; the source is not restarted. A conversation without a panel keeps the entry and shows the empty state. PC selection, conversation selection and database-generation changes invalidate old reads. A phone-only direct-model chat does not run the PC's registered sources.
 
 ## Using the example
 
@@ -31,7 +31,7 @@ During collection the display reports discovered and processed counts. A fixed c
 | `nuwa` | 当前会话，未打开会话时绑定项目 | 会话打开即显示；项目入口按模式或已有记录显示；保留当前焦点 | `react`：选中时挂载工作记录组件，会话通知复用聊天 SSE |
 | `task-panels` | `thread` | `agent_open`：当前会话有实例才显示入口，首次发现新实例时自动打开 | `iframe`：同一标签内可切换多个实例，其他标签选中时保留 iframe |
 
-解析注册项时会绑定具体的项目或会话 ID。当前标签因归属变化或实例移除而不可用时，右侧栏暂时显示 Agents，不覆盖原选项。工作记录读取当前会话及其所属项目；只在没有活动会话时使用侧栏所选项目。任务面板实例归会话，采集执行归启动它的任务，两者有各自的生命周期。
+解析注册项时会绑定具体的项目或会话 ID。当前标签因归属变化而不可用时，右侧栏暂时显示 Agents，不覆盖原选项。知识图谱标签（`task-panels`）对每个打开的会话固定存在，移除实例只会让它显示空状态。工作记录读取当前会话及其所属项目；只在没有活动会话时使用侧栏所选项目。任务面板实例归会话，采集执行归启动它的任务，两者有各自的生命周期。
 
 按下文编写 HTML/JS 插件后，把定义加到 [catalog.json](../frontend/src/task-panels/catalog.json) 即可共用 `task-panels` 入口，无须改宿主注册表。新增宿主面板类型时，在宿主注册表中声明归属、激活、渲染和挂载规则，并验证切换作用域时不会带入旧面板。`catalog.json` 是构建和 Agent 共用的插件目录；工作记录的宿主注册项不进入该目录，也不出现在 Agent 提示词的可用任务面板列表中，不能用 `open_task_panel` 打开。配对手机继续使用会话级任务面板的现有入口，不展示工作记录图。
 

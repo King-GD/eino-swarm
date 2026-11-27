@@ -50,8 +50,10 @@ const registrations = [
     renderer: "iframe",
     mount: "retained",
     label: (t) => panelText(t.locale, "tab"),
-    bind: ({ threadId, taskPanels }) => {
-      if (!threadId || taskPanels.threadId !== threadId || !taskPanels.panels.some((panel) => panel.thread_id === threadId)) return
+    // The knowledge graph tab is fixed for every conversation; panel
+    // instances only decide what it shows.
+    bind: ({ threadId }) => {
+      if (!threadId) return
       return {
         ownerId: threadId,
         scope: "thread",

@@ -240,7 +240,7 @@ This is the current user-facing capability map. The code and tests named below a
 ### F-138 Project Markdown knowledge base
 
 - 目的：在一个项目内用可编辑的 Markdown 页面积累、查找和追溯跨对话的知识。
-- 入口：PC／Web 右侧 Knowledge 标签、提炼菜单、对话 wikilink、项目回合的 `read_knowledge`／`record_knowledge` 和项目知识库 HTTP 路由。Agents、Files、Trace、工作记录和任务面板可绑定当前会话，Memory 和 Knowledge 属项目范围，所有标签共用一条标签栏并用浅底色区分。
+- 入口：PC／Web 右侧 Knowledge 标签、提炼菜单、对话 wikilink、项目回合的 `read_knowledge`／`record_knowledge` 和项目知识库 HTTP 路由。Agents、Files、Trace、工作记录和知识图谱可绑定当前会话，Memory 和 Knowledge 属项目范围，所有标签共用一条标签栏并用浅底色区分。
 - 输入与输出：项目 schema、稳定页面 ID、Markdown、历史引用；提供类型或关系树、待处理项、单页、反链、来源、Trace 和宽幅预览。Knowledge 的「关系图」从项目根节点可达所有可浏览页面，归属线连接各关系簇。大量未关联页面折叠为可浏览分组，搜索仍覆盖这些页面。可缩放、按标题或别名查找并打开页面。Memory 与 Knowledge 共用一次后台提炼，支持最近成功回合、当前任务和当前项目。启用项目记忆、自动复盘和知识库后，成功非计划回合的自动复盘也可写入知识库。当前任务和当前项目按保存的历史范围分批合并笔记、Skills 与知识库变更，可暂停和继续。两个面板显示已处理数、剩余数、同一回执与 Trace。
 - 前置与失败：Settings 中的全局开关默认开启。首次非计划回合可初始化项目知识库，也可在面板先手动初始化。关闭后隐藏面板并停止知识库提炼。部分提交保留实际写入回执。无项目对话提示移动到项目。相同名称、旧 revision 和错误来源拒绝写入；已保存来源失效时给出提示。
 - 提炼进度条反映已保存的批次进度，区分只读摘录与整条跳过。当前任务和当前项目默认摘录，也可选择全文分段，两个面板显示当前长记录的进度，暂停和重启后继续。引文校验与暂时性服务失败可触发一次未写入批次的重试，配置类失败给出对应的调整提示。
@@ -691,7 +691,7 @@ This is the current user-facing capability map. The code and tests named below a
 
 ### F-137 HTML/JS task panels
 
-- 桌面和 Web 通过宿主注册表显示当前会话的 Task panels 标签，多个实例共用一个入口。首次发现新实例时自动打开，数据更新不抢焦点；切换标签保留 iframe。切换会话或移除实例使所选标签不可用时，暂时显示 Agents。插件目录继续只列可由 Agent 打开的 HTML/JS 定义。见 [开发者接入](TASK_PANELS.md#开发者接入)。
+- 桌面和 Web 通过宿主注册表为每个打开的会话固定显示“知识图谱”标签（原 Task panels），没有实例时显示空状态，多个实例共用一个入口。首次发现新实例时自动打开，数据更新不抢焦点；切换标签保留 iframe。没有活动会话使所选标签不可用时，暂时显示 Agents；移除实例只让知识图谱回到空状态。插件目录继续只列可由 Agent 打开的 HTML/JS 定义。见 [开发者接入](TASK_PANELS.md#开发者接入)。
 - 已保存的 EASM 企业资产画像升级后可打开并按原查询续采。热力趋势、供应链和云服务商卡片在采集中或有数据时显示。配对手机可连接提供已发布 EASM v1 或 v2 定义的主机。见 [EASM portrait](TASK_PANELS.md#easm-portrait)。
 
-- 目的：将任务的结构化结果持续呈现在插件自定义界面；入口：会话右侧任务面板、配对手机会话的全屏面板、Settings → Tools、Agent通用面板工具；输入：已安装插件定义、带来源的快照或增量；输出：展示运行中或已有观测的实例、持久状态、地图与本地/触摸交互；三端均可持久关闭实例并中断其数据源；前置条件：插件版本兼容，数据源执行由当前任务拥有，手机通过Pairlink读取PC投影；失败表现：协议/版本/加载错误保留旧状态，取消与重启显示中断，旧PC不展示入口；关联契约：`C-050`。实现证据：`internal/taskpanel`、`internal/store/task_panels.go`、`internal/engine/task_panels.go`、`internal/remote/task_panels.go`、`internal/panelplugins/fofaworld`、`frontend/src/task-panels`、`frontend/src/components/app/task-panel-frame.tsx`、`mobile/src/components/task-panels.tsx`；说明：[Task panels](TASK_PANELS.md)。
+- 目的：将任务的结构化结果持续呈现在插件自定义界面；入口：会话右侧知识图谱标签、配对手机会话的全屏知识图谱、Settings → Tools、Agent通用面板工具；输入：已安装插件定义、带来源的快照或增量；输出：展示运行中或已有观测的实例、持久状态、地图与本地/触摸交互；三端均可持久关闭实例并中断其数据源；前置条件：插件版本兼容，数据源执行由当前任务拥有，手机通过Pairlink读取PC投影；失败表现：协议/版本/加载错误保留旧状态，取消与重启显示中断，旧PC不展示入口；关联契约：`C-050`。实现证据：`internal/taskpanel`、`internal/store/task_panels.go`、`internal/engine/task_panels.go`、`internal/remote/task_panels.go`、`internal/panelplugins/fofaworld`、`frontend/src/task-panels`、`frontend/src/components/app/task-panel-frame.tsx`、`mobile/src/components/task-panels.tsx`；说明：[Task panels](TASK_PANELS.md)。

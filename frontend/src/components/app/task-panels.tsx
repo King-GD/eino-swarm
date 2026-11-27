@@ -24,6 +24,7 @@ export function TaskPanels({ threadId, visible }: { threadId: string; visible: b
     {closeError ? <p role="alert" className="p-2 text-xs text-destructive">{panelText(t.locale, "closeFailed")}</p> : null}
     {!connected && panels.length ? <p role="status" className="border-b border-border px-3 py-1 text-xs text-muted-foreground">{panelText(t.locale, "disconnected")}</p> : null}
     {owner === threadId && error ? <p role="alert" className="p-2 text-xs text-destructive">{error}</p> : null}
+    {!panels.length && !(owner === threadId && error) ? <p role="status" className="p-3 text-sm text-muted-foreground">{panelText(t.locale, "empty")}</p> : null}
     {panels.map((panel) => <div key={panel.id} className={panel.id === current?.id ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
       {isNativeTaskPanel(panel)
         ? <NativeTaskPanel panel={panel} visible={visible && current?.id === panel.id} locale={t.locale} active={active} />
