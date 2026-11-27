@@ -66,6 +66,7 @@ it.each([
   ["classification_invalid", "schedule_id", "声明的计划 ID 不在引文中。"],
   ["classification_invalid", "quote_not_in_candidate", "声明引文不是候选答复中的原文。"],
   ["classification_invalid", "next_run_at", "声明的下次运行时间不是 RFC3339 格式。"],
+  ["classification_invalid", "decision_response", "网关决策模型返回的概率缺失或无效。"],
   ["classification_deferred", "unavailable", "连续核对请求失败达到上限，已暂缓。"],
   ["classification_deferred", "invalid", "连续核对响应格式无效达到上限，已暂缓。"],
   ["classification_deferred", "attempts", "这份候选答复的核对总尝试次数达到上限，已暂缓。"],

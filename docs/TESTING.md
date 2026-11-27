@@ -1780,6 +1780,15 @@ requires stance, time and attribution; nonaffirmative, noncurrent and reported
 items cannot require a matching armed plan. These offline fixtures prove the
 protocol and runtime boundary, not an external model's semantic accuracy.
 
+`internal/engine/schedule_answer_model_http_test.go` exercises actual chat
+and Gateway Decisions requests for all three Settings choices, disabled
+verification, a supported route that fails, malformed probabilities, and
+withholding a concrete unsupported claim after decision screening. It checks
+the associated calls in the original turn's Trace. Settings API and browser
+tests check persisted choices, old-client omission, and retaining the chosen
+model when the switch is off. These fixtures verify routing and failure
+semantics. Decision-model precision, recall and latency require real-model data.
+
 The [schedule answer admission model](../models/scheduling/ScheduleAnswerAdmission.tla)
 runs with `make model-check`. It checks one private candidate and at most one
 same-turn correction. The historical switch sends a grounded external polling

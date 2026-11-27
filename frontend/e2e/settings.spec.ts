@@ -293,6 +293,45 @@ test("policy check thinking and the tool result limit save through settings", as
   }
 })
 
+test("answer check switch and model round-trip through settings", async ({ page, request }) => {
+  const { settings } = await (await request.get("/api/settings")).json()
+  try {
+    await page.goto("/")
+    const open = page.getByRole("button", { name: "Settings" })
+    const dialog = page.getByRole("dialog")
+    await open.click()
+    await dialog.getByRole("tab", { name: "Swarm" }).click()
+    const check = dialog.getByRole("switch", { name: "Check scheduling claims in answers" })
+    const model = dialog.getByLabel("Answer check model")
+    await expect(check).toBeChecked()
+    await expect(model).toHaveText("Follow chat model")
+    await model.click()
+    await page.getByRole("option", { name: "Automatic", exact: true }).click()
+    await model.click()
+    await page.getByRole("option", { name: "Decision model", exact: true }).click()
+    await check.click()
+    await expect(model).toBeDisabled()
+    await dialog.getByRole("button", { name: "Back to app" }).click()
+    await expect(dialog).toBeHidden()
+    const { settings: saved } = await (await request.get("/api/settings")).json()
+    expect(saved.swarm).toMatchObject({ schedule_answer_check: false, schedule_answer_model: "decision" })
+
+    await page.reload()
+    await open.click()
+    await dialog.getByRole("tab", { name: "Swarm" }).click()
+    await expect(check).not.toBeChecked()
+    await expect(model).toHaveText("Decision model")
+    await check.click()
+    await expect(model).toBeEnabled()
+    await dialog.getByRole("button", { name: "Back to app" }).click()
+    await expect(dialog).toBeHidden()
+    const { settings: restored } = await (await request.get("/api/settings")).json()
+    expect(restored.swarm).toMatchObject({ schedule_answer_check: true, schedule_answer_model: "decision" })
+  } finally {
+    await request.put("/api/settings", { data: { swarm: settings.swarm } })
+  }
+})
+
 test("personality round-trips through settings", async ({ page, request }) => {
   const { settings } = await (await request.get("/api/settings")).json()
   try {

@@ -373,6 +373,40 @@ func TestSettingsPreservesReasoningOutputRecoveryChoice(t *testing.T) {
 	}
 }
 
+func TestSettingsPreservesScheduleAnswerCheckChoices(t *testing.T) {
+	h := newHarness(t)
+	const enabled = "schedule_answer_check"
+	const model = "schedule_answer_model"
+	for _, step := range []struct {
+		put         map[string]any
+		wantEnabled bool
+		wantModel   string
+	}{
+		{nil, true, config.ScheduleAnswerChat},
+		{map[string]any{enabled: false, model: " DECISION "}, false, config.ScheduleAnswerDecision},
+		{map[string]any{"max_concurrent": 3}, false, config.ScheduleAnswerDecision},
+		{map[string]any{enabled: nil, model: nil}, false, config.ScheduleAnswerDecision},
+		{map[string]any{enabled: true}, true, config.ScheduleAnswerDecision},
+		{map[string]any{model: config.ScheduleAnswerAuto}, true, config.ScheduleAnswerAuto},
+	} {
+		if step.put != nil {
+			h.json(http.MethodPut, "/api/settings", map[string]any{"swarm": step.put}, http.StatusOK)
+		}
+		out := h.json(http.MethodGet, "/api/settings", nil, http.StatusOK)
+		swarm := out["settings"].(map[string]any)["swarm"].(map[string]any)
+		if swarm[enabled] != step.wantEnabled || swarm[model] != step.wantModel {
+			t.Fatalf("after save %v, GET settings = %v/%v, want %t/%s", step.put, swarm[enabled], swarm[model], step.wantEnabled, step.wantModel)
+		}
+		reloaded, err := config.Load(h.app.Config.DataDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reloaded.Swarm.ScheduleAnswerCheck != step.wantEnabled || reloaded.Swarm.ScheduleAnswerModel != step.wantModel {
+			t.Fatalf("after save %v, disk settings = %v/%v, want %t/%s", step.put, reloaded.Swarm.ScheduleAnswerCheck, reloaded.Swarm.ScheduleAnswerModel, step.wantEnabled, step.wantModel)
+		}
+	}
+}
+
 // A language switch is a PUT of only ui, so it must not wipe swarm settings,
 // and GET /api/meta must report the pin so the next load paints Chinese
 // before Settings is opened.

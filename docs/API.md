@@ -320,7 +320,8 @@ Client startup metadata. During recovery, clients poll it until `startup` is `re
              "goal_max_auto_turns": 12,
              "goal_session_max_iterations": 40, "goal_auto_compact_percent": 80,
              "schedule_min_interval_seconds": 30, "schedule_tick_ms": 1000,
-             "schedule_max_active": 32, "policy_reasoning_effort": ""},
+             "schedule_max_active": 32, "policy_reasoning_effort": "",
+             "schedule_answer_check": true, "schedule_answer_model": "chat"},
   "product_mode": "fofa",
   "locale": "system",
   "ui": {"locale": "system", "font": "system", "ui_font_size": "medium",
@@ -577,7 +578,8 @@ provider carries `has_api_key` and `ready` instead.
             "goal_max_auto_turns": 12,
             "goal_session_max_iterations": 40, "goal_auto_compact_percent": 80,
             "schedule_min_interval_seconds": 30, "schedule_tick_ms": 1000,
-            "schedule_max_active": 32, "policy_reasoning_effort": ""},
+            "schedule_max_active": 32, "policy_reasoning_effort": "",
+            "schedule_answer_check": true, "schedule_answer_model": "chat"},
   "tools": {"disabled": [], "enabled": [], "web_search_max_results": 8,
             "web_execution": "auto",
             "result_max_chars": 40000,
@@ -3260,9 +3262,16 @@ loop. See `C-029`.
 `model_retry.reason: "schedule_claim_unverified"` is the original turn's
 single correction for a scheduling claim that classification and current
 persisted facts cannot support. It is not a classifier-service retry or proof
-that a wait was created. Candidate manager prose stays private until the
-tool-free `schedule-answer-policy` call extracts claims and code verifies the
-current plans. Each extracted item requires `stance` (`affirmed`, `negated`,
+that a wait was created. With `swarm.schedule_answer_check` enabled, candidate
+manager prose stays private during verification. By default (`chat`), the
+tool-free `schedule-answer-policy` call extracts claims using the conversation
+model. `auto` and `decision` can first use the conversation account's authorized
+Gateway `/decisions` role. A valid probability below 0.1 skips extraction. At
+0.1 or above, the chat extractor supplies concrete claims for code to verify.
+If the role is absent, `auto` follows chat and `decision` reports
+`decision_model_unavailable`. Disabling the check skips this policy path; the
+publication and scheduling operations retain their own ownership checks. Each
+extracted item requires `stance` (`affirmed`, `negated`,
 `hypothetical`), `temporal` (`current`, `historical`, `intended`) and
 `attribution` (`assistant`, `reported`). Only affirmed/current/assistant items
 require schedule evidence. A quote preserves its contiguous negation, tense
@@ -3358,7 +3367,7 @@ Normal retries use `classification_unavailable` or `classification_invalid`;
 the durable cap uses `classification_deferred` with `wait_ms:0`. Invalid retry
 `detail` is limited to `missing_message`, `json`, `trailing`, `claim_list`,
 `claim_meaning`, `claim_shape`, `unspecified_scope_quote`, `scope_quote`,
-`schedule_id`, `quote_not_in_candidate` or `next_run_at`. The deferred receipt
+`schedule_id`, `quote_not_in_candidate`, `next_run_at` or `decision_response`. The deferred receipt
 instead identifies the exhausted limit with `detail:"unavailable"`, `"invalid"`
 or `"attempts"`. No raw Cause/error string, model response, quote, scope quote
 or candidate prose enters `detail`. Markdown fences, extra fields and approximate

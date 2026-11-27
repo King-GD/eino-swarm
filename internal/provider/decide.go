@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/LubyRuffy/eino-swarm/internal/config"
 )
 
 const decisionsPath = "/decisions"
@@ -39,7 +41,7 @@ func (p *Pool) Decide(ctx context.Context, providerID, modelName, input string) 
 	if err != nil {
 		return "", err
 	}
-	body, err := json.Marshal(decisionRequest{
+	raw, err := requestDecision(ctx, prov, decisionRequest{
 		Model: strings.TrimSpace(modelName),
 		Input: input,
 		Questions: []decisionQuestion{{
@@ -48,12 +50,20 @@ func (p *Pool) Decide(ctx context.Context, providerID, modelName, input string) 
 		}},
 	})
 	if err != nil {
-		return "", fmt.Errorf("provider: encode decisions: %w", err)
+		return "", err
+	}
+	return formatDecision(raw)
+}
+
+func requestDecision(ctx context.Context, prov config.Provider, decision decisionRequest) ([]byte, error) {
+	body, err := json.Marshal(decision)
+	if err != nil {
+		return nil, fmt.Errorf("provider: encode decisions: %w", err)
 	}
 	base := strings.TrimRight(strings.TrimSpace(prov.BaseURL), "/")
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+decisionsPath, bytes.NewReader(body))
 	if err != nil {
-		return "", fmt.Errorf("provider: decisions: %w", err)
+		return nil, fmt.Errorf("provider: decisions: %w", err)
 	}
 	if key := strings.TrimSpace(prov.APIKey); key != "" {
 		req.Header.Set("Authorization", "Bearer "+key)
@@ -62,17 +72,17 @@ func (p *Pool) Decide(ctx context.Context, providerID, modelName, input string) 
 	req.Header.Set("Accept", "application/json")
 	resp, err := (&http.Client{Timeout: prov.Timeout()}).Do(req)
 	if err != nil {
-		return "", fmt.Errorf("provider: decisions: %w", err)
+		return nil, fmt.Errorf("provider: decisions: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("provider: decisions failed (%d %s)", resp.StatusCode, http.StatusText(resp.StatusCode))
+	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return "", fmt.Errorf("provider: decisions: %w", err)
+		return nil, fmt.Errorf("provider: decisions: %w", err)
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("provider: decisions failed (%s)", resp.Status)
-	}
-	return formatDecision(raw)
+	return raw, nil
 }
 
 func formatDecision(raw []byte) (string, error) {

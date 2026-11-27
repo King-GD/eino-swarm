@@ -1,6 +1,7 @@
 import { imageGenerationZh } from "./messages-image-generation"
 import { modelSettingsZh } from "./messages-model-settings"
 import { backoffZh } from "./messages-backoff"
+import { scheduleAnswerSettingsZh } from "./messages-schedule-answer-settings"
 import { modelPolicyZh } from "./messages-model-policy"
 import { remoteLoginZh } from "./messages-remote-login"
 import { desktopAccountZh } from "./messages-desktop-account"
@@ -28,6 +29,7 @@ export const zh: { [K in keyof typeof en]: string } = {
   ...knowledgeZh,
   ...mcpZH,
   ...backoffZh,
+  ...scheduleAnswerSettingsZh,
   ...desktopAccountZh,
   ...remoteLoginZh,
   ...draftZH,

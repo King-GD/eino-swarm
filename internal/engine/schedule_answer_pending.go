@@ -81,6 +81,9 @@ func (rt *runtime) verifyPendingScheduleAnswer(ctx context.Context, turn *store.
 	if ctx.Err() != nil {
 		return nil, interruptedScheduleAnswer(ctx)
 	}
+	if row.State == "pending" && !e.cfg.SwarmSnapshot().ScheduleAnswerCheck {
+		return nil, nil
+	}
 	if failure := e.restoreScheduleAnswerFailureBudget(turn, row); failure != nil {
 		return nil, failure
 	}

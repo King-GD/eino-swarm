@@ -31,7 +31,7 @@ export function modelBackoffNotice(text?: string): ModelBackoffNotice | undefine
   return { text: "Waiting before retrying the model request." }
 }
 
-const invalidDetails = ["missing_message", "json", "trailing", "claim_list", "claim_meaning", "claim_shape", "unspecified_scope_quote", "scope_quote", "schedule_id", "quote_not_in_candidate", "next_run_at"] as const
+const invalidDetails = ["missing_message", "json", "trailing", "claim_list", "claim_meaning", "claim_shape", "unspecified_scope_quote", "scope_quote", "schedule_id", "quote_not_in_candidate", "next_run_at", "decision_response"] as const
 const deferredDetails = ["unavailable", "invalid", "attempts"] as const
 
 type InvalidDetail = typeof invalidDetails[number]

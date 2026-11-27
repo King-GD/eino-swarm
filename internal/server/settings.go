@@ -221,6 +221,8 @@ type putSwarmSettings struct {
 	// Absent keeps the stored choices when an older client saves the section.
 	RecoverReasoningOutputLimit   *bool   `json:"recover_reasoning_output_limit"`
 	ReasoningOutputRecoveryEffort *string `json:"reasoning_output_recovery_effort"`
+	ScheduleAnswerCheck           *bool   `json:"schedule_answer_check"`
+	ScheduleAnswerModel           *string `json:"schedule_answer_model"`
 }
 
 // putSettingsRequest mirrors settingsView, plus the optional new API key per
@@ -341,6 +343,14 @@ func (s *Server) putSettings(c *gin.Context) {
 			next.Swarm.ReasoningOutputRecoveryEffort = cfg.Swarm.ReasoningOutputRecoveryEffort
 			if req.Swarm.ReasoningOutputRecoveryEffort != nil {
 				next.Swarm.ReasoningOutputRecoveryEffort = *req.Swarm.ReasoningOutputRecoveryEffort
+			}
+			next.Swarm.ScheduleAnswerCheck = cfg.Swarm.ScheduleAnswerCheck
+			if req.Swarm.ScheduleAnswerCheck != nil {
+				next.Swarm.ScheduleAnswerCheck = *req.Swarm.ScheduleAnswerCheck
+			}
+			next.Swarm.ScheduleAnswerModel = cfg.Swarm.ScheduleAnswerModel
+			if req.Swarm.ScheduleAnswerModel != nil {
+				next.Swarm.ScheduleAnswerModel = *req.Swarm.ScheduleAnswerModel
 			}
 		}
 		if req.Tools != nil {
