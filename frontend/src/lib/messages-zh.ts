@@ -92,6 +92,7 @@ export const zh: { [K in keyof typeof en]: string } = {
   "surface.tui": "终端",
 
   "sidebar.newConversation": "新对话",
+  "sidebar.searchLabel": "搜索对话",
   "sidebar.search": "搜索会话 (⌘K)",
   "sidebar.settings": "设置",
   "sidebar.appMenu": "应用菜单",
@@ -157,19 +158,20 @@ export const zh: { [K in keyof typeof en]: string } = {
   "palette.conversations": "会话",
   "palette.untitled": "未命名",
 
-  "empty.title": "要做什么？",
+  "empty.title": "你好，今天想做点什么？",
+  "empty.greeting": "你好，{name}",
   "empty.lead":
-    "描述你想要的结果。值得拆开时会交给子代理。运行中按 Enter 会排队跟进；注入会进入当前回合。",
+    "给 zwai 一个目标，或直接拖入文件开始。",
   "empty.research.title": "从多角度调研",
-  "empty.research.hint": "几个子代理同时从不同角度查。",
+  "empty.research.hint": "对比不同来源，整理成简报",
   "empty.research.text":
     "从几个角度调研一个主题，合并成一份带来源的简报。",
   "empty.files.title": "过一遍文件",
   "empty.files.hint":
-    "用回形针附加，或把文件拖进输入框。粘贴或拖入截图会作为视觉输入发送。",
+    "阅读工作区文件，提取要点",
   "empty.files.text": "过一遍工作区里的文件，总结每个文件里有什么。",
   "empty.split.title": "拆开大任务",
-  "empty.split.hint": "说出目标；它决定需要多少工人。",
+  "empty.split.hint": "并行处理子任务，汇总结果",
   "empty.split.text": "把这个目标拆成可并行的部分，并行处理，再合并结果。",
 
   "banner.unconfigured":
@@ -500,7 +502,12 @@ export const zh: { [K in keyof typeof en]: string } = {
   "transcript.steer": "引导",
   "transcript.agentEmpty": "这个代理还没有产出任何内容。",
   "transcript.agentLoading": "正在加载这个代理的记录…",
-  "transcript.waitingFor": "正在等待 {n} 个子代理{s}",
+  "transcript.waitingFor": "正在等待 {n} 个子代理",
+  "transcript.waitEnded": "本次等待已结束",
+  "transcript.waitFailed": "本次等待失败",
+  "transcript.waitCompleted": "已完成 {done}/{total}",
+  "transcript.answerStart": "回到回答开头",
+  "transcript.answerFiles": "回答中提到的文件",
   "transcript.collectingWait": "正在收回子代理结果",
   "transcript.workingEllipsis": "工作中…",
   "transcript.started": "已启动 {role}",

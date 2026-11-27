@@ -1,5 +1,8 @@
 @import 'tailwindcss';
 @import './styles/easm.css';
+@import './styles/workbench.css';
+@import './styles/settings-workbench.css';
+@import './styles/workbench-actions.css';
 @import './styles/scroll-fade.css';
 @import './styles/palettes.css';
 

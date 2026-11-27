@@ -36,7 +36,7 @@ describe("sidebar width", () => {
     expect(clampSidebarWidth(9999)).toBe(SIDEBAR_WIDTH_MAX)
     localStorage.setItem("zwai.sidebar.width", "80")
     expect(readSidebarWidth()).toBe(SIDEBAR_WIDTH_MIN)
-    localStorage.setItem("zwai.sidebar.width", "256")
+    localStorage.setItem("zwai.sidebar.width", "220")
     expect(readSidebarWidth()).toBe(SIDEBAR_WIDTH_MIN)
     localStorage.setItem("zwai.sidebar.width", "800")
     expect(readSidebarWidth()).toBe(SIDEBAR_WIDTH_MAX)

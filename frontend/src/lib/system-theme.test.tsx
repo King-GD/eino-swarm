@@ -14,7 +14,11 @@ describe("system theme changes while the app is open", () => {
 
   beforeEach(() => {
     media = Object.assign(new EventTarget(), { matches: false })
-    vi.stubGlobal("matchMedia", vi.fn(() => media as unknown as MediaQueryList))
+    vi.stubGlobal("matchMedia", vi.fn((query: string) =>
+      query === "(prefers-color-scheme: dark)"
+        ? media
+        : Object.assign(new EventTarget(), { matches: false }),
+    ))
     vi.spyOn(api, "clients").mockResolvedValue({ enabled: false, tools: [] })
     useApp.setState({ boot: vi.fn(async () => {}), status: { running: false } })
     useApp.getState().setTheme("system")

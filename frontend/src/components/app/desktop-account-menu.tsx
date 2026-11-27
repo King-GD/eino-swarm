@@ -172,7 +172,7 @@ export function DesktopAccountMenu() {
         {open ? <DropdownMenuContent
           side="top"
           align="start"
-          className="max-w-72"
+          className="wb-menu min-w-48 max-w-72"
           onCloseAutoFocus={(event) => {
             if (handoff.current) { event.preventDefault(); handoff.current = false }
           }}
@@ -194,7 +194,7 @@ export function DesktopAccountMenu() {
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={settings}>{t("desktopAccount.settings")}</DropdownMenuItem>
           {canLogout ? (
-            <DropdownMenuItem disabled={busy || signingOut} onSelect={() => { showDialog(); logout() }}>
+            <DropdownMenuItem data-tone="danger" disabled={busy || signingOut} onSelect={() => { showDialog(); logout() }}>
               {t("desktopAccount.signOut")}
             </DropdownMenuItem>
           ) : null}
@@ -204,7 +204,7 @@ export function DesktopAccountMenu() {
         <Dialog open modal={false} onOpenChange={setDialog}>
           <DialogContent
             data-testid="desktop-account-dialog"
-            className="max-h-[90dvh] overflow-y-auto"
+            className="wb-account-panel max-h-[90dvh] overflow-y-auto"
             onCloseAutoFocus={(event) => {
               event.preventDefault()
               if (handoff.current) { handoff.current = false; return }
@@ -265,7 +265,7 @@ export function DesktopAccountMenu() {
                 {t("desktopAccount.settings")}
               </Button>
               {canLogout ? (
-                <Button type="button" variant="outline" size="sm" disabled={busy || signingOut} onClick={logout}>
+                <Button type="button" variant="outline" size="sm" data-tone="danger" disabled={busy || signingOut} onClick={logout}>
                   {t("desktopAccount.signOut")}
                 </Button>
               ) : null}

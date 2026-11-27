@@ -54,6 +54,10 @@ folders. Conversations is the list of threads that belong to no project.
 Launch and reload show the home page and select no conversation. Restart
 leaves the rail where you left it.
 
+New conversation is the first sidebar action, also available in the collapsed rail. The composer’s model, tools and thinking menus open over the draft next to the toolbar button, one at a time. Select a model or thinking level to close the menu. Tool switches stay open for additional changes. Press Escape to dismiss.
+
+On the home screen, choose a suggested task to fill the composer, or type your own. The inspector starts folded on home. It stays folded in a newly created empty conversation and opens beside the first turn on wide windows. A manual inspector choice takes precedence. On compact windows, the title-bar control opens it over the conversation. Its title-bar toggle still works in either view. During a turn the live activity sits beside the conversation, and a completed turn ends with a check mark and its local completion time.
+
 The transcript is the middle. Once you have sent two messages, a tick cluster
 on its left edge lists your own turns; click one to pin that send at the top.
 A long conversation packs the ticks into a minimap. Auto-follow unpins so a

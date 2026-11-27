@@ -73,6 +73,7 @@ function RailButton({
       }}
     >
       {children}
+      <span className="wb-nav-label" aria-hidden="true">{label}</span>
     </Button>
   )
 }
@@ -99,11 +100,9 @@ export function DestRail({
   return (
     <nav
       data-testid="dest-rail"
+      data-expanded={edge}
       aria-label={t("nav.destinations")}
-      className={cn(
-        "flex h-full shrink-0 flex-col items-center gap-1 py-2",
-        edge && "border-r border-sidebar-border",
-      )}
+      className="wb-rail flex h-full shrink-0 flex-col items-center gap-1 py-2"
       style={{
         width: "var(--dest-rail-width)",
         paddingInline: "var(--dest-rail-pad)",
@@ -133,7 +132,7 @@ export function DestRail({
       >
         <CalendarClock />
       </RailButton>
-      <div className="mt-auto flex flex-col items-center gap-1 pb-1">
+      <div className="wb-nav-tools mt-auto flex flex-col items-center gap-1 pb-1">
         <ChromeMenu onToggleTheme={onToggleTheme} onToggleLocale={onToggleLocale} />
         <RailButton
           current={false}

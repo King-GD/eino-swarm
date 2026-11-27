@@ -7,6 +7,7 @@ const PREVIEW_NAME = /\.(md|markdown|mdx|txt|log|csv|tsv|json|jsonl|ndjson|ya?ml
 type MdNode = {
   type: string
   value?: string
+  data?: { hName: string }
   url?: string
   children?: MdNode[]
 }
@@ -131,5 +132,28 @@ function rewrite(node: MdNode) {
 export function remarkWorkspaceFiles() {
   return (tree: MdNode) => {
     rewrite(tree)
+  }
+}
+
+/** Index the workspace links already recognized in this completed answer. */
+export function remarkAnswerFiles() {
+  return (tree: MdNode) => {
+    const paths = new Set<string>()
+    function collect(node: MdNode) {
+      if (node.type === "link" && node.url?.startsWith(FILE_HREF)) {
+        const path = workspaceFileFromHref(node.url)
+        if (path) paths.add(path)
+      }
+      node.children?.forEach(collect)
+    }
+    collect(tree)
+    if (!paths.size) return
+    tree.children?.push({
+      type: "paragraph",
+      data: { hName: "aside" },
+      children: Array.from(paths, (path) => ({
+        type: "link", url: workspaceFileHref(path), children: [{ type: "text", value: path }],
+      })),
+    })
   }
 }

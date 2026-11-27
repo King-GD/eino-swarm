@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react"
-import userEvent, { PointerEventsCheckLevel } from "@testing-library/user-event"
+import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { Attachment, Meta } from "@/lib/types"
@@ -80,7 +80,7 @@ describe("Composer thinking level", () => {
       disabled: [], enabled: [], proxy: { http: "", https: "", no_proxy: "" },
       web_search_max_results: 8, web_execution: "local", result_max_chars: 12000,
     } } as unknown as Awaited<ReturnType<typeof api.settings>>)
-    const user = userEvent.setup({ pointerEventsCheck: PointerEventsCheckLevel.Never })
+    const user = userEvent.setup()
     HTMLElement.prototype.hasPointerCapture ??= () => false
     HTMLElement.prototype.releasePointerCapture ??= () => undefined
     renderComposer()
@@ -88,7 +88,7 @@ describe("Composer thinking level", () => {
     expect(await screen.findByTestId("composer-tools-menu")).toBeVisible()
     await user.click(screen.getByLabelText("Thinking level"))
     await waitFor(() => expect(screen.queryByTestId("composer-tools-menu")).toBeNull())
-    expect(screen.getByRole("option", { name: "High thinking" })).toBeVisible()
+    expect(screen.getByRole("menuitemradio", { name: "High thinking" })).toBeVisible()
     await user.click(screen.getByRole("button", { name: "Tools", hidden: true }))
     await waitFor(() => expect(screen.queryByRole("option", { name: "High thinking" })).toBeNull())
     expect(screen.getByTestId("composer-tools-menu")).toBeVisible()

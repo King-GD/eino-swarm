@@ -3,7 +3,11 @@ import { IterationLimitCard } from "./iteration-limit-card"
 import { BackoffNotice } from "./backoff-notice"
 import { GenerationNotice } from "./generation-notice"
 import {
+  ArrowUpToLine,
   ChevronDown,
+  CircleCheck,
+  CircleAlert,
+  ChevronRight,
   Loader2,
   Pencil,
   Users,
@@ -27,11 +31,13 @@ import { MemoMarkdown } from "@/components/app/markdown"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ToolResultBody } from "@/components/app/tool-result"
 import { ToolRow } from "@/components/app/tool-row"
 import { Reasoning } from "@/components/app/transcript-reasoning"
 import { MarqueeText } from "@/components/app/marquee"
 import {
   GoalSessionTurn,
+  TurnFooter,
   responseClockBlockId,
 } from "@/components/app/transcript-session"
 import { QueuedSteers } from "@/components/app/queued-steers"
@@ -60,7 +66,7 @@ import { agentRosterLabel, agentRosterText } from "@/lib/agent-label"
 import { useRetryInput } from "@/lib/use-retry-input"
 import { useT } from "@/lib/use-t"
 import { Textarea } from "@/components/ui/textarea"
-import type { AgentState, Block, Pulse, TranscriptState } from "@/lib/transcript"
+import type { AgentState, Block, Pulse, TranscriptState, TurnState } from "@/lib/transcript"
 import { MANAGER_ID, liveWorkers, splitQueuedSteers } from "@/lib/transcript"
 import { useApp } from "@/store/app"
 import { turnSlices } from "@/lib/turn-boundary"
@@ -239,8 +245,8 @@ export function Transcript({
         className={cn(
           // Hidden X: a GFM table's min-content used to stretch this flex
           // item under the side panel. Tables scroll inside .md-table.
-          "thin-scrollbar content-gutter min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto [overflow-anchor:none] pt-6 pb-composer",
-          navItems.length >= TURN_NAV_MIN && "pl-10 sm:pl-12",
+          "wb-thread-scroll content-gutter thin-scrollbar min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto [overflow-anchor:none] pt-6 pb-composer",
+          navItems.length >= TURN_NAV_MIN && "wb-turn-rail",
         )}
       >
         <div className="content-column flex min-w-0 flex-col gap-1">
@@ -250,6 +256,7 @@ export function Transcript({
           {groups.map(({ turnId, blocks: turnBlocks, showFooter }, i) => {
             const clockAnswerId = responseClockBlockId(turnBlocks)
             const turn = turnById.get(turnId)
+            const finishedTurn = showFooter && clockAnswerId && turn?.status === "done" ? turn : undefined
             const live = i === liveAt
             // A memory note can carry an earlier turn id after the next turn
             // has started, so one id is two slices. Keying only on the id
@@ -262,7 +269,7 @@ export function Transcript({
                 blocks={turnBlocks}
                 turn={turn}
                 live={live}
-                showFooter={showFooter}
+                showFooter={showFooter && !finishedTurn}
                 renderBlock={(b) => (
                   <BlockView
                     key={b.id}
@@ -270,6 +277,8 @@ export function Transcript({
                     collapseProcess={collapseProcess}
                     threadId={threadId}
                     reveal={revealIds.has(b.id)}
+                    onReadAnswer={unpin}
+                    finishedTurn={b.id === clockAnswerId ? finishedTurn : undefined}
                     showClock={b.kind === "user" || b.id === clockAnswerId}
                     onSelectAgent={onSelectAgent}
                     onResendUser={onResendUser}
@@ -302,7 +311,7 @@ export function Transcript({
           size="icon"
           data-testid="jump-to-latest"
           aria-label={t("transcript.jumpLatest")}
-          className="absolute right-4 z-20 rounded-full bg-background shadow-md motion-safe:animate-pop-in bottom-[calc(var(--composer-pad)+0.75rem)]"
+          className="absolute left-1/2 -translate-x-1/2 z-20 rounded-full bg-background shadow-sm motion-safe:animate-pop-in bottom-[calc(var(--composer-pad)+0.75rem)]"
           onClick={jumpToLatest}
         >
           <ChevronDown />
@@ -317,6 +326,8 @@ const BlockView = memo(function BlockView({
   threadId,
   reveal,
   showClock,
+  finishedTurn,
+  onReadAnswer,
   collapseProcess,
   onSelectAgent,
   onResendUser,
@@ -330,6 +341,8 @@ const BlockView = memo(function BlockView({
   threadId?: string
   reveal?: boolean
   showClock?: boolean
+  finishedTurn?: TurnState
+  onReadAnswer: () => void
   collapseProcess?: boolean
   onSelectAgent: (id: string) => void
   onResendUser?: (text: string, seq: number) => void
@@ -378,7 +391,7 @@ const BlockView = memo(function BlockView({
       return <Reasoning block={block} reveal={reveal} defaultCollapsed={collapseProcess} />
 
     case "answer":
-      return <Answer block={block} showClock={showClock} />
+      return <Answer block={block} showClock={showClock} finishedTurn={finishedTurn} onReadAnswer={onReadAnswer} />
 
     case "image_generation":
       return block.imageGeneration && threadId ? <GeneratedImageCard data={block.imageGeneration} threadId={threadId} /> : null
@@ -398,8 +411,8 @@ const BlockView = memo(function BlockView({
       // A pending wait is the moment a swarm looks frozen from the outside, so
       // it shows the sub-agents it is waiting on and what each is doing right
       // now rather than a bare "running…".
-      if (block.tool?.name === "wait_agents" && block.tool.pending) {
-        return <WaitProgress block={block} onSelect={onSelectAgent} />
+      if (block.tool?.name === "wait_agents" && (block.tool.pending || collapseProcess)) {
+        return <WaitProgress block={block} onSelect={onSelectAgent} reveal={reveal} />
       }
       return <ToolRow block={block} reveal={reveal} defaultCollapsed={collapseProcess} />
 
@@ -489,20 +502,49 @@ function MessageMeta({
   )
 }
 
-function Answer({ block, showClock }: { block: Block; showClock?: boolean }) {
+function Answer({ block, showClock, finishedTurn, onReadAnswer }: {
+  block: Block; showClock?: boolean; finishedTurn?: TurnState; onReadAnswer: () => void
+}) {
+  const finalAnswer = Boolean(finishedTurn)
+  const t = useT()
+  const answerRef = useRef<HTMLDivElement>(null)
+  const [longAnswer, setLongAnswer] = useState(false)
+  useEffect(() => {
+    const answer = answerRef.current
+    const pane = answer?.closest<HTMLElement>(".wb-thread-scroll")
+    if (!finalAnswer || !answer || !pane || typeof ResizeObserver === "undefined") return
+    const measure = () => {
+      const viewport = pane.clientHeight - parseFloat(getComputedStyle(pane).paddingBottom || "0")
+      setLongAnswer(viewport > 0 && answer.offsetHeight > viewport)
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(answer)
+    observer.observe(pane)
+    return () => observer.disconnect()
+  }, [finalAnswer])
   const copy =
     showClock && !block.streaming && block.text.length > 0 ? (
       <CopyButton text={block.text} size="icon-2xs" className="text-muted-foreground" />
     ) : null
   return (
-    <div className="group/msg relative min-w-0 py-2" data-testid="assistant-message">
+    <div ref={answerRef} tabIndex={finalAnswer ? -1 : undefined} className="group/msg relative min-w-0 py-2" data-testid="assistant-message" data-final-answer={finalAnswer || undefined}>
       <div className="md">
-        <MemoMarkdown text={block.text} streaming={block.streaming} />
+        <MemoMarkdown text={block.text} streaming={block.streaming} indexFiles={finalAnswer} />
       </div>
       {showClock ? (
         <MessageMeta at={block.at} timeTestId="assistant-message-time">
           {copy}
           {copy ? <SpeechReadButton id={block.id} text={block.text} /> : null}
+          {finalAnswer && longAnswer ? (
+            <Button type="button" variant="ghost" size="sm" onClick={() => {
+              onReadAnswer()
+              answerRef.current?.focus({ preventScroll: true })
+              answerRef.current?.scrollIntoView({ block: "start" })
+            }}>
+              <ArrowUpToLine aria-hidden />{t("transcript.answerStart")}
+            </Button>
+          ) : null}
+          {finishedTurn?.endedAt ? <TurnFooter turn={finishedTurn} inline /> : null}
         </MessageMeta>
       ) : null}
     </div>
@@ -513,30 +555,39 @@ export function WaitProgress({
   block,
   agents,
   pulse,
+  reveal,
   onSelect,
 }: {
   block: Block
   agents?: Record<string, AgentState>
+  reveal?: boolean
   pulse?: Pulse
   onSelect: (id: string) => void
 }) {
   const t = useT()
+  const [opened, setOpened] = useState(false)
+  const expanded = opened || Boolean(reveal)
+  const tool = block.tool
+  const pending = Boolean(tool?.pending)
   const storedAgents = useApp((s) => s.transcript.agents)
   const storedPulse = useApp((s) => s.transcript.pulse)
   const liveAgents = agents ?? storedAgents
   const livePulse = pulse ?? storedPulse
-  const ids = waitAgentIds(block.tool?.args ?? "")
+  const ids = [...new Set(waitAgentIds(block.tool?.args ?? ""))]
   const watched = ids.map((id) => liveAgents[id]).filter(Boolean) as AgentState[]
+  const completed = watched.filter((a) => a.status === "done").length
   const waiting = watched.filter((a) => a.status === "running").length
   const ages = new Map(livePulse?.agents.map((a) => [a.agentId, a.elapsedMs]))
   return (
-    <div className="my-1 rounded-lg border border-border bg-muted/40 px-3 py-2">
-      <div className="flex items-center gap-2 text-(length:--chrome-font-size) text-muted-foreground">
-        <Loader2 className="size-3.5 shrink-0 animate-spin" />
+    <div className="wb-wait-progress" data-pending={pending} data-failed={tool?.failed || undefined}>
+      <button type="button" className="wb-wait-toggle" aria-expanded={expanded} onClick={() => setOpened(!expanded)}>
+        {pending ? <Loader2 aria-hidden className="wb-wait-glyph motion-safe:animate-spin" />
+          : tool?.failed ? <CircleAlert aria-hidden className="wb-wait-glyph" />
+          : <CircleCheck aria-hidden className="wb-wait-glyph" />}
         <MarqueeText
-          active
+          active={false}
           text={
-            waiting > 0
+            !pending ? t(tool?.failed ? "transcript.waitFailed" : "transcript.waitEnded") : waiting > 0
               ? t("transcript.waitingFor", {
                   n: waiting,
                   s: waiting === 1 ? "" : "s",
@@ -544,8 +595,12 @@ export function WaitProgress({
               : t("transcript.collectingWait")
           }
         />
-      </div>
-      <div className="mt-1.5 flex flex-col gap-0.5">
+        {pending && watched.length > 0 ? (
+          <span className="wb-wait-count">{t("transcript.waitCompleted", { done: completed, total: ids.length })}</span>
+        ) : null}
+        <ChevronRight aria-hidden className="wb-wait-chevron size-3.5 shrink-0" />
+      </button>
+      {pending ? <div className="wb-wait-rows" hidden={!expanded}>
         {watched.map((a) => {
           const label = agentRosterLabel(a.role, a.id)
           return (
@@ -553,13 +608,12 @@ export function WaitProgress({
               key={a.id}
               type="button"
               onClick={() => onSelect(a.id)}
-              className="flex items-center gap-2 rounded-md px-1.5 py-1 text-left text-[13px] transition-colors hover:bg-accent/60"
+              className="wb-wait-row"
             >
               <StatusDot status={a.status} />
-              <span className="shrink-0 font-medium">{label.name}</span>
-              {label.tag ? (
-                <span className="shrink-0 text-muted-foreground">{label.tag}</span>
-              ) : null}
+              <span className="wb-wait-name" title={a.id}>
+                {label.name}{label.tag ? <small> {label.tag}</small> : null}
+              </span>
               <MarqueeText
                 text={
                   a.status === "running"
@@ -577,15 +631,16 @@ export function WaitProgress({
               />
               {/* The age is the honest part of a silent row: it says the work is
                   still being done, and how long it has been going. */}
-              {ages.has(a.id) ? (
-                <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">
-                  {formatDuration(ages.get(a.id) ?? 0)}
-                </span>
-              ) : null}
+              <span className="wb-wait-age">
+                {ages.has(a.id) ? formatDuration(ages.get(a.id) ?? 0) : null}
+              </span>
+              <ChevronRight aria-hidden className="wb-worker-open size-3.5 shrink-0" />
             </button>
           )
         })}
-      </div>
+      </div> : expanded && tool ? (
+        <ToolResultBody name={tool.name} args={tool.args} result={tool.result} failed={tool.failed} />
+      ) : null}
     </div>
   )
 }
@@ -681,8 +736,9 @@ export function Heartbeat({
   return (
     <p
       data-testid="heartbeat"
+      data-generic={!pulse || undefined}
       data-find-ignore=""
-      className="mt-2 flex items-center gap-2 px-2 text-xs text-muted-foreground"
+      className="wb-heartbeat mt-2 flex items-center gap-2 px-2 text-xs text-muted-foreground"
     >
       <Loader2 className="size-3 shrink-0 animate-spin" />
       <MarqueeText active className="text-(length:--chrome-font-size)" text={label} />
@@ -832,7 +888,7 @@ function UserMessage({
               data-testid="user-message"
               className={cn(
                 contentTypeClass,
-                "min-w-0 max-w-full rounded-2xl rounded-br-md bg-secondary px-4 py-2.5 text-secondary-foreground",
+                "wb-user-message min-w-0 max-w-full rounded-2xl rounded-br-md bg-secondary px-4 py-2.5 text-secondary-foreground",
               )}
             >
               <InputThumbs

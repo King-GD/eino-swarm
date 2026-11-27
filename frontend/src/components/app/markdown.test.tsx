@@ -248,6 +248,19 @@ describe("MemoMarkdown", () => {
 
   // A long unbreakable cell used to set the column's min-content and paint
   // under the side panel. The scrollport is the cap; the cell still renders.
+  it("indexes each mentioned workspace file once only after the answer is complete", () => {
+    const open = vi.fn().mockResolvedValue(undefined)
+    const text = "Open notes/out.md or `notes/out.md`. [Site](https://example.org/file.md)\n\n```txt\nexample.md\n```"
+    const view = (streaming: boolean) => <WorkspaceFileOpenProvider open={open}><MemoMarkdown text={text} streaming={streaming} indexFiles /></WorkspaceFileOpenProvider>
+    const { container, rerender } = render(view(true))
+    expect(container.querySelector(".wb-answer-files")).toBeNull()
+    rerender(view(false))
+    const links = container.querySelectorAll<HTMLButtonElement>(".wb-answer-files button")
+    expect(Array.from(links, (link) => link.dataset.path)).toEqual(["notes/out.md"])
+    fireEvent.click(links[0]!)
+    expect(open).toHaveBeenCalledWith("notes/out.md", { returnFocus: links[0] })
+  })
+
   it("turns workspace paths in an answer into preview buttons", () => {
     const open = vi.fn().mockResolvedValue(undefined)
     const text = [

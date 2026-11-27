@@ -1,5 +1,5 @@
 import { useTaskPanels } from "@/store/task-panels"
-import { ArrowDownNarrowWide, ArrowLeft, ArrowUpNarrowWide, ChevronDown } from "lucide-react"
+import { Bot, ArrowDownNarrowWide, ArrowLeft, ArrowUpNarrowWide, ChevronDown } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
 import { AgentPromptButton } from "@/components/app/agent-prompt"
@@ -500,13 +500,13 @@ function AgentRow({
       onClick={() => onSelect(agent.id)}
       className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent/60"
     >
-      <StatusDot status={agent.status} />
-      <AgentName agent={agent} />
+      <span className="wb-agent-icon"><Bot size={17} aria-hidden="true" /><StatusDot status={agent.status} /></span>
+      <span className="wb-agent-copy"><span className="wb-agent-name"><AgentName agent={agent} /></span>
       <MarqueeText
         text={agent.status === "cancelled" ? t("status.cancelled") : agent.status === "failed" ? t("agentFailure.viewReason") : agent.activity}
         active={agent.status === "running"}
         className="text-xs text-muted-foreground"
-      />
+      /></span>
     </button>
   )
 }

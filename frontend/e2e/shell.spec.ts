@@ -13,7 +13,7 @@ test("launch with an existing conversation stays on the home page", async ({
   await send(page, "This turn must not stay selected after launch")
   await waitForIdle(page)
   await page.reload()
-  await expect(page.getByRole("heading", { name: "What should we work on?" })).toBeVisible()
+  await expect(page.locator("#welcome-title")).toBeVisible()
   await expect(page.locator('[data-testid="thread-row"][aria-current="true"]')).toHaveCount(0)
   await expect(page.getByTestId("transcript")).toHaveCount(0)
 })
@@ -24,12 +24,16 @@ test("the compact window title bar spans the sidebar, conversation and panel", a
   const bar = page.getByRole("banner")
   const list = page.getByTestId("conversation-list")
   const leading = page.getByTestId("titlebar-leading")
+  await expect(page.getByTestId("thread-title")).toHaveCount(0)
   const title = page.getByTestId("thread-title")
   const panel = page.getByTestId("side-panel")
   const tabs = panel.getByRole("tablist")
   const panelToggle = bar.getByRole("button", { name: /toggle side panel/i })
   const hideList = bar.getByRole("button", { name: "Hide conversations" })
 
+  await send(page, "Title bar alignment")
+  await waitForIdle(page)
+  await expect(title).toBeVisible()
   await expect(tabs).toBeVisible()
   const barBox = (await bar.boundingBox())!
   const listBox = (await list.boundingBox())!
@@ -43,6 +47,18 @@ test("the compact window title bar spans the sidebar, conversation and panel", a
   expect(titleBox.x).toBeGreaterThan(leadingBox.x + leadingBox.width)
   expect(titleBox.x).toBeLessThan(leadingBox.x + leadingBox.width + 20)
   expect(toggleBox.x).toBeGreaterThan(panelBox.x)
+
+  // Compare the visible controls, including the usage ring from the completed turn.
+  const centers = await page.locator(".composer-toolbar").locator("button:visible, :scope > div:has(> .lucide-shield-check)").evaluateAll(controls =>
+    controls.map(control => {
+      const rect = control.getBoundingClientRect()
+      return rect.top + rect.height / 2
+    }),
+  )
+  expect(Math.max(...centers) - Math.min(...centers)).toBeLessThan(1)
+  const surface = page.locator(".wb-conversation-surface")
+  await expect(surface).toHaveCSS("border-top-left-radius", "0px")
+  expect((await surface.boundingBox())!.y).toBe(barBox.y + barBox.height)
 
   const toggleListX = (await hideList.boundingBox())?.x
   await hideList.click()
@@ -75,7 +91,7 @@ for (const { surface, mac, desktop } of [
       const barBounds = (await bar.boundingBox())!
       const controls = [
         bar.getByRole("button", { name: "Hide conversations" }),
-        bar.getByTestId("thread-title"),
+        bar.getByTestId("status-badge"),
         bar.getByRole("button", { name: "Toggle side panel" }),
       ]
       for (const control of controls) {
@@ -118,9 +134,12 @@ test("keyboard shortcuts open the palette, a conversation and the panel", async 
   await palette.press("Escape")
 
   await page.keyboard.press("ControlOrMeta+n")
-  await expect(page.getByTestId("thread-title")).toHaveText("New conversation")
+  await expect(page.locator("#welcome-title")).toBeVisible()
+  await expect(page.getByTestId("thread-title")).toHaveCount(0)
 
-  // ⌘\ collapses the right-hand panel and brings it back
+  // An empty new chat keeps home centered until the inspector is requested.
+  await expect(page.getByRole("tab", { name: "Agents" })).toBeHidden()
+  await page.keyboard.press("ControlOrMeta+\\")
   await expect(page.getByRole("tab", { name: "Agents" })).toBeVisible()
   await page.keyboard.press("ControlOrMeta+\\")
   await expect(page.getByRole("tab", { name: "Agents" })).toBeHidden()
@@ -128,25 +147,18 @@ test("keyboard shortcuts open the palette, a conversation and the panel", async 
   await expect(page.getByRole("tab", { name: "Agents" })).toBeVisible()
 
   // ⌘B hides the list column the way Codex hides theirs, and brings it
-  // back. The icon rail stays, and the controls live in the title bar so
-  // hiding the list cannot trap the reader. New and search belong to that
-  // same row now, not to a second header inside the list.
+  // back. The collapsed icon rail still offers New conversation.
   const hideList = page.getByRole("banner").getByRole("button", {
     name: "Hide conversations",
   })
   await expect(hideList).toBeVisible()
   const newConversation = page.getByRole("button", { name: "New conversation", exact: true })
-  await expect(
-    page.getByRole("banner").getByRole("button", { name: "New conversation", exact: true }),
-  ).toBeVisible()
-  const search = page
-    .getByRole("banner")
-    .getByRole("button", { name: "Search conversations (⌘K)" })
+  const search = page.getByTestId("conversation-list").getByRole("button", { name: "Search conversations (⌘K)" })
   await expect(search).toBeVisible()
 
   await expect(newConversation).toBeVisible()
   await page.keyboard.press("ControlOrMeta+b")
-  await expect(newConversation).toBeHidden()
+  await expect(newConversation).toBeVisible()
   await expect(search).toBeHidden()
   await expect(page.getByTestId("dest-rail")).toBeVisible()
   await expect(page.getByTestId("dest-projects")).toBeVisible()

@@ -1,4 +1,4 @@
-import { MessageSquarePlus } from "lucide-react"
+import { MessageSquarePlus, Orbit, Search, SquarePen } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -41,6 +41,7 @@ export function Sidebar({
   waitingIds,
   askingIds,
   onNew,
+  onSearch,
   onOpen,
   onRename,
   onDelete,
@@ -68,6 +69,7 @@ export function Sidebar({
   waitingIds?: ReadonlySet<string>
   askingIds?: ReadonlySet<string>
   onNew: () => void
+  onSearch: () => void
   onOpen: (id: string) => void
   onRename: (id: string, title: string) => void
   onDelete: (id: string) => void
@@ -129,8 +131,11 @@ export function Sidebar({
     // earlier flex sibling; without a stacking context the main column
     // paints over that overlap and the drag dies.
     <aside
+      id="workspace-sidebar"
       data-testid="conversation-list"
-      className="relative z-10 flex h-full shrink-0 border-r border-sidebar-border bg-sidebar"
+      data-expanded={listOpen}
+      data-workspace-sidebar=""
+      className="relative z-10 flex h-full shrink-0 bg-sidebar"
       style={{
         width: listOpen
           ? `var(${SIDEBAR_WIDTH_VAR}, ${startWidth}px)`
@@ -148,6 +153,18 @@ export function Sidebar({
           max={SIDEBAR_WIDTH_MAX}
         />
       ) : null}
+      <div className="wb-brand" aria-label="zwai" title="zwai">
+        <Orbit size={19} aria-hidden="true" />{listOpen ? <span>zwai</span> : null}
+      </div>
+      <div className="wb-new-row">
+        <Button onClick={onNew} aria-label={t("sidebar.newConversation")} title={t("sidebar.newConversation") + " (⌘N)"}
+          variant="ghost" className="wb-new-chat">
+          <SquarePen />{listOpen ? <><span>{t("sidebar.newConversation")}</span><kbd aria-hidden="true">⌘N</kbd></> : null}
+        </Button>
+        <Button aria-hidden={!listOpen || undefined} tabIndex={listOpen ? undefined : -1} disabled={!listOpen} onClick={onSearch} variant="ghost" className="wb-search" aria-label={t("sidebar.search")} title={t("sidebar.search")}>
+          <Search /><span>{t("sidebar.searchLabel")}</span><kbd aria-hidden="true">⌘K</kbd>
+        </Button>
+      </div>
       <DestRail
         edge={listOpen}
         onSettings={onSettings}
@@ -155,10 +172,10 @@ export function Sidebar({
         onToggleLocale={onToggleLocale}
       />
       {listOpen ? (
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="wb-nav-content flex min-h-0 min-w-0 flex-1 flex-col">
         {pane === "projects" ? (
           <>
-            <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto px-(--sidebar-list-px) pb-3 pt-2">
+            <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto px-(--sidebar-list-px) pb-3 pt-1">
               {buckets.pinned.length > 0 ? (
                 <SidebarSection
                   testId="pinned-list"
@@ -217,7 +234,7 @@ export function Sidebar({
         ) : null}
         {pane === "chats" ? (
           <>
-            <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto px-(--sidebar-list-px) pb-3 pt-2">
+            <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto px-(--sidebar-list-px) pb-3 pt-1">
               {buckets.recents.length > 0 ? (
                 <SidebarSection
                   testId="recents-list"

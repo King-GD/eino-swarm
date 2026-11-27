@@ -46,8 +46,6 @@ export function AppHeader({
   onTogglePanel,
   onToggleSidebar,
   onOpenTerminal,
-  onNew,
-  onSearch,
   sideChat,
 }: {
   panelOpen: boolean
@@ -56,8 +54,6 @@ export function AppHeader({
   onTogglePanel: () => void
   onToggleSidebar: () => void
   onOpenTerminal: () => void
-  onNew: () => void
-  onSearch: () => void
   sideChat?: SideChatToggle
 }) {
   const threads = useApp((s) => s.threads)
@@ -82,8 +78,6 @@ export function AppHeader({
       onTogglePanel={onTogglePanel}
       onToggleSidebar={onToggleSidebar}
       onOpenTerminal={onOpenTerminal}
-      onNew={onNew}
-      onSearch={onSearch}
       sideChat={sideChat}
       terminalOpen={terminalOpen}
       terminalEnabled={Boolean(activeId || selectedId)}

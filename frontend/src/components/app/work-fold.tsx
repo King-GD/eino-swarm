@@ -125,6 +125,7 @@ export function WorkFold({
       open={expanded}
       onOpenChange={setChoice}
       failed={stats.failed}
+      className="wb-thread-work"
       testId="work-fold"
       summary={
         <>

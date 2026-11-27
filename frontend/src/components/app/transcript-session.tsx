@@ -1,6 +1,7 @@
+import { CircleCheck } from "lucide-react"
 import type { ReactNode } from "react"
 import { TurnBlockList } from "@/components/app/work-fold"
-import { formatDuration, formatTurnTime } from "@/lib/utils"
+import { formatClockTime, formatDuration, formatTurnTime } from "@/lib/utils"
 import { isArmedWaitNotice, isGoalHoldNotice } from "@/lib/transcript-notices"
 import { useT } from "@/lib/use-t"
 import type { Block, TurnState } from "@/lib/transcript"
@@ -28,7 +29,7 @@ export function GoalSessionTurn({
   const split = turn?.status && turn.status !== "running" ? splitSessionBlocks(blocks) : null
   const ordered = split ? [...split.leading, ...split.work, ...split.trailing] : blocks
   return (
-    <div className="flex min-w-0 flex-col gap-1">
+    <div data-live={live || undefined} className="wb-chat-turn flex min-w-0 flex-col gap-1">
       <TurnBlockList
         blocks={ordered}
         revealIds={revealIds}
@@ -79,7 +80,7 @@ export function responseClockBlockId(blocks: Block[]): string | undefined {
   return last.id
 }
 
-function TurnFooter({ turn }: { turn?: TurnState }) {
+export function TurnFooter({ turn, inline = false }: { turn?: TurnState; inline?: boolean }) {
   const t = useT()
   if (!turn || turn.status === "running" || !turn.endedAt) return null
   const ms = turn.startedAt ? new Date(turn.endedAt).getTime() - new Date(turn.startedAt).getTime() : NaN
@@ -87,14 +88,19 @@ function TurnFooter({ turn }: { turn?: TurnState }) {
     <p
       data-find-ignore=""
       data-testid="turn-boundary"
+      data-outcome={turn.status}
+      data-inline={inline || undefined}
       className="mt-3 flex items-center gap-2 border-t border-border px-2 pt-2 text-xs text-muted-foreground"
     >
+      {turn.status === "done" ? (
+        <span className="wb-finished"><CircleCheck aria-hidden="true" size={14} />{t("status.done")}</span>
+      ) : null}
       {Number.isFinite(ms) && ms >= 0 ? (
         <span>
           {turn.status === "done" ? t("transcript.workedFor") : t("transcript.stoppedAfter")} {formatDuration(ms)}
         </span>
       ) : null}
-      <time dateTime={turn.endedAt} className="ml-auto tabular-nums">{formatTurnTime(turn.endedAt)}</time>
+      <time dateTime={turn.endedAt} title={formatTurnTime(turn.endedAt)} className="ml-auto tabular-nums">{inline ? formatClockTime(turn.endedAt) : formatTurnTime(turn.endedAt)}</time>
     </p>
   )
 }

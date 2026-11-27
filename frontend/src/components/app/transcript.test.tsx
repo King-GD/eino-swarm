@@ -63,6 +63,16 @@ describe("WaitProgress", () => {
     expect(screen.getByText(/Waiting for 1 sub-agent/)).toBeInTheDocument()
   })
 
+  it("counts successful returns against the requested agents including missing roster rows", () => {
+    const agents = {
+      "ready": agent({ id: "ready", status: "done" }),
+      "failed": agent({ id: "failed", status: "failed" }),
+    }
+    render(<WaitProgress block={waitBlock('{"agent_ids":["ready","failed","new","ready"]}')} agents={agents} onSelect={() => {}} />)
+    expect(screen.getByText("1/3 finished successfully")).toBeVisible()
+    expect(screen.queryByText(/Waiting for 1 sub-agent/)).toBeNull()
+  })
+
   it("does not count a finished worker as someone still being waited on", () => {
     const agents = {
       "a-1": agent({ id: "a-1", role: "researcher", status: "done" }),
@@ -112,6 +122,11 @@ describe("WaitProgress", () => {
         onSelect={onSelect}
       />,
     )
+    const summary = screen.getByRole("button", { name: /Waiting for 1 sub-agent/ })
+    expect(summary).toHaveAttribute("aria-expanded", "false")
+    expect(screen.queryByRole("button", { name: /researcher/ })).toBeNull()
+    fireEvent.click(summary)
+    expect(summary).toHaveAttribute("aria-expanded", "true")
     fireEvent.click(screen.getByRole("button", { name: /researcher/ }))
     expect(onSelect).toHaveBeenCalledWith("a-1")
   })

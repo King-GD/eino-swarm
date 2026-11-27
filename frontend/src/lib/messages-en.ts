@@ -91,6 +91,7 @@ export const en = {
   "surface.tui": "Terminal",
 
   "sidebar.newConversation": "New conversation",
+  "sidebar.searchLabel": "Search conversations",
   "sidebar.search": "Search conversations (⌘K)",
   "sidebar.settings": "Settings",
   "sidebar.appMenu": "App menu",
@@ -156,21 +157,22 @@ export const en = {
   "palette.conversations": "Conversations",
   "palette.untitled": "Untitled",
 
-  "empty.title": "What should we work on?",
+  "empty.title": "Hello, what would you like to work on?",
+  "empty.greeting": "Hello, {name}",
   "empty.lead":
-    "Describe the outcome you want. It delegates to sub-agents when the work is worth splitting up. Enter while it runs queues a follow-up; Steer injects into the current turn.",
+    "Give zwai a goal, or drop in a file to get started.",
   "empty.research.title": "Research something broad",
   "empty.research.hint":
-    "Several sub-agents look into different angles at once.",
+    "Compare sources and build a brief.",
   "empty.research.text":
     "Research a topic from several angles and give me one merged brief with sources.",
   "empty.files.title": "Work through files",
   "empty.files.hint":
-    "Attach files with the paperclip or drop them on the box. Paste or drop a screenshot to send it as visual input.",
+    "Read workspace files and extract key points.",
   "empty.files.text":
     "Go through the files in the workspace and summarise what each one contains.",
   "empty.split.title": "Split a big task",
-  "empty.split.hint": "Say the goal; it decides how many workers it needs.",
+  "empty.split.hint": "Delegate subtasks and combine the results.",
   "empty.split.text":
     "Break this goal into parallel pieces, work them in parallel, then combine the results.",
 
@@ -514,6 +516,11 @@ export const en = {
   "transcript.agentEmpty": "This agent has not produced anything yet.",
   "transcript.agentLoading": "Loading this agent's log…",
   "transcript.waitingFor": "Waiting for {n} sub-agent{s}",
+  "transcript.waitEnded": "Wait finished",
+  "transcript.waitFailed": "Wait failed",
+  "transcript.waitCompleted": "{done}/{total} finished successfully",
+  "transcript.answerStart": "Start of answer",
+  "transcript.answerFiles": "Files mentioned in this answer",
   "transcript.collectingWait": "Collecting sub-agent results",
   "transcript.workingEllipsis": "working…",
   "transcript.started": "Started {role}",

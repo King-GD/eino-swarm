@@ -1,3 +1,4 @@
+import { Check } from "lucide-react"
 import { SelectItem } from "@/components/ui/select"
 import type { PalettePref } from "@/lib/appearance"
 import { chromeTypeClass } from "@/lib/chrome-type"
@@ -15,11 +16,13 @@ const THEME_MODES: Theme[] = ["system", "light", "dark"]
 
 function SwatchFace() {
   return (
-    <div className="theme-swatch-face">
+    <div className="theme-swatch-face" aria-hidden="true">
+      <div className="settings-swatch-rail"><i /><i /><i /></div>
       <div className="theme-swatch-page">
         <span className="theme-swatch-bar theme-swatch-bar-accent" />
         <span className="theme-swatch-bar theme-swatch-bar-mid" />
         <span className="theme-swatch-bar theme-swatch-bar-short" />
+        <span className="settings-swatch-composer" />
       </div>
     </div>
   )
@@ -152,6 +155,7 @@ export function AppearanceTheme({
                       selected ? "text-foreground" : "text-muted-foreground",
                     )}
                   >
+                    {selected && <Check size={13} aria-hidden="true" />}
                     {caption}
                   </span>
                 </button>

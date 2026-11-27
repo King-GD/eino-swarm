@@ -2,8 +2,8 @@
  *  through a CSS variable so dragging the border does not re-render
  *  the transcript on every pointer frame. */
 
-export const SIDEBAR_WIDTH_DEFAULT = 360
-export const SIDEBAR_WIDTH_MIN = 320
+export const SIDEBAR_WIDTH_DEFAULT = 252
+export const SIDEBAR_WIDTH_MIN = 240
 export const SIDEBAR_WIDTH_MAX = 480
 export const SIDEBAR_WIDTH_VAR = "--zwai-sidebar-width"
 
@@ -15,7 +15,7 @@ export function clampSidebarWidth(px: number): number {
 
 /** Missing or unreadable storage means the column that still fits a
  *  wait row beside the icon rail. A saved width below the floor is the
- *  pre-rail 16rem column, which no longer leaves room for a title. */
+ *  old narrow column, which no longer leaves room for a title. */
 export function readSidebarWidth(): number {
   try {
     const raw = localStorage.getItem(SIDEBAR_WIDTH_KEY)
