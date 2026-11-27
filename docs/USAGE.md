@@ -88,8 +88,9 @@ inspector keeps its panels available.
 On desktop and Web, select the expand button beside the EASM panel title to
 open the larger view.
 
-In the EASM graph, a node with children shows `−` on hover or
-selection; select it to collapse the branch, which then shows `+N`. The node
+In the EASM graph, hovering a node highlights its whole line, from the target
+down to its leaves, and dims the rest. A node with children shows a small `−`
+beside it on hover; select it to collapse the branch, which then shows `+N`. The node
 card offers the same Collapse (N) / Expand (N) button, which is how the phone
 collapses a branch. Collapsing keeps the layout and zoom, carries over to the
 expanded view, and a search hit inside a collapsed branch opens it.

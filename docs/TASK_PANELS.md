@@ -176,8 +176,14 @@ source yet and stay empty.
 The canvas treats the first edge that reached each node as its parent when it
 collapses a branch. Collapsing is a renderer-only view state and never changes
 saved clues. A
-node with children shows `+N` while collapsed and `−` on hover or selection
-(hidden while its card is open, which carries the same Collapse/Expand button).
+node with children shows `+N` while collapsed and `−` only on hover, so the
+selected target is not badged when the graph first opens (hidden while its card
+is open, which carries the same Collapse/Expand button). The badge sits outside
+the node's outer ring and its hit circle only touches the ring, so it never takes
+the node's clicks. Hovering a node highlights its first-reach path to the target
+and its whole subtree and fades every other node and link; leaving it restores
+the click highlight. The stage exposes `data-hovered-id` and
+`data-highlighted-nodes` for end-to-end checks.
 Collapsed nodes keep their layout positions, the side panel and expanded dialog
 share the state, a new subject clears it, and a search hit inside a collapsed
 branch expands its ancestors. The stage exposes `data-collapsed-nodes` and

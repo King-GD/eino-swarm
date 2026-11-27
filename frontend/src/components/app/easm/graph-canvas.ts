@@ -48,24 +48,31 @@ export interface DrawState {
 export const FONT_SIZE = 12
 const LABEL_WIDTH = FONT_SIZE * 12
 
-/** Collapse badge: a screen-constant circle just outside the lower-right edge,
- *  so it never covers the type glyph and stays clickable at any zoom. */
-export const BADGE_RADIUS = 9
+/** Collapse badge: a small screen-constant circle beyond the node's outer
+ *  ring, on its lower-right diagonal, so it never covers the node or takes
+ *  its clicks at any zoom. */
+export const BADGE_RADIUS = 7
+/** Screen gap between the outer ring and the badge. */
+const BADGE_GAP = 2
+/** The badge's hit circle closes the gap, so the pointer can slide from the
+ *  node onto the badge without leaving both, yet never overlaps the node. */
+export const BADGE_HIT_RADIUS = BADGE_RADIUS + BADGE_GAP
 
 export function badgeCenter(node: GraphNode, zoom: number) {
   const scale = zoom || 1
-  const reach = (node.radius * scale + BADGE_RADIUS * 0.7) / scale / Math.SQRT2
+  const reach = (node.radius * 1.25 * scale + BADGE_GAP + BADGE_RADIUS) / scale / Math.SQRT2
   return { x: (node.x ?? 0) + reach, y: (node.y ?? 0) + reach }
 }
 
 /** What the badge says, or null when this node shows none. A collapsed node
  *  always quotes its hidden branch; an expanded one only reveals "−" while the
- *  pointer or the selection is on it, and never behind an open card. */
+ *  pointer is on it, and never behind an open card. The selection alone does
+ *  not show it, so the selected target is not badged from the start. */
 export function badgeLabel(node: GraphNode, state: DrawState): string | null {
   const count = state.descendants?.get(node.id) ?? 0
   if (count < 1 || state.cardId === node.id) return null
   if (state.collapsed?.has(node.id)) return count > 99 ? "99+" : `+${count}`
-  return state.hoveredId === node.id || state.selectedId === node.id ? "−" : null
+  return state.hoveredId === node.id ? "−" : null
 }
 
 export function drawCollapseBadge(node: GraphNode, ctx: CanvasRenderingContext2D, zoom: number, state: DrawState, palette: Palette) {
@@ -90,7 +97,7 @@ export function drawCollapseBadge(node: GraphNode, ctx: CanvasRenderingContext2D
     ctx.fillStyle = palette.kind(node.kind)
   }
   const max = radius * 1.7
-  let size = 11 / scale
+  let size = 10 / scale
   ctx.font = `600 ${size}px sans-serif`
   const width = ctx.measureText(label).width
   if (width > max) {
@@ -154,6 +161,9 @@ export function drawLink(link: GraphLink, ctx: CanvasRenderingContext2D, zoom: n
   const x2 = (end.x ?? 0) - (endRadius * dx) / length
   const y2 = (end.y ?? 0) - (endRadius * dy) / length
   ctx.save()
+  // Links outside the highlighted branch fade further than nodes do, so the
+  // branch reads as one line from the target to its leaves.
+  if (state.highlighted.size && !marked) ctx.globalAlpha = 0.15
   ctx.strokeStyle = ctx.fillStyle = marked ? palette.highlight : palette.edge
   ctx.lineWidth = marked ? Math.max(2, 0.8 / zoom) : Math.max(1, 0.25 / zoom)
   ctx.setLineDash(link.confirmed === true ? [] : [4, 3])

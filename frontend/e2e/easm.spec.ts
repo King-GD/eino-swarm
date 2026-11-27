@@ -182,6 +182,16 @@ test("EASM collapses a branch from the node card and a search reopens it", async
   await expect(stage).toHaveAttribute("data-visible-nodes", "5")
   const zoom = await stage.getAttribute("data-zoom")
 
+  // Hovering a leaf lights its path to the target and dims the sibling leaf.
+  await stage.hover({ position: await nodePoint(stage, "domain:leaf-a.test") })
+  await expect(stage).toHaveAttribute("data-hovered-id", "domain:leaf-a.test")
+  await expect(stage).toHaveAttribute("data-highlighted-nodes", "4")
+  // Hovering a branch lights it down to its leaves as well.
+  await stage.hover({ position: await nodePoint(stage, "domain:fold.test") })
+  await expect(stage).toHaveAttribute("data-highlighted-nodes", "5")
+  await page.mouse.move(0, 0)
+  await expect(stage).toHaveAttribute("data-hovered-id", "")
+
   await stage.click({ position: await nodePoint(stage, "company:fold") })
   const card = panel.getByRole("dialog", { name: "Fold subsidiary" })
   await card.getByRole("button", { name: "Collapse (3)" }).click()

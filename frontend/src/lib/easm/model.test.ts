@@ -1,7 +1,7 @@
 import { easmText } from "./messages"
 import { describe, expect, it } from "vitest"
 import {
-  basisText, collapsedHidden, descendantCounts, displayKind, graphLabel, highlightIds, hotDays, indexResult, isSafeLink, kindLabel,
+  basisText, branchIds, collapsedHidden, descendantCounts, displayKind, graphLabel, highlightIds, hotDays, indexResult, isSafeLink, kindLabel,
   layoutOrder, nodeRadius, primaryTree, projectEasmResult, searchNodes, sortComponents, summaryStats, validity, visibleIds, wrapLabel,
 } from "./model"
 import type { EasmNode, EasmResult } from "./types"
@@ -70,6 +70,18 @@ describe("EASM model", () => {
   it("highlights the path back to the root and the direct children", () => {
     expect([...highlightIds(result.edges, "c")].sort()).toEqual(["c", "d", "r"])
     expect(highlightIds(result.edges, null).size).toBe(0)
+  })
+
+  it("lights a hovered node's path to the root and its whole subtree", () => {
+    const tree = primaryTree(result.edges)
+    // c sits under r and carries d → cert; the sibling o stays dark.
+    expect([...branchIds(tree, "c")].sort()).toEqual(["c", "cert", "d", "r"])
+    expect([...branchIds(tree, "cert")].sort()).toEqual(["c", "cert", "d", "r"])
+    expect([...branchIds(tree, "r")].sort()).toEqual(["c", "cert", "d", "o", "r"])
+    expect(branchIds(tree, null).size).toBe(0)
+    // A cycle in the first-reach tree cannot loop either walk.
+    const loop = primaryTree([{ source: "a", target: "b" }, { source: "b", target: "a" }])
+    expect([...branchIds(loop, "a")].sort()).toEqual(["a", "b"])
   })
 
   it("keeps isolated observations out of the layout until a link arrives", () => {

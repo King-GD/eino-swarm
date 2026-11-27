@@ -68,7 +68,10 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 - Any EASM graph node with children can be collapsed and expanded from its canvas
   badge or its node card;
   folding keeps the layout and zoom, survives the expanded view, and a search hit
-  inside a folded branch opens its path.
+  inside a folded branch opens its path. The badge sits beside the node instead of
+  over it and shows `−` only on hover, so the target is not badged when the graph
+  opens. Hovering a node highlights its whole line from the target to its leaves
+  and dims the rest.
 
 - The EASM graph uses the same yellow icon for the target and related organizations.
   The target keeps its glow, and its logo appears in the node details.

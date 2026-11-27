@@ -88,6 +88,22 @@ export function collapsedHidden(tree: EasmTree, collapsed: ReadonlySet<string>):
   return hidden
 }
 
+/** The branch a hovered node stands on: its first-reach path back to the
+ *  root and everything below it. Cycles cannot loop the walk. */
+export function branchIds(tree: EasmTree, id: string | null): Set<string> {
+  if (!id) return new Set()
+  const ids = new Set([id])
+  for (let up = tree.parent.get(id); up !== undefined && !ids.has(up); up = tree.parent.get(up)) ids.add(up)
+  const pending = [...(tree.children.get(id) ?? [])]
+  while (pending.length) {
+    const child = pending.pop()!
+    if (ids.has(child)) continue
+    ids.add(child)
+    pending.push(...(tree.children.get(child) ?? []))
+  }
+  return ids
+}
+
 /** Node id → how many nodes its badge quotes. Cycles cannot inflate a count. */
 export function descendantCounts(tree: EasmTree): Map<string, number> {
   const counts = new Map<string, number>()

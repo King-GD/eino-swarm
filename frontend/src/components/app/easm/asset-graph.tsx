@@ -7,14 +7,14 @@ import fitIcon from "../../../assets/easm/zoomfit.svg"
 import { Input } from "../../ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip"
 import {
-  collapsedHidden, displayKind, graphLabel, highlightIds, kindLabel, layoutOrder, nodeRadius, searchNodes, summaryStats, visibleIds, wrapLabel,
+  branchIds, collapsedHidden, displayKind, graphLabel, highlightIds, kindLabel, layoutOrder, nodeRadius, searchNodes, summaryStats, visibleIds, wrapLabel,
   type EasmIndex, type EasmTree,
 } from "../../../lib/easm/model"
 import { useEasmText } from "../../../lib/easm/messages"
 import type { DisplayKind, EasmResult } from "../../../lib/easm/types"
 import { cn } from "@/lib/cn"
 import {
-  badgeCenter, BADGE_RADIUS, chooseLabels, drawLabels, drawLink, drawNode, FONT_SIZE, MAX_LABEL_WIDTH,
+  badgeCenter, BADGE_HIT_RADIUS, chooseLabels, drawLabels, drawLink, drawNode, FONT_SIZE, MAX_LABEL_WIDTH,
   type DrawState, type GraphLink, type GraphNode, type Palette,
 } from "./graph-canvas"
 import { KIND_ICONS, KIND_TOKENS, tokenColor } from "./kind-style"
@@ -127,6 +127,10 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
   const nodesRef = useRef<GraphNode[]>([])
   const visibleRef = useRef<Set<string>>(new Set())
   const hoveredRef = useRef<string | null>(null)
+  const treeRef = useRef(index.tree)
+  treeRef.current = index.tree
+  // The click focus highlight; a hovered branch replaces it until the pointer leaves.
+  const focusHighlightRef = useRef<Set<string>>(new Set())
   const focusRef = useRef({ selected, cardId })
   const labelTimer = useRef(0)
   const lastLabels = useRef(0)
@@ -195,6 +199,18 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
     window.clearTimeout(labelTimer.current)
     labelTimer.current = window.setTimeout(updateLabels, delay)
   }, [updateLabels])
+
+  // Hovering a node lights its whole branch, root to leaves, and fades the
+  // rest; leaving it restores whatever the last click focused.
+  const applyHighlight = useCallback(() => {
+    const hovered = hoveredRef.current
+    drawState.current.highlighted = hovered ? branchIds(treeRef.current, hovered) : focusHighlightRef.current
+    const stage = stageRef.current
+    if (stage) {
+      stage.dataset.highlightedNodes = String(drawState.current.highlighted.size)
+      stage.dataset.hoveredId = hovered ?? ""
+    }
+  }, [])
 
   // Fit the whole visible view; the reference never zooms past 1:1, where one
   // node and its label would fill the canvas.
@@ -278,6 +294,18 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
     const moved = () => { retainedViewport.current = null; userMoved.current = true }
     stage.addEventListener("wheel", moved, { passive: true })
     stage.addEventListener("pointerdown", moved)
+    // The graph only reports hover while the pointer moves over the canvas, so
+    // leaving the stage straight from a node would keep its branch lit and its
+    // badge showing.
+    const left = () => {
+      if (!hoveredRef.current) return
+      hoveredRef.current = null
+      drawState.current.hoveredId = null
+      stage.style.cursor = "grab"
+      applyHighlight()
+      queueLabels()
+    }
+    stage.addEventListener("pointerleave", left)
     const graph = new ForceGraph<GraphNode, GraphLink>(canvasMount)
       .width(stage.clientWidth).height(stage.clientHeight)
       .minZoom(MIN_ZOOM).maxZoom(MAX_ZOOM).cooldownTime(15000)
@@ -288,12 +316,13 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
       .nodeCanvasObject((n, ctx, zoom) => drawNode(n, ctx, zoom, drawState.current, palette()))
       // The hit area covers the badge too: a pointer that reaches the lower-right
       // corner must reveal "−" there rather than fall through the background.
+      // The badge circle only touches the node ring, so the node keeps its clicks.
       .nodePointerAreaPaint((n, color, ctx, zoom) => {
         ctx.fillStyle = color
         ctx.beginPath(); ctx.arc(n.x ?? 0, n.y ?? 0, n.radius * 1.25, 0, Math.PI * 2); ctx.fill()
         if ((drawState.current.descendants?.get(n.id) ?? 0) > 0) {
           const center = badgeCenter(n, zoom || 1)
-          ctx.beginPath(); ctx.arc(center.x, center.y, BADGE_RADIUS / (zoom || 1), 0, Math.PI * 2); ctx.fill()
+          ctx.beginPath(); ctx.arc(center.x, center.y, BADGE_HIT_RADIUS / (zoom || 1), 0, Math.PI * 2); ctx.fill()
         }
       })
       .linkCanvasObject((l, ctx, zoom) => drawLink(l, ctx, zoom, drawState.current, palette()))
@@ -310,7 +339,7 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
           const center = badgeCenter(n, zoom)
           const x = origin.x + (center.x - (n.x ?? 0)) * zoom
           const y = origin.y + (center.y - (n.y ?? 0)) * zoom
-          if (Math.hypot((event.offsetX ?? 0) - x, (event.offsetY ?? 0) - y) <= BADGE_RADIUS * 1.15) {
+          if (Math.hypot((event.offsetX ?? 0) - x, (event.offsetY ?? 0) - y) < BADGE_HIT_RADIUS) {
             toggleCollapseRef.current(n.id)
             return
           }
@@ -322,6 +351,7 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
         hoveredRef.current = n?.id ?? null
         drawState.current.hoveredId = hoveredRef.current
         stage.style.cursor = n ? "pointer" : "grab"
+        applyHighlight()
         queueLabels()
       })
       .onZoom(({ k }) => {
@@ -380,6 +410,7 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
       document.removeEventListener("visibilitychange", pause)
       stage.removeEventListener("wheel", moved)
       stage.removeEventListener("pointerdown", moved)
+      stage.removeEventListener("pointerleave", left)
       resize.disconnect()
       theme.disconnect()
       window.clearTimeout(labelTimer.current)
@@ -497,10 +528,10 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
   }, [currentSelection, cardId, queueLabels])
 
   useEffect(() => {
-    drawState.current.highlighted = focus?.mode === "node" ? new Set([focus.id]) : highlightIds(result.edges, focus?.id ?? null)
-    if (stageRef.current) stageRef.current.dataset.highlightedNodes = String(drawState.current.highlighted.size)
+    focusHighlightRef.current = focus?.mode === "node" ? new Set([focus.id]) : highlightIds(result.edges, focus?.id ?? null)
+    applyHighlight()
     queueLabels()
-  }, [focus, result.edges, queueLabels])
+  }, [focus, result.edges, queueLabels, applyHighlight])
 
   useEffect(() => { if (cardId) requestAnimationFrame(repositionCard) }, [cardId, repositionCard])
 

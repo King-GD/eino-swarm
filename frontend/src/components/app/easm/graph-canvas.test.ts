@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
-import { badgeCenter, badgeLabel, drawLink, drawNode, type DrawState, type GraphNode, type Palette } from "./graph-canvas"
+import {
+  BADGE_HIT_RADIUS, BADGE_RADIUS, badgeCenter, badgeLabel, drawLink, drawNode, type DrawState, type GraphNode, type Palette,
+} from "./graph-canvas"
 import { KIND_ICONS } from "./kind-style"
 
 it("draws the same enterprise icon at its intrinsic ratio and highlights only the center", () => {
@@ -61,6 +63,28 @@ it("paints confirmed relationships solid and pending or unknown relationships da
 
   expect(strokePatterns).toEqual([[], [4, 3], [4, 3]])
 })
+
+it("fades links outside the highlighted branch and keeps the branch opaque", () => {
+  const palette = { edge: "#000", highlight: "#f00" } as Palette
+  const root = { id: "root", x: 0, y: 0 } as GraphNode
+  const lit = { id: "lit", x: 100, y: 0 } as GraphNode
+  const dark = { id: "dark", x: 0, y: 100 } as GraphNode
+  const alphas: number[] = []
+  const canvas = {
+    globalAlpha: 1, strokeStyle: "",
+    setLineDash: vi.fn(), stroke: () => { alphas.push(canvas.globalAlpha) },
+    beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), closePath: vi.fn(),
+    save: vi.fn(), fill: vi.fn(), restore: () => { canvas.globalAlpha = 1 },
+  }
+  const ctx = canvas as unknown as CanvasRenderingContext2D
+  const state: DrawState = { rootId: "root", highlighted: new Set(["root", "lit"]), labels: new Map(), icons: new Map() }
+
+  drawLink({ source: root, target: lit, confirmed: true }, ctx, 1, state, palette)
+  drawLink({ source: root, target: dark, confirmed: true }, ctx, 1, state, palette)
+  drawLink({ source: root, target: dark, confirmed: true }, ctx, 1, { ...state, highlighted: new Set() }, palette)
+
+  expect(alphas).toEqual([1, 0.15, 1])
+})
 // The badge is the only collapse affordance on the canvas, so its visibility
 // rules decide when a branch can be folded at all.
 describe("EASM collapse badge", () => {
@@ -70,14 +94,15 @@ describe("EASM collapse badge", () => {
   }
   const base = (): DrawState => ({ rootId: null, highlighted: new Set(), labels: new Map(), icons: new Map() })
 
-  it("stays silent until the pointer or the selection reaches a branching node", () => {
+  it("stays silent until the pointer reaches a branching node", () => {
     const state = { ...base(), descendants: new Map([["cert", 4]]) }
     expect(badgeLabel(node, state)).toBeNull()
     expect(badgeLabel(node, { ...state, hoveredId: "cert" })).toBe("−")
-    expect(badgeLabel(node, { ...state, selectedId: "cert" })).toBe("−")
+    // The target starts selected; selection alone must not badge it.
+    expect(badgeLabel(node, { ...state, selectedId: "cert" })).toBeNull()
     // An open card owns the action; the canvas must not offer it twice.
-    expect(badgeLabel(node, { ...state, selectedId: "cert", cardId: "cert" })).toBeNull()
-    expect(badgeLabel({ ...node, id: "leaf" }, state)).toBeNull()
+    expect(badgeLabel(node, { ...state, hoveredId: "cert", cardId: "cert" })).toBeNull()
+    expect(badgeLabel({ ...node, id: "leaf" }, { ...state, hoveredId: "leaf" })).toBeNull()
   })
 
   it("always quotes a folded branch, capped so a huge branch cannot outgrow the circle", () => {
@@ -86,16 +111,18 @@ describe("EASM collapse badge", () => {
     expect(badgeLabel(node, { ...state, descendants: new Map([["cert", 120]]) })).toBe("99+")
   })
 
-  it("grows the badge outside the node edge and lands the hit where it paints", () => {
-    const center = badgeCenter(node, 1)
-    expect(center.x).toBeGreaterThan(node.x!)
-    expect(center.y).toBeGreaterThan(node.y!)
-    expect(Math.hypot(center.x - node.x!, center.y - node.y!)).toBeGreaterThan(node.radius)
-    // On screen the badge sits a fixed 6.3px outside the node edge, so zooming
-    // moves it outward only as far as the node itself grows.
-    const wide = badgeCenter(node, 4)
-    const near = Math.hypot(center.x - node.x!, center.y - node.y!)
-    const far = Math.hypot(wide.x - node.x!, wide.y - node.y!) * 4
-    expect(far - near).toBeCloseTo(node.radius * 3, 1)
+  it("keeps the badge and its hit circle off the node at any zoom", () => {
+    for (const zoom of [0.5, 1, 4]) {
+      const center = badgeCenter(node, zoom)
+      expect(center.x).toBeGreaterThan(node.x!)
+      expect(center.y).toBeGreaterThan(node.y!)
+      // Screen pixels from the node centre to the badge centre.
+      const distance = Math.hypot(center.x - node.x!, center.y - node.y!) * zoom
+      const ring = node.radius * 1.25 * zoom
+      // The painted badge clears the outer ring, and its hit circle only
+      // touches it, so a click on the node never lands on the badge.
+      expect(distance - BADGE_RADIUS).toBeGreaterThan(ring)
+      expect(distance - BADGE_HIT_RADIUS).toBeCloseTo(ring, 5)
+    }
   })
 })
