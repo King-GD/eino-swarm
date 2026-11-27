@@ -67,16 +67,34 @@ at [v0.1.0](https://github.com/LubyRuffy/eino-swarm/releases/tag/v0.1.0).
 
 ### Changed
 
+- Folding the EASM root now hides every branch, including groups that are already
+  folded, and hovering the root lights only its direct children. Any other node
+  still lights its whole line.
+
 - Any EASM graph node with children can be collapsed and expanded from its canvas
-  badge or its node card;
-  folding keeps the layout and zoom, survives the expanded view, and a search hit
+  badge; a phone, which has no hover, folds from the node card instead, and the
+  desktop details card no longer repeats the control.
+  Folding keeps the layout and zoom, survives the expanded view, and a search hit
   inside a folded branch opens its path. The badge sits beside the node instead of
   over it and shows `−` only on hover, so the target is not badged when the graph
   opens. Hovering a node highlights its whole line from the target to its leaves
   and dims the rest.
 
-- The EASM graph uses the same yellow icon for the target and related organizations.
-  The target keeps its glow, and its logo appears in the node details.
+- As in FOFA AI, the EASM graph draws the target and related organizations as a blue
+  building and keeps the yellow icon for certificate organizations. The target keeps
+  its glow, and its logo appears in the node details.
+
+- The EASM graph has one "Fold same-type nodes" icon button on its own row below the
+  type icons, off by default and named by its tooltip. Turning it on hangs every node of one type under a single group node tied
+  to the target, folded with a `+N` count; each group expands and folds like any
+  other branch. Turning it off returns the original graph.
+
+- The EASM graph can show vulnerability, URL, person, address and other nodes, each
+  with its own icon and colour. A published mailbox is contact detail of the node it
+  belongs to (`detail.emails[] = {address, label?}`) and appears in that node's
+  details, not as a person node of its own. The EASM panel definition is now v3;
+  saved v1 and v2 portraits upgrade at startup and a paired phone receives the
+  contract its bundle names.
 
 - The EASM panel hides empty heat trend, supply-chain and hosting provider cards
   after collection. Collection failures remain available in the task's tool results.

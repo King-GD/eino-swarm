@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs"
 import type { EasmResult } from "../src/lib/easm/types"
 import { firstCertificate, firstDomain, laterDomain, nextDomain, rootedEasmNodeIds, savedEasmGraph, updatedEasmGraph } from "./easm-graph-fixture"
 
-type GraphStage = HTMLDivElement & { __easmNodePoint?: (id: string) => { x: number; y: number } | undefined }
+type GraphStage = HTMLDivElement & {
+  __easmNodePoint?: (id: string) => { x: number; y: number } | undefined
+  __easmBadgePoint?: (id: string) => { x: number; y: number } | undefined
+}
 
 const definition = JSON.parse(readFileSync(new URL("../src/task-panels/catalog.json", import.meta.url), "utf8"))
   .find((item: { id: string }) => item.id === "easm-asset-portrait")
@@ -38,6 +41,20 @@ async function emit(page: Page, update: object) {
 async function nodePoint(stage: Locator, id: string) {
   await expect.poll(() => stage.evaluate((element, nodeId) => Boolean((element as GraphStage).__easmNodePoint?.(nodeId)), id)).toBe(true)
   return (await stage.evaluate((element, nodeId) => (element as GraphStage).__easmNodePoint?.(nodeId), id))!
+}
+
+/** Fold a branch through the canvas badge the way a user does. Folding
+ *  reheats the layout and the fit routine keeps moving the view, so a point
+ *  taken once is stale before the click lands: chase the node until the
+ *  pointer holds it and the layout has stopped. */
+async function foldBadge(stage: Locator, id: string) {
+  await expect.poll(async () => {
+    await stage.hover({ position: await nodePoint(stage, id) })
+    return [await stage.getAttribute("data-hovered-id"), await stage.getAttribute("data-layout-moving")]
+  }, { timeout: 40_000, intervals: [300] }).toEqual([id, "false"])
+  const point = await stage.evaluate((element, nodeId) => (element as GraphStage).__easmBadgePoint?.(nodeId), id)
+  expect(point).toBeTruthy()
+  await stage.click({ position: point! })
 }
 
 const portrait: EasmResult = {
@@ -127,6 +144,12 @@ test("EASM keeps the enterprise logo in the details card", async ({ page }) => {
   await page.getByRole("button", { name: title, exact: true }).click()
 
   const panel = page.getByTestId("easm-task-panel")
+  // The close control shares the subject row with the enlarge button: the
+  // panel must not spend a whole band of its height on one icon.
+  const header = panel.getByTestId("easm-panel-header")
+  await expect(header.getByRole("button", { name: "Expand EASM" })).toBeVisible()
+  await expect(header.getByRole("button", { name: "Close panel instance" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Close panel instance" })).toHaveCount(1)
   await expect(panel.getByRole("button", { name: "Related organization" }).locator("img")).toBeVisible()
   const stage = panel.getByTestId("easm-graph")
   await expect(stage).toHaveAttribute("data-ready", "true")
@@ -145,11 +168,13 @@ test("EASM keeps the enterprise logo in the details card", async ({ page }) => {
   const detailLogo = panel.getByRole("dialog", { name: root.label }).getByRole("img", { name: `${root.label} logo` })
   await expect(detailLogo).toHaveAttribute("src", logo)
   await expect.poll(() => detailLogo.evaluate((image: HTMLImageElement) => [image.naturalWidth, image.naturalHeight])).toEqual([32, 20])
+  // Folding belongs to the canvas badge; the details card must not repeat it.
+  await expect(panel.getByRole("dialog").getByRole("button", { name: /Collapse|Expand/ })).toHaveCount(0)
 })
 
 // Folding is the user's way to tame a large portrait. It must hide the whole
 // branch, keep their zoom, and never make a search hit unreachable.
-test("EASM collapses a branch from the node card and a search reopens it", async ({ page }) => {
+test("EASM collapses a branch from the canvas badge and a search reopens it", async ({ page }) => {
   const title = `EASM collapse ${Date.now()}`
   const response = await page.request.post("/api/threads", { data: { title } })
   await expect(response).toBeOK()
@@ -189,22 +214,29 @@ test("EASM collapses a branch from the node card and a search reopens it", async
   // Hovering a branch lights it down to its leaves as well.
   await stage.hover({ position: await nodePoint(stage, "domain:fold.test") })
   await expect(stage).toHaveAttribute("data-highlighted-nodes", "5")
+  // The target lights one level only: its whole tree lit says no more than the
+  // graph already shows.
+  await stage.hover({ position: await nodePoint(stage, "root") })
+  await expect(stage).toHaveAttribute("data-hovered-id", "root")
+  await expect(stage).toHaveAttribute("data-highlighted-nodes", "2")
   await page.mouse.move(0, 0)
   await expect(stage).toHaveAttribute("data-hovered-id", "")
 
-  await stage.click({ position: await nodePoint(stage, "company:fold") })
-  const card = panel.getByRole("dialog", { name: "Fold subsidiary" })
-  await card.getByRole("button", { name: "Collapse (3)" }).click()
+  // The badge appears under the pointer and, once the branch folds, stays to
+  // quote what it hides. It must not open the details card on the way.
+  await foldBadge(stage, "company:fold")
   await expect(stage).toHaveAttribute("data-collapsed-nodes", "1")
   await expect(stage).toHaveAttribute("data-visible-nodes", "2")
-  await expect(card.getByRole("button", { name: "Expand (3)" })).toHaveAttribute("aria-expanded", "false")
+  await expect(panel.getByRole("dialog")).toHaveCount(0)
   await expect(stage).toHaveAttribute("data-zoom", zoom!)
+  await expect(stage).toHaveAttribute("data-layout-moving", "false", { timeout: 20_000 })
 
-  await card.getByRole("button", { name: "Expand (3)" }).click()
+  await foldBadge(stage, "company:fold")
   await expect(stage).toHaveAttribute("data-collapsed-nodes", "0")
   await expect(stage).toHaveAttribute("data-visible-nodes", "5")
+  await expect(stage).toHaveAttribute("data-layout-moving", "false", { timeout: 20_000 })
 
-  await card.getByRole("button", { name: "Collapse (3)" }).click()
+  await foldBadge(stage, "company:fold")
   await expect(stage).toHaveAttribute("data-visible-nodes", "2")
   const search = panel.getByRole("searchbox", { name: "Search assets or features" })
   await search.fill("leaf-b")
@@ -212,6 +244,47 @@ test("EASM collapses a branch from the node card and a search reopens it", async
   await expect(stage).toHaveAttribute("data-collapsed-nodes", "0")
   await expect(stage).toHaveAttribute("data-visible-nodes", "5")
   await expect(stage).toHaveAttribute("data-selected-id", "domain:leaf-b.test")
+})
+
+// Same-type folding hangs the clues under one group per kind. Folding the
+// target then has to take those already-folded groups away as well.
+test("EASM folds every branch of the target in same-type mode", async ({ page }) => {
+  const title = `EASM fold target ${Date.now()}`
+  const response = await page.request.post("/api/threads", { data: { title } })
+  await expect(response).toBeOK()
+  const created = await response.json()
+  const nodes: EasmResult["nodes"] = [
+    { id: "root", kind: "root", label: "Fold Enterprise" },
+    { id: "company:fold", kind: "company", label: "Fold subsidiary" },
+    { id: "domain:fold.test", kind: "domain", label: "fold.test" },
+    { id: "domain:leaf-a.test", kind: "domain", label: "leaf-a.test" },
+    { id: "domain:leaf-b.test", kind: "domain", label: "leaf-b.test" },
+  ]
+  await servePanel(page, created.thread.id, {
+    schema_version: 1, title: nodes[0].label, collection: { status: "done", steps: [] }, heat: [], components: [],
+    nodes,
+    edges: [
+      { source: "root", target: "company:fold", confirmed: true },
+      { source: "company:fold", target: "domain:fold.test", confirmed: true },
+      { source: "domain:fold.test", target: "domain:leaf-a.test" },
+      { source: "domain:fold.test", target: "domain:leaf-b.test" },
+    ],
+  }, "finished")
+  await page.goto("/")
+  await page.getByTestId("dest-chats").click()
+  await page.getByRole("button", { name: title, exact: true }).click()
+
+  const panel = page.getByTestId("easm-task-panel")
+  const stage = panel.getByTestId("easm-graph")
+  await expect(stage).toHaveAttribute("data-ready", "true")
+  await expect(stage).toHaveAttribute("data-layout-moving", "false", { timeout: 20_000 })
+  await panel.getByRole("button", { name: "Fold same-type nodes" }).click()
+  await expect(stage).toHaveAttribute("data-visible-nodes", "3")
+  await expect(stage).toHaveAttribute("data-collapsed-nodes", "2")
+
+  await foldBadge(stage, "root")
+  await expect(stage).toHaveAttribute("data-visible-nodes", "1")
+  await expect(stage).toHaveAttribute("data-collapsed-nodes", "3")
 })
 
 test("EASM shows the first certificate source and hides detached clues after reopening", async ({ page }) => {

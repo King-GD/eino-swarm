@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ComponentType } from "react"
+import { lazy, Suspense, type ComponentType, type ReactNode } from "react"
 import { panelText } from "../../task-panels/messages"
 import type { TaskPanel } from "../../task-panels/types"
 
@@ -11,6 +11,9 @@ export interface NativeTaskPanelProps {
   /** The conversation that owns the panel is still running a task, so data
    *  that has not arrived yet may still come. */
   active?: boolean
+  /** Host controls, such as closing the instance, drawn in the panel's own
+   *  subject row so the panel needs no separate control band. */
+  headerActions?: ReactNode
 }
 
 const EasmTaskPanel = lazy(() => import("./easm/easm-task-panel").then((module) => ({ default: module.EasmTaskPanel })))

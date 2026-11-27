@@ -2,7 +2,7 @@ import type { EasmText } from "./messages"
 import type { DisplayKind, EasmBasis, EasmComponent, EasmEdge, EasmNode, EasmResult, FeatureKind, TagType } from "./types"
 
 /** Card feature groups, in the reference order; asset cards also list domains. */
-export const FEATURE_GROUPS: (FeatureKind | "domain")[] = ["cert", "org", "asn", "icon_hash", "domain", "ipc", "fid", "icp", "mx"]
+export const FEATURE_GROUPS: (FeatureKind | "domain")[] = ["cert", "org", "asn", "icon_hash", "domain", "ipc", "fid", "icp", "mx", "vuln", "url", "person", "address", "other"]
 const TAG_ORDER: TagType[] = ["hot", "kev", "cve"]
 
 export const displayKind = (node: EasmNode): DisplayKind =>
@@ -51,6 +51,38 @@ export function projectEasmResult(result: EasmResult): EasmResult {
   }
 }
 
+/** Group node id for a folded kind. Real ids carry a kind prefix such as
+ *  `domain:` or `feature:`, so `group:` never collides with one. */
+export const groupId = (kind: DisplayKind) => `group:${kind}`
+
+/** The "fold same-type nodes" view: every node of one kind hangs under a single
+ *  group node tied to the root, wherever it sat before. Grouping is only a
+ *  classification, so member edges are the group's and nothing else. */
+export function foldByKind(result: EasmResult, label: (kind: DisplayKind) => string): EasmResult {
+  const root = result.nodes.find((node) => node.kind === "root")
+  if (!root) return result
+  const members = new Map<DisplayKind, EasmNode[]>()
+  for (const node of result.nodes) {
+    if (node.id === root.id) continue
+    const kind = displayKind(node)
+    const list = members.get(kind) ?? []
+    list.push(node)
+    members.set(kind, list)
+  }
+  const nodes: EasmNode[] = [root]
+  const edges: EasmEdge[] = []
+  for (const [kind, list] of members) {
+    const id = groupId(kind)
+    nodes.push({ id, kind: list[0].kind, featureKind: list[0].featureKind, label: label(kind) })
+    edges.push({ source: root.id, target: id, confirmed: true })
+    for (const member of list) {
+      nodes.push(member)
+      edges.push({ source: id, target: member.id, confirmed: true })
+    }
+  }
+  return { ...result, nodes, edges }
+}
+
 /** The tree the canvas shrinks with: every node hangs under the first clue that
  *  introduced it. Later observations stay as evidence, not as a second parent. */
 export interface EasmTree {
@@ -79,9 +111,12 @@ export function collapsedHidden(tree: EasmTree, collapsed: ReadonlySet<string>):
     const pending = [...(tree.children.get(id) ?? [])]
     while (pending.length) {
       const child = pending.pop()!
-      // A collapsed id inside the walk would hide its ancestor too.
-      if (hidden.has(child) || collapsed.has(child)) continue
+      // A cycle can walk back to the node this fold starts from; it stays drawn.
+      if (child === id || hidden.has(child)) continue
       hidden.add(child)
+      // Its own walk hides the subtree, but the node itself still disappears
+      // under the collapsed ancestor: folding the root must fold every group.
+      if (collapsed.has(child)) continue
       pending.push(...(tree.children.get(child) ?? []))
     }
   }
@@ -102,6 +137,14 @@ export function branchIds(tree: EasmTree, id: string | null): Set<string> {
     pending.push(...(tree.children.get(child) ?? []))
   }
   return ids
+}
+
+/** The nodes to light while one is hovered. The root stops at its first level:
+ *  lighting every leaf under it says no more than the whole graph already does. */
+export function hoverIds(tree: EasmTree, id: string | null, rootId: string | null): Set<string> {
+  if (!id) return new Set()
+  if (id !== rootId) return branchIds(tree, id)
+  return new Set([id, ...(tree.children.get(id) ?? [])])
 }
 
 /** Node id → how many nodes its badge quotes. Cycles cannot inflate a count. */
@@ -254,6 +297,7 @@ export function nodeRadius(ipCount?: number) {
 /** Short canvas label. Certificates and ICP numbers are long identifiers, so
  *  the graph shows their tail and the card shows them in full. */
 export function graphLabel(node: EasmNode, text: EasmText) {
+  if (node.id.startsWith("group:")) return node.label
   if (node.featureKind === "cert") return text.certificateLabel((node.detail?.serial || node.label).slice(-6))
   if (node.featureKind === "icp") return `ICP · …${node.label.slice(-7)}`
   return node.label

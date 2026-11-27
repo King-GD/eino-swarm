@@ -1,5 +1,5 @@
 import ForceGraph from "force-graph"
-import { Loader2, Search } from "lucide-react"
+import { Layers, Loader2, Search } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import enlargeIcon from "../../../assets/easm/enlarge.svg"
 import shrinkIcon from "../../../assets/easm/shrink.svg"
@@ -7,21 +7,21 @@ import fitIcon from "../../../assets/easm/zoomfit.svg"
 import { Input } from "../../ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip"
 import {
-  branchIds, collapsedHidden, displayKind, graphLabel, highlightIds, kindLabel, layoutOrder, nodeRadius, searchNodes, summaryStats, visibleIds, wrapLabel,
+  collapsedHidden, displayKind, graphLabel, highlightIds, hoverIds, kindLabel, layoutOrder, nodeRadius, searchNodes, summaryStats, visibleIds, wrapLabel,
   type EasmIndex, type EasmTree,
 } from "../../../lib/easm/model"
 import { useEasmText } from "../../../lib/easm/messages"
 import type { DisplayKind, EasmResult } from "../../../lib/easm/types"
 import { cn } from "@/lib/cn"
-import {
-  badgeCenter, BADGE_HIT_RADIUS, chooseLabels, drawLabels, drawLink, drawNode, FONT_SIZE, MAX_LABEL_WIDTH,
-  type DrawState, type GraphLink, type GraphNode, type Palette,
-} from "./graph-canvas"
+import { badgeCenter, BADGE_HIT_RADIUS, chooseLabels, drawLabels, drawLink, drawNode, FONT_SIZE, MAX_LABEL_WIDTH, type DrawState, type GraphLink, type GraphNode, type Palette } from "./graph-canvas"
 import { KIND_ICONS, KIND_TOKENS, tokenColor } from "./kind-style"
 import { KindIcon, NodeCard } from "./node-card"
 
 /** Tests and the dialog read a node's on-canvas point to click it. */
-export interface GraphElement extends HTMLDivElement { __easmNodePoint?: (id: string) => { x: number; y: number } | undefined }
+export interface GraphElement extends HTMLDivElement {
+  __easmNodePoint?: (id: string) => { x: number; y: number } | undefined
+  __easmBadgePoint?: (id: string) => { x: number; y: number } | undefined
+}
 
 type Focus = { id: string; mode: "path" | "node" } | null
 
@@ -84,7 +84,7 @@ function ancestorsOf(tree: EasmTree, id: string): string[] {
   return path
 }
 
-export function AssetGraph({ result, index, loading = false, expanded = false, mobile = false, visible: active = true, collapsed = NO_COLLAPSED, onCollapseChange }: {
+export function AssetGraph({ result, index, loading = false, expanded = false, mobile = false, visible: active = true, collapsed = NO_COLLAPSED, onCollapseChange, folded = false, onFoldedChange }: {
   result: EasmResult
   index: EasmIndex
   loading?: boolean
@@ -95,6 +95,9 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
    *  show the same tree. */
   collapsed?: ReadonlySet<string>
   onCollapseChange?: (next: Set<string>) => void
+  /** The one "fold same-type nodes" switch; the panel owns it like the collapse state. */
+  folded?: boolean
+  onFoldedChange?: (next: boolean) => void
 }) {
   const text = useEasmText()
   const textRef = useRef(text)
@@ -201,10 +204,11 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
   }, [updateLabels])
 
   // Hovering a node lights its whole branch, root to leaves, and fades the
-  // rest; leaving it restores whatever the last click focused.
+  // rest; the root stops at one level, where leaving it restores whatever the
+  // last click focused.
   const applyHighlight = useCallback(() => {
     const hovered = hoveredRef.current
-    drawState.current.highlighted = hovered ? branchIds(treeRef.current, hovered) : focusHighlightRef.current
+    drawState.current.highlighted = hovered ? hoverIds(treeRef.current, hovered, drawState.current.rootId) : focusHighlightRef.current
     const stage = stageRef.current
     if (stage) {
       stage.dataset.highlightedNodes = String(drawState.current.highlighted.size)
@@ -390,6 +394,14 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
     graphRef.current = graph
     stage.dataset.zoom = String(graph.zoom())
     stage.__easmNodePoint = (id) => { const n = nodesRef.current.find((node) => node.id === id); return n && graph.graph2ScreenCoords(n.x ?? 0, n.y ?? 0) }
+    stage.__easmBadgePoint = (id) => {
+      const n = nodesRef.current.find((node) => node.id === id)
+      if (!n) return undefined
+      const zoom = graph.zoom() || 1
+      const center = badgeCenter(n, zoom)
+      const origin = graph.graph2ScreenCoords(n.x ?? 0, n.y ?? 0)
+      return { x: origin.x + (center.x - (n.x ?? 0)) * zoom, y: origin.y + (center.y - (n.y ?? 0)) * zoom }
+    }
     // The tab or dialog can lay out after mount; refit whenever the canvas size changes.
     const resize = new ResizeObserver(() => {
       if (!stage.clientWidth || !stage.clientHeight || (graph.width() === stage.clientWidth && graph.height() === stage.clientHeight)) return
@@ -614,33 +626,53 @@ export function AssetGraph({ result, index, loading = false, expanded = false, m
               </> : null}
               <button type="button" className={toolButton} aria-label={text.fit} title={text.fit} onClick={fit}><MaskIcon src={fitIcon} /></button>
             </div>
-            {legend.length ? (
-              <div role="group" aria-label={text.kindFilter} className="flex min-w-0 flex-wrap justify-end gap-1.5">
-                <TooltipProvider delayDuration={300}>
-                  {legend.map((kind) => {
-                    const label = kindLabel(kind, text)
-                    return (
-                      <Tooltip key={kind}>
-                        <TooltipTrigger asChild aria-describedby={undefined}>
-                          <button type="button" aria-label={label} aria-pressed={!hidden.has(kind)} onClick={() => toggleKind(kind)}
-                            className={cn(toolButton, "pointer-events-auto shrink-0 rounded-full aria-[pressed=false]:[&>span]:opacity-35")}>
-                            <KindIcon kind={kind} />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom">{label}</TooltipContent>
-                      </Tooltip>
-                    )
-                  })}
-                </TooltipProvider>
+            <TooltipProvider delayDuration={300}>
+              <div className="flex min-w-0 flex-wrap items-start justify-end gap-1.5">
+                {legend.length ? (
+                  <div role="group" aria-label={text.kindFilter} className="flex min-w-0 flex-wrap justify-end gap-1.5">
+                    {legend.map((kind) => {
+                      const label = kindLabel(kind, text)
+                      return (
+                        <Tooltip key={kind}>
+                          <TooltipTrigger asChild aria-describedby={undefined}>
+                            <button type="button" aria-label={label} aria-pressed={!hidden.has(kind)} onClick={() => toggleKind(kind)}
+                              className={cn(toolButton, "pointer-events-auto shrink-0 rounded-full aria-[pressed=false]:[&>span]:opacity-35")}>
+                              <KindIcon kind={kind} />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom">{label}</TooltipContent>
+                        </Tooltip>
+                      )
+                    })}
+                  </div>
+                ) : null}
+                {/* Its own row below the type icons: the tooltip carries the
+                    name, so the canvas keeps no text label. */}
+                {onFoldedChange && view.nodes.length ? (
+                  <div className="flex w-full justify-end">
+                    <Tooltip>
+                      <TooltipTrigger asChild aria-describedby={undefined}>
+                        <button type="button" aria-label={text.foldKinds} aria-pressed={folded} data-testid="easm-fold-kinds"
+                          onClick={() => onFoldedChange(!folded)}
+                          className={cn(toolButton, "pointer-events-auto shrink-0 rounded-full aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground")}>
+                          <Layers className="size-4" aria-hidden />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">{text.foldKinds}</TooltipContent>
+                    </Tooltip>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
+            </TooltipProvider>
           </div>
         </div>
         {cardNode ? (
           <NodeCard key={cardNode.id} ref={mobile ? undefined : cardRef}
             className={mobile ? "bottom-3 left-3 max-h-[400px]" : undefined}
             node={cardNode} index={index}
-            collapse={(index.descendants.get(cardNode.id) ?? 0) > 0 ? {
+            // Touch has no hover for the canvas badge, so the phone's card keeps
+            // the fold control; on the desktop the badge is the one affordance.
+            collapse={mobile && (index.descendants.get(cardNode.id) ?? 0) > 0 ? {
               collapsed: collapsed.has(cardNode.id),
               count: index.descendants.get(cardNode.id) ?? 0,
               onToggle: () => toggleCollapse(cardNode.id),

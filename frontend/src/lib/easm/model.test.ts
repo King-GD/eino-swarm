@@ -1,7 +1,7 @@
 import { easmText } from "./messages"
 import { describe, expect, it } from "vitest"
 import {
-  basisText, branchIds, collapsedHidden, descendantCounts, displayKind, graphLabel, highlightIds, hotDays, indexResult, isSafeLink, kindLabel,
+  basisText, branchIds, collapsedHidden, descendantCounts, displayKind, foldByKind, graphLabel, groupId, highlightIds, hotDays, hoverIds, indexResult, isSafeLink, kindLabel,
   layoutOrder, nodeRadius, primaryTree, projectEasmResult, searchNodes, sortComponents, summaryStats, validity, visibleIds, wrapLabel,
 } from "./model"
 import type { EasmNode, EasmResult } from "./types"
@@ -65,6 +65,16 @@ describe("EASM model", () => {
     expect([...visibleIds(result.nodes, result.edges)].sort()).toEqual(["c", "cert", "d", "o", "r"])
     // Hiding company leaves the root and the domain-certificate link.
     expect([...visibleIds(result.nodes, result.edges, new Set(["company"]))].sort()).toEqual(["cert", "d", "r"])
+  })
+
+  it("lights only the first level while the root is hovered", () => {
+    const tree = primaryTree(result.edges)
+    // Everything lit under the root says nothing more than the graph already
+    // shows, so the root stops at its direct children.
+    expect([...hoverIds(tree, "r", "r")].sort()).toEqual(["c", "o", "r"])
+    // Another node keeps its whole branch, root to leaves.
+    expect([...hoverIds(tree, "c", "r")].sort()).toEqual(["c", "cert", "d", "r"])
+    expect(hoverIds(tree, null, "r").size).toBe(0)
   })
 
   it("highlights the path back to the root and the direct children", () => {
@@ -197,6 +207,15 @@ describe("EASM collapse tree", () => {
     expect(innerOnly.has("d")).toBe(false)
   })
 
+  it("hides a folded branch under its folded ancestor", () => {
+    // Fold-by-kind keeps every group folded while the root is open; folding
+    // the root must take those groups with it instead of leaving them drawn.
+    const index = indexResult(branch)
+    const hidden = collapsedHidden(index.tree, new Set(["r", "cert"]))
+    expect(hidden).toEqual(new Set(["c", "d", "cert", "n1", "n2", "n3"]))
+    expect(collapsedHidden(index.tree, new Set(["r"]))).toEqual(new Set(["c", "d", "cert", "n1", "n2", "n3"]))
+  })
+
   it("keeps the first clue that introduced a node as its only parent", () => {
     const tree = primaryTree([{ source: "a", target: "x" }, { source: "b", target: "x" }])
     expect(tree.parent.get("x")).toBe("a")
@@ -207,5 +226,46 @@ describe("EASM collapse tree", () => {
     const tree = primaryTree([{ source: "a", target: "b" }, { source: "b", target: "a" }])
     expect(collapsedHidden(tree, new Set(["a"]))).toEqual(new Set(["b"]))
     expect(descendantCounts(tree).get("a")).toBe(1)
+  })
+})
+
+describe("fold same-type nodes", () => {
+  const label = (kind: Parameters<typeof kindLabel>[0]) => kindLabel(kind, zh)
+
+  it("hangs every node of one kind under a single group tied to the root", () => {
+    const folded = foldByKind(result, label)
+    const tree = primaryTree(folded.edges)
+    // company, domain, cert and mx each get one group; the root keeps no other child.
+    expect(tree.children.get("r")).toEqual([groupId("company"), groupId("domain"), groupId("cert"), groupId("mx")])
+    expect(tree.children.get(groupId("company"))).toEqual(["c", "o"])
+    // The domain sat under a company; folded, its group is its only parent.
+    expect(tree.parent.get("d")).toBe(groupId("domain"))
+    expect(folded.edges.filter((edge) => edge.target === "d")).toHaveLength(1)
+    // A lone node of its kind is still a group of one.
+    expect(tree.children.get(groupId("mx"))).toEqual(["mx"])
+    // Every original node survives once.
+    for (const original of result.nodes) expect(folded.nodes.filter((n) => n.id === original.id)).toHaveLength(1)
+  })
+
+  it("draws a group with its kind's icon and name, not a member's label", () => {
+    const folded = foldByKind(result, label)
+    const group = folded.nodes.find((n) => n.id === groupId("cert"))!
+    expect(displayKind(group)).toBe("cert")
+    expect(graphLabel(group, zh)).toBe(kindLabel("cert", zh))
+  })
+
+  it("counts a group's members behind its badge", () => {
+    const index = indexResult(foldByKind(result, label))
+    expect(index.descendants.get(groupId("company"))).toBe(2)
+    expect(index.descendants.get(groupId("mx"))).toBe(1)
+    // All groups folded leaves only the root and the groups drawn.
+    const groups = new Set([...index.tree.children.get("r")!])
+    const hidden = collapsedHidden(index.tree, groups)
+    expect(hidden).toEqual(new Set(result.nodes.filter((n) => n.kind !== "root").map((n) => n.id)))
+  })
+
+  it("leaves a result without a subject root unchanged", () => {
+    const rootless = { ...result, nodes: result.nodes.filter((n) => n.kind !== "root") }
+    expect(foldByKind(rootless, label)).toBe(rootless)
   })
 })

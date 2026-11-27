@@ -1,6 +1,7 @@
 import { expect, it } from "vitest"
 import catalog from "./catalog.json"
 import easmV1 from "./easm-v1.json"
+import easmV2 from "./easm-v2.json"
 import { panelDefinitionCompatible } from "./definition"
 import type { TaskPanel } from "./types"
 
@@ -15,12 +16,14 @@ it("requires the pinned plugin identity and schema without depending on object k
   expect(panelDefinitionCompatible({ ...panel, definition: { ...definition, schema } })).toBe(true)
 })
 
-it("opens the published EASM v1 schema and distinguishes it from the v2 wire version", () => {
+it("opens each published EASM schema and distinguishes it from the current wire version", () => {
   const current = catalog.find((definition) => definition.id === easmV1.id)!
   const panel: TaskPanel = { id: "p", thread_id: "t", plugin_id: easmV1.id, plugin_version: "1", revision: 1, state: easmV1.initial_state, definition: easmV1 }
-  expect(current.version).toBe("2")
+  expect(current.version).toBe("3")
   expect(panelDefinitionCompatible(panel)).toBe(true)
-  expect(panelDefinitionCompatible({ ...panel, plugin_version: "2", definition: current })).toBe(true)
+  expect(panelDefinitionCompatible({ ...panel, plugin_version: "2", definition: easmV2 })).toBe(true)
+  expect(panelDefinitionCompatible({ ...panel, plugin_version: "3", definition: current })).toBe(true)
   expect(panelDefinitionCompatible({ ...panel, definition: { ...easmV1, schema: current.schema } })).toBe(false)
+  expect(panelDefinitionCompatible({ ...panel, plugin_version: "3", definition: easmV2 })).toBe(false)
   expect(panelDefinitionCompatible({ ...panel, plugin_version: "2" })).toBe(false)
 })

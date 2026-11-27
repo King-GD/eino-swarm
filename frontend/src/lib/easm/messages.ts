@@ -7,10 +7,12 @@ const en = {
   kinds: {
     root: "Target organization", company: "Related organization", org: "Certificate organization", domain: "Primary domain",
     cert: "Domain certificate", asn: "ASN", icon_hash: "Site icon", ipc: "IP range", fid: "FID", icp: "ICP filing", mx: "MX record",
+    vuln: "Vulnerability", url: "URL", person: "Person", address: "Address", other: "Other",
   } satisfies Record<DisplayKind, string>,
   featureGroups: {
     cert: "Domain certificates", org: "Certificate organizations", asn: "ASN", icon_hash: "Icon fingerprints", domain: "Domains",
     ipc: "IP ranges", fid: "FID", icp: "ICP filings", mx: "MX records",
+    vuln: "Vulnerabilities", url: "URLs", person: "People", address: "Addresses", other: "Other",
   },
   tags: { hot: "Trending", kev: "KEV", cve: "CVE" } satisfies Record<TagType, string>,
   basisSources: {
@@ -26,7 +28,7 @@ const en = {
   graphDescription: "Knowledge graph, attention trend and supply chain. Select a node for details.",
   search: "Search assets or features", searchPlaceholder: "Organization, domain or certificate", graph: "Knowledge graph", graphNetwork: "Asset and feature network",
   graphLoading: "Loading asset data", graphEmpty: "No asset data", graphActions: "Graph actions", zoomIn: "Zoom in", zoomInGraph: "Zoom in the graph",
-  zoomOut: "Zoom out", zoomOutGraph: "Zoom out the graph", fit: "Fit view", kindFilter: "Node type filter; select to hide or show",
+  zoomOut: "Zoom out", zoomOutGraph: "Zoom out the graph", fit: "Fit view", kindFilter: "Node type filter; select to hide or show", foldKinds: "Fold same-type nodes",
   heatTitle: "Asset attention trend", heatChart: "Asset attention trend curve", heatLoading: "Loading asset attention trend", heatEmpty: "No attention trend data",
   noIntel: "No related intelligence.", trending: "Trending", trendingDays: (days: number) => `Trending on ${days} of the last 30 days.`,
   supplyTitle: "Supply chain / third-party components", supplyCount: (count: string) => `${count} items`,
@@ -54,6 +56,7 @@ const en = {
   profile: "Profile", noDescription: "No saved company introduction", organizations: "Organizations", noOrganizations: "No saved organizations",
   relation: (value: string) => `Relation: ${value}`,
   serial: "Serial number", issuer: "Issuer", validityLabel: "Validity", names: "Covered names", filingSubjectLabel: "Filing subject",
+  contact: "Contact", contactEmail: "Email",
   features: "Effective features", noFeatures: "No saved effective features", closeCard: "Close node card",
   listSeparator: ", ",
 }
@@ -64,9 +67,11 @@ const zh: EasmText = {
   kinds: {
     root: "目标企业", company: "关联组织", org: "证书组织", domain: "主域名",
     cert: "域名证书", asn: "ASN", icon_hash: "网站图标", ipc: "IP 段", fid: "FID", icp: "ICP 备案", mx: "MX 记录",
+    vuln: "漏洞", url: "URL", person: "人员", address: "地址", other: "其他",
   },
   featureGroups: {
     cert: "域名证书", org: "证书组织", asn: "ASN", icon_hash: "图标指纹", domain: "域名", ipc: "IP 段", fid: "FID", icp: "ICP 备案", mx: "MX 记录",
+    vuln: "漏洞", url: "URL", person: "人员", address: "地址", other: "其他",
   },
   tags: { hot: "热搜", kev: "KEV", cve: "CVE" },
   basisSources: {
@@ -82,7 +87,7 @@ const zh: EasmText = {
   graphDescription: "知识图谱、热力趋势和供应链，点击节点查看详情。",
   search: "搜索资产或特征", searchPlaceholder: "企业、域名或证书", graph: "知识图谱", graphNetwork: "资产与具体特征网络",
   graphLoading: "正在加载资产数据", graphEmpty: "暂无资产数据", graphActions: "关联网络操作", zoomIn: "放大", zoomInGraph: "放大关联网络",
-  zoomOut: "缩小", zoomOutGraph: "缩小关联网络", fit: "适配视图", kindFilter: "节点类型筛选，点击隐藏或显示",
+  zoomOut: "缩小", zoomOutGraph: "缩小关联网络", fit: "适配视图", kindFilter: "节点类型筛选，点击隐藏或显示", foldKinds: "折叠同类型节点",
   heatTitle: "资产热力趋势", heatChart: "资产热力趋势曲线", heatLoading: "正在加载资产热力趋势", heatEmpty: "暂无热力趋势数据",
   noIntel: "暂无相关情报。", trending: "热搜情况", trendingDays: (days) => `近 30 天有 ${days} 天上榜。`,
   supplyTitle: "供应链 / 第三方组件", supplyCount: (count) => `${count}项`,
@@ -108,6 +113,7 @@ const zh: EasmText = {
   profile: "简介", noDescription: "暂无已保存的企业简介", organizations: "组织列表", noOrganizations: "暂无已保存的组织",
   relation: (value) => `关系：${value}`,
   serial: "序列号", issuer: "签发机构", validityLabel: "有效期", names: "覆盖名称", filingSubjectLabel: "备案主体",
+  contact: "联系方式", contactEmail: "邮箱",
   features: "有效特征", noFeatures: "暂无已保存的有效特征", closeCard: "关闭节点卡片",
   listSeparator: "、",
 }

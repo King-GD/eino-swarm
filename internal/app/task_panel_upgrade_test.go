@@ -103,3 +103,60 @@ func TestStartupUpgradesSavedEASMPanelAndKeepsItsHistory(t *testing.T) {
 		t.Fatalf("new collection = version %q, state %s, error %v", produced.PluginVersion, produced.State, err)
 	}
 }
+
+// A database written by the release that published v2 must also reach the
+// current contract at startup, not only the oldest one.
+func TestStartupUpgradesASavedV2EASMPanel(t *testing.T) {
+	ctx := t.Context()
+	dataDir := t.TempDir()
+	cfg, err := config.Load(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	published, err := easm.PanelVersions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous, current := published[len(published)-2], published[len(published)-1]
+	db, err := store.Open(cfg.DBPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	thread := store.Thread{Title: "saved v2 portrait"}
+	if err := db.CreateThread(&thread); err != nil {
+		t.Fatal(err)
+	}
+	turn := store.Turn{ThreadID: thread.ID, Status: store.TurnDone}
+	if err := db.CreateTurn(&turn); err != nil {
+		t.Fatal(err)
+	}
+	source := taskpanel.Source{ThreadID: thread.ID, TurnID: turn.ID, AgentID: "manager", ToolCallID: "collection"}
+	panel, err := db.OpenTaskPanel(ctx, previous, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := db.PublishTaskPanel(ctx, source, taskpanel.Update{ProtocolVersion: taskpanel.ProtocolVersion, PanelID: panel.ID,
+		OperationID: "v2-query", BaseRevision: panel.Revision, Kind: "patch",
+		Operations: json.RawMessage(`[{"op":"add","path":"/query","value":"saved-query"}]`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	a, err := New(Options{DataDir: dataDir, Mock: true, NoAssets: true, DeferRestore: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { a.Shutdown(ctx) })
+	upgraded, err := a.Store.TaskPanel(ctx, thread.ID, panel.ID)
+	if err != nil || !taskpanel.DefinitionsMatch(upgraded.Definition, current) || upgraded.Revision != receipt.Revision+1 ||
+		!bytes.Equal(upgraded.State, receipt.State) {
+		t.Fatalf("v2 startup upgrade = plugin %q, revision %d, state %s, error %v",
+			upgraded.PluginVersion, upgraded.Revision, upgraded.State, err)
+	}
+	if previous.Version == current.Version {
+		t.Fatal("fixture needs two distinct published contracts")
+	}
+}

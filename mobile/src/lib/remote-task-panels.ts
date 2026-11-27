@@ -8,7 +8,7 @@ import type { PanelChange, TaskPanel } from "../../../frontend/src/task-panels/t
 // The PC still enforces its configured, potentially smaller state budget.
 export const maxTaskPanelTransferBytes = 64 << 20
 const chunkBytes = 36 << 10
-const easmPanelVersion = "2"
+const easmPanelVersion = "3"
 
 export class TaskPanelReadError extends Error {
   constructor(readonly code: string, message: string) { super(message) }

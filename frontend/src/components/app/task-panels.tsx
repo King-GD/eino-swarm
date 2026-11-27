@@ -15,11 +15,16 @@ export function TaskPanels({ threadId, visible }: { threadId: string; visible: b
   const t = useT()
   const active = useApp((state) => state.activeId === threadId && state.status.running)
   const current = panels.find((panel) => panel.id === selected) ?? panels.at(0)
+  // A native panel draws its own subject row, so a lone close control belongs
+  // there instead of on a band of its own. Several instances still need the
+  // chooser band, and a generic frame has no row to share.
+  const inlineClose = Boolean(current && isNativeTaskPanel(current) && panels.length === 1)
+  const closeButton = current ? <Button type="button" variant="ghost" size="icon" disabled={Boolean(closingPanelId)}
+    onClick={() => void closePanel(current.id)} aria-label={panelText(t.locale, "closeInstance")} title={panelText(t.locale, "closeInstance")}><X aria-hidden /></Button> : null
   return <section className="flex min-h-0 flex-1 flex-col" aria-label={panelText(t.locale, "tab")}>
-    {current ? <header className="flex shrink-0 items-center justify-end gap-2 border-b border-border px-2 py-1">
+    {current && !inlineClose ? <header className="flex shrink-0 items-center justify-end gap-2 border-b border-border px-2 py-1">
       {panels.length > 1 ? <label className="mr-auto min-w-0 text-xs">{panelText(t.locale, "choose")} <select value={current.id} onChange={(event) => select(event.target.value)} className="max-w-full rounded border border-border bg-background p-1">{panels.map((panel) => <option key={panel.id} value={panel.id}>{panel.definition.name}</option>)}</select></label> : null}
-      <Button type="button" variant="ghost" size="icon" disabled={Boolean(closingPanelId)}
-        onClick={() => void closePanel(current.id)} aria-label={panelText(t.locale, "closeInstance")} title={panelText(t.locale, "closeInstance")}><X aria-hidden /></Button>
+      {closeButton}
     </header> : null}
     {closeError ? <p role="alert" className="p-2 text-xs text-destructive">{panelText(t.locale, "closeFailed")}</p> : null}
     {!connected && panels.length ? <p role="status" className="border-b border-border px-3 py-1 text-xs text-muted-foreground">{panelText(t.locale, "disconnected")}</p> : null}
@@ -27,7 +32,7 @@ export function TaskPanels({ threadId, visible }: { threadId: string; visible: b
     {!panels.length && !(owner === threadId && error) ? <p role="status" className="p-3 text-sm text-muted-foreground">{panelText(t.locale, "empty")}</p> : null}
     {panels.map((panel) => <div key={panel.id} className={panel.id === current?.id ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
       {isNativeTaskPanel(panel)
-        ? <NativeTaskPanel panel={panel} visible={visible && current?.id === panel.id} locale={t.locale} active={active} />
+        ? <NativeTaskPanel panel={panel} visible={visible && current?.id === panel.id} locale={t.locale} active={active} headerActions={inlineClose && panel.id === current?.id ? closeButton : undefined} />
         : <TaskPanelFrame panel={panel} change={changes[panel.id]} visible={visible && current?.id === panel.id} locale={t.locale} />}
     </div>)}
   </section>

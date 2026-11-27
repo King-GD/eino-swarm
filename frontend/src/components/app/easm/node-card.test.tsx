@@ -296,10 +296,10 @@ describe("EASM node details", () => {
     expect(organizations.queryByText(pending.label)).not.toBeInTheDocument()
     expect(organizations.queryByText(subject.label)).not.toBeInTheDocument()
     const button = organizations.getByRole("button", { name: company.label })
-    expect(button.querySelector("img")).toHaveAttribute("src", KIND_ICONS.org)
+    expect(button.querySelector("img")).toHaveAttribute("src", KIND_ICONS.company)
     fireEvent.click(button)
     expect(screen.getByRole("dialog", { name: company.label })).toBeInTheDocument()
-    expect(screen.getByRole("dialog").querySelector("header img")).toHaveAttribute("src", KIND_ICONS.org)
+    expect(screen.getByRole("dialog").querySelector("header img")).toHaveAttribute("src", KIND_ICONS.company)
     expect(screen.getByText("关联组织", { exact: true })).toBeInTheDocument()
     expect(screen.getAllByRole("heading", { level: 3 }).map((el) => el.textContent)).toEqual(["资产判断详情", "有效特征"])
   })
@@ -340,13 +340,15 @@ describe("EASM node details", () => {
     expect(screen.queryByRole("button", { name: company.label })).not.toBeInTheDocument()
   })
 
+  // The two organization kinds read differently to the user: a related
+  // organization is a building, a certificate organization keeps its own glyph.
   it.each([
-    { label: "关联组织", node: company },
-    { label: "证书组织", node: { id: "new-org", kind: "feature", featureKind: "org", label: "Certificate organization" } as EasmNode },
-  ])("preserves a saved $label and its confirmed domain link", ({ label, node: organization }) => {
+    { label: "关联组织", node: company, icon: KIND_ICONS.company },
+    { label: "证书组织", node: { id: "new-org", kind: "feature", featureKind: "org", label: "Certificate organization" } as EasmNode, icon: KIND_ICONS.org },
+  ])("preserves a saved $label and its confirmed domain link", ({ label, node: organization, icon }) => {
     render(<Card graph={result([organization, domain], [{ source: organization.id, target: domain.id, confirmed: true }])} start={organization.id} />)
     const card = screen.getByRole("dialog")
-    expect(card.querySelector("header img")).toHaveAttribute("src", KIND_ICONS.org)
+    expect(card.querySelector("header img")).toHaveAttribute("src", icon)
     expect(within(card).getByText(label, { exact: true })).toBeInTheDocument()
     fireEvent.click(within(card).getByRole("button", { name: domain.label }))
     expect(screen.getByRole("dialog", { name: domain.label })).toBeInTheDocument()
@@ -383,9 +385,9 @@ describe("EASM node details", () => {
   })
 })
 
-// The card is the keyboard and phone entry point for the same fold the canvas
-// badge offers; a leaf has nothing to fold.
-describe("EASM node card fold", () => {
+// Touch has no hover, so the phone's card is its only way to reach the same
+// fold the desktop canvas badge offers; a leaf has nothing to fold.
+describe("EASM node card fold on touch", () => {
   it("folds and unfolds a branching node with a counted button", () => {
     const onToggle = vi.fn()
     const index = indexResult(result([company, domain], [{ source: company.id, target: domain.id }]))
@@ -411,5 +413,35 @@ describe("EASM node card fold", () => {
   it("offers no fold for a node without descendants", () => {
     render(<Card graph={result([domain])} start={domain.id} />)
     expect(screen.queryByRole("button", { name: /收起|展开/ })).toBeNull()
+  })
+})
+
+// A mailbox the source published is contact detail of the node it belongs to;
+// the graph must not spend a person node on an address with no name.
+describe("EASM contact details", () => {
+  it("lists published mailboxes with their labels on the owning node", () => {
+    const person: EasmNode = {
+      id: "person", kind: "feature", featureKind: "person", label: "示例联系人",
+      detail: { relation: "法定代表人", emails: [{ address: "contact@example.test", label: "联系邮箱" }, { address: "press@example.test", label: "媒体联络" }] },
+    }
+    render(<Card graph={result([person])} start={person.id} />)
+    const card = screen.getByRole("dialog")
+    expect(within(card).getByText("联系方式")).toBeInTheDocument()
+    expect(within(card).getByText("联系邮箱")).toBeInTheDocument()
+    expect(within(card).getByText("contact@example.test")).toBeInTheDocument()
+    expect(within(card).getByText("press@example.test")).toBeInTheDocument()
+  })
+
+  it("labels an unlabelled mailbox as email and hides the section without any", () => {
+    const person: EasmNode = {
+      id: "person", kind: "feature", featureKind: "person", label: "示例联系人",
+      detail: { emails: [{ address: "plain@example.test" }] },
+    }
+    const { rerender } = render(<Card graph={result([person])} start={person.id} />)
+    expect(within(screen.getByRole("dialog")).getByText("邮箱")).toBeInTheDocument()
+    expect(within(screen.getByRole("dialog")).getByText("plain@example.test")).toBeInTheDocument()
+
+    rerender(<Card graph={result([{ ...person, detail: {} }])} start={person.id} />)
+    expect(within(screen.getByRole("dialog")).queryByText("联系方式")).not.toBeInTheDocument()
   })
 })

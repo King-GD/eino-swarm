@@ -41,8 +41,8 @@ function Fields({ rows }: { rows: [string, ReactNode][] }) {
   if (!shown.length) return null
   return (
     <dl className="divide-y overflow-hidden rounded-md border bg-muted/40">
-      {shown.map(([label, value]) => (
-        <div key={label} className="grid grid-cols-[88px_1fr] gap-3 px-3 py-2">
+      {shown.map(([label, value], i) => (
+        <div key={`${label}:${i}`} className="grid grid-cols-[88px_1fr] gap-3 px-3 py-2">
           <dt className="text-muted-foreground">{label}</dt>
           <dd className="m-0 break-all">{value}</dd>
         </div>
@@ -147,6 +147,20 @@ function RootProfile({ node, index, onSelect }: { node: EasmNode; index: EasmInd
   )
 }
 
+/** Mailboxes the source published for this node; a person's address belongs
+ *  to the person, not to a graph node of its own. */
+function Contacts({ node }: { node: EasmNode }) {
+  const text = useEasmText()
+  const emails = node.detail?.emails ?? []
+  if (!emails.length) return null
+  return (
+    <>
+      <SectionTitle>{text.contact}</SectionTitle>
+      <Fields rows={emails.map((email) => [email.label || text.contactEmail, email.address])} />
+    </>
+  )
+}
+
 function EffectiveFeatures({ node, index, onSelect }: { node: EasmNode; index: EasmIndex; onSelect: (id: string) => void }) {
   const detail = node.detail ?? {}
   const children = index.children.get(node.id) ?? []
@@ -184,7 +198,8 @@ export function NodeCard({ ref, className, node, index, onSelect, onClose, colla
   index: EasmIndex
   onSelect: (id: string) => void
   onClose: () => void
-  /** Present only for a node whose branch can be folded away. */
+  /** Present only where the canvas has no hover to reach its fold badge,
+   *  i.e. the phone; the desktop card leaves folding to the canvas badge. */
   collapse?: { collapsed: boolean; count: number; onToggle: () => void }
 }) {
   const kind = displayKind(node)
@@ -211,6 +226,7 @@ export function NodeCard({ ref, className, node, index, onSelect, onClose, colla
       </header>
       <div className="overflow-y-auto px-4 pt-3.5 pb-4 leading-relaxed">
         {node.kind === "root" ? <RootProfile node={node} index={index} onSelect={onSelect} /> : <AssetJudgment node={node} index={index} />}
+        <Contacts node={node} />
         <EffectiveFeatures node={node} index={index} onSelect={onSelect} />
       </div>
     </section>

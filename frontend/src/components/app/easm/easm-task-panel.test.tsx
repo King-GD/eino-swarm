@@ -46,3 +46,21 @@ it("keeps cloud collection hidden while an older host is working", () => {
   render(<EasmTaskPanel panel={panel} visible locale="zh" active />)
   expect(seen).toHaveBeenLastCalledWith(expect.objectContaining({ heatStatus: "loading", cloudsStatus: undefined }))
 })
+
+// The panel's subject row carries the host's close control, so no second
+// control band sits above the panel. A stored definition can outlive this
+// bundle; the control must survive that, or the panel cannot be closed.
+it("keeps the host's close control in the header when the definition is stale", () => {
+  const definition = catalog.find((item) => item.id === "easm-asset-portrait")!
+  const state: EasmResult = {
+    schema_version: 1, title: "Subject", nodes: [{ id: "root", kind: "root", label: "Subject" }], edges: [],
+    collection: { status: "done", steps: [] }, heat: [], components: [],
+  }
+  const panel = { id: "p", thread_id: "t", plugin_id: definition.id, plugin_version: definition.version, revision: 1, definition, state } as TaskPanel
+  const close = <button type="button">close-it</button>
+  const view = render(<EasmTaskPanel panel={panel} visible locale="en" headerActions={close} />)
+  expect(seen).toHaveBeenLastCalledWith(expect.objectContaining({ headerActions: close }))
+  view.rerender(<EasmTaskPanel panel={{ ...panel, state: { title: "" }, revision: 2 }} visible locale="en" headerActions={close} />)
+  expect(view.getByRole("button", { name: "close-it" })).toBeTruthy()
+  view.unmount()
+})

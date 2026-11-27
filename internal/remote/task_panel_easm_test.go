@@ -180,3 +180,59 @@ func TestEASMLegacyTransferRefusesMalformedStoredState(t *testing.T) {
 		}
 	}
 }
+
+// A phone renders the contract it was built for: v3 contact mailboxes must not
+// reach a v2 bundle, and the cloud table must not reach v1.
+func TestEASMPhonesReceiveTheContractTheirBundleNames(t *testing.T) {
+	published, err := easm.PanelVersions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	v1, v2, v3 := published[0], published[1], published[2]
+	e, _, source := phonePanelFixture(t)
+	panel, err := e.Store().OpenTaskPanel(t.Context(), v3, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	panel = phonePanelPublish(t, e, panel, source, "emails", map[string]any{
+		"schema_version": 1, "title": "Subject",
+		"collection": map[string]any{"status": "done", "steps": []map[string]string{
+			{"id": "summary", "status": "done"}, {"id": "clouds", "status": "done"},
+		}},
+		"nodes": []any{
+			map[string]any{"id": "root", "kind": "root", "label": "Subject",
+				"detail": map[string]any{"emails": []any{map[string]any{"address": "contact@example.test", "label": "Contact"}}}},
+			map[string]any{"id": "domain", "kind": "domain", "label": "example.test"},
+		},
+		"edges": []any{map[string]any{"source": "root", "target": "domain"}},
+		"heat":  []any{}, "components": []any{},
+		"clouds": []map[string]any{{"name": "Provider", "category": "mail", "assets": 1, "ips": 1,
+			"services": []map[string]any{{"name": "SMTP", "count": 1}}}},
+	})
+	relay := newFollowupRelay(t, e)
+	for _, want := range []struct {
+		version    string
+		definition taskpanel.Definition
+		emails     bool
+		clouds     bool
+	}{
+		{v2.Version, v2, false, true},
+		{v1.Version, v1, false, false},
+		{v3.Version, v3, true, true},
+	} {
+		body := readEASMPhoneBody(t, relay, panel, want.version, nil, false)
+		if body.Panel == nil || body.Panel.PluginVersion != want.version ||
+			!taskpanel.DefinitionsMatch(body.Panel.Definition, want.definition) {
+			t.Fatalf("phone v%s received plugin version %q", want.version, body.Panel.PluginVersion)
+		}
+		if err := taskpanel.ValidateState(want.definition, body.Panel.State); err != nil {
+			t.Fatalf("phone v%s state: %v", want.version, err)
+		}
+		if got := bytes.Contains(body.Panel.State, []byte(`"emails"`)); got != want.emails {
+			t.Fatalf("phone v%s emails = %t", want.version, got)
+		}
+		if got := bytes.Contains(body.Panel.State, []byte(`"clouds"`)); got != want.clouds {
+			t.Fatalf("phone v%s clouds = %t", want.version, got)
+		}
+	}
+}

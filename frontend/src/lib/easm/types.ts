@@ -1,7 +1,7 @@
 /** The EASM result shape from the task-panel catalog. */
 
 export type NodeKind = "root" | "company" | "domain" | "feature"
-export type FeatureKind = "org" | "cert" | "mx" | "asn" | "icp" | "icon_hash" | "ipc" | "fid"
+export type FeatureKind = "org" | "cert" | "mx" | "asn" | "icp" | "icon_hash" | "ipc" | "fid" | "vuln" | "url" | "person" | "address" | "other"
 /** Legend / colour / icon key: a feature uses its featureKind. */
 export type DisplayKind = Exclude<NodeKind, "feature"> | FeatureKind
 
@@ -38,6 +38,8 @@ export interface EasmDetail {
   }[]
   names?: string[]
   subject_name?: string
+  /** Contact mailboxes the source published for this node. */
+  emails?: { address: string; label?: string }[]
 }
 
 export interface EasmBasis {

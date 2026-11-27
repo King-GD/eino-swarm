@@ -103,6 +103,8 @@ Stop preserves an HTTP observation already returned to the source reducer, but d
 
 EASM v2 adds the hosting provider table. Startup and full or project backup import upgrade saved instances with the original v1 definition in a transaction. The panel keeps its ID, query, existing observations and replay history. Reconnecting clients read its full definition at the new revision. When cloud data has yet to be collected, an idle portrait hides the cloud card. Running the same query adds cloud data while retaining completed totals, trend and components. Clients displaying a v1 portrait hide the cloud card.
 
+EASM v3 adds `detail.emails[]` for contact mailboxes that belong to a node. Startup upgrades v1 and v2 instances straight to v3 and keeps the original definition for a retried operation. A paired phone reads the contract it names: a v2 bundle receives the portrait without the mailboxes and a v1 bundle without the cloud table as well, so an older renderer never receives a field it cannot draw.
+
 `run_panel_source` takes one batch of that work:
 
 ```text
@@ -118,7 +120,7 @@ EASM v2 adds the hosting provider table. Startup and full or project backup impo
 
 Batches are cumulative for the confirmed subject. Use its full name for every batch. A unique confirmed company row for that subject can bind its registry ID to the root. The same registry identity can continue a portrait, while a conflicting registry ID or different unverified subject starts a new portrait. A company row that matches the subject's identity enriches the root. Name-only ownership requires a unique eligible candidate. Unresolved or ambiguous parent names are counted in `unresolved_parents` and kept as unconfirmed clues. Domains are bounded by `max_domains` across the whole portrait; entries over it are counted in `refused_domains`.
 
-Each clue retains its first source edge. A later observation can enrich the clue and upgrade confirmation for a relationship reachable from the subject. Both the registered source and direct updates check new relationships for reachability from the single subject root. Older graph records and detached clues stay in stored state, and their detached sources are skipped on follow-up batches. Desktop and phone render only the portion reachable from the subject. Domains use one IDNA normalization. Node evidence is structured as `detail.basis[] = {source, via?, date?}`; the renderer words it in the user's language and shows unrecognized tool names as stored.
+Each clue retains its first source edge. A later observation can enrich the clue and upgrade confirmation for a relationship reachable from the subject. Both the registered source and direct updates check new relationships for reachability from the single subject root. Older graph records and detached clues stay in stored state, and their detached sources are skipped on follow-up batches. Desktop and phone render only the portion reachable from the subject. Domains use one IDNA normalization. Node evidence is structured as `detail.basis[] = {source, via?, date?}`; the renderer words it in the user's language and shows unrecognized tool names as stored. A published mailbox is node detail (`detail.emails[] = {address, label?}`), shown in the owning node's details; it does not become a node of its own.
 
 Updates to the same subject must preserve saved first-source edges, their
 target clues and any recorded confirmation. Ordinary snapshot and patch
@@ -168,8 +170,9 @@ in `frontend/src/lib/easm/messages.ts`.
 
 The graph receives whole batches and waits while the source is collecting or
 the owning task can still supply a batch. It displays its own empty state when
-no graph data arrives. The target and related organizations share the same
-yellow graph icon, with a glow around the target. Its logo appears in the node
+no graph data arrives. As in FOFA AI, the target and related organizations
+share the blue building icon, with a glow around the target, and certificate
+organizations keep their own yellow icon. The target's logo appears in the node
 details when available. Component trending days and KEV/CVE tags have no configured
 source yet and stay empty.
 
@@ -177,17 +180,34 @@ The canvas treats the first edge that reached each node as its parent when it
 collapses a branch. Collapsing is a renderer-only view state and never changes
 saved clues. A
 node with children shows `+N` while collapsed and `−` only on hover, so the
-selected target is not badged when the graph first opens (hidden while its card
-is open, which carries the same Collapse/Expand button). The badge sits outside
+selected target is not badged when the graph first opens; the badge stays hidden
+while that node's details card is open. The badge is the desktop fold control,
+and the desktop details card does not repeat it; a phone has no hover, so its
+details card carries the Collapse/Expand button instead. The badge sits outside
 the node's outer ring and its hit circle only touches the ring, so it never takes
 the node's clicks. Hovering a node highlights its first-reach path to the target
-and its whole subtree and fades every other node and link; leaving it restores
-the click highlight. The stage exposes `data-hovered-id` and
+and its whole subtree and fades every other node and link; the target itself
+lights only its direct children. Leaving the node restores the click highlight. The stage exposes `data-hovered-id` and
 `data-highlighted-nodes` for end-to-end checks.
 Collapsed nodes keep their layout positions, the side panel and expanded dialog
 share the state, a new subject clears it, and a search hit inside a collapsed
 branch expands its ancestors. The stage exposes `data-collapsed-nodes` and
 `data-visible-nodes` for end-to-end checks.
+
+Feature nodes may be `org`, `cert`, `mx`, `asn`, `icp`, `icon_hash`, `ipc`,
+`fid`, `vuln`, `url`, `person`, `address` or `other`; each has its own glyph and
+colour token in `kind-style.ts` and `easm.css`. An address is its own node type.
+
+At the end of the type icon row, a single "Fold same-type nodes" icon button
+(off by default, not persisted, named only by its tooltip and accessible name,
+highlighted and `aria-pressed` while on) re-renders the graph through `foldByKind`: every node of one
+type hangs under one `group:<kind>` node tied to the target, wherever it sat
+before, and a type with one node is a group of one. Groups start collapsed and
+show their member count as the usual `+N`. Expanding, folding, search and hover
+then work exactly as for any branch. The button only decides whether to fold.
+Which groups are open is view state, and turning it off restores the
+original graph and clears all collapse state. Like collapsing, folding never
+changes saved clues.
 
 ## Validation
 

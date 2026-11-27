@@ -46,7 +46,8 @@ type panelTransfer struct {
 
 func panelRequestValid(req Request) bool {
 	return len(req.ID) <= 128 && len(req.ThreadID) > 0 && len(req.ThreadID) <= 128 && len(req.PanelID) <= 128 && len(req.PanelTransferID) <= 128 &&
-		(req.EASMPanelVersion == "" || req.EASMPanelVersion == easm.LegacyPanelVersion || req.EASMPanelVersion == easm.PanelVersion)
+		(req.EASMPanelVersion == "" || req.EASMPanelVersion == easm.LegacyPanelVersion ||
+			req.EASMPanelVersion == easm.PreviousPanelVersion || req.EASMPanelVersion == easm.PanelVersion)
 }
 
 func handleTaskPanels(eng *engine.Engine, req Request, path, sessionID string) Response {
@@ -61,8 +62,11 @@ func handleTaskPanels(eng *engine.Engine, req Request, path, sessionID string) R
 		return fail(req.ID, path, sessionID, "too_large", "panel manifest exceeds the phone frame limit")
 	}
 	for i := range rows {
-		if rows[i].PluginID == easm.PanelID && rows[i].PluginVersion == easm.PanelVersion && req.EASMPanelVersion != easm.PanelVersion {
-			rows[i].PluginVersion = easm.LegacyPanelVersion
+		if rows[i].PluginID != easm.PanelID {
+			continue
+		}
+		if version := easm.ClientVersion(rows[i].PluginVersion, req.EASMPanelVersion); version != "" {
+			rows[i].PluginVersion = version
 		}
 	}
 	resp := okBase(req.ID, path, sessionID)

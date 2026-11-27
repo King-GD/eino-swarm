@@ -8,30 +8,100 @@ import (
 	"github.com/LubyRuffy/eino-swarm/internal/taskpanel"
 )
 
+// projectEASMPanel serves a stored portrait in the contract the calling phone
+// understands. A client never receives a schema newer than its bundle: fields
+// introduced later are removed instead of being handed to an older renderer.
 func projectEASMPanel(panel taskpanel.Panel, change *taskpanel.Change, version string) (taskpanel.Panel, *taskpanel.Change, error) {
-	legacy, current, err := easm.PanelDefinitions()
+	published, err := easm.PanelVersions()
 	if err != nil {
 		return taskpanel.Panel{}, nil, err
 	}
-	if panel.PluginVersion == legacy.Version && taskpanel.DefinitionsMatch(panel.Definition, legacy) {
-		return panel, change, nil
+	known := false
+	for _, definition := range published {
+		if panel.PluginVersion == definition.Version && taskpanel.DefinitionsMatch(panel.Definition, definition) {
+			known = true
+			break
+		}
 	}
-	if panel.PluginVersion != current.Version || !taskpanel.DefinitionsMatch(panel.Definition, current) {
+	if !known {
 		return taskpanel.Panel{}, nil, fmt.Errorf("unknown EASM panel definition")
 	}
-	if version == current.Version {
+	target := easm.ClientVersion(panel.PluginVersion, version)
+	if target == "" || target == panel.PluginVersion {
 		return panel, change, nil
 	}
-	state, err := legacyEASMState(panel.State)
+	definition, ok := publishedVersion(published, target)
+	if !ok {
+		return taskpanel.Panel{}, nil, fmt.Errorf("unknown EASM panel definition")
+	}
+	state, err := projectEASMState(panel.State, definition)
 	if err != nil {
 		return taskpanel.Panel{}, nil, err
 	}
-	if err := taskpanel.ValidateState(legacy, state); err != nil {
-		return taskpanel.Panel{}, nil, err
-	}
-	panel.Definition, panel.PluginVersion, panel.State = legacy, legacy.Version, state
-	// A patch from the stored definition may refer to fields absent in v1.
+	panel.Definition, panel.PluginVersion, panel.State = definition, definition.Version, state
+	// A patch from the newer definition may refer to fields this one lacks.
 	return panel, nil, nil
+}
+
+func publishedVersion(published []taskpanel.Definition, version string) (taskpanel.Definition, bool) {
+	for _, definition := range published {
+		if definition.Version == version {
+			return definition, true
+		}
+	}
+	return taskpanel.Definition{}, false
+}
+
+func projectEASMState(raw json.RawMessage, target taskpanel.Definition) (json.RawMessage, error) {
+	state := raw
+	var err error
+	if target.Version != easm.PanelVersion {
+		if state, err = withoutEASMEmails(state); err != nil {
+			return nil, err
+		}
+	}
+	if target.Version == easm.LegacyPanelVersion {
+		if state, err = legacyEASMState(state); err != nil {
+			return nil, err
+		}
+	}
+	if err := taskpanel.ValidateState(target, state); err != nil {
+		return nil, err
+	}
+	return state, nil
+}
+
+// withoutEASMEmails drops the contact mailboxes v3 added to node details.
+func withoutEASMEmails(raw json.RawMessage) (json.RawMessage, error) {
+	var state map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &state); err != nil {
+		return nil, err
+	}
+	var nodes []map[string]json.RawMessage
+	if err := json.Unmarshal(state["nodes"], &nodes); err != nil {
+		return nil, err
+	}
+	for _, node := range nodes {
+		var detail map[string]json.RawMessage
+		if err := json.Unmarshal(node["detail"], &detail); err != nil {
+			continue
+		}
+		if _, ok := detail["emails"]; !ok {
+			continue
+		}
+		delete(detail, "emails")
+		encoded, err := json.Marshal(detail)
+		if err != nil {
+			return nil, err
+		}
+		node["detail"] = encoded
+	}
+	encoded, err := json.Marshal(nodes)
+	if err != nil {
+		return nil, err
+	}
+	state["nodes"] = encoded
+	return json.Marshal(state)
 }
 
 func legacyEASMState(raw json.RawMessage) (json.RawMessage, error) {

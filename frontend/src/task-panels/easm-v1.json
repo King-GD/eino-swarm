@@ -260,7 +260,12 @@
               "icp",
               "icon_hash",
               "ipc",
-              "fid"
+              "fid",
+              "vuln",
+              "url",
+              "person",
+              "address",
+              "other"
             ]
           },
           "label": {
@@ -368,6 +373,11 @@
                         "icon_hash",
                         "ipc",
                         "fid",
+                        "vuln",
+                        "url",
+                        "person",
+                        "address",
+                        "other",
                         "domain"
                       ]
                     },

@@ -6,6 +6,7 @@ import { KIND_ICONS } from "./kind-style"
 
 it("draws the same enterprise icon at its intrinsic ratio and highlights only the center", () => {
   expect.soft(KIND_ICONS.root).toBe(KIND_ICONS.company)
+  expect.soft(KIND_ICONS.company).not.toBe(KIND_ICONS.org)
 
   const icon = { complete: true, naturalWidth: 20, naturalHeight: 10 } as HTMLImageElement
   const state: DrawState = {

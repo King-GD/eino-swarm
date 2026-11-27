@@ -10,6 +10,11 @@
   --color-easm-fid: hsl(var(--easm-fid));
   --color-easm-icon-hash: hsl(var(--easm-icon-hash));
   --color-easm-mx: hsl(var(--easm-mx));
+  --color-easm-vuln: hsl(var(--easm-vuln));
+  --color-easm-url: hsl(var(--easm-url));
+  --color-easm-person: hsl(var(--easm-person));
+  --color-easm-address: hsl(var(--easm-address));
+  --color-easm-other: hsl(var(--easm-other));
   --color-easm-edge: hsl(var(--easm-edge));
   --color-easm-highlight: hsl(var(--easm-highlight));
 }
@@ -18,7 +23,7 @@
   :root {
     /* The same type palette colors the bundled glyphs in the canvas, filters and cards. */
     --easm-root: var(--easm-company);
-    --easm-company: var(--easm-org);
+    --easm-company: 217.84 88.89% 61.18%;
     --easm-domain: 121.53 55.14% 41.96%;
     --easm-org: 36.63 85.25% 47.84%;
     --easm-cert: 44.56 67.59% 49.61%;
@@ -28,6 +33,11 @@
     --easm-fid: 17.04 76.42% 58.43%;
     --easm-icon-hash: 234 82.42% 64.31%;
     --easm-mx: 83.91 55.65% 53.14%;
+    --easm-vuln: 0 72% 51%;
+    --easm-url: 205 85% 48%;
+    --easm-person: 330 70% 55%;
+    --easm-address: 160 60% 38%;
+    --easm-other: 220 9% 52%;
     --easm-edge: 212 18% 62%;
     --easm-highlight: 40 100% 35%;
   }
